@@ -38,6 +38,13 @@ To look around as an agent does, open a shell in its workspace:
 ```
 Agents run their Bash tool as root in the app-server with no sandbox. Each agent's tool starts in `/work/<agent-id>` with `AGENT_ID`, `AGENT_NAME` and `MEMORY_DIR` set, and `shell` sets the same. Like an agent, the shell can read every agent's workspace, memory and conversations in that stack, plus `/root/.letta` (provider and Claude/Codex credentials). It is close to what the agent sees but not identical: letta-code also sets the conversation id, the agent's secrets and a few `PATH` entries. Commands can be piped in: `./lettucectl shell alfred lucius <<<'ls'`.
 
+### Agent skills
+`agent-skills/` holds skills this repo gives every agent, for example `scheduling-scripts` (cron jobs that survive restarts, instead of `crontab`). After adding or changing one, push them to the running stacks:
+```bash
+./lettucectl skills all           # or one stack: skills alfred
+```
+They go into each stack's global skills (`/root/.letta/skills`), which every agent of that stack loads. `skills` replaces or removes only what it installed before (listed in `.lettucectl-skills` there), so upstream's skills and the ones enabled in Settings stay. A name upstream Lettuce also ships is refused, because its BFF would overwrite ours. `up` does not install skills; run `skills` after setting up a new stack. Skill text reaches every operator's stacks, so keep it generic.
+
 ## Optional features
 Optional features are compose profiles, the same list for **all** stacks (upstream `docs/CONFIGURATION.md` lists them):
 - `search`: SearXNG + DuckDuckGo page reader for the agents' web tools.

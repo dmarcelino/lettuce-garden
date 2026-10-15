@@ -22,7 +22,15 @@ case $args in
     cat "$STUB_ROOT/agents.json" 2>/dev/null
     exit "${STUB_AGENTS_RC:-0}"
     ;;
-  *" exec "*) cat >>"$STUB_ROOT/exec-stdin.log" ;;
+  *" exec "*)
+    cat >>"$STUB_ROOT/exec-stdin.log"
+    prev=""
+    for a in "$@"; do
+      [[ $prev == -c ]] && printf '%s' "$a" >"$STUB_ROOT/exec-script"
+      prev=$a
+    done
+    exit "${STUB_EXEC_RC:-0}"
+    ;;
   *" config --format json "*) cat "$STUB_ROOT/compose-config.json" 2>/dev/null ;;
   *" config --services "*)
     # Like upstream: two services always, the rest per COMPOSE_PROFILES in --env-file.

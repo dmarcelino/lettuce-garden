@@ -29,6 +29,7 @@ Operation (<target> is a stack name or "all")
   down <target>                 stop
   restart <target>              down + up (app-server and bff share a namespace; never restart one alone)
   check <target>                refuse unsafe or inconsistent configuration
+  skills <target>               install agent-skills/ into running stacks (every agent of the stack)
   status                        containers and health of every stack
   list                          stacks, hostnames and allowed users
   logs <name> [service]         follow logs
@@ -117,6 +118,49 @@ route_stack() {
   tun=$(env_get "$f" CF_TUNNEL_ID)
   [[ -n $tun && -n $(env_get "$f" CF_DNS_RECORD_ID) ]] || return 0
   cf_tunnel_configure "$(cfg CF_ACCOUNT_ID)" "$tun" "$(env_get "$f" LETTUCE_HOSTNAME)" "$(env_get "$f" COMPOSE_PROFILES)"
+}
+
+# Run by sh in the app-server as: sh -c "$SKILLS_INSTALL" sh DIR SKILL... with a tar
+# of the skills on stdin. Replaces what the last run installed (the manifest) and
+# leaves every other skill in DIR alone. Extracting into a dot directory first
+# means a broken stream changes nothing; skill discovery ignores dot directories.
+# shellcheck disable=SC2016 # expanded by sh in the container
+SKILLS_INSTALL='set -e
+d=$1
+shift
+mkdir -p "$d"
+t=$(mktemp -d "$d/.lettucectl.XXXXXX")
+trap '\''rm -rf "$t"'\'' EXIT
+tar -C "$t" --no-same-owner -xf -
+if [ -f "$d/.lettucectl-skills" ]; then
+  while read -r s; do [ -n "$s" ] && rm -rf "${d:?}/$s"; done <"$d/.lettucectl-skills"
+fi
+for s in "$@"; do
+  rm -rf "${d:?}/$s"
+  mv "$t/$s" "$d/$s"
+done
+printf "%s\n" "$@" >"$d/.lettucectl-skills"'
+
+# sync_skills NAME -> installs agent-skills/ into the stack's global skills, which
+# every agent of the stack loads; prints how many
+sync_skills() {
+  local src=$LETTUCE_HOME/agent-skills f s skills=()
+  for f in "$src"/*/SKILL.md; do
+    [[ -f $f ]] || continue
+    s=${f%/SKILL.md}
+    s=${s##*/}
+    [[ $s =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "invalid skill name '$s': lowercase letters, digits and '-'"
+    # The BFF rewrites its own skills on every connect, over any of ours.
+    [[ ! -e $(upstream_dir)/docker/agent-skills/$s ]] || die "skill '$s' is also shipped by upstream Lettuce; rename it"
+    skills+=("$s")
+  done
+  if ((${#skills[@]})); then
+    tar -C "$src" -cf - "${skills[@]}"
+  else
+    tar -cf - -T /dev/null
+  fi | compose "$1" exec -T app-server sh -c "$SKILLS_INSTALL" sh /root/.letta/skills "${skills[@]}" ||
+    die "$1: could not install skills (is the stack up?)"
+  printf '%s' "${#skills[@]}"
 }
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -512,11 +556,21 @@ export LETTA_MEMORY_DIR=$MEMORY_DIR
 exec bash'
 }
 
+cmd_skills() {
+  (($# == 1)) || die "usage: lettucectl skills <name|all>"
+  local n targets k
+  targets=$(expand_targets "$1")
+  for n in $targets; do
+    k=$(sync_skills "$n")
+    info "$n: $k skill(s) installed"
+  done
+}
+
 main() {
   local cmd=${1:-help}
   shift || true
   case $cmd in
-    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell)
+    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | skills)
       "cmd_$cmd" "$@"
       ;;
     help | -h | --help) usage ;;

@@ -831,6 +831,123 @@ test_shell_rejects_unknown_stacks() {
   out_has "no stack named 'hal'"
 }
 
+# ── skills ───────────────────────────────────────────────────────────────────
+# skill NAME... -> an agent skill in the repo copy
+skill() {
+  local s
+  for s in "$@"; do
+    mkdir -p "$H/agent-skills/$s"
+    printf -- '---\nname: %s\ndescription: test\n---\n' "$s" >"$H/agent-skills/$s/SKILL.md"
+  done
+}
+shipped() { tar -tf "$T/exec-stdin.log" | LC_ALL=C sort | paste -sd' '; }
+
+test_skills_installs_every_skill_dir() {
+  added
+  skill alpha beta
+  mkdir -p "$H/agent-skills/notes"
+  touch "$H/agent-skills/notes/README.md"
+  ctl skills alfred
+  ok_rc
+  out_has "alfred: 2 skill(s) installed"
+  eq "$(shipped)" "alpha/ alpha/SKILL.md beta/ beta/SKILL.md"
+  log_has "-p lettuce-alfred"
+  log_has "exec -T app-server sh -c"
+  log_has "sh /root/.letta/skills alpha beta"
+}
+
+test_skills_all_covers_every_stack() {
+  ctl add alfred alfred@example.com
+  ctl add hal hal@example.com
+  skill alpha
+  : >"$T/calls.log"
+  ctl skills all
+  ok_rc
+  out_has "alfred: 1 skill(s) installed"
+  out_has "hal: 1 skill(s) installed"
+  log_has "-p lettuce-hal"
+}
+
+test_skills_removes_all_when_the_repo_has_none() {
+  added
+  ctl skills alfred
+  ok_rc
+  out_has "alfred: 0 skill(s) installed"
+  eq "$(shipped)" ""
+}
+
+test_skills_refuses_upstream_names() {
+  added
+  mkdir -p "$H/upstream/docker/agent-skills/serving-web-apps"
+  skill serving-web-apps
+  ctl skills alfred
+  bad_rc
+  out_has "skill 'serving-web-apps' is also shipped by upstream Lettuce"
+  log_lacks " exec "
+}
+
+test_skills_refuses_bad_names() {
+  added
+  skill My.Skill
+  ctl skills alfred
+  bad_rc
+  out_has "invalid skill name 'My.Skill'"
+  log_lacks " exec "
+}
+
+test_skills_fails_when_the_stack_is_down() {
+  added
+  skill alpha
+  stub STUB_EXEC_RC=1
+  ctl skills alfred
+  bad_rc
+  out_has "alfred: could not install skills (is the stack up?)"
+}
+
+test_skills_rejects_unknown_stacks() {
+  ctl skills hal
+  bad_rc
+  out_has "no stack named 'hal'"
+}
+
+test_skills_ships_the_repo_skills() {
+  added
+  cp -r "$ROOT/agent-skills" "$H/"
+  ctl skills alfred
+  ok_rc
+  tar -tf "$T/exec-stdin.log" | grep -qx "scheduling-scripts/SKILL.md" || fail "scheduling-scripts not shipped"
+  grep -qx "name: scheduling-scripts" "$ROOT/agent-skills/scheduling-scripts/SKILL.md" || fail "SKILL.md name mismatch"
+}
+
+# The script lettucectl runs in the container, run here on a stand-in skills dir.
+test_skills_script_replaces_only_its_own_skills() {
+  added
+  skill alpha beta
+  ctl skills alfred
+  ok_rc
+  local d=$T/skills
+  mkdir -p "$d/serving-web-apps" "$d/old" "$d/alpha"
+  touch "$d/serving-web-apps/SKILL.md" "$d/old/SKILL.md" "$d/alpha/stale.txt"
+  printf 'old\nalpha\n' >"$d/.lettucectl-skills"
+  sh -c "$(cat "$T/exec-script")" sh "$d" alpha beta <"$T/exec-stdin.log"
+  eq "$(cd "$d" && find . | LC_ALL=C sort | paste -sd' ')" \
+    ". ./.lettucectl-skills ./alpha ./alpha/SKILL.md ./beta ./beta/SKILL.md ./serving-web-apps ./serving-web-apps/SKILL.md"
+  eq "$(paste -sd' ' "$d/.lettucectl-skills")" "alpha beta"
+}
+
+test_skills_script_keeps_skills_on_a_broken_stream() {
+  added
+  skill alpha
+  ctl skills alfred
+  ok_rc
+  local d=$T/skills
+  mkdir -p "$d/alpha"
+  touch "$d/alpha/SKILL.md"
+  printf 'alpha\n' >"$d/.lettucectl-skills"
+  ! sh -c "$(cat "$T/exec-script")" sh "$d" alpha <<<'not a tar' 2>/dev/null || fail "script accepted a broken stream"
+  eq "$(cd "$d" && find . | LC_ALL=C sort | paste -sd' ')" ". ./.lettucectl-skills ./alpha ./alpha/SKILL.md"
+}
+
 for t in $(declare -F | awk '$3 ~ /^test_/ { print $3 }'); do
   run_test "$t"
 done
