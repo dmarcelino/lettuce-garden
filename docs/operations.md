@@ -32,6 +32,12 @@ Each person sets up their own stack in the Lettuce UI:
 
 Provider keys live in that stack's `state/letta-data`, never in this repo.
 
+To look around as an agent does, open a shell in its workspace:
+```bash
+./lettucectl shell alfred lucius   # agent name (any case) or id; without one, /work
+```
+Agents run their Bash tool as root in the app-server with no sandbox. Each agent's tool starts in `/work/<agent-id>` with `AGENT_ID`, `AGENT_NAME` and `MEMORY_DIR` set, and `shell` sets the same. Like an agent, the shell can read every agent's workspace, memory and conversations in that stack, plus `/root/.letta` (provider and Claude/Codex credentials). It is close to what the agent sees but not identical: letta-code also sets the conversation id, the agent's secrets and a few `PATH` entries. Commands can be piped in: `./lettucectl shell alfred lucius <<<'ls'`.
+
 ## Optional features
 Optional features are compose profiles, the same list for **all** stacks (upstream `docs/CONFIGURATION.md` lists them):
 - `search`: SearXNG + DuckDuckGo page reader for the agents' web tools.

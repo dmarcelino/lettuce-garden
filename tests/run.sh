@@ -744,6 +744,93 @@ test_list_shows_stacks_and_hosts() {
   out_has "https://hal.example.org"
 }
 
+# ── shell ────────────────────────────────────────────────────────────────────
+# agents NAME... -> what `letta agents list` answers: one agent per name, id agent-<n>
+agents() {
+  local i=0 n items=()
+  for n in "$@"; do
+    i=$((i + 1))
+    items+=("$(jq -nc --arg id "agent-$i" --arg n "$n" '{id: $id, name: $n, system: "long prompt"}')")
+  done
+  printf '{"items":[%s]}\n' "$(IFS=,; echo "${items[*]}")" >"$T/agents.json"
+}
+
+test_shell_without_agent_opens_work() {
+  added
+  ctl shell alfred </dev/null
+  ok_rc
+  log_has "-p lettuce-alfred"
+  log_has "exec -T -w /work app-server bash"
+  log_lacks "letta agents list"
+}
+
+test_shell_opens_the_agents_workspace() {
+  added
+  agents Alfred Lucius
+  ctl shell alfred lucius </dev/null
+  ok_rc
+  out_has "alfred: Lucius (agent-2)"
+  log_has "exec -T -w /work/agent-2 -e AGENT_ID=agent-2 -e LETTA_AGENT_ID=agent-2 -e AGENT_NAME=Lucius -e USER_CWD=/work/agent-2 app-server bash -c"
+  # shellcheck disable=SC2016 # the literal script lettucectl passes to the container
+  log_has 'export MEMORY_DIR=$LETTA_LOCAL_BACKEND_DIR/memfs/$AGENT_ID/memory'
+}
+
+test_shell_passes_stdin_to_the_agents_shell() {
+  added
+  agents Lucius
+  ctl shell alfred lucius <<<'ls'
+  ok_rc
+  eq "$(cat "$T/exec-stdin.log")" ls
+}
+
+test_shell_accepts_an_agent_id() {
+  added
+  agents Alfred Lucius
+  ctl shell alfred agent-1 </dev/null
+  ok_rc
+  log_has "-e AGENT_NAME=Alfred"
+}
+
+test_shell_keeps_spaces_in_agent_names() {
+  added
+  agents "The Finn"
+  ctl shell alfred "the finn" </dev/null
+  ok_rc
+  log_has "-e AGENT_NAME=The Finn -e"
+}
+
+test_shell_lists_agents_when_none_match() {
+  added
+  agents Alfred Lucius
+  ctl shell alfred hal </dev/null
+  bad_rc
+  out_has "alfred has no agent 'hal'; agents: Alfred, Lucius"
+  log_lacks "-w /work"
+}
+
+test_shell_refuses_ambiguous_agent_names() {
+  added
+  agents Saburo saburo
+  ctl shell alfred Saburo </dev/null
+  bad_rc
+  out_has "use an id: agent-1 agent-2"
+  log_lacks "-w /work"
+}
+
+test_shell_fails_when_agents_cannot_be_listed() {
+  added
+  stub STUB_AGENTS_RC=1
+  ctl shell alfred lucius </dev/null
+  bad_rc
+  out_has "could not list agents"
+}
+
+test_shell_rejects_unknown_stacks() {
+  ctl shell hal </dev/null
+  bad_rc
+  out_has "no stack named 'hal'"
+}
+
 for t in $(declare -F | awk '$3 ~ /^test_/ { print $3 }'); do
   run_test "$t"
 done

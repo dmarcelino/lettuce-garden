@@ -33,6 +33,7 @@ Operation (<target> is a stack name or "all")
   list                          stacks, hostnames and allowed users
   logs <name> [service]         follow logs
   compose <name> <args...>      any other docker compose command for one stack
+  shell <name> [agent]          bash in the app-server, in /work or in an agent's workspace (name or id)
 EOF
 }
 
@@ -466,11 +467,56 @@ cmd_compose() {
   compose "$@"
 }
 
+# find_agent NAME AGENT -> "<id>\t<name>" of the stack's agent whose id, or name
+# ignoring case, is AGENT; dies when none or several match
+find_agent() {
+  local list matches
+  # letta exits before flushing a pipe past 64 KiB, and each agent carries its
+  # whole system prompt, so the list goes through a file in the container.
+  # stdin stays for the shell: `compose exec` would forward it here.
+  # shellcheck disable=SC2016 # expanded by sh in the container
+  list=$(compose "$1" exec -T app-server sh -c \
+    'f=$(mktemp); letta agents list --limit 1000 >"$f"; rc=$?; cat "$f"; rm -f "$f"; exit $rc' </dev/null) ||
+    die "$1: could not list agents (is the stack up?)"
+  matches=$(jq -r --arg a "$2" \
+    '.items[] | select(.id == $a or (.name | ascii_downcase) == ($a | ascii_downcase)) | "\(.id)\t\(.name)"' \
+    <<<"$list") || die "$1: unexpected output from 'letta agents list'"
+  case $(grep -c . <<<"$matches") in
+    0) die "$1 has no agent '$2'; agents: $(jq -r '[.items[].name] | join(", ")' <<<"$list")" ;;
+    1) printf '%s' "$matches" ;;
+    *) die "$1 has several agents named '$2'; use an id: $(cut -f1 <<<"$matches" | paste -sd' ')" ;;
+  esac
+}
+
+# Close to, not the same as, an agent's Bash tool: letta-code also sets the
+# conversation id, per-agent secrets and a few PATH entries.
+cmd_shell() {
+  (($# == 1 || $# == 2)) || die "usage: lettucectl shell <name> [agent]"
+  validate_name "$1"
+  require_stack "$1"
+  local tty=() agent id
+  [[ -t 0 && -t 1 ]] || tty=(-T)
+  if (($# == 1)); then
+    compose "$1" exec "${tty[@]}" -w /work app-server bash
+    return
+  fi
+  agent=$(find_agent "$1" "$2")
+  id=${agent%%$'\t'*}
+  info "$1: ${agent#*$'\t'} ($id)"
+  # The memory path is letta-code's local-backend layout (getLocalBackendMemoryFilesystemRoot).
+  # shellcheck disable=SC2016 # expanded by bash in the container
+  compose "$1" exec "${tty[@]}" -w "/work/$id" \
+    -e "AGENT_ID=$id" -e "LETTA_AGENT_ID=$id" -e "AGENT_NAME=${agent#*$'\t'}" -e "USER_CWD=/work/$id" \
+    app-server bash -c 'export MEMORY_DIR=$LETTA_LOCAL_BACKEND_DIR/memfs/$AGENT_ID/memory
+export LETTA_MEMORY_DIR=$MEMORY_DIR
+exec bash'
+}
+
 main() {
   local cmd=${1:-help}
   shift || true
   case $cmd in
-    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose)
+    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell)
       "cmd_$cmd" "$@"
       ;;
     help | -h | --help) usage ;;
