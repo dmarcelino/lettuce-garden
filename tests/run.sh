@@ -831,6 +831,233 @@ test_shell_rejects_unknown_stacks() {
   out_has "no stack named 'hal'"
 }
 
+# ── toolbox ──────────────────────────────────────────────────────────────────
+# toolbox_ready -> alfred with agents Alfred and Lucius (agent-2), an app-server
+# image and Lucius's workspace; the operator's home is the empty $T/u
+toolbox_ready() {
+  added
+  agents Alfred Lucius
+  jq -c '.services["app-server"].image = "lettuce-app-server:test"' "$T/compose-config.json" >"$T/c.json"
+  mv "$T/c.json" "$T/compose-config.json"
+  mkdir -p "$H/stacks/alfred/state/workspaces/agent-2" "$T/u"
+}
+
+# tb ARGS... -> `toolbox alfred ARGS...` with $T/u as home, so nothing of the real
+# operator's is read; TB_SOCK and TB_CLAUDE stand in for their variables
+tb() {
+  HOME=$T/u XDG_CONFIG_HOME="" CLAUDE_CONFIG_DIR="" SSH_AUTH_SOCK=${TB_SOCK:-} \
+    CLAUDE_CODE_OAUTH_TOKEN=${TB_CLAUDE:-} ctl toolbox alfred "$@" </dev/null
+}
+
+# toolbox_tools -> the operator has ssh, git, gh and Claude Code set up
+toolbox_tools() {
+  mkdir -p "$T/u/.ssh" "$T/u/.claude/skills"
+  touch "$T/u/.ssh/known_hosts" "$T/u/.gitconfig" "$T/u/.claude/CLAUDE.md" "$T/agent.sock"
+  TB_SOCK=$T/agent.sock
+  stub STUB_GH_TOKEN=gh-tok-1
+  stub STUB_SECRET_TOOL=claude-tok-1
+}
+
+# toolbox_file LINE... -> the operator's personal toolbox file
+toolbox_file() {
+  mkdir -p "$T/u/.config/lettucectl"
+  printf '%s\n' "$@" >"$T/u/.config/lettucectl/toolbox"
+  chmod 600 "$T/u/.config/lettucectl/toolbox"
+}
+
+run_env() { cat "$T/run-env.log" 2>/dev/null; }
+
+test_toolbox_opens_the_agents_workspace() {
+  toolbox_ready
+  tb lucius
+  ok_rc
+  out_has "alfred: Lucius (agent-2)"
+  log_has "--hostname toolbox-alfred --label lettucectl.toolbox=alfred --label lettucectl.agent=agent-2 --security-opt no-new-privileges --memory 8g --pids-limit 4096 --tmpfs /root:mode=700,exec --tmpfs /tmp:exec"
+  log_has "-v $H/stacks/alfred/state/workspaces/agent-2:/work/agent-2 -w /work/agent-2"
+  log_has "-e AGENT_ID=agent-2 -e LETTA_AGENT_ID=agent-2 -e AGENT_NAME=Lucius -e USER_CWD=/work/agent-2"
+  log_has "-e PATH=/opt/claude-code/bin:/usr/local/bin:/usr/bin:/bin"
+  log_has " lettuce-app-server:test bash"
+}
+
+test_toolbox_clears_the_images_compose_labels() {
+  toolbox_ready
+  tb lucius
+  ok_rc
+  # Inherited from the Compose-built image, they would make the toolbox one of the
+  # stack's app-server containers to Compose and `stale_services`.
+  log_has "docker run --rm --init -i --label com.docker.compose.project= --label com.docker.compose.service= --hostname"
+  log_lacks "org.opencontainers.image.title="
+}
+
+test_toolbox_runs_a_command() {
+  toolbox_ready
+  tb lucius claude --resume
+  ok_rc
+  log_has " lettuce-app-server:test claude --resume"
+}
+
+test_toolbox_skips_what_the_host_lacks() {
+  toolbox_ready
+  tb lucius
+  ok_rc
+  log_lacks "ssh-agent.sock"
+  log_lacks ".gitconfig"
+  log_lacks "/root/.claude"
+  log_lacks "GH_TOKEN"
+  log_lacks "CLAUDE_CODE_OAUTH_TOKEN"
+  out_has "toolbox: nothing of yours found"
+  out_has "claude setup-token"
+}
+
+test_toolbox_brings_in_the_operators_tools() {
+  toolbox_ready
+  toolbox_tools
+  tb lucius
+  ok_rc
+  out_has "toolbox: ssh-agent, git, gh, claude config, claude token"
+  out_lacks "claude setup-token"
+  log_has "-v $T/agent.sock:/run/ssh-agent.sock -e SSH_AUTH_SOCK=/run/ssh-agent.sock"
+  log_has "-v $T/u/.ssh/known_hosts:/root/.ssh/known_hosts:ro"
+  log_has "-v $T/u/.gitconfig:/root/.gitconfig:ro"
+  log_has "-e GIT_CONFIG_KEY_1=credential.https://github.com.helper -e GIT_CONFIG_VALUE_1=!gh auth git-credential"
+  log_has "-v $T/u/.claude/CLAUDE.md:/root/.claude/CLAUDE.md:ro"
+  log_has "-v $T/u/.claude/skills:/root/.claude/skills:ro"
+  log_lacks "settings.json"
+}
+
+test_toolbox_passes_tokens_by_name_only() {
+  toolbox_ready
+  toolbox_tools
+  tb lucius
+  ok_rc
+  log_has "-e GH_TOKEN"
+  log_has "-e CLAUDE_CODE_OAUTH_TOKEN"
+  log_lacks "gh-tok-1"
+  log_lacks "claude-tok-1"
+  run_env | grep -qx "GH_TOKEN=gh-tok-1" || fail "GH_TOKEN not passed: $(run_env)"
+  run_env | grep -qx "CLAUDE_CODE_OAUTH_TOKEN=claude-tok-1" || fail "Claude token not passed: $(run_env)"
+}
+
+test_toolbox_prefers_the_callers_claude_token() {
+  toolbox_ready
+  toolbox_tools
+  TB_CLAUDE=env-tok-1 tb lucius
+  ok_rc
+  run_env | grep -qx "CLAUDE_CODE_OAUTH_TOKEN=env-tok-1" || fail "caller's token not used: $(run_env)"
+}
+
+test_toolbox_reads_the_personal_file() {
+  toolbox_ready
+  mkdir -p "$T/u/shared" "$T/u/.aws" "$T/data"
+  touch "$T/u/.aws/config"
+  toolbox_file "# extras" "" \
+    "mount ~/shared" \
+    "mount ~/.aws/config ~/.aws/config" \
+    "mount $T/data /data rw" \
+    "secret TEST_TOKEN printf tok-123" \
+    "env AWS_PROFILE=dev"
+  tb lucius
+  ok_rc
+  out_has "+5 from $T/u/.config/lettucectl/toolbox"
+  log_has "-v $T/u/shared:$T/u/shared:ro"
+  log_has "-v $T/u/.aws/config:/root/.aws/config:ro"
+  log_has "-v $T/data:/data:rw"
+  log_has "-e AWS_PROFILE=dev"
+  log_has "-e TEST_TOKEN"
+  log_lacks "tok-123"
+  run_env | grep -qx "TEST_TOKEN=tok-123" || fail "secret not passed: $(run_env)"
+}
+
+test_toolbox_file_overrides_built_in_tokens() {
+  toolbox_ready
+  toolbox_tools
+  toolbox_file "secret GH_TOKEN printf file-tok"
+  tb lucius
+  ok_rc
+  eq "$(run_env | grep -c '^GH_TOKEN=')" 1
+  run_env | grep -qx "GH_TOKEN=file-tok" || fail "file token not used: $(run_env)"
+}
+
+test_toolbox_never_sources_the_personal_file() {
+  toolbox_ready
+  # shellcheck disable=SC2016 # the literal line a sourced file would run
+  toolbox_file 'mount $(touch '"$T"'/pwned)'
+  tb lucius
+  bad_rc
+  [[ ! -e $T/pwned ]] || fail "the personal file was executed"
+  log_lacks "docker run"
+}
+
+test_toolbox_refuses_unknown_directives() {
+  toolbox_ready
+  toolbox_file "volume ~/shared"
+  tb lucius
+  bad_rc
+  out_has "unknown directive 'volume'"
+  log_lacks "docker run"
+}
+
+test_toolbox_refuses_missing_mounts() {
+  toolbox_ready
+  toolbox_file "mount ~/nope"
+  tb lucius
+  bad_rc
+  out_has "$T/u/nope does not exist"
+  log_lacks "docker run"
+}
+
+test_toolbox_refuses_a_personal_file_others_can_write() {
+  toolbox_ready
+  toolbox_file "env A=b"
+  chmod 666 "$T/u/.config/lettucectl/toolbox"
+  tb lucius
+  bad_rc
+  out_has "writable by others"
+  log_lacks "docker run"
+}
+
+test_toolbox_fails_when_a_secret_command_fails() {
+  toolbox_ready
+  toolbox_file "secret TEST_TOKEN false"
+  tb lucius
+  bad_rc
+  out_has "secret TEST_TOKEN"
+  log_lacks "docker run"
+}
+
+test_toolbox_needs_the_stack_image() {
+  toolbox_ready
+  stub STUB_IMAGE_RC=1
+  tb lucius
+  bad_rc
+  out_has "lettucectl up alfred"
+  log_lacks "docker run"
+}
+
+test_toolbox_needs_the_agents_workspace() {
+  toolbox_ready
+  rmdir "$H/stacks/alfred/state/workspaces/agent-2"
+  tb lucius
+  bad_rc
+  out_has "no workspace"
+  log_lacks "docker run"
+}
+
+test_toolbox_lists_agents_when_none_match() {
+  toolbox_ready
+  tb hal
+  bad_rc
+  out_has "alfred has no agent 'hal'; agents: Alfred, Lucius"
+  log_lacks "docker run"
+}
+
+test_toolbox_requires_an_agent() {
+  toolbox_ready
+  tb
+  bad_rc
+  out_has "usage: lettucectl toolbox"
+}
+
 # ── skills ───────────────────────────────────────────────────────────────────
 # skill NAME... -> an agent skill in the repo copy
 skill() {

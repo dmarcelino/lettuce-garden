@@ -35,6 +35,7 @@ Operation (<target> is a stack name or "all")
   logs <name> [service]         follow logs
   compose <name> <args...>      any other docker compose command for one stack
   shell <name> [agent]          bash in the app-server, in /work or in an agent's workspace (name or id)
+  toolbox <name> <agent> [cmd]  bash (or cmd) in an agent's workspace with your own ssh, git, gh and Claude Code
 EOF
 }
 
@@ -556,6 +557,187 @@ export LETTA_MEMORY_DIR=$MEMORY_DIR
 exec bash'
 }
 
+# ── toolbox ──────────────────────────────────────────────────────────────────
+# `toolbox` works on an agent's workspace with the operator's own tools from a
+# throwaway container. Agents run in the app-server, so unlike `shell` nothing it
+# brings in is visible to them. The helpers below add to cmd_toolbox's arrays.
+
+toolbox_file() { printf '%s/lettucectl/toolbox' "${XDG_CONFIG_HOME:-$HOME/.config}"; }
+
+# tilde PATH HOME -> PATH with a leading ~ replaced by HOME
+tilde() {
+  # shellcheck disable=SC2088 # matching a literal ~ from the toolbox file
+  case $1 in
+    "~") printf '%s' "$2" ;;
+    "~/"*) printf '%s/%s' "$2" "${1#"~/"}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+# toolbox_mount SRC DEST ro|rw
+toolbox_mount() {
+  [[ -e $1 ]] || die "toolbox: $1 does not exist"
+  [[ $1 == /* && $2 == /* ]] || die "toolbox: mount paths must be absolute: $1 $2"
+  [[ $1$2 != *:* ]] || die "toolbox: mount paths cannot contain ':': $1 $2"
+  run+=(-v "$1:$2:$3")
+}
+
+# toolbox_secret NAME VALUE -> passed to the container by name, never in argv; a
+# later value for the same NAME replaces the earlier one
+toolbox_secret() {
+  local i
+  for i in "${!secret_names[@]}"; do
+    if [[ ${secret_names[i]} == "$1" ]]; then
+      secret_values[i]=$2
+      return
+    fi
+  done
+  secret_names+=("$1")
+  secret_values+=("$2")
+}
+
+# toolbox_builtins -> what every operator gets, each only when the host has it
+toolbox_builtins() {
+  local claude=${CLAUDE_CONFIG_DIR:-$HOME/.claude} f tok found=""
+  if [[ -n ${SSH_AUTH_SOCK:-} && -e $SSH_AUTH_SOCK ]]; then
+    run+=(-v "$SSH_AUTH_SOCK:/run/ssh-agent.sock" -e SSH_AUTH_SOCK=/run/ssh-agent.sock)
+    have+=(ssh-agent)
+  fi
+  if [[ -f $HOME/.ssh/known_hosts ]]; then
+    toolbox_mount "$HOME/.ssh/known_hosts" /root/.ssh/known_hosts ro
+  fi
+  if [[ -f $HOME/.gitconfig ]]; then
+    toolbox_mount "$HOME/.gitconfig" /root/.gitconfig ro
+    have+=(git)
+  fi
+  if command -v gh >/dev/null && tok=$(gh auth token 2>/dev/null </dev/null) && [[ -n $tok ]]; then
+    # The host's credential helper may call gh by a path the image does not have.
+    run+=(-e GIT_CONFIG_COUNT=2
+      -e GIT_CONFIG_KEY_0=credential.https://github.com.helper -e GIT_CONFIG_VALUE_0=
+      -e GIT_CONFIG_KEY_1=credential.https://github.com.helper -e "GIT_CONFIG_VALUE_1=!gh auth git-credential")
+    toolbox_secret GH_TOKEN "$tok"
+    have+=(gh)
+  fi
+  for f in CLAUDE.md settings.json skills agents commands; do
+    if [[ -e $claude/$f ]]; then
+      toolbox_mount "$claude/$f" "/root/.claude/$f" ro
+      found=1
+    fi
+  done
+  [[ -z $found ]] || have+=("claude config")
+  tok=${CLAUDE_CODE_OAUTH_TOKEN:-}
+  if [[ -z $tok ]] && command -v secret-tool >/dev/null; then
+    tok=$(secret-tool lookup service claude-toolbox 2>/dev/null </dev/null) || tok=""
+  fi
+  if [[ -n $tok ]]; then
+    toolbox_secret CLAUDE_CODE_OAUTH_TOKEN "$tok"
+    have+=("claude token")
+  fi
+}
+
+# toolbox_personal FILE -> the operator's own additions; parsed, never sourced.
+# One per line, words split on spaces:
+#   mount SRC [DEST] [rw]       read-only unless rw; DEST defaults to SRC
+#   secret NAME COMMAND [ARG]   NAME is set to the command's output, by name only
+#   env NAME=VALUE              a plain variable
+# ~ is the operator's home in SRC and commands, and /root in DEST.
+toolbox_personal() {
+  local file=$1 line w a n=0 src dest mode val name
+  [[ -f $file ]] || return 0
+  [[ -O $file ]] || die "$file is not owned by you"
+  ((((8#$(file_mode "$file")) & 8#022) == 0)) || die "$file is writable by others (chmod 600 $file)"
+  while IFS= read -r line || [[ -n $line ]]; do
+    read -ra w <<<"$line"
+    [[ ${#w[@]} == 0 || ${w[0]} == \#* ]] && continue
+    case ${w[0]} in
+      mount)
+        a=("${w[@]:1}")
+        mode=ro
+        if ((${#a[@]} > 1)) && [[ ${a[-1]} == rw ]]; then
+          mode=rw
+          unset 'a[-1]'
+        fi
+        ((${#a[@]} == 1 || ${#a[@]} == 2)) || die "$file: expected 'mount SRC [DEST] [rw]': $line"
+        src=$(tilde "${a[0]}" "$HOME")
+        dest=$src
+        [[ -z ${a[1]:-} ]] || dest=$(tilde "${a[1]}" /root)
+        toolbox_mount "$src" "$dest" "$mode"
+        ;;
+      secret)
+        name=${w[1]:-}
+        ((${#w[@]} >= 3)) && [[ $name =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] ||
+          die "$file: expected 'secret NAME COMMAND [ARG...]': $line"
+        a=()
+        for val in "${w[@]:2}"; do a+=("$(tilde "$val" "$HOME")"); done
+        val=$("${a[@]}" </dev/null) || die "$file: secret $name: '${a[*]}' failed"
+        [[ -n $val ]] || die "$file: secret $name: '${a[*]}' printed nothing"
+        toolbox_secret "$name" "$val"
+        ;;
+      env)
+        ((${#w[@]} == 2)) && [[ ${w[1]} =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] ||
+          die "$file: expected 'env NAME=VALUE': $line"
+        run+=(-e "${w[1]}")
+        ;;
+      *) die "$file: unknown directive '${w[0]}': $line" ;;
+    esac
+    n=$((n + 1))
+  done <"$file"
+  ((n == 0)) || have+=("+$n from $file")
+}
+
+cmd_toolbox() {
+  (($# >= 2)) || die "usage: lettucectl toolbox <name> <agent> [command...]"
+  validate_name "$1"
+  require_stack "$1"
+  local name=$1 agent id image config path label ws i run=() secret_names=() secret_values=() have=() argv=("${@:3}")
+  agent=$(find_agent "$name" "$2")
+  id=${agent%%$'\t'*}
+  image=$(compose "$name" config --format json | jq -r '.services["app-server"].image // empty') ||
+    die "$name: docker compose config failed"
+  [[ -n $image ]] || die "$name: the compose config has no app-server image"
+  config=$(env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
+    docker image inspect --format '{{json .Config}}' "$image") ||
+    die "$name: no image $image; run: lettucectl up $name"
+  path=$(jq -r '.Env // [] | map(select(startswith("PATH="))) | .[0] // "" | ltrimstr("PATH=")' <<<"$config")
+  [[ -n $path ]] || die "$name: image $image sets no PATH"
+  ws=$(env_get "$(stack_env "$name")" LETTA_STATE_DIR)/workspaces/$id
+  [[ -d $ws ]] || die "$name: no workspace for ${agent#*$'\t'} at $ws"
+
+  run=(run --rm --init -i)
+  if [[ -t 0 && -t 1 ]]; then run+=(-t); fi
+  # Compose labelled the image it built, and a container inherits those labels, so
+  # Compose and `stale_services` would take the toolbox for one of the stack's
+  # app-server containers. Emptied, they no longer match the project filters.
+  for label in $(jq -r '.Labels // {} | keys[] | select(startswith("com.docker.compose."))' <<<"$config"); do
+    run+=(--label "$label=")
+  done
+  # shellcheck disable=SC2054 # the commas are tmpfs options
+  run+=(--hostname "toolbox-$name" --label "lettucectl.toolbox=$name" --label "lettucectl.agent=$id"
+    --security-opt no-new-privileges --memory 8g --pids-limit 4096
+    --tmpfs /root:mode=700,exec --tmpfs /tmp:exec
+    -v "$ws:/work/$id" -w "/work/$id"
+    -e "AGENT_ID=$id" -e "LETTA_AGENT_ID=$id" -e "AGENT_NAME=${agent#*$'\t'}" -e "USER_CWD=/work/$id"
+    -e "PATH=/opt/claude-code/bin:$path")
+  toolbox_builtins
+  toolbox_personal "$(toolbox_file)"
+  for i in "${!secret_names[@]}"; do run+=(-e "${secret_names[i]}"); done
+
+  info "$name: ${agent#*$'\t'} ($id)"
+  if ((${#have[@]})); then
+    info "toolbox: $(printf '%s, ' "${have[@]}" | sed 's/, $//')"
+  else
+    info "toolbox: nothing of yours found"
+  fi
+  [[ " ${secret_names[*]} " == *" CLAUDE_CODE_OAUTH_TOKEN "* ]] ||
+    warn "no Claude token, so claude will ask you to log in; to set one up once: claude setup-token, then: secret-tool store --label='Claude toolbox' service claude-toolbox"
+  # Secrets reach docker through its environment, so they never show in argv
+  # (which `env -i NAME=value` would do); `-e NAME` copies each one.
+  (
+    for i in "${!secret_names[@]}"; do export "${secret_names[i]}=${secret_values[i]}"; done
+    exec docker "${run[@]}" "$image" "${argv[@]:-bash}"
+  )
+}
+
 cmd_skills() {
   (($# == 1)) || die "usage: lettucectl skills <name|all>"
   local n targets k
@@ -570,7 +752,7 @@ main() {
   local cmd=${1:-help}
   shift || true
   case $cmd in
-    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | skills)
+    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | toolbox | skills)
       "cmd_$cmd" "$@"
       ;;
     help | -h | --help) usage ;;

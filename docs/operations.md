@@ -38,6 +38,34 @@ To look around as an agent does, open a shell in its workspace:
 ```
 Agents run their Bash tool as root in the app-server with no sandbox. Each agent's tool starts in `/work/<agent-id>` with `AGENT_ID`, `AGENT_NAME` and `MEMORY_DIR` set, and `shell` sets the same. Like an agent, the shell can read every agent's workspace, memory and conversations in that stack, plus `/root/.letta` (provider and Claude/Codex credentials). It is close to what the agent sees but not identical: letta-code also sets the conversation id, the agent's secrets and a few `PATH` entries. Commands can be piped in: `./lettucectl shell alfred lucius <<<'ls'`.
 
+### Working on an agent's workspace with your own tools
+`shell` is the wrong place for your own credentials: agents share that container as root, so they could read anything you bring in while the shell is open. `toolbox` instead starts a throwaway container from the stack's app-server image with only that agent's workspace mounted:
+```bash
+./lettucectl toolbox alfred lucius          # bash in /work/<agent-id>
+./lettucectl toolbox alfred lucius claude   # straight into Claude Code
+```
+It brings in whatever of these the host has, read-only, and says which:
+- your ssh-agent (`SSH_AUTH_SOCK`; the key itself never enters) and `~/.ssh/known_hosts`;
+- `~/.gitconfig`, and with a logged-in `gh`, a GitHub token git uses for `https://github.com`;
+- Claude Code's `CLAUDE.md`, `settings.json`, `skills`, `agents` and `commands` (from `~/.claude`, or `CLAUDE_CONFIG_DIR`), and a Claude token: `CLAUDE_CODE_OAUTH_TOKEN` if you set it, otherwise the keyring entry `service claude-toolbox`. Set that entry up once with `claude setup-token`, then `secret-tool store --label='Claude toolbox' service claude-toolbox` (Ubuntu package `libsecret-tools`).
+
+`/root` and `/tmp` are in memory, so history, caches and logins made inside are gone on exit; only what you write to the workspace stays, and the agent sees it. Tokens reach the container through docker's environment, never its command line. The container is not on the stack's network and is labelled `lettucectl.toolbox=<name>`.
+
+For anything else, write `~/.config/lettucectl/toolbox` (mode 600; it is parsed, never sourced, and words are split on spaces):
+```
+# shared skills that ~/.claude/skills links to keep their host path
+mount ~/team/shared-skills
+mount ~/.aws/config ~/.aws/config
+mount ~/scratch /scratch rw
+secret AWS_SESSION_TOKEN secret-tool lookup service aws-session
+env AWS_PROFILE=dev
+```
+`mount SRC [DEST] [rw]` is read-only unless `rw`, and `DEST` defaults to `SRC`; `~` is your home in `SRC` and `/root` in `DEST`. `secret NAME COMMAND...` runs the command without a shell and passes its output as `NAME`; a secret overrides a built-in of the same name.
+
+Two limits:
+- Only someone with Docker access on the host can run `toolbox`. Docker access is root on the host, so a stack's web-only users cannot, by design.
+- The workspace is the agent's to write, and what you run there runs with your credentials: git hooks, `.git/config` (`core.sshCommand`, credential helpers), package scripts, Makefiles. Look before you push, and prefer short-lived, narrowly scoped tokens.
+
 ### Agent skills
 `agent-skills/` holds skills this repo gives every agent, for example `scheduling-scripts` (cron jobs that survive restarts, instead of `crontab`). After adding or changing one, push them to the running stacks:
 ```bash
