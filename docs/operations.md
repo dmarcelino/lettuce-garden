@@ -101,23 +101,52 @@ git -C upstream fetch --tags && git -C upstream tag --sort=-creatordate | head
 Back up first (below), and read upstream's CHANGELOG.md.
 
 ## Backups
-Everything a stack needs is in `stacks/<name>/` (its secrets and its state). Back up with the stack stopped. The state is root-owned, so read it as root:
 ```bash
-./lettucectl down alfred
-sudo tar -C stacks -czf ~/lettuce-alfred-$(date +%F).tgz alfred
+./lettucectl backup alfred /mnt/backup             # a snapshot in /mnt/backup/alfred/<UTC time>/
+./lettucectl backup all /mnt/backup --compress     # a .tar.gz per stack instead
+```
+`backup` copies what the images cannot recreate:
+- agents, conversations and memory (`state/letta-data`);
+- settings, schedules, transcripts, Claude Code/Codex/gh logins and skills installed from Settings (`state/letta-home`);
+- agents' workspaces (`state/workspaces`) and the tools agents installed (`state/tools`, left out with `--no-tools`);
+- `stack.env`, and with the `secrets` profile the vault.
+
+It leaves out caches and the skills that come back by themselves: upstream's, which the BFF reinstalls on every connect, and those from `agent-skills/`, which `lettucectl skills` reinstalls. The state is root-owned, so `backup` reads it from a container of a small image it builds (`backup/Dockerfile`, `lettuce-backup:local`), with no network and read-only mounts. No sudo is needed.
+
+- **Snapshots (the default).** Each run writes `<dir>/<name>/<UTC time>/`, owned by you with the original file modes. Files unchanged since the previous snapshot are hard links to it, so a run costs only what changed, and each snapshot is still a complete copy. Hard links need a Linux filesystem at the destination (ext4, xfs, btrfs; not FAT or exFAT). `<dir>` is a local directory: for another machine, mount it (NAS, USB disk) or copy the snapshots onward with your own tools.
+- **`--compress`.** Writes `<dir>/<name>/<UTC time>.tar.gz` instead, mode 600. Inside the archive, files keep their real owners. Each archive holds everything again, so this suits one-off copies and moving to another host better than regular backups.
+- **A running stack.** Copying while agents write can catch memory, conversations or the vault mid-write and leave a corrupt backup. `backup` asks whether to pause the stack while it copies (agents and the UI freeze until it finishes; recommended), copy live anyway, or abort. `--pause` or `--live` answers ahead of time; without either and without anyone to answer, it aborts. A stopped stack is copied without asking.
+- **`--keep N`.** After a successful run, removes all but the newest N snapshots (or, with `--compress`, archives) of each stack. Snapshots can hold read-only directories, such as Go's module cache, so to delete one by hand use `chmod -R u+w <snapshot>` first.
+- A run that is interrupted leaves a `.partial-*` entry, which the next run removes.
+
+A nightly cron job (`crontab -e`) for every stack that keeps two weeks:
+```
+30 3 * * * /path/to/lettucectl backup all /mnt/backup --pause --keep 14
+```
+A backup holds credentials: provider keys, Claude/Codex/gh logins and `stack.env`. Keep the destination private, and encrypt any copy that leaves the host. The vault inside it stays encrypted with the person's passphrase, which is stored nowhere, so nobody (you included) can recover a vault whose passphrase is forgotten. `config.env` and `.secrets/` are not included; keep a copy of them too.
+
+To restore, stop the stack (`./lettucectl down alfred`), or on a new host create its directory: `(umask 077 && mkdir -p stacks/alfred/state)`. Then, from a snapshot `S` (the state goes back to root, the vault to its uid 10001, and `state/` itself stays yours):
+```bash
+S=/mnt/backup/alfred/20261018T033000Z
+install -m 600 "$S/stack.env" stacks/alfred/stack.env
+docker run --rm -v "$S/state:/b:ro" -v "$PWD/stacks/alfred/state:/d" lettuce-backup:local \
+  sh -c "rsync -aH --numeric-ids --delete --chown=0:0 /b/ /d/ && chown $(id -u):$(id -g) /d"
+# with the secrets profile:
+docker run --rm -v "$S/vault:/b:ro" -v lettuce-alfred_secret-broker-data:/d lettuce-backup:local \
+  rsync -a --numeric-ids --delete --chown=10001:10001 /b/ /d/
 ./lettucectl up alfred
 ```
-To restore on another host:
-1. Clone this repo.
-2. Copy `config.env` and `.secrets/`, and extract the archive into `stacks/`.
-3. Run `./lettucectl init`.
-4. Run `./lettucectl up all`.
+From an archive `A`, extract the same parts in the same image instead (the archive keeps the owners), then `up`:
+```bash
+docker run --rm -v "$A:/a.tar.gz:ro" -v "$PWD/stacks/alfred/state:/d" lettuce-backup:local \
+  tar -xzpf /a.tar.gz --numeric-owner -C /d --strip-components=2 ./state
+docker run --rm -v "$A:/a.tar.gz:ro" -v lettuce-alfred_secret-broker-data:/d lettuce-backup:local \
+  sh -c 'tar -xzpf /a.tar.gz --numeric-owner -C /d --strip-components=2 ./vault && chown 10001:10001 /d && chmod 700 /d'
+(umask 077 && tar -xzOf "$A" ./stack.env >stacks/alfred/stack.env)
+```
+On another host, first clone this repo, copy `config.env` and `.secrets/`, run `./lettucectl init`, and build the image: `docker build -t lettuce-backup:local backup`. If the repo is at a different path there, fix `LETTA_STATE_DIR` in the restored `stack.env`. Cloudflare needs no change: the tunnel token travels inside `stack.env`. Never run the same stack on two hosts at once.
 
-Cloudflare needs no change: the tunnel token travels inside `stack.env`. Never run the same stack on two hosts at once.
-
-The named volume `lettuce-<name>_bff-data` holds push-notification subscriptions and pinned-agent lists. Losing it is harmless.
-
-With the `secrets` profile, the named volume `lettuce-<name>_secret-broker-data` holds that stack's vault. It is encrypted with the person's passphrase, which is stored nowhere, so nobody (you included) can recover a vault whose passphrase is forgotten. It is not part of the backup above; to keep it, also back up the volume (`docker run --rm -v lettuce-<name>_secret-broker-data:/d -v "$PWD":/b alpine tar -C /d -czf /b/vault-<name>.tgz .`), which is useless without the passphrase. `remove` deletes it.
+The named volume `lettuce-<name>_bff-data` holds push-notification subscriptions and pinned-agent lists. It is not backed up; losing it is harmless. `remove` deletes the vault's volume along with the stack.
 
 Each stack's push-notification keypairs (`PUSH_VAPID_*` for Lettuce, `BROKER_VAPID_*` for the vault, in `stack.env`) are generated by the first `up` and kept from then on. Do not change or delete it: every device that enabled notifications would have to enable them again.
 

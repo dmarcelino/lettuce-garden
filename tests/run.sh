@@ -14,7 +14,7 @@ setup() {
   T=$(mktemp -d)
   H=$T/home
   mkdir -p "$H/upstream/docker" "$H/.secrets" "$T/bin"
-  cp -r "$ROOT/lettucectl" "$ROOT/lib" "$ROOT/compose" "$ROOT/config.env.example" "$H/"
+  cp -r "$ROOT/lettucectl" "$ROOT/lib" "$ROOT/compose" "$ROOT/backup" "$ROOT/config.env.example" "$H/"
   cp "$ROOT"/tests/stubs/* "$T/bin/"
   touch "$H/upstream/docker/compose.yml"
   printf 'secret-api-token-123\n' >"$H/.secrets/cloudflare-api-token"
@@ -1173,6 +1173,225 @@ test_skills_script_keeps_skills_on_a_broken_stream() {
   printf 'alpha\n' >"$d/.lettucectl-skills"
   ! sh -c "$(cat "$T/exec-script")" sh "$d" alpha <<<'not a tar' 2>/dev/null || fail "script accepted a broken stream"
   eq "$(cd "$d" && find . | LC_ALL=C sort | paste -sd' ')" ". ./.lettucectl-skills ./alpha ./alpha/SKILL.md"
+}
+
+# ── backup ───────────────────────────────────────────────────────────────────
+# backed -> a fresh alfred stack with a backup destination at $B
+backed() {
+  added
+  B=$T/bk
+  mkdir -p "$B"
+}
+backup_runs() { grep -c "^docker run .* lettuce-backup:local sh -c" "$T/calls.log" || true; }
+snapshots() { find "$B/alfred" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort | paste -sd' '; }
+
+test_backup_rejects_bad_destinations() {
+  backed
+  ctl backup alfred "$T/missing"
+  bad_rc
+  out_has "is not a directory"
+  ctl backup alfred backup-host:/srv/backups
+  bad_rc
+  out_has "cannot contain ':' or ','"
+  ctl backup alfred "$H/stacks/alfred"
+  bad_rc
+  out_has "cannot be inside"
+  ctl backup alfred "$B" --pause --live
+  bad_rc
+  out_has "use --pause or --live, not both"
+  ctl backup alfred "$B" --keep 0
+  bad_rc
+  out_has "--keep needs"
+  ctl backup alfred
+  bad_rc
+  out_has "usage: lettucectl backup"
+  log_lacks "docker run"
+}
+
+test_backup_copies_a_stopped_stack_without_asking() {
+  backed
+  ctl backup alfred "$B"
+  ok_rc
+  out_lacks "Choice"
+  log_lacks " pause"
+  log_has "docker build -q -t lettuce-backup:local $H/backup"
+  log_has "docker run --rm --network none --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --label lettucectl.backup=alfred"
+  log_has "-v $H/stacks/alfred/state:/src/state:ro -v $H/stacks/alfred/stack.env:/src/stack.env:ro -v $B/alfred:/dst lettuce-backup:local"
+  log_has "sh rsync /src /dst $(id -u):$(id -g)  .partial-"
+  log_has "state/letta-home/mod-cache state/letta-home/claude/paste-cache state/letta-home/claude/backups"
+  log_lacks "state/tools"
+  log_lacks "secret-broker-data"
+  [[ $(snapshots) =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || fail "expected one snapshot, got: $(snapshots)"
+  eq "$(stat -c %a "$B/alfred")" 700
+  out_has "alfred: $B/alfred/$(snapshots)"
+}
+
+test_backup_leaves_out_upstream_skills_and_tools() {
+  backed
+  mkdir -p "$H/upstream/docker/agent-skills/serving-web-apps"
+  ctl backup alfred "$B" --no-tools
+  ok_rc
+  log_has "state/letta-home/skills/serving-web-apps state/tools"
+}
+
+test_backup_links_to_the_previous_snapshot() {
+  backed
+  mkdir -p "$B/alfred/20260101T000000Z" "$B/alfred/20260102T000000Z" "$B/alfred/notes"
+  ctl backup alfred "$B"
+  ok_rc
+  log_has "$(id -u):$(id -g) 20260102T000000Z .partial-"
+}
+
+test_backup_removes_what_an_interrupted_run_left() {
+  backed
+  mkdir -p "$B/alfred/.partial-20260101T000000Z"
+  ctl backup alfred "$B"
+  ok_rc
+  log_has "-v $B/alfred:/dst lettuce-backup:local rm -rf -- /dst/.partial-20260101T000000Z"
+}
+
+test_backup_includes_the_vault() {
+  backed
+  with_secrets
+  ctl backup alfred "$B"
+  ok_rc
+  log_has "docker volume inspect lettuce-alfred_secret-broker-data"
+  log_has "-v lettuce-alfred_secret-broker-data:/src/vault:ro"
+}
+
+test_backup_skips_a_vault_that_does_not_exist() {
+  backed
+  with_secrets
+  stub STUB_VOLUME_RC=1
+  ctl backup alfred "$B"
+  ok_rc
+  out_has "the vault volume lettuce-alfred_secret-broker-data does not exist yet"
+  log_lacks "/src/vault"
+}
+
+test_backup_pauses_a_running_stack_when_asked() {
+  backed
+  containers alfred app-server bff
+  ctl backup alfred "$B" <<<"p"
+  ok_rc
+  out_has "alfred is running. A live copy can catch"
+  eq "$(grep -oE ' (pause|unpause)$|lettuce-backup:local sh -c' "$T/calls.log" | paste -sd,)" \
+    " pause,lettuce-backup:local sh -c, unpause"
+}
+
+test_backup_copies_live_when_asked() {
+  backed
+  containers alfred app-server
+  ctl backup alfred "$B" <<<"l"
+  ok_rc
+  log_lacks " pause"
+  eq "$(backup_runs)" 1
+}
+
+test_backup_aborts_without_an_answer() {
+  backed
+  containers alfred app-server
+  ctl backup alfred "$B" </dev/null
+  bad_rc
+  out_has "aborted (to answer ahead of time, as from cron: --pause or --live)"
+  eq "$(backup_runs)" 0
+  ctl backup alfred "$B" <<<"y"
+  bad_rc
+  eq "$(backup_runs)" 0
+}
+
+test_backup_flags_answer_ahead_of_time() {
+  backed
+  containers alfred app-server
+  ctl backup alfred "$B" --pause </dev/null
+  ok_rc
+  out_lacks "Choice"
+  log_has " unpause"
+}
+
+test_backup_unpauses_when_the_copy_fails() {
+  backed
+  containers alfred app-server
+  stub STUB_RUN_RC=1
+  ctl backup alfred "$B" --pause
+  bad_rc
+  out_has "alfred: the copy failed"
+  log_has " unpause"
+  eq "$(snapshots)" ""
+}
+
+test_backup_compress_writes_a_private_archive() {
+  backed
+  ctl backup alfred "$B" --compress
+  ok_rc
+  log_has "sh tar /src     state/letta-home/mod-cache"
+  log_lacks ":/dst"
+  [[ $(snapshots) =~ ^[0-9]{8}T[0-9]{6}Z\.tar\.gz$ ]] || fail "expected one archive, got: $(snapshots)"
+  eq "$(stat -c %a "$B/alfred/$(snapshots)")" 600
+}
+
+test_backup_keep_removes_older_snapshots() {
+  backed
+  mkdir -p "$B/alfred/20260101T000000Z" "$B/alfred/20260102T000000Z" "$B/alfred/20260103T000000Z" "$B/alfred/notes"
+  ctl backup alfred "$B" --keep 2
+  ok_rc
+  log_has "rm -rf -- /dst/20260101T000000Z /dst/20260102T000000Z"
+  log_lacks "/dst/20260103T000000Z"
+  log_lacks "/dst/notes"
+  out_has "alfred: removed 2 older backup(s)"
+}
+
+test_backup_keep_removes_older_archives() {
+  backed
+  mkdir -p "$B/alfred/20260103T000000Z"
+  touch "$B/alfred/20260101T000000Z.tar.gz" "$B/alfred/20260102T000000Z.tar.gz" "$B/alfred/notes.tar.gz"
+  ctl backup alfred "$B" --compress --keep 2
+  ok_rc
+  [[ ! -e $B/alfred/20260101T000000Z.tar.gz ]] || fail "oldest archive kept"
+  [[ -e $B/alfred/20260102T000000Z.tar.gz && -e $B/alfred/notes.tar.gz && -d $B/alfred/20260103T000000Z ]] ||
+    fail "removed more than the oldest archive: $(snapshots)"
+}
+
+test_backup_all_covers_every_stack() {
+  ctl add alfred alfred@example.com
+  ctl add hal hal@example.com
+  B=$T/bk
+  mkdir -p "$B"
+  ctl backup all "$B"
+  ok_rc
+  [[ -d $B/alfred && -d $B/hal ]] || fail "not every stack backed up"
+  log_has "lettucectl.backup=hal"
+}
+
+# The script lettucectl runs in the container, run here with the host's rsync and
+# tar on a stand-in state.
+test_backup_script_copies_what_matters() {
+  command -v rsync >/dev/null || return 0
+  backed
+  mkdir -p "$H/upstream/docker/agent-skills/serving-web-apps"
+  ctl backup alfred "$B" --no-tools
+  ok_rc
+  local src=$T/src dst=$T/dst args got
+  mkdir -p "$src/state/letta-home/"{mod-cache,skills/serving-web-apps,skills/scheduling-scripts,skills/from-settings} \
+    "$src/state/letta-home/claude/projects" "$src/state/workspaces/agent-1" "$src/state/tools/bin" "$src/vault" "$dst"
+  touch "$src/stack.env" "$src/state/letta-home/mod-cache/x" "$src/state/letta-home/claude/projects/t.jsonl" \
+    "$src/state/letta-home/skills/serving-web-apps/SKILL.md" "$src/state/letta-home/skills/scheduling-scripts/SKILL.md" \
+    "$src/state/letta-home/skills/from-settings/SKILL.md" "$src/state/workspaces/agent-1/notes.md" \
+    "$src/state/tools/bin/uv" "$src/vault/vault.db"
+  printf 'scheduling-scripts\n' >"$src/state/letta-home/skills/.lettucectl-skills"
+  # The same excludes lettucectl passed, after MODE SRC DST OWNER PREV OUT.
+  args=$(grep -o ' \.partial-[^ ]* .*' "$T/calls.log" | head -1 | cut -d' ' -f3-)
+  # shellcheck disable=SC2086 # the excludes are single words
+  sh -c "$(cat "$T/run-script")" sh rsync "$src" "$dst" "$(id -u):$(id -g)" "" s1 $args
+  got=$(cd "$dst/s1" && find . -type f | LC_ALL=C sort | paste -sd' ')
+  eq "$got" "./stack.env ./state/letta-home/claude/projects/t.jsonl ./state/letta-home/skills/from-settings/SKILL.md ./state/workspaces/agent-1/notes.md ./vault/vault.db"
+  # shellcheck disable=SC2086
+  sh -c "$(cat "$T/run-script")" sh rsync "$src" "$dst" "$(id -u):$(id -g)" s1 s2 $args
+  eq "$(stat -c %h "$dst/s2/state/workspaces/agent-1/notes.md")" 2
+  # shellcheck disable=SC2086
+  sh -c "$(cat "$T/run-script")" sh tar "$src" "" "" "" "" $args >"$T/a.tar.gz"
+  got=$(tar -tzf "$T/a.tar.gz" | grep -v '/$' | LC_ALL=C sort | paste -sd' ')
+  eq "$got" "./stack.env ./state/letta-home/claude/projects/t.jsonl ./state/letta-home/skills/from-settings/SKILL.md ./state/workspaces/agent-1/notes.md ./vault/vault.db"
 }
 
 for t in $(declare -F | awk '$3 ~ /^test_/ { print $3 }'); do

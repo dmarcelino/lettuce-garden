@@ -30,6 +30,8 @@ Operation (<target> is a stack name or "all")
   restart <target>              down + up (app-server and bff share a namespace; never restart one alone)
   check <target>                refuse unsafe or inconsistent configuration
   skills <target>               install agent-skills/ into running stacks (every agent of the stack)
+  backup <target> <dir> [opts]  copy agents, memory, workspaces, tools and vault to a snapshot in <dir>/<name>/
+                                (--compress: a tar.gz instead; --no-tools; --pause|--live; --keep N)
   status                        containers and health of every stack
   list                          stacks, hostnames and allowed users
   logs <name> [service]         follow logs
@@ -695,8 +697,7 @@ cmd_toolbox() {
   image=$(compose "$name" config --format json | jq -r '.services["app-server"].image // empty') ||
     die "$name: docker compose config failed"
   [[ -n $image ]] || die "$name: the compose config has no app-server image"
-  config=$(env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
-    docker image inspect --format '{{json .Config}}' "$image") ||
+  config=$(host_docker image inspect --format '{{json .Config}}' "$image") ||
     die "$name: no image $image; run: lettucectl up $name"
   path=$(jq -r '.Env // [] | map(select(startswith("PATH="))) | .[0] // "" | ltrimstr("PATH=")' <<<"$config")
   [[ -n $path ]] || die "$name: image $image sets no PATH"
@@ -738,6 +739,211 @@ cmd_toolbox() {
   )
 }
 
+# ── backup ───────────────────────────────────────────────────────────────────
+# `backup` copies what the images cannot recreate (agents, memory, conversations,
+# workspaces, agent-installed tools, Settings skills, the vault and stack.env) to
+# <dir>/<name>/: a dated rsync snapshot that hard-links files unchanged since the
+# previous one, or with --compress a tar.gz. The state is root-owned, so it is
+# read in a throwaway container of backup/Dockerfile. The helpers below read
+# cmd_backup's settings (dest, compress, tools, when, keep).
+
+BACKUP_IMAGE=lettuce-backup:local
+# No network, and only the capabilities copying needs: read everything, write
+# into the operator's directory and hand the copies to the operator (--chown).
+BACKUP_RUN=(run --rm --network none --read-only --tmpfs /tmp --security-opt no-new-privileges
+  --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER)
+# A backup's name: its UTC start time, which sorts by age.
+BACKUP_TS='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z'
+
+# Run by sh in the backup container as: sh -c "$BACKUP_COPY" sh MODE SRC DST OWNER
+# PREV OUT EXCLUDE... MODE rsync copies SRC to DST/OUT owned by OWNER, hard-linking
+# files unchanged since DST/PREV; MODE tar writes a tar.gz of SRC to stdout, with
+# the real owners a restore needs. EXCLUDEs are relative to SRC. The skills
+# lettucectl installed are left out too (`skills` reinstalls them); their manifest
+# is read here because the host may not be allowed to.
+# shellcheck disable=SC2016 # expanded by sh in the container
+BACKUP_COPY='set -e
+mode=$1 src=$2 dst=$3 owner=$4 prev=$5 out=$6
+shift 6
+x=$(mktemp)
+for p in "$@"; do printf "%s\n" "$p"; done >"$x"
+m=$src/state/letta-home/skills/.lettucectl-skills
+if [ -f "$m" ]; then
+  echo state/letta-home/skills/.lettucectl-skills >>"$x"
+  while read -r s; do
+    if [ -n "$s" ]; then echo "state/letta-home/skills/$s" >>"$x"; fi
+  done <"$m"
+fi
+rc=0
+if [ "$mode" = tar ]; then
+  sed "s|^|./|" "$x" >"$x.tar"
+  tar -C "$src" --numeric-owner --anchored -X "$x.tar" -czf - . || rc=$?
+  # 1: a file changed while it was read, as in a live copy; the archive is complete.
+  if [ "$rc" = 1 ]; then echo "warning: files changed during the copy" >&2; rc=0; fi
+else
+  sed "s|^|/|" "$x" >"$x.rsync"
+  rsync -aH --numeric-ids --chown="$owner" --exclude-from="$x.rsync" \
+    ${prev:+--link-dest="$dst/$prev"} "$src/" "$dst/$out/" || rc=$?
+  # 24: files vanished while copying, as in a live copy.
+  if [ "$rc" = 24 ]; then echo "warning: files vanished during the copy" >&2; rc=0; fi
+fi
+exit "$rc"'
+
+# backup_list DIR SUFFIX -> DIR's snapshots (SUFFIX "") or archives (SUFFIX
+# .tar.gz), oldest first
+backup_list() {
+  local p
+  # shellcheck disable=SC2086 # BACKUP_TS is a glob
+  for p in "$1"/$BACKUP_TS"$2"; do
+    if [[ -e $p ]]; then printf '%s\n' "${p##*/}"; fi
+  done
+}
+
+# backup_rm NAME DIR ENTRY... -> deletes DIR's entries from the container: a
+# snapshot can hold read-only directories (Go's module cache) the operator cannot empty
+backup_rm() {
+  local name=$1 dir=$2 e paths=()
+  shift 2
+  (($#)) || return 0
+  for e in "$@"; do paths+=("/dst/$e"); done
+  host_docker "${BACKUP_RUN[@]}" --label "lettucectl.backup=$name" -v "$dir:/dst" "$BACKUP_IMAGE" \
+    rm -rf -- "${paths[@]}" || die "$name: could not delete $* in $dir"
+}
+
+# backup_choice NAME -> pause|live for a running stack: --pause or --live, else the
+# operator's answer
+backup_choice() {
+  local answer=""
+  if [[ -n $when ]]; then
+    printf '%s' "$when"
+    return
+  fi
+  info "$1 is running. A live copy can catch memory repos, conversations or the vault mid-write and"
+  info "leave a corrupt backup; pausing is recommended (agents and the UI freeze until the copy ends)."
+  info "  [p] pause $1 while copying   [l] copy live anyway (not recommended)   [a] abort"
+  printf 'Choice [p/l/a]: ' >&2
+  read -r answer || true
+  case $answer in
+    p | P) printf pause ;;
+    l | L) printf live ;;
+    *) die "aborted (to answer ahead of time, as from cron: --pause or --live)" ;;
+  esac
+}
+
+# backup_prune NAME DIR -> keeps DIR's newest $keep backups of the kind just made
+backup_prune() {
+  local name=$1 dir=$2 p old=()
+  if [[ -n $compress ]]; then
+    mapfile -t old < <(backup_list "$dir" .tar.gz | head -n -"$keep")
+    for p in "${old[@]}"; do rm -f -- "${dir:?}/$p"; done
+  else
+    mapfile -t old < <(backup_list "$dir" "" | head -n -"$keep")
+    backup_rm "$name" "$dir" "${old[@]}"
+  fi
+  ((${#old[@]} == 0)) || info "$name: removed ${#old[@]} older backup(s): ${old[*]}"
+}
+
+# backup_stack NAME -> one backup of the stack into $dest/NAME
+backup_stack() {
+  local name=$1 f state dir ts prev s p vol choice="" mounts=() excludes=() stale=()
+  f=$(stack_env "$name")
+  state=$(env_get "$f" LETTA_STATE_DIR)
+  [[ -d $state ]] || die "$name: no state directory at $state"
+  dir=$dest/$name
+  (umask 077 && mkdir -p "$dir")
+  mounts=(--label "lettucectl.backup=$name" -v "$state:/src/state:ro" -v "$f:/src/stack.env:ro")
+  if has_profile "$(env_get "$f" COMPOSE_PROFILES)" secrets; then
+    vol=lettuce-${name}_secret-broker-data
+    # `run -v` would create a missing volume, so look first.
+    if host_docker volume inspect "$vol" >/dev/null 2>&1; then
+      mounts+=(-v "$vol:/src/vault:ro")
+    else
+      warn "$name: the vault volume $vol does not exist yet; backing up without it"
+    fi
+  fi
+  excludes=(state/letta-home/mod-cache state/letta-home/claude/paste-cache state/letta-home/claude/backups)
+  # The BFF rewrites upstream's skills on every connect.
+  for s in "$(upstream_dir)"/docker/agent-skills/*/; do
+    if [[ -d $s ]]; then
+      s=${s%/}
+      excludes+=("state/letta-home/skills/${s##*/}")
+    fi
+  done
+  [[ -n $tools ]] || excludes+=(state/tools)
+
+  # What an interrupted run left behind.
+  for p in "$dir"/.partial-*; do
+    if [[ -e $p ]]; then stale+=("${p##*/}"); fi
+  done
+  backup_rm "$name" "$dir" "${stale[@]}"
+  ts=$(date -u +%Y%m%dT%H%M%SZ)
+  [[ ! -e $dir/$ts && ! -e $dir/$ts.tar.gz ]] || die "$name: $dir/$ts already exists; run again in a second"
+  if stack_running "$name"; then
+    choice=$(backup_choice "$name")
+  fi
+  (
+    if [[ $choice == pause ]]; then
+      info "$name: paused while copying"
+      compose "$name" pause >/dev/null || die "$name: could not pause the stack"
+      trap 'compose "$name" unpause >/dev/null || warn "$name: could not unpause it; run: lettucectl compose $name unpause"' EXIT
+      trap 'exit 130' INT TERM
+    fi
+    if [[ -n $compress ]]; then
+      if ! (umask 077 && host_docker "${BACKUP_RUN[@]}" "${mounts[@]}" "$BACKUP_IMAGE" \
+        sh -c "$BACKUP_COPY" sh tar /src "" "" "" "" "${excludes[@]}" >"$dir/.partial-$ts.tar.gz"); then
+        rm -f "$dir/.partial-$ts.tar.gz"
+        die "$name: the copy failed"
+      fi
+      mv "$dir/.partial-$ts.tar.gz" "$dir/$ts.tar.gz"
+    else
+      prev=$(backup_list "$dir" "" | tail -n 1)
+      host_docker "${BACKUP_RUN[@]}" "${mounts[@]}" -v "$dir:/dst" "$BACKUP_IMAGE" \
+        sh -c "$BACKUP_COPY" sh rsync /src /dst "$(id -u):$(id -g)" "$prev" ".partial-$ts" "${excludes[@]}" ||
+        die "$name: the copy failed; the next run removes $dir/.partial-$ts"
+      mv "$dir/.partial-$ts" "$dir/$ts"
+    fi
+  )
+  info "$name: $dir/$ts${compress:+.tar.gz}"
+  [[ -z $keep ]] || backup_prune "$name" "$dir"
+}
+
+cmd_backup() {
+  local usage="usage: lettucectl backup <name|all> <dir> [--compress] [--no-tools] [--pause|--live] [--keep N]"
+  local dest compress="" tools=1 when="" keep="" n targets args=()
+  while (($#)); do
+    case $1 in
+      --compress) compress=1 ;;
+      --no-tools) tools="" ;;
+      --pause | --live)
+        [[ -z $when || $when == "${1#--}" ]] || die "use --pause or --live, not both"
+        when=${1#--}
+        ;;
+      --keep)
+        [[ ${2:-} =~ ^[1-9][0-9]*$ ]] || die "--keep needs how many backups to keep, 1 or more"
+        keep=$2
+        shift
+        ;;
+      -*) die "$usage" ;;
+      *) args+=("$1") ;;
+    esac
+    shift
+  done
+  ((${#args[@]} == 2)) || die "$usage"
+  require_initialised
+  targets=$(expand_targets "${args[0]}")
+  dest=${args[1]}
+  [[ $dest != *[:,]* ]] || die "the destination cannot contain ':' or ','; backup writes to a local directory"
+  [[ -d $dest ]] || die "$dest is not a directory"
+  dest=$(realpath "$dest")
+  [[ $dest != *[:,]* ]] || die "the destination cannot contain ':' or ',': $dest"
+  [[ $dest/ != "$LETTUCE_HOME"/stacks/* ]] || die "the destination cannot be inside $LETTUCE_HOME/stacks"
+  host_docker build -q -t "$BACKUP_IMAGE" "$LETTUCE_HOME/backup" >/dev/null ||
+    die "could not build $BACKUP_IMAGE (backup/Dockerfile)"
+  for n in $targets; do
+    backup_stack "$n"
+  done
+}
+
 cmd_skills() {
   (($# == 1)) || die "usage: lettucectl skills <name|all>"
   local n targets k
@@ -752,7 +958,7 @@ main() {
   local cmd=${1:-help}
   shift || true
   case $cmd in
-    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | toolbox | skills)
+    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | toolbox | skills | backup)
       "cmd_$cmd" "$@"
       ;;
     help | -h | --help) usage ;;
