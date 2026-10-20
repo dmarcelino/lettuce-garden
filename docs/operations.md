@@ -109,15 +109,16 @@ Back up first (below), and read upstream's CHANGELOG.md.
 - agents, conversations and memory (`state/letta-data`);
 - settings, schedules, transcripts, Claude Code/Codex/gh logins and skills installed from Settings (`state/letta-home`);
 - agents' workspaces (`state/workspaces`) and the tools agents installed (`state/tools`, left out with `--no-tools`);
-- `stack.env`, and with the `secrets` profile the vault.
+- `stack.env`, and the vault, whenever its volume exists (turning the `secrets` profile off keeps it).
 
 It leaves out caches and the skills that come back by themselves: upstream's, which the BFF reinstalls on every connect, and those from `agent-skills/`, which `lettucectl skills` reinstalls. The state is root-owned, so `backup` reads it from a container of a small image it builds (`backup/Dockerfile`, `lettuce-backup:local`), with no network and read-only mounts. No sudo is needed.
 
-- **Snapshots (the default).** Each run writes `<dir>/<name>/<UTC time>/`, owned by you with the original file modes. Files unchanged since the previous snapshot are hard links to it, so a run costs only what changed, and each snapshot is still a complete copy. Hard links need a Linux filesystem at the destination (ext4, xfs, btrfs; not FAT or exFAT). `<dir>` is a local directory: for another machine, mount it (NAS, USB disk) or copy the snapshots onward with your own tools.
+- **Snapshots (the default).** Each run writes `<dir>/<name>/<UTC time>/`, owned by you with the original file modes. The original owners are not kept: a restore makes the state root's again, which is what nearly all of it is, so a file an agent gave to another user (say, a database directory owned by uid 999) comes back owned by root. Use `--compress` when those owners matter. Files unchanged since the previous snapshot are hard links to it, so a run costs only what changed, and each snapshot is still a complete copy. Hard links need a Linux filesystem at the destination (ext4, xfs, btrfs; not FAT or exFAT). `<dir>` is a local directory outside this repo: for another machine, mount it (NAS, USB disk) or copy the snapshots onward with your own tools.
 - **`--compress`.** Writes `<dir>/<name>/<UTC time>.tar.gz` instead, mode 600. Inside the archive, files keep their real owners. Each archive holds everything again, so this suits one-off copies and moving to another host better than regular backups.
 - **A running stack.** Copying while agents write can catch memory, conversations or the vault mid-write and leave a corrupt backup. `backup` asks whether to pause the stack while it copies (agents and the UI freeze until it finishes; recommended), copy live anyway, or abort. `--pause` or `--live` answers ahead of time; without either and without anyone to answer, it aborts. A stopped stack is copied without asking.
 - **`--keep N`.** After a successful run, removes all but the newest N snapshots (or, with `--compress`, archives) of each stack. Snapshots can hold read-only directories, such as Go's module cache, so to delete one by hand use `chmod -R u+w <snapshot>` first.
-- A run that is interrupted leaves a `.partial-*` entry, which the next run removes.
+- A run that is interrupted (Ctrl-C stops the copy and unpauses the stack) leaves a `.partial-*` entry, which the next run removes. Only one backup of a stack runs at a time; a second one stops with an error.
+- With `all`, a stack that fails (or that nobody answered for) does not stop the others; `backup` lists the failed ones at the end and exits with an error.
 
 A nightly cron job (`crontab -e`) for every stack that keeps two weeks:
 ```
@@ -131,11 +132,13 @@ S=/mnt/backup/alfred/20261018T033000Z
 install -m 600 "$S/stack.env" stacks/alfred/stack.env
 docker run --rm -v "$S/state:/b:ro" -v "$PWD/stacks/alfred/state:/d" lettuce-backup:local \
   sh -c "rsync -aH --numeric-ids --delete --chown=0:0 /b/ /d/ && chown $(id -u):$(id -g) /d"
-# with the secrets profile:
+# if the vault is in the snapshot:
 docker run --rm -v "$S/vault:/b:ro" -v lettuce-alfred_secret-broker-data:/d lettuce-backup:local \
   rsync -a --numeric-ids --delete --chown=10001:10001 /b/ /d/
 ./lettucectl up alfred
 ```
+`--delete` makes the state match the snapshot, so it also deletes what the backup left out. The caches and skills come back by themselves, but for a snapshot taken with `--no-tools`, add `--exclude=/tools/` to the first `rsync` to keep the tools already there.
+
 From an archive `A`, extract the same parts in the same image instead (the archive keeps the owners), then `up`:
 ```bash
 docker run --rm -v "$A:/a.tar.gz:ro" -v "$PWD/stacks/alfred/state:/d" lettuce-backup:local \

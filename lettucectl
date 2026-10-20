@@ -535,25 +535,36 @@ find_agent() {
   esac
 }
 
+# open_agent NAME AGENT -> sets the caller's id, ws (the workspace on the host)
+# and agent_env (what letta-code sets for the agent's Bash tool, as -e options);
+# dies when the agent or its workspace does not exist
+open_agent() {
+  local agent agent_name
+  agent=$(find_agent "$1" "$2")
+  id=${agent%%$'\t'*}
+  agent_name=${agent#*$'\t'}
+  ws=$(env_get "$(stack_env "$1")" LETTA_STATE_DIR)/workspaces/$id
+  [[ -d $ws ]] || die "$1: no workspace for $agent_name at $ws"
+  agent_env=(-e "AGENT_ID=$id" -e "LETTA_AGENT_ID=$id" -e "AGENT_NAME=$agent_name" -e "USER_CWD=/work/$id")
+  info "$1: $agent_name ($id)"
+}
+
 # Close to, not the same as, an agent's Bash tool: letta-code also sets the
 # conversation id, per-agent secrets and a few PATH entries.
 cmd_shell() {
   (($# == 1 || $# == 2)) || die "usage: lettucectl shell <name> [agent]"
   validate_name "$1"
   require_stack "$1"
-  local tty=() agent id
+  local tty=() id ws agent_env=()
   [[ -t 0 && -t 1 ]] || tty=(-T)
   if (($# == 1)); then
     compose "$1" exec "${tty[@]}" -w /work app-server bash
     return
   fi
-  agent=$(find_agent "$1" "$2")
-  id=${agent%%$'\t'*}
-  info "$1: ${agent#*$'\t'} ($id)"
+  open_agent "$1" "$2"
   # The memory path is letta-code's local-backend layout (getLocalBackendMemoryFilesystemRoot).
   # shellcheck disable=SC2016 # expanded by bash in the container
-  compose "$1" exec "${tty[@]}" -w "/work/$id" \
-    -e "AGENT_ID=$id" -e "LETTA_AGENT_ID=$id" -e "AGENT_NAME=${agent#*$'\t'}" -e "USER_CWD=/work/$id" \
+  compose "$1" exec "${tty[@]}" -w "/work/$id" "${agent_env[@]}" \
     app-server bash -c 'export MEMORY_DIR=$LETTA_LOCAL_BACKEND_DIR/memfs/$AGENT_ID/memory
 export LETTA_MEMORY_DIR=$MEMORY_DIR
 exec bash'
@@ -691,9 +702,8 @@ cmd_toolbox() {
   (($# >= 2)) || die "usage: lettucectl toolbox <name> <agent> [command...]"
   validate_name "$1"
   require_stack "$1"
-  local name=$1 agent id image config path label ws i run=() secret_names=() secret_values=() have=() argv=("${@:3}")
-  agent=$(find_agent "$name" "$2")
-  id=${agent%%$'\t'*}
+  local name=$1 id ws image config path label i run=() agent_env=() secret_names=() secret_values=() have=() argv=("${@:3}")
+  open_agent "$name" "$2"
   image=$(compose "$name" config --format json | jq -r '.services["app-server"].image // empty') ||
     die "$name: docker compose config failed"
   [[ -n $image ]] || die "$name: the compose config has no app-server image"
@@ -701,8 +711,6 @@ cmd_toolbox() {
     die "$name: no image $image; run: lettucectl up $name"
   path=$(jq -r '.Env // [] | map(select(startswith("PATH="))) | .[0] // "" | ltrimstr("PATH=")' <<<"$config")
   [[ -n $path ]] || die "$name: image $image sets no PATH"
-  ws=$(env_get "$(stack_env "$name")" LETTA_STATE_DIR)/workspaces/$id
-  [[ -d $ws ]] || die "$name: no workspace for ${agent#*$'\t'} at $ws"
 
   run=(run --rm --init -i)
   if [[ -t 0 && -t 1 ]]; then run+=(-t); fi
@@ -716,14 +724,12 @@ cmd_toolbox() {
   run+=(--hostname "toolbox-$name" --label "lettucectl.toolbox=$name" --label "lettucectl.agent=$id"
     --security-opt no-new-privileges --memory 8g --pids-limit 4096
     --tmpfs /root:mode=700,exec --tmpfs /tmp:exec
-    -v "$ws:/work/$id" -w "/work/$id"
-    -e "AGENT_ID=$id" -e "LETTA_AGENT_ID=$id" -e "AGENT_NAME=${agent#*$'\t'}" -e "USER_CWD=/work/$id"
+    -v "$ws:/work/$id" -w "/work/$id" "${agent_env[@]}"
     -e "PATH=/opt/claude-code/bin:$path")
   toolbox_builtins
   toolbox_personal "$(toolbox_file)"
   for i in "${!secret_names[@]}"; do run+=(-e "${secret_names[i]}"); done
 
-  info "$name: ${agent#*$'\t'} ($id)"
   if ((${#have[@]})); then
     info "toolbox: $(printf '%s, ' "${have[@]}" | sed 's/, $//')"
   else
@@ -750,7 +756,8 @@ cmd_toolbox() {
 BACKUP_IMAGE=lettuce-backup:local
 # No network, and only the capabilities copying needs: read everything, write
 # into the operator's directory and hand the copies to the operator (--chown).
-BACKUP_RUN=(run --rm --network none --read-only --tmpfs /tmp --security-opt no-new-privileges
+# --init: as PID 1, sh would ignore the signal docker forwards on Ctrl-C.
+BACKUP_RUN=(run --rm --init --network none --read-only --tmpfs /tmp --security-opt no-new-privileges
   --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER)
 # A backup's name: its UTC start time, which sorts by age.
 BACKUP_TS='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z'
@@ -843,23 +850,26 @@ backup_prune() {
   ((${#old[@]} == 0)) || info "$name: removed ${#old[@]} older backup(s): ${old[*]}"
 }
 
-# backup_stack NAME -> one backup of the stack into $dest/NAME
+# backup_stack NAME -> one backup of the stack into $dest/NAME. Run in a subshell:
+# the lock it takes is released when that exits.
 backup_stack() {
-  local name=$1 f state dir ts prev s p vol choice="" mounts=() excludes=() stale=()
+  local name=$1 f state dir ts prev s p lock vol choice="" mounts=() excludes=() stale=()
   f=$(stack_env "$name")
   state=$(env_get "$f" LETTA_STATE_DIR)
   [[ -d $state ]] || die "$name: no state directory at $state"
   dir=$dest/$name
   (umask 077 && mkdir -p "$dir")
+  # A second run would take this one's .partial-* for a leftover and delete it.
+  exec {lock}>"$dir/.lock"
+  flock -n "$lock" || die "$name: another backup of $name is running"
   mounts=(--label "lettucectl.backup=$name" -v "$state:/src/state:ro" -v "$f:/src/stack.env:ro")
-  if has_profile "$(env_get "$f" COMPOSE_PROFILES)" secrets; then
-    vol=lettuce-${name}_secret-broker-data
-    # `run -v` would create a missing volume, so look first.
-    if host_docker volume inspect "$vol" >/dev/null 2>&1; then
-      mounts+=(-v "$vol:/src/vault:ro")
-    else
-      warn "$name: the vault volume $vol does not exist yet; backing up without it"
-    fi
+  # Turning the secrets profile off keeps the volume, so look for it either way;
+  # `run -v` would create a missing one.
+  vol=lettuce-${name}_secret-broker-data
+  if host_docker volume inspect "$vol" >/dev/null 2>&1; then
+    mounts+=(-v "$vol:/src/vault:ro")
+  elif has_profile "$(env_get "$f" COMPOSE_PROFILES)" secrets; then
+    warn "$name: the vault volume $vol does not exist yet; backing up without it"
   fi
   excludes=(state/letta-home/mod-cache state/letta-home/claude/paste-cache state/letta-home/claude/backups)
   # The BFF rewrites upstream's skills on every connect.
@@ -884,9 +894,10 @@ backup_stack() {
   (
     if [[ $choice == pause ]]; then
       info "$name: paused while copying"
-      compose "$name" pause >/dev/null || die "$name: could not pause the stack"
+      # Set first: a pause that fails partway leaves some containers paused.
       trap 'compose "$name" unpause >/dev/null || warn "$name: could not unpause it; run: lettucectl compose $name unpause"' EXIT
       trap 'exit 130' INT TERM
+      compose "$name" pause >/dev/null || die "$name: could not pause the stack"
     fi
     if [[ -n $compress ]]; then
       if ! (umask 077 && host_docker "${BACKUP_RUN[@]}" "${mounts[@]}" "$BACKUP_IMAGE" \
@@ -909,7 +920,7 @@ backup_stack() {
 
 cmd_backup() {
   local usage="usage: lettucectl backup <name|all> <dir> [--compress] [--no-tools] [--pause|--live] [--keep N]"
-  local dest compress="" tools=1 when="" keep="" n targets args=()
+  local dest compress="" tools=1 when="" keep="" n rc targets args=() failed=()
   while (($#)); do
     case $1 in
       --compress) compress=1 ;;
@@ -936,12 +947,29 @@ cmd_backup() {
   [[ -d $dest ]] || die "$dest is not a directory"
   dest=$(realpath "$dest")
   [[ $dest != *[:,]* ]] || die "the destination cannot contain ':' or ',': $dest"
-  [[ $dest/ != "$LETTUCE_HOME"/stacks/* ]] || die "the destination cannot be inside $LETTUCE_HOME/stacks"
+  # This repo is public, and a backup holds stack.env and the agents' logins.
+  [[ $dest/ != "$LETTUCE_HOME"/* ]] || die "the destination cannot be inside $LETTUCE_HOME"
+  command -v flock >/dev/null || die "flock is required but not installed (util-linux)"
   host_docker build -q -t "$BACKUP_IMAGE" "$LETTUCE_HOME/backup" >/dev/null ||
     die "could not build $BACKUP_IMAGE (backup/Dockerfile)"
+  # One stack failing must not cost the others their backup, but Ctrl-C stops
+  # them all (the trap runs once the stack's subshell is done). errexit is off
+  # inside a subshell that is part of `||` or `if`, so the status is read after.
+  trap 'exit 130' INT TERM
   for n in $targets; do
-    backup_stack "$n"
+    set +e
+    (
+      set -e
+      backup_stack "$n"
+    )
+    rc=$?
+    set -e
+    ((rc == 0)) || failed+=("$n")
   done
+  if ((${#failed[@]})); then
+    [[ ${args[0]} != all ]] || die "backup failed for: ${failed[*]}"
+    exit 1
+  fi
 }
 
 cmd_skills() {

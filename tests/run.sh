@@ -764,9 +764,16 @@ test_shell_without_agent_opens_work() {
   log_lacks "letta agents list"
 }
 
+# workspaces ID... -> alfred's agents with these ids have a workspace
+workspaces() {
+  local id
+  for id in "$@"; do mkdir -p "$H/stacks/alfred/state/workspaces/$id"; done
+}
+
 test_shell_opens_the_agents_workspace() {
   added
   agents Alfred Lucius
+  workspaces agent-2
   ctl shell alfred lucius </dev/null
   ok_rc
   out_has "alfred: Lucius (agent-2)"
@@ -778,6 +785,7 @@ test_shell_opens_the_agents_workspace() {
 test_shell_passes_stdin_to_the_agents_shell() {
   added
   agents Lucius
+  workspaces agent-1
   ctl shell alfred lucius <<<'ls'
   ok_rc
   eq "$(cat "$T/exec-stdin.log")" ls
@@ -786,6 +794,7 @@ test_shell_passes_stdin_to_the_agents_shell() {
 test_shell_accepts_an_agent_id() {
   added
   agents Alfred Lucius
+  workspaces agent-1
   ctl shell alfred agent-1 </dev/null
   ok_rc
   log_has "-e AGENT_NAME=Alfred"
@@ -794,9 +803,19 @@ test_shell_accepts_an_agent_id() {
 test_shell_keeps_spaces_in_agent_names() {
   added
   agents "The Finn"
+  workspaces agent-1
   ctl shell alfred "the finn" </dev/null
   ok_rc
   log_has "-e AGENT_NAME=The Finn -e"
+}
+
+test_shell_refuses_an_agent_without_a_workspace() {
+  added
+  agents Alfred Lucius
+  ctl shell alfred lucius </dev/null
+  bad_rc
+  out_has "alfred: no workspace for Lucius at $H/stacks/alfred/state/workspaces/agent-2"
+  log_lacks "-w /work"
 }
 
 test_shell_lists_agents_when_none_match() {
@@ -1183,7 +1202,7 @@ backed() {
   mkdir -p "$B"
 }
 backup_runs() { grep -c "^docker run .* lettuce-backup:local sh -c" "$T/calls.log" || true; }
-snapshots() { find "$B/alfred" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort | paste -sd' '; }
+snapshots() { find "$B/alfred" -mindepth 1 -maxdepth 1 ! -name .lock -printf '%f\n' | LC_ALL=C sort | paste -sd' '; }
 
 test_backup_rejects_bad_destinations() {
   backed
@@ -1196,6 +1215,14 @@ test_backup_rejects_bad_destinations() {
   ctl backup alfred "$H/stacks/alfred"
   bad_rc
   out_has "cannot be inside"
+  # The repo is public, and a backup holds stack.env and logins.
+  mkdir -p "$H/backups"
+  ctl backup alfred "$H/backups"
+  bad_rc
+  out_has "cannot be inside $H"
+  ctl backup alfred "$H"
+  bad_rc
+  out_has "cannot be inside $H"
   ctl backup alfred "$B" --pause --live
   bad_rc
   out_has "use --pause or --live, not both"
@@ -1210,17 +1237,20 @@ test_backup_rejects_bad_destinations() {
 
 test_backup_copies_a_stopped_stack_without_asking() {
   backed
+  stub STUB_VOLUME_RC=1
   ctl backup alfred "$B"
   ok_rc
   out_lacks "Choice"
+  out_lacks "vault"
   log_lacks " pause"
   log_has "docker build -q -t lettuce-backup:local $H/backup"
-  log_has "docker run --rm --network none --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --label lettucectl.backup=alfred"
+  # --init: sh as PID 1 would ignore the signal docker forwards on Ctrl-C.
+  log_has "docker run --rm --init --network none --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --label lettucectl.backup=alfred"
   log_has "-v $H/stacks/alfred/state:/src/state:ro -v $H/stacks/alfred/stack.env:/src/stack.env:ro -v $B/alfred:/dst lettuce-backup:local"
   log_has "sh rsync /src /dst $(id -u):$(id -g)  .partial-"
   log_has "state/letta-home/mod-cache state/letta-home/claude/paste-cache state/letta-home/claude/backups"
   log_lacks "state/tools"
-  log_lacks "secret-broker-data"
+  log_lacks "/src/vault"
   [[ $(snapshots) =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || fail "expected one snapshot, got: $(snapshots)"
   eq "$(stat -c %a "$B/alfred")" 700
   out_has "alfred: $B/alfred/$(snapshots)"
@@ -1256,6 +1286,14 @@ test_backup_includes_the_vault() {
   ctl backup alfred "$B"
   ok_rc
   log_has "docker volume inspect lettuce-alfred_secret-broker-data"
+  log_has "-v lettuce-alfred_secret-broker-data:/src/vault:ro"
+}
+
+# Turning the profile off keeps the volume; it still holds the vault.
+test_backup_includes_a_vault_left_by_a_dropped_profile() {
+  backed
+  ctl backup alfred "$B"
+  ok_rc
   log_has "-v lettuce-alfred_secret-broker-data:/src/vault:ro"
 }
 
@@ -1318,6 +1356,46 @@ test_backup_unpauses_when_the_copy_fails() {
   out_has "alfred: the copy failed"
   log_has " unpause"
   eq "$(snapshots)" ""
+}
+
+test_backup_unpauses_when_the_pause_fails_partway() {
+  backed
+  containers alfred app-server bff
+  stub STUB_PAUSE_RC=1
+  ctl backup alfred "$B" --pause
+  bad_rc
+  out_has "alfred: could not pause the stack"
+  log_has " unpause"
+  eq "$(backup_runs)" 0
+}
+
+test_backup_refuses_a_second_run_of_the_same_stack() {
+  command -v flock >/dev/null || return 0
+  backed
+  mkdir -p "$B/alfred/.partial-20260101T000000Z"
+  local fd
+  exec {fd}>"$B/alfred/.lock"
+  flock "$fd"
+  ctl backup alfred "$B"
+  exec {fd}>&-
+  bad_rc
+  out_has "alfred: another backup of alfred is running"
+  [[ -d $B/alfred/.partial-20260101T000000Z ]] || fail "the running backup's copy was deleted"
+  eq "$(backup_runs)" 0
+}
+
+test_backup_all_goes_on_after_a_failure() {
+  ctl add alfred alfred@example.com
+  ctl add hal hal@example.com
+  B=$T/bk
+  mkdir -p "$B"
+  containers alfred app-server
+  ctl backup all "$B" </dev/null
+  bad_rc
+  out_has "aborted"
+  out_has "hal: $B/hal/"
+  out_has "backup failed for: alfred"
+  eq "$(find "$B" -mindepth 2 -maxdepth 2 -name '20*' | sed "s|^$B/||; s|/.*||")" hal
 }
 
 test_backup_compress_writes_a_private_archive() {

@@ -27,6 +27,7 @@ case $args in
     exit 0
     ;;
   " volume inspect "*) exit "${STUB_VOLUME_RC:-0}" ;;
+  *" pause ") exit "${STUB_PAUSE_RC:-0}" ;;
   *" ps --status running --services "*)
     # Every container in $STUB_ROOT/containers.txt counts as running.
     project=${args#* -p }
