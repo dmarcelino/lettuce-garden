@@ -173,13 +173,24 @@ compose() {
     "$@"
 }
 
+# host_docker ARGS... -> plain docker, under `env -i` like `compose`
+host_docker() {
+  env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} docker "$@"
+}
+
+# stack_running NAME -> success when any of the stack's containers is running
+stack_running() {
+  local running
+  running=$(compose "$1" ps --status running --services) || die "$1: docker compose ps failed"
+  [[ -n $running ]]
+}
+
 # stale_services NAME -> services that have a container in the stack but are not
 # enabled by its profiles: Compose leaves those running when a profile is dropped.
 stale_services() {
   local enabled existing
   enabled=$(compose "$1" config --services) || die "$1: docker compose config failed"
-  existing=$(env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
-    docker ps -a --filter "label=com.docker.compose.project=lettuce-$1" \
+  existing=$(host_docker ps -a --filter "label=com.docker.compose.project=lettuce-$1" \
     --format '{{.Label "com.docker.compose.service"}}') || die "$1: docker ps failed"
   comm -23 <(sort -u <<<"$existing") <(sort -u <<<"$enabled") | sed '/^$/d'
 }

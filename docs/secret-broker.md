@@ -51,7 +51,7 @@ agent ──get_result───────────────────�
   ./lettucectl profiles <current list>,secrets      # e.g. cloudflared,search,secrets
   ```
   This routes `https://<stack>/secrets/` to the vault on every stack, using the same hostname and Access app with no new DNS record, then builds and starts it. Each stack gets its own push keys for the vault (`BROKER_VAPID_*` in `stack.env`). Dropping `secrets` from the list removes the route and the container, and leaves the data where it is.
-- **Data:** the vault lives in the Docker volume `lettuce-<name>_secret-broker-data`, not under `stacks/<name>/`, so ordinary stack backups do not include it. To keep it, back up the volume as well (see [operations.md](operations.md#backups)). The backup is useless without the passphrase.
+- **Data:** the vault lives in the Docker volume `lettuce-<name>_secret-broker-data`, not under `stacks/<name>/`. `lettucectl backup` includes it (see [operations.md](operations.md#backups)). The backup is useless without the passphrase.
 - **Removal:** `lettucectl remove <name>` deletes the volume, so removing a stack deletes its vault.
 - **Forgotten passphrase:** there is no recovery. The person can erase the vault in Settings. If they can't unlock to do that, delete the volume (see the troubleshooting table in [operations.md](operations.md#troubleshooting)).
 - **Isolation:** the vault container has a read-only root filesystem and no capabilities, runs as a non-root user and has no host mounts. Its volume is mounted by nothing else. `lettucectl check` refuses a stack where any of that is not true.
