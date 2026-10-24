@@ -5,6 +5,19 @@ This file provides guidance to agents when working with code in this repository.
 ## What this is
 `lettucectl` is a Bash CLI that runs several single-user [Lettuce](https://github.com/dmarchevsky/lettuce) stacks on one host, one per person. Each stack is its own Docker Compose project behind its own Cloudflare Tunnel and Cloudflare Access application (Google login). There is no multi-user code: isolation comes from separate stacks, authentication from Cloudflare. README.md covers the design rationale; docs/operations.md and docs/cloudflare-setup.md cover operator workflows.
 
+## Relationship to upstream
+This repo composes Lettuce and adds to it: multi-user stacks plus an opinionated set of extras (MCP servers, skills, sidecars, CLI commands). Lettuce is not ours, and every departure from its design is something `lettucectl upgrade` can break.
+- **Never modify Lettuce without an explicit request.** That covers the `upstream/` clone and the upstream repository (code, issues, PRs). Say when a change would fit better upstream, and stop there.
+- **Plug in only through supported seams:** `stack.env`, compose profiles, the overlays in `compose/`, Lettuce's Settings and `letta connect`, the shared MCP list, the skills directory, `host.docker.internal`. A feature that needs Lettuce internals (undocumented files under `/root/.letta`, BFF routes, the app-server protocol) is redesigned, or names that dependency here so an upgrade checks it. Named today:
+  - `cmd_shell`: letta-code's memory path, `$LETTA_LOCAL_BACKEND_DIR/memfs/$AGENT_ID/memory`.
+  - `toolbox`: the app-server image layout, `/opt/claude-code/bin`.
+  - `google_redirect_uri`: the BFF route `/api/google/oauth/callback`.
+  - `find_agent`: the JSON shape of `letta agents list` (`.items[]`).
+- **Overlays restrict, never redefine.** They may drop ports, drop capabilities, set `read_only` or cap resources; they don't replace an upstream service's image, entrypoint, command or internal env.
+- **No second way into an agent.** The BFF owns the only connection to the app-server: no `lettucectl` command or sidecar opens another or starts a turn. `compose exec` for files and read-only CLI calls is the limit. The vault's `/secrets/` route (its own UI and Access check) is the one route that bypasses the BFF; another needs a written reason here.
+- **Don't write into what Lettuce manages.** Its settings, MCP list, agent memory and workspaces are Lettuce's. Use its own mechanism where one exists; where we must write, own a namespace (as `skills` does with its manifest). Never turn an upstream feature on by editing its files: a feature is on when its profile and its Settings switch are.
+- **Keep upstream's defences on.** Keep its auth settings at their strictest and never disable a boot check. Nothing secret goes under `stacks/<name>/state/`: agent shells mount it read-write as root. Don't shorten the BFF's `stop_grace_period`, which lets in-flight turns drain on a redeploy. Give new profiles names upstream is unlikely to claim: it matches tokens exactly, so a shared name turns on both.
+
 ## Commands
 ```bash
 tests/run.sh                 # all offline tests (docker, curl, dig, gh, secret-tool are stubbed)
