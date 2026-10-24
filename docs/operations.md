@@ -62,9 +62,17 @@ env AWS_PROFILE=dev
 ```
 `mount SRC [DEST] [rw]` is read-only unless `rw`, and `DEST` defaults to `SRC`; `~` is your home in `SRC` and `/root` in `DEST`. `secret NAME COMMAND...` runs the command without a shell and passes its output as `NAME`; a secret overrides a built-in of the same name.
 
-Two limits:
+The tools agents installed (`/opt/agent-tools`: `npm i -g`, `go install`, `uv tool install`, downloaded binaries) are left out unless you ask for them, before the stack name:
+```bash
+./lettucectl toolbox --tools alfred lucius      # the agents' tools, read-only: what `shell` has
+./lettucectl toolbox --tools=rw alfred lucius   # installs land there, for every agent of the stack
+```
+Without `--tools=rw`, an install inside the toolbox is gone on exit. To install something that needs none of your credentials, `./lettucectl shell alfred` is the better place: your tokens never meet what agents wrote.
+
+Three limits:
 - Only someone with Docker access on the host can run `toolbox`. Docker access is root on the host, so a stack's web-only users cannot, by design.
 - The workspace is the agent's to write, and what you run there runs with your credentials: git hooks, `.git/config` (`core.sshCommand`, credential helpers), package scripts, Makefiles. Look before you push, and prefer short-lived, narrowly scoped tokens.
+- `--tools` goes further: every agent of the stack writes those tools, and npm's global config (`/opt/agent-tools/etc/npmrc`) and cargo's (`/opt/agent-tools/cargo/config.toml`) are read on every call, so with it the agents' code runs with your credentials whenever you use them. With `rw`, whatever you write there is every agent's to read: never `cargo login` (its token goes to `CARGO_HOME`, on that mount) or `npm config set --location=global` with a token.
 
 ### Agent skills
 `agent-skills/` holds skills this repo gives every agent, for example `scheduling-scripts` (cron jobs that survive restarts, instead of `crontab`). After adding or changing one, push them to the running stacks:

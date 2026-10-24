@@ -861,11 +861,17 @@ toolbox_ready() {
   mkdir -p "$H/stacks/alfred/state/workspaces/agent-2" "$T/u"
 }
 
-# tb ARGS... -> `toolbox alfred ARGS...` with $T/u as home, so nothing of the real
-# operator's is read; TB_SOCK and TB_CLAUDE stand in for their variables
+# tb [--OPTION...] ARGS... -> `toolbox --OPTION... alfred ARGS...` with $T/u as home,
+# so nothing of the real operator's is read; TB_SOCK and TB_CLAUDE stand in for
+# their variables
 tb() {
+  local opts=()
+  while [[ ${1:-} == --* ]]; do
+    opts+=("$1")
+    shift
+  done
   HOME=$T/u XDG_CONFIG_HOME="" CLAUDE_CONFIG_DIR="" SSH_AUTH_SOCK=${TB_SOCK:-} \
-    CLAUDE_CODE_OAUTH_TOKEN=${TB_CLAUDE:-} ctl toolbox alfred "$@" </dev/null
+    CLAUDE_CODE_OAUTH_TOKEN=${TB_CLAUDE:-} ctl toolbox "${opts[@]}" alfred "$@" </dev/null
 }
 
 # toolbox_tools -> the operator has ssh, git, gh and Claude Code set up
@@ -1075,6 +1081,58 @@ test_toolbox_requires_an_agent() {
   tb
   bad_rc
   out_has "usage: lettucectl toolbox"
+}
+
+test_toolbox_leaves_out_agent_tools_by_default() {
+  toolbox_ready
+  mkdir -p "$H/stacks/alfred/state/tools"
+  tb lucius
+  ok_rc
+  log_lacks "/opt/agent-tools"
+  out_lacks "agent tools"
+}
+
+test_toolbox_mounts_agent_tools_read_only() {
+  toolbox_ready
+  mkdir -p "$H/stacks/alfred/state/tools"
+  tb --tools lucius
+  ok_rc
+  log_has "-v $H/stacks/alfred/state/tools:/opt/agent-tools:ro"
+  out_has "toolbox: agent tools (read-only)"
+}
+
+test_toolbox_mounts_agent_tools_writable() {
+  toolbox_ready
+  mkdir -p "$H/stacks/alfred/state/tools"
+  tb --tools=rw lucius
+  ok_rc
+  log_has "-v $H/stacks/alfred/state/tools:/opt/agent-tools:rw"
+  out_has "toolbox: agent tools (writable)"
+}
+
+test_toolbox_tools_flag_keeps_the_command() {
+  toolbox_ready
+  mkdir -p "$H/stacks/alfred/state/tools"
+  tb --tools lucius claude --resume
+  ok_rc
+  log_has " lettuce-app-server:test claude --resume"
+}
+
+test_toolbox_tools_needs_the_tools_dir() {
+  toolbox_ready
+  tb --tools lucius
+  bad_rc
+  out_has "lettucectl up alfred"
+  log_lacks "docker run"
+}
+
+test_toolbox_refuses_an_unknown_tools_mode() {
+  toolbox_ready
+  mkdir -p "$H/stacks/alfred/state/tools"
+  tb --tools=wx lucius
+  bad_rc
+  out_has "usage: lettucectl toolbox"
+  log_lacks "docker run"
 }
 
 # ── skills ───────────────────────────────────────────────────────────────────

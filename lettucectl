@@ -38,6 +38,7 @@ Operation (<target> is a stack name or "all")
   compose <name> <args...>      any other docker compose command for one stack
   shell <name> [agent]          bash in the app-server, in /work or in an agent's workspace (name or id)
   toolbox <name> <agent> [cmd]  bash (or cmd) in an agent's workspace with your own ssh, git, gh and Claude Code
+                                (--tools before <name>: the agents' installed tools, read-only; --tools=rw: writable)
 EOF
 }
 
@@ -574,6 +575,8 @@ exec bash'
 # `toolbox` works on an agent's workspace with the operator's own tools from a
 # throwaway container. Agents run in the app-server, so unlike `shell` nothing it
 # brings in is visible to them. The helpers below add to cmd_toolbox's arrays.
+# The agents' installed tools are mounted only with --tools (read-only unless rw):
+# every agent writes them, and here they would run with the operator's credentials.
 
 toolbox_file() { printf '%s/lettucectl/toolbox' "${XDG_CONFIG_HOME:-$HOME/.config}"; }
 
@@ -699,11 +702,23 @@ toolbox_personal() {
 }
 
 cmd_toolbox() {
-  (($# >= 2)) || die "usage: lettucectl toolbox <name> <agent> [command...]"
+  local usage="usage: lettucectl toolbox [--tools[=rw]] <name> <agent> [command...]" tools=""
+  case ${1:-} in
+    --tools) tools=ro ;;
+    --tools=rw) tools=rw ;;
+    --*) die "$usage" ;;
+  esac
+  [[ -z $tools ]] || shift
+  (($# >= 2)) || die "$usage"
   validate_name "$1"
   require_stack "$1"
-  local name=$1 id ws image config path label i run=() agent_env=() secret_names=() secret_values=() have=() argv=("${@:3}")
+  local name=$1 id ws state image config path label i run=() agent_env=() secret_names=() secret_values=() have=() argv=("${@:3}")
   open_agent "$name" "$2"
+  if [[ -n $tools ]]; then
+    # Docker would create a missing bind source as root; the app-server's `up` does that.
+    state=$(env_get "$(stack_env "$name")" LETTA_STATE_DIR)
+    [[ -d $state/tools ]] || die "$name: no agent tools at $state/tools yet; run: lettucectl up $name"
+  fi
   image=$(compose "$name" config --format json | jq -r '.services["app-server"].image // empty') ||
     die "$name: docker compose config failed"
   [[ -n $image ]] || die "$name: the compose config has no app-server image"
@@ -726,8 +741,14 @@ cmd_toolbox() {
     --tmpfs /root:mode=700,exec --tmpfs /tmp:exec
     -v "$ws:/work/$id" -w "/work/$id" "${agent_env[@]}"
     -e "PATH=/opt/claude-code/bin:$path")
+  # The image already points PATH and the package managers at /opt/agent-tools.
+  [[ -z $tools ]] || run+=(-v "$state/tools:/opt/agent-tools:$tools")
   toolbox_builtins
   toolbox_personal "$(toolbox_file)"
+  case $tools in
+    ro) have+=("agent tools (read-only)") ;;
+    rw) have+=("agent tools (writable)") ;;
+  esac
   for i in "${!secret_names[@]}"; do run+=(-e "${secret_names[i]}"); done
 
   if ((${#have[@]})); then
