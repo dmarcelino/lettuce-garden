@@ -1,0 +1,332 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Gmail triggers: containers, boundaries and requests",
+    "output": "docs/diagrams/gmail-triggers-architecture.html",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Person's browser",
+      "sublabel": "phone or desktop",
+      "pos": [
+        30,
+        220
+      ],
+      "size": [
+        120,
+        64
+      ]
+    },
+    {
+      "id": "cf-edge",
+      "type": "security",
+      "label": "Cloudflare edge",
+      "sublabel": "Access login, tunnel (+1 route)",
+      "pos": [
+        205,
+        220
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "gmail",
+      "type": "external",
+      "label": "Gmail API",
+      "sublabel": "Google",
+      "pos": [
+        205,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "cloudflared",
+      "type": "cloud",
+      "label": "cloudflared",
+      "sublabel": "routes by path",
+      "pos": [
+        440,
+        220
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "backend",
+      "label": "secret-broker",
+      "sublabel": "vault, unchanged",
+      "pos": [
+        440,
+        40
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "google-creds",
+      "type": "database",
+      "label": "google-creds/policy",
+      "sublabel": "Lettuce's Google token",
+      "pos": [
+        440,
+        580
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "bff",
+      "type": "frontend",
+      "label": "bff :8080",
+      "sublabel": "Lettuce UI + API",
+      "pos": [
+        680,
+        40
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "triggers",
+      "type": "backend",
+      "label": "gmail-triggers",
+      "sublabel": "pages, poller, /executor/v1",
+      "pos": [
+        680,
+        400
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "rules",
+      "type": "database",
+      "label": "state/garden",
+      "sublabel": "rules + pending requests",
+      "pos": [
+        680,
+        580
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "app-server",
+      "type": "backend",
+      "label": "app-server",
+      "sublabel": "letta-code + cron scheduler",
+      "pos": [
+        960,
+        40
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "executor",
+      "type": "backend",
+      "label": "executor",
+      "sublabel": "system cron, every minute",
+      "pos": [
+        960,
+        220
+      ],
+      "size": [
+        170,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Stack lettuce-<name>: one Docker Compose project per person",
+      "wraps": [
+        "cloudflared",
+        "vault",
+        "google-creds",
+        "bff",
+        "triggers",
+        "rules",
+        "app-server",
+        "executor"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "app-server container: agents run here as root",
+      "wraps": [
+        "app-server",
+        "executor"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "not mounted in app-server",
+      "wraps": [
+        "rules"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser-to-edge",
+      "from": "browser",
+      "to": "cf-edge",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "edge-to-cloudflared",
+      "from": "cf-edge",
+      "to": "cloudflared",
+      "label": "tunnel",
+      "variant": "emphasis"
+    },
+    {
+      "id": "route-secrets",
+      "from": "cloudflared",
+      "to": "vault",
+      "label": "/secrets/"
+    },
+    {
+      "id": "route-app",
+      "from": "cloudflared",
+      "to": "bff",
+      "label": "everything else",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "route-garden",
+      "from": "cloudflared",
+      "to": "triggers",
+      "label": "/garden/gmail-triggers/",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "one-socket",
+      "from": "bff",
+      "to": "app-server",
+      "label": "the one socket"
+    },
+    {
+      "id": "cron-add",
+      "from": "executor",
+      "to": "app-server",
+      "label": "letta cron add --once"
+    },
+    {
+      "id": "rules-store",
+      "from": "triggers",
+      "to": "rules",
+      "label": "rules, requests"
+    },
+    {
+      "id": "read-token",
+      "from": "triggers",
+      "to": "google-creds",
+      "label": "read-only",
+      "variant": "security",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "poll-gmail",
+      "from": "triggers",
+      "to": "gmail",
+      "label": "poll every 2 min",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "fetch-requests",
+      "from": "executor",
+      "to": "triggers",
+      "label": "fetches requests (token)",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "right"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "gmail-triggers (stack network)",
+      "items": [
+        "Pages at /garden/gmail-triggers/: Access JWT on every request, CSRF on every form",
+        "Polls Gmail every 2 minutes, metadata only; agents never see email bodies",
+        "Its only bind mount is state/garden, which the app-server does not mount",
+        "Never connects to the app-server; shares no directory with it"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Executor (inside the app-server)",
+      "items": [
+        "Installed by lettucectl in /root/.letta/garden, run by system cron every minute",
+        "Fetches pending requests from /executor/v1/ with the stack's token; the tunnel never routes that path",
+        "Runs letta cron add --once with an argument array; posts results, the agent list and a heartbeat",
+        "Agents can read its token: they can do what it does, which is no more than letta cron add"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Unchanged Lettuce",
+      "items": [
+        "One app-server socket, owned by the BFF; the scheduler fires the task on it",
+        "Each run shows in the Tasks tab as 'Gmail: <rule>'",
+        "The agent reads the mail through google-mcp (not drawn)",
+        "The app-server's compose config is untouched"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "lettucectl (host)",
+      "items": [
+        "compose/gmail-triggers.yml behind the gmail-triggers profile (needs google)",
+        "Tunnel route ^/garden/gmail-triggers(/|$) to gmail-triggers:8000",
+        "Generates the executor token once per stack; installs and removes the executor with the profile",
+        "check_gmail_triggers: one bind mount, no symlinks on its path, Google volumes read-only, no privileges"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust notes",
+      "items": [
+        "google-creds mounted read-only: a deliberate exception to upstream's intent",
+        "A claimed request is never offered twice: a lost turn beats a duplicate",
+        "Left out: google-mcp, channel-gateway, searxng, ddg-mcp"
+      ]
+    }
+  ]
+}

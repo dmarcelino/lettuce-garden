@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ "New trigger" if is_new else rule.name }}{% endblock %}
+{% block content %}
+{% set action = base ~ "/rules" if is_new else base ~ "/r/" ~ rule.id %}
+{% set here = base ~ "/new" if is_new else base ~ "/r/" ~ rule.id %}
+<p class="crumb"><a href="{{ base }}/">Triggers</a>{% if not is_new %} / <a href="{{ base }}/r/{{ rule.id }}/history">History</a>{% endif %}</p>
+<h1>{{ "New trigger" if is_new else "Edit trigger" }}</h1>
+{% if problems %}
+<div class="banner bad" role="alert">
+  <strong class="banner-title">Not saved yet</strong>
+  <ul class="problems">{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<form method="post" action="{{ action }}" class="rule-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <label class="field">Name
+    <input name="name" value="{{ rule.name }}" maxlength="80" required autocomplete="off" placeholder="Invoices">
+  </label>
+
+  <fieldset class="field">
+    <legend>When mail arrives in</legend>
+    {% if labels_problem %}<p class="hint">Gmail's labels can't be loaded right now ({{ labels_problem }}).{% if labels %} Showing the ones this trigger already has.{% endif %}</p>{% endif %}
+    {% if labels %}
+    <div class="menu-list label-list">
+      {% for lb in labels %}
+      <label class="menu-row">
+        <input type="checkbox" name="labels" value="{{ lb.id }}"{% if lb.checked %} checked{% endif %}>
+        <span class="menu-row-text"><span class="menu-row-title">{{ lb.name }}</span></span>
+      </label>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <p class="hint">Any of the ticked labels. Gmail filters that label mail as it arrives count; labels added later by hand don't.</p>
+  </fieldset>
+
+  <label class="field"><span>Only from <span class="hint">(optional)</span></span>
+    <textarea name="senders" rows="3" class="short" placeholder="hal@example.com" autocomplete="off" spellcheck="false">{{ senders_text }}</textarea>
+    <span class="hint">One address per line. Leave empty for mail from anyone.</span>
+  </label>
+
+  <div class="menu-list">
+    <label class="menu-row">
+      <input type="checkbox" name="verified"{% if rule.verified_only %} checked{% endif %}>
+      <span class="menu-row-text">
+        <span class="menu-row-title">Only if Gmail verified the sender</span>
+        <span class="menu-row-desc">The sender's domain passed Gmail's DMARC check. Anyone can write any address in "From"; this makes forged senders not count. Mail Gmail didn't check on arrival, for example from a colleague in the same Google Workspace, may not count as verified: turn this off for such senders.</span>
+      </span>
+    </label>
+  </div>
+
+  <label class="field">Ask
+    {% if agents %}
+    <select name="agent_id" required>
+      {% if not rule.agent_id %}<option value="" selected disabled>Choose an agent</option>{% endif %}
+      {% for agent, dup in agents %}
+      <option value="{{ agent.id }}"{% if agent.id == rule.agent_id %} selected{% endif %}>{{ agent.name }}{% if dup %} ({{ agent.id }}){% endif %}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    {% if not agents_known %}<span class="hint warn-text">Lettuce hasn't sent its list of agents yet. It sends one within a minute or two; reload then.</span>{% endif %}
+  </label>
+
+  <fieldset class="field">
+    <legend>In</legend>
+    <div class="menu-list">
+      {% for value, text in conversations.items() %}
+      <label class="menu-row">
+        <input type="radio" name="conversation" value="{{ value }}"{% if rule.conversation == value %} checked{% endif %}>
+        <span class="menu-row-text"><span class="menu-row-title">{{ text }}</span>
+          <span class="menu-row-desc">{{ "Each run starts fresh and shows as its own conversation." if value == "new" else "Runs add to the conversation you usually have with this agent." }}</span></span>
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <label class="field" id="prompt">To
+    <textarea name="prompt" rows="6" maxlength="4000" required placeholder="What should the agent do with the new emails?">{{ rule.prompt }}</textarea>
+  </label>
+  <p class="examples"><span class="hint">Examples (replace the text above):</span>
+    {% for title, _ in examples %}<a href="{{ here }}?example={{ loop.index }}#prompt">{{ title }}</a>{% endfor %}
+  </p>
+
+  <label class="field narrow">At most
+    <span class="inline-input"><input type="number" name="max_per_hour" min="1" max="{{ max_per_hour_limit }}" value="{{ rule.max_per_hour }}" required> runs per hour</span>
+    <span class="hint">Emails over the limit wait and go together in the next run.</span>
+  </label>
+
+  <div class="note">
+    <strong>What the agent sees.</strong>
+    Your instructions, and for each email its Gmail message id, the sender's address and the subject line (one line, at most 120 characters).
+    Not the email's text: the agent reads the email itself with its Gmail tools, as far as Lettuce's Settings -> Google allows.
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="button">{{ "Create trigger" if is_new else "Save" }}</button>
+    <a class="button ghost" href="{{ base }}/">Cancel</a>
+    {% if not is_new %}<a class="button danger outline leading" href="#delete">Delete</a>{% endif %}
+  </div>
+</form>
+
+{% if not is_new %}
+<div class="sheet" id="delete" role="dialog" aria-labelledby="delete-title">
+  <a class="sheet-scrim" href="#" aria-label="Cancel"></a>
+  <div class="sheet-panel">
+    <div class="sheet-body">
+      <h2 id="delete-title">Delete "{{ rule.name }}"?</h2>
+      <p class="muted">Its history goes too. Requests already sent to Lettuce still run.</p>
+    </div>
+    <form method="post" action="{{ base }}/r/{{ rule.id }}/delete" class="sheet-actions">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <a class="button ghost" href="#">Cancel</a>
+      <button type="submit" class="button danger">Delete</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

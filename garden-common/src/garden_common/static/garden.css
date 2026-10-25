@@ -1,0 +1,506 @@
+/* Garden pages: Lettuce's visual language (upstream web/src/styles.css) with the
+   colours reversed. Lettuce is dark only, so garden pages are light only: filled
+   controls take Lettuce's dark ink with the accent as their text.
+   Square corners, 40px controls, a 640px shell, 15px/1.5 system-ui, menu-row
+   toggles (a 20px square box, filled when on) and bottom sheets. No JavaScript:
+   a sheet opens with :target. */
+
+:root {
+  --bg: #e7eaf0;
+  --surface: #f6f7fa;
+  --surface-2: #ffffff;
+  --border: #c5ccd8;
+  --text: #0f1116;
+  --muted: #4f5868;
+  /* Fills (buttons, a box that is on); --on-accent is the text on them. */
+  --accent: #0b1020;
+  --on-accent: #7aa2f7;
+  /* Links and selected borders. */
+  --accent-ink: #2c4fa8;
+  --ok: #15803d;
+  --warn: #a16207;
+  --bad: #b91c1c;
+  --radius: 0;
+  --radius-pill: 999px;
+  --disabled: 0.45;
+  --control-h: 40px;
+  --control-font: 14px;
+  --menu-row-h: 44px;
+  color-scheme: light;
+}
+/* iOS zooms the page when a focused input's text is under 16px. */
+@media (pointer: coarse) {
+  :root {
+    --control-font: 16px;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    15px / 1.5 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+a {
+  color: var(--accent-ink);
+}
+code,
+pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+}
+h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+p {
+  margin: 0;
+}
+:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+/* -- Layout ---------------------------------------------------------------- */
+
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding-top: env(safe-area-inset-top);
+}
+.topbar-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  min-height: 52px;
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.app-icon {
+  display: block;
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar-note {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+.shell {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.footer {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 16px calc(24px + env(safe-area-inset-bottom));
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+.crumb {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: -8px;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 13px;
+}
+.ok {
+  color: var(--ok);
+}
+.warn-text {
+  color: var(--warn);
+}
+.bad {
+  color: var(--bad);
+}
+.empty {
+  padding: 24px 16px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* -- Buttons --------------------------------------------------------------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: var(--control-h);
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: var(--control-font);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.button:hover {
+  background: #1b2440;
+}
+.button.ghost {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.button.ghost:hover {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+.button.danger {
+  background: var(--bad);
+  color: #ffffff;
+}
+.button.danger:hover {
+  background: #991b1b;
+}
+/* A destructive action offered, not yet confirmed: outlined, not filled. */
+.button.danger.outline {
+  background: none;
+  color: var(--bad);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 45%, transparent);
+}
+.button.danger.outline:hover {
+  background: color-mix(in srgb, var(--bad) 6%, transparent);
+}
+.button:disabled {
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: not-allowed;
+}
+
+/* -- Banners and pills ----------------------------------------------------- */
+
+.banner {
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  overflow-wrap: anywhere;
+}
+/* The colour is in the edge and the title; the text stays readable ink. */
+.banner.ok,
+.banner.warn,
+.banner.bad {
+  color: var(--text);
+}
+.banner.ok {
+  border-left-color: var(--ok);
+}
+.banner.warn {
+  border-left-color: var(--warn);
+}
+.banner.bad {
+  border-left-color: var(--bad);
+}
+.banner-title {
+  display: block;
+  font-weight: 600;
+}
+.banner.warn .banner-title {
+  color: var(--warn);
+}
+.banner.bad .banner-title {
+  color: var(--bad);
+}
+.banner ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+.pill {
+  display: inline-block;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.pill.ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
+}
+.pill.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+}
+.pill.bad {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 40%, var(--border));
+}
+
+/* -- Forms ----------------------------------------------------------------- */
+
+fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+legend {
+  padding: 0;
+  margin-bottom: 4px;
+}
+/* Sentence case, like every other label: one heading voice. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.field input:not([type="checkbox"]):not([type="radio"]),
+.field select,
+.field textarea {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: var(--control-font);
+  font-weight: 400;
+}
+.field textarea {
+  height: auto;
+  min-height: 132px;
+  padding: 8px 10px;
+  line-height: 1.45;
+  resize: vertical;
+}
+.field textarea.short {
+  min-height: 72px;
+}
+.field input:hover,
+.field select:hover,
+.field textarea:hover {
+  border-color: var(--muted);
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--accent-ink);
+  outline: 1px solid var(--accent-ink);
+  outline-offset: -2px;
+}
+/* The native arrow differs per platform; this one is drawn with gradients
+   because the pages' CSP allows no data: images. */
+.field select {
+  appearance: none;
+  padding-right: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 52%,
+    calc(100% - 12px) 52%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+.hint {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.form-actions .leading {
+  margin-left: auto;
+}
+
+/* -- Menu rows: toggles and choices ---------------------------------------- */
+
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.menu-row {
+  width: 100%;
+  min-height: var(--menu-row-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px 7px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+.menu-row:hover {
+  border-color: var(--muted);
+}
+.menu-row.selected,
+.menu-row:has(input:checked) {
+  border-color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent-ink) 6%, var(--surface-2));
+}
+.menu-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu-row-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.menu-row-desc {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+/* The box: a styled checkbox or radio inside a menu row, or a span (.box) in
+   a button that toggles something with a POST. */
+.box,
+.menu-row input[type="checkbox"],
+.menu-row input[type="radio"] {
+  appearance: none;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  background: var(--surface-2);
+  /* --border vanishes against the row; an empty box has to read as a box. */
+  border: 2px solid color-mix(in srgb, var(--muted) 60%, transparent);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.box.on,
+.menu-row input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.box.on::after,
+.menu-row input:checked::after {
+  content: "";
+  width: 10px;
+  height: 5px;
+  border-left: 2px solid var(--on-accent);
+  border-bottom: 2px solid var(--on-accent);
+  transform: translateY(-1px) rotate(-45deg);
+}
+.menu-row input:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+/* -- Bottom sheets (open with :target, no script) -------------------------- */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: rgba(15, 17, 22, 0.45);
+}
+.sheet:target {
+  display: flex;
+}
+.sheet-scrim {
+  position: absolute;
+  inset: 0;
+}
+.sheet-panel {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: none;
+}
+.sheet-body {
+  padding: 16px;
+  max-height: 72vh;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.sheet-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+}
+.sheet-actions .button {
+  flex: 1;
+}

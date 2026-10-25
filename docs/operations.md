@@ -88,12 +88,13 @@ Optional features are compose profiles, the same list for **all** stacks (upstre
 - `google`: Gmail/Calendar/Tasks/Contacts sidecar. It needs a Google OAuth client and each person connects their own account: see **[google-setup.md](google-setup.md)**.
 - `telegram`: Telegram channel gateway.
 - `secrets`: a personal vault per stack (address, cards, ID documents, logins...), encrypted with the person's own passphrase and shared with agents only when they agree. Each person uses it at `https://<stack>/secrets/`: see **[secret-broker.md](secret-broker.md)**.
+- `gmail-triggers`: rules like "when mail arrives in this label, ask this agent to do that", which each person sets up at `https://<stack>/garden/gmail-triggers/`. Needs `google` (`profiles` and `check` refuse it otherwise) and each person's Google account connected in Lettuce. `up` installs a small executor in the app-server; dropping the profile removes it and keeps the rules. See **[gmail-triggers.md](gmail-triggers.md)**.
 
 ```bash
 ./lettucectl profiles                              # show config.env and every stack
 ./lettucectl profiles cloudflared,search,google    # set the list everywhere, then up all
 ```
-`profiles` first checks every stack, so one broken stack stops the change before anything is written. It then writes `PROFILES` in `config.env` and `COMPOSE_PROFILES` in every `stack.env` together, and runs `up` on every stack. It also removes the containers of profiles that are off, which Compose would leave running. That last step runs every time, so a re-run cleans up after an interrupted one. When the list is already set everywhere, it changes and restarts nothing. Every run also re-applies each stack's tunnel routes (`/secrets/` goes to the vault only with `secrets`), before any stack starts; if that fails, the stacks still start and the command asks you to run it again. `codex` and `claude` change the app-server image, and `up` rebuilds it. The list must contain `cloudflared`.
+`profiles` first checks every stack, so one broken stack stops the change before anything is written. It then writes `PROFILES` in `config.env` and `COMPOSE_PROFILES` in every `stack.env` together, and runs `up` on every stack. It also removes the containers of profiles that are off, which Compose would leave running. That last step runs every time, so a re-run cleans up after an interrupted one. When the list is already set everywhere, it changes and restarts nothing. Every run also re-applies each stack's tunnel routes (`/secrets/` goes to the vault only with `secrets`, `/garden/gmail-triggers/` to Gmail triggers only with `gmail-triggers`), before any stack starts; if that fails, the stacks still start and the command asks you to run it again. `codex` and `claude` change the app-server image, and `up` rebuilds it. The list must contain `cloudflared`.
 
 ## Config changes
 `config.env` values are copied into each `stack.env` when the stack is created. Use `profiles` for the profile list. To change `TZ` for existing stacks, edit `config.env` and every `stack.env`, then run `./lettucectl up all`.
@@ -117,7 +118,8 @@ Back up first (below), and read upstream's CHANGELOG.md.
 - agents, conversations and memory (`state/letta-data`);
 - settings, schedules, transcripts, Claude Code/Codex/gh logins and skills installed from Settings (`state/letta-home`);
 - agents' workspaces (`state/workspaces`) and the tools agents installed (`state/tools`, left out with `--no-tools`);
-- `stack.env`, and the vault, whenever its volume exists (turning the `secrets` profile off keeps it).
+- `stack.env`, and the vault, whenever its volume exists (turning the `secrets` profile off keeps it);
+- Gmail trigger rules (`state/garden`).
 
 It leaves out caches and the skills that come back by themselves: upstream's, which the BFF reinstalls on every connect, and those from `agent-skills/`, which `lettucectl skills` reinstalls. The state is root-owned, so `backup` reads it from a container of a small image it builds (`backup/Dockerfile`, `lettuce-backup:local`), with no network and read-only mounts. No sudo is needed.
 
@@ -177,6 +179,11 @@ Each stack's push-notification keypairs (`PUSH_VAPID_*` for Lettuce, `BROKER_VAP
 | `/secrets/` shows Lettuce or a 404 | The `secrets` profile is off, or the route update failed: run `./lettucectl profiles <list>` again. |
 | `/secrets/` gives 502 | The vault is not running: `./lettucectl status`, `./lettucectl logs <name> secret-broker`. |
 | Someone forgot their vault passphrase | It cannot be recovered. They can erase the vault in Settings after unlocking; if they cannot unlock, stop the service and delete its volume: `./lettucectl compose <name> rm -sf secret-broker`, `docker volume rm lettuce-<name>_secret-broker-data`, `./lettucectl up <name>`. |
+| `/garden/gmail-triggers/` shows Lettuce or a 404 | The `gmail-triggers` profile is off, or the route update failed: run `./lettucectl profiles <list>` again. |
+| Gmail triggers page says Lettuce is not picking up requests | The executor has not run for 3 minutes. Run `./lettucectl up <name>` to reinstall it; read `/root/.letta/garden/gmail-triggers/executor.log` with `./lettucectl shell <name> <agent>`. |
+| Gmail triggers: you suspect the executor token leaked outside the stack | Delete the `GMAIL_TRIGGERS_EXECUTOR_TOKEN` line from `stack.env` and run `./lettucectl up <name>`: a new one is generated and installed. Agents in the stack can always read it; that is by design (see gmail-triggers.md). |
+| `add`, `up` or `profiles`: "the gmail-triggers executor is out of step" / "could not sync the gmail-triggers executor" | Installing or removing the executor in the app-server failed; the stacks still came up. Check `./lettucectl logs <name> app-server`, then run `./lettucectl up <name>` (after `profiles`, running it again also works). |
+| `remove --purge` refuses: garden is a symlink | `stacks/<name>/state/garden` (or under `LETTA_STATE_DIR`) points elsewhere, and emptying it would empty the target. Look at where it points before removing it by hand. |
 | `/secrets/` says "direct access is not allowed" or "may not use this stack" | The request did not come through Cloudflare Access, or the email is not in `ALLOWED_USERS`. |
 | A wildcard warning during `add` | The domain has a `*` record, so public DNS can't show which names are free. Only the Cloudflare zone is checked. |
 | `ping` in an agent shell: "Operation not permitted" | The app-server has no `NET_RAW` (see Security notes), and the image's `ping` is set to require it. A copy without that setting works: `cp /usr/bin/ping /tmp/ping && /tmp/ping <host>`. Tools that need raw sockets (`tcpdump`, `arping`, `nmap` SYN scans) don't work there; `curl` and `tracepath` do. |
@@ -187,4 +194,5 @@ Each stack's push-notification keypairs (`PUSH_VAPID_*` for Lettuce, `BROKER_VAP
 - The Cloudflare API token can change your DNS. Scope it to one zone and one account, and consider an IP restriction.
 - Agents in one stack can read everything else in that stack, including its provider keys. That is why each person gets their own stack. The vault is the exception: it lives on a volume only the vault service mounts (`check` enforces that), encrypted with each person's passphrase. Root on the host can still read the vault service's memory while it is unlocked, and anything a person shares with an agent is stored in that conversation like the rest of it.
 - The app-server, and the containers sharing its network (BFF, channel-gateway), drop `NET_RAW`, so agents can't capture the Access token on its way to the BFF and use it on the vault. `check` refuses a stack that keeps it. The cost is raw sockets in agent shells, including the image's `ping` (see Troubleshooting).
-- Run `tests/run.sh` and `shellcheck -x lettucectl lib/*.sh scripts/*.sh tests/run.sh tests/run-broker.sh tests/stubs/*` before changing the CLI, and `tests/run-broker.sh` before changing `broker/`.
+- Gmail triggers start agents without the person typing anything, but only for rules they made on their Access-protected page, and only through Lettuce's own scheduler: see the security model in [gmail-triggers.md](gmail-triggers.md). The sidecar reads Lettuce's Google token (read-only); `check` refuses any other service mounting it.
+- Run `tests/run.sh` and `shellcheck -x lettucectl lib/*.sh scripts/*.sh tests/run.sh tests/run-sidecar.sh tests/stubs/*` before changing the CLI, and `tests/run-sidecar.sh <broker|gmail-triggers>` before changing a sidecar or `garden-common/`.

@@ -1,0 +1,172 @@
+/* Gmail triggers only; the shared look is garden.css. */
+
+.intro {
+  margin-top: -8px;
+}
+
+/* -- Trigger list ---------------------------------------------------------- */
+
+.rules,
+.runs {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rule {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.rule-toggle {
+  display: flex;
+  flex: none;
+}
+.rule-toggle button {
+  width: 52px;
+  min-height: 52px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+.rule-toggle button:hover {
+  background: var(--surface);
+}
+.rule-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  color: var(--text);
+  text-decoration: none;
+}
+.rule-main:hover .rule-name {
+  text-decoration: underline;
+}
+.rule-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.rule-desc {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.rule-last {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 2px;
+  font-size: 12px;
+}
+.rule.off .rule-name,
+.rule.off .rule-desc {
+  color: var(--muted);
+}
+.rule-history {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 13px;
+  border-left: 1px solid var(--border);
+}
+
+/* -- Form ------------------------------------------------------------------ */
+
+.rule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.label-list {
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin-top: -12px;
+  font-size: 13px;
+}
+.examples .hint {
+  flex-basis: 100%;
+}
+.field.narrow input[type="number"] {
+  width: 88px;
+}
+.inline-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 400;
+}
+.note {
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+.problems {
+  margin: 4px 0 0;
+}
+
+/* -- History --------------------------------------------------------------- */
+
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.run-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+.run-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.run-messages li {
+  overflow-wrap: anywhere;
+}
+.run-from {
+  font-weight: 600;
+}
+.run-subject {
+  color: var(--muted);
+}
+.run-error {
+  font-size: 13px;
+  color: var(--bad);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .rule-history {
+    padding: 0 10px;
+  }
+}

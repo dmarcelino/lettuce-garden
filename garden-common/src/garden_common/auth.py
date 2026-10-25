@@ -1,8 +1,9 @@
 """Who is asking: the Cloudflare Access JWT, verified like upstream's BFF does
 (bff/src/auth/cf-access.ts), and CSRF tokens for every form.
 
-Agents reach the broker over the Docker network without passing Access, so
-they can send any header they like. Only a JWT signed by the team's Access
+Shared by the garden sidecars (the vault, gmail-triggers). Agents reach them
+over the Docker network without passing Access, so they can send any header
+they like. Only a JWT signed by the team's Access
 keys, for this stack's application, carrying an allowed email, counts.
 The unsigned Cf-Access-Authenticated-User-Email header is never read.
 """
@@ -13,14 +14,27 @@ import hashlib
 import hmac
 import secrets
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
 
 import anyio
 import jwt
 
-from .config import Settings
-
 JWT_HEADER = "cf-access-jwt-assertion"
+
+
+class AccessSettings(Protocol):
+    """What the checks need from a sidecar's settings."""
+
+    @property
+    def team_domain(self) -> str: ...
+    @property
+    def audience(self) -> str: ...
+    @property
+    def issuer(self) -> str: ...
+    @property
+    def allowed_users(self) -> frozenset[str]: ...
+    @property
+    def public_origin(self) -> str: ...
 
 
 class AuthError(Exception):
@@ -44,7 +58,7 @@ def jwks_resolver(team_domain: str) -> KeyResolver:
 
 
 class Authenticator:
-    def __init__(self, settings: Settings, key_resolver: KeyResolver | None = None):
+    def __init__(self, settings: AccessSettings, key_resolver: KeyResolver | None = None):
         self._settings = settings
         self._resolve = key_resolver or jwks_resolver(settings.team_domain)
         # Forms carry HMAC(email); the key lives only in this process, so a

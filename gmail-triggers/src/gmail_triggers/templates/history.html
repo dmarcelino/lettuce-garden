@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_run.html" import run_status %}
+{% block title %}History of {{ rule.name }}{% endblock %}
+{% block content %}
+<p class="crumb"><a href="{{ base }}/">Triggers</a> / <a href="{{ base }}/r/{{ rule.id }}">{{ rule.name }}</a></p>
+<div class="row-between">
+  <h1>History</h1>
+  <form method="post" action="{{ base }}/r/{{ rule.id }}/test">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit" class="button ghost">Send a test</button>
+  </form>
+</div>
+<p class="muted">"Send a test" asks {{ rule.agent_name or rule.agent_id }} to follow this trigger's instructions now, with "(test run, no email)" in place of the emails.</p>
+{% if notice %}<div class="banner ok" role="status"><p>{{ notice }}</p></div>{% endif %}
+{% if held %}<div class="banner warn" role="status"><p>{{ held }} matched email{{ "s" if held != 1 }} wait{{ "s" if held == 1 }} for the hourly limit ({{ rule.max_per_hour }} per hour) and will be sent together.</p></div>{% endif %}
+{% if runs %}
+<ul class="runs">
+  {% for run in runs %}
+  <li class="run">
+    <div class="run-head">
+      {{ run_status(run) }}
+      <span class="muted">{{ run.at | time }}</span>
+      {% if not run.test %}<span class="muted">{{ run.total }} email{{ "s" if run.total != 1 }}</span>{% endif %}
+    </div>
+    {% if run.messages %}
+    <ul class="run-messages">
+      {% for m in run.messages %}
+      <li><span class="run-from">{{ m.sender or "(unknown sender)" }}</span> <span class="run-subject">{{ m.subject or "(no subject)" }}</span></li>
+      {% endfor %}
+      {% if run.total > run.messages | length %}<li class="muted">and {{ run.total - run.messages | length }} more</li>{% endif %}
+    </ul>
+    {% endif %}
+    {% if run.status == "failed" or run.status == "lost" %}<p class="run-error">{{ run.error }}</p>{% endif %}
+    {% if run.status == "ok" and run.task_id %}<p class="muted small">Task {{ run.task_id }} in the agent's Tasks.</p>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty"><p class="muted">Nothing yet. Matches and tests show here.</p></div>
+{% endif %}
+{% endblock %}

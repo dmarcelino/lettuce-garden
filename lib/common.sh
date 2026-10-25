@@ -102,7 +102,17 @@ normalise_profiles() {
   if ((${#out[@]} == 0)) || ! has_profile "${out[*]}" cloudflared; then
     die "the profile list must contain cloudflared"
   fi
+  p=$(profile_unmet "${out[*]}")
+  [[ -z $p ]] || die "$p"
   printf '%s' "${out[*]}"
+}
+
+# profile_unmet "a,b,c" -> why a profile in the list cannot run without another
+# that is missing; nothing when every dependency is on
+profile_unmet() {
+  if has_profile "$1" gmail-triggers && ! has_profile "$1" google; then
+    printf 'the gmail-triggers profile needs google (it uses the connection made in Settings -> Google)'
+  fi
 }
 
 # google_redirect_uri NAME -> the OAuth redirect URI that stack's Settings -> Google
@@ -158,9 +168,13 @@ expand_targets() {
 # compose NAME ARGS... -> docker compose for one stack. `env -i` keeps variables
 # exported in the caller's shell from overriding stack.env, and the explicit
 # --env-file stops Compose from reading any upstream/docker/.env.
-compose() {
-  local name=$1 up
-  shift
+compose() { compose_env "$(stack_env "$1")" "$@"; }
+
+# compose_env ENV_FILE NAME ARGS... -> `compose`, reading ENV_FILE in place of
+# the stack's stack.env (check_stack renders a profile list before it is written)
+compose_env() {
+  local env_file=$1 name=$2 up
+  shift 2
   up=$(upstream_dir)
   env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
     docker compose -p "lettuce-$name" \
@@ -169,7 +183,8 @@ compose() {
     -f "$LETTUCE_HOME/compose/hardening.yml" \
     -f "$LETTUCE_HOME/compose/multi.yml" \
     -f "$LETTUCE_HOME/compose/secrets.yml" \
-    --env-file "$(stack_env "$name")" \
+    -f "$LETTUCE_HOME/compose/gmail-triggers.yml" \
+    --env-file "$env_file" \
     "$@"
 }
 
@@ -238,10 +253,22 @@ ensure_push_keys() {
   done
 }
 
-# check_stack NAME [--skip-profiles] -> dies with the first reason the stack must
-# not start. `profiles` skips the profile checks before it rewrites the lists.
+# ensure_executor_token NAME -> gives the stack, once, the token the gmail-triggers
+# executor presents to the sidecar's /executor/v1/ API. Nothing rotates it; to
+# replace it, delete the line from stack.env and run `lettucectl up`.
+ensure_executor_token() {
+  local f
+  f=$(stack_env "$1")
+  [[ -n $(env_get "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN) ]] ||
+    env_set "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN "$(openssl rand -hex 32)"
+}
+
+# check_stack NAME [--profiles LIST] -> dies with the first reason the stack must
+# not start. With --profiles, `profiles` checks the stack as it will be under
+# LIST, before it writes the lists: the stack.env and config.env lists may differ
+# then, and the config is rendered from a copy of stack.env with LIST in it.
 check_stack() {
-  local name=$1 skip_profiles=${2:-} f k profiles rendered published updating sniffing
+  local name=$1 f k profiles rendered published updating sniffing tmp
   f=$(stack_env "$name")
   [[ -f $f ]] || die "$name: stack.env missing"
   [[ $(file_mode "$f") == 600 ]] || die "$name: stack.env must be mode 600"
@@ -256,13 +283,28 @@ check_stack() {
   done
   k=$(env_get "$f" SESSION_SECRET)
   ((${#k} >= 32)) || die "$name: SESSION_SECRET is shorter than 32 characters"
-  if [[ $skip_profiles != --skip-profiles ]]; then
+  if [[ ${2:-} == --profiles ]]; then
+    profiles=$3
+  else
     profiles=$(env_get "$f" COMPOSE_PROFILES)
     has_profile "$profiles" cloudflared || die "$name: COMPOSE_PROFILES must contain cloudflared"
     [[ $profiles == "$(cfg PROFILES)" ]] ||
       die "$name: COMPOSE_PROFILES ($profiles) differs from config.env PROFILES ($(cfg PROFILES)); all stacks share one image (set both with: lettucectl profiles <list>)"
   fi
-  rendered=$(compose "$name" config --format json) || die "$name: docker compose config failed"
+  k=$(profile_unmet "$profiles")
+  [[ -z $k ]] || die "$name: $k"
+  if [[ $profiles == "$(env_get "$f" COMPOSE_PROFILES)" ]]; then
+    rendered=$(compose "$name" config --format json) || die "$name: docker compose config failed"
+  else
+    tmp=$(mktemp "$f.XXXXXX")
+    chmod 600 "$tmp"
+    { grep -v '^COMPOSE_PROFILES=' "$f" || true; printf 'COMPOSE_PROFILES=%s\n' "$profiles"; } >"$tmp"
+    rendered=$(compose_env "$tmp" "$name" config --format json) || {
+      rm -f "$tmp"
+      die "$name: docker compose config failed"
+    }
+    rm -f "$tmp"
+  fi
   published=$(jq '[.services[] | (.ports // []) | length] | add // 0' <<<"$rendered")
   [[ $published == 0 ]] || die "$name: $published published port(s) in the rendered config; nothing may be published"
   updating=$(jq -r '[.services | to_entries[]
@@ -275,23 +317,108 @@ check_stack() {
     | select((.value.cap_drop // []) | (index("NET_RAW") or index("ALL")) | not) | .key] | join(", ")' <<<"$rendered")
   [[ -z $sniffing ]] ||
     die "$name: $sniffing must drop NET_RAW; agents in the app-server's network namespace could capture the Access JWT (compose/hardening.yml)"
-  if has_profile "$(env_get "$f" COMPOSE_PROFILES)" secrets; then
+  k=$(volume_users "$rendered" google-creds bff google-mcp gmail-triggers)
+  [[ -z $k ]] || die "$name: $k mount(s) google-creds (the Google token); only bff, google-mcp and gmail-triggers may"
+  # volumes_from would hand another service every mount of the one it names.
+  k=$(jq -r '([.services | to_entries[]
+      | select([(.value.volumes // [])[] | select(.source == "google-creds" or .source == "secret-broker-data")] | length > 0)
+      | .key] + ["gmail-triggers", "secret-broker"]) as $held
+    | [.services | to_entries[] | .key as $k | (.value.volumes_from // [])[]
+      | sub("^service:"; "") | sub(":(ro|rw)$"; "") | select(. as $t | $held | index($t)) | "\($k) from \(.)"]
+    | join(", ")' <<<"$rendered")
+  [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault or the gmail-triggers rules ($k)"
+  if has_profile "$profiles" secrets; then
     check_broker "$name" "$rendered"
+  fi
+  if has_profile "$profiles" gmail-triggers; then
+    [[ $(env_get "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] ||
+      die "$name: GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters (delete the line and run: lettucectl up $name)"
+    check_gmail_triggers "$name" "$rendered" "$(env_get "$f" LETTA_STATE_DIR)"
   fi
 }
 
+# paths_overlap A B -> success when A and B are the same path or one contains
+# the other ("/" contains every path)
+paths_overlap() {
+  local a=${1%/} b=${2%/}
+  [[ -z $a || -z $b || $a == "$b" || $a == "$b"/* || $b == "$a"/* ]]
+}
+
+# reaches PATH TARGET -> success when PATH, as written or with its symlinks
+# resolved, overlaps TARGET
+reaches() {
+  paths_overlap "$1" "$2" || paths_overlap "$(realpath -m -- "$1")" "$(realpath -m -- "$2")"
+}
+
+# volume_users RENDERED VOLUME SERVICE... -> the services, other than these, that
+# mount the named volume VOLUME, comma-separated
+volume_users() {
+  local rendered=$1 volume=$2
+  shift 2
+  jq -r --arg v "$volume" '[.services | to_entries[] | select(.key as $k | $ARGS.positional | index($k) | not)
+    | select([(.value.volumes // [])[] | select(.source == $v)] | length > 0) | .key] | join(", ")' --args "$@" <<<"$rendered"
+}
+
+# check_hardened NAME SERVICE SVC -> the sidecar SERVICE (rendered as the JSON
+# SVC) keeps what its overlay gives it: a read-only root filesystem, no
+# capabilities or privileges, its own namespaces and no devices
+check_hardened() {
+  local name=$1 s=$2 svc=$3 k
+  jq -e '.read_only == true' <<<"$svc" >/dev/null || die "$name: $s must have read_only: true"
+  jq -e '(.cap_drop // []) | index("ALL")' <<<"$svc" >/dev/null || die "$name: $s must drop all capabilities (cap_drop: [ALL])"
+  k=$(jq -r '[(select(.privileged == true) | "privileged"), (select((.cap_add // []) | length > 0) | "cap_add"),
+    (select(.network_mode != null) | "network_mode"), (select(.pid != null) | "pid"), (select(.ipc != null) | "ipc"),
+    (select((.volumes_from // []) | length > 0) | "volumes_from"), (select((.devices // []) | length > 0) | "devices")]
+    | join(", ")' <<<"$svc")
+  [[ -z $k ]] || die "$name: $s must not set $k"
+}
+
 # check_broker NAME RENDERED -> the vault service keeps the isolation
-# compose/secrets.yml gives it: its volume is its alone, its root filesystem is
-# read-only, it has no capabilities and no host paths.
+# compose/secrets.yml gives it: hardened (check_hardened), its volume is its
+# alone and it has no host paths.
 check_broker() {
   local name=$1 rendered=$2 broker others
   broker=$(jq -c '.services["secret-broker"] // empty' <<<"$2")
   [[ -n $broker ]] || die "$name: the secrets profile is on but secret-broker is not in the rendered config (compose/secrets.yml)"
-  jq -e '.read_only == true' <<<"$broker" >/dev/null || die "$name: secret-broker must have read_only: true"
-  jq -e '(.cap_drop // []) | index("ALL")' <<<"$broker" >/dev/null || die "$name: secret-broker must drop all capabilities (cap_drop: [ALL])"
+  check_hardened "$name" secret-broker "$broker"
   jq -e '[(.volumes // [])[] | select(.type != "volume" and .type != "tmpfs")] | length == 0' <<<"$broker" >/dev/null ||
     die "$name: secret-broker must not mount host paths"
-  others=$(jq -r '[.services | to_entries[] | select(.key != "secret-broker")
-    | select([(.value.volumes // [])[] | select(.source == "secret-broker-data")] | length > 0) | .key] | join(", ")' <<<"$rendered")
+  others=$(volume_users "$rendered" secret-broker-data secret-broker)
   [[ -z $others ]] || die "$name: $others mount(s) the vault's volume; only secret-broker may"
+}
+
+# check_gmail_triggers NAME RENDERED STATE_DIR -> the gmail-triggers service keeps
+# what compose/gmail-triggers.yml gives it: hardened (check_hardened), one host
+# path (STATE_DIR/garden/gmail-triggers), the Google volumes read-only and
+# nothing else; and nothing else reaches the rules: no other bind mount or
+# volume device at, in or above STATE_DIR/garden, and no symlink on the way there.
+check_gmail_triggers() {
+  local name=$1 rendered=$2 state=${3%/} svc garden k p o
+  garden=$state/garden
+  svc=$(jq -c '.services["gmail-triggers"] // empty' <<<"$rendered")
+  [[ -n $svc ]] || die "$name: the gmail-triggers profile is on but gmail-triggers is not in the rendered config (compose/gmail-triggers.yml)"
+  check_hardened "$name" gmail-triggers "$svc"
+  k=$(jq -c '[(.volumes // [])[] | select(.type == "bind") | [.source, .target]]' <<<"$svc")
+  [[ $k == "$(jq -cn --arg s "$garden/gmail-triggers" '[[$s, "/data"]]')" ]] ||
+    die "$name: gmail-triggers may mount from the host only $garden/gmail-triggers (at /data)"
+  jq -e '[(.volumes // [])[] | select(.source == "google-creds" or .source == "google-policy") | select(.read_only != true)] | length == 0' <<<"$svc" >/dev/null ||
+    die "$name: gmail-triggers must mount google-creds and google-policy read-only"
+  k=$(jq -r '[(.volumes // [])[] | select(.type != "bind")
+    | select(.source != "google-creds" and .source != "google-policy") | .source // .type] | join(", ")' <<<"$svc")
+  [[ -z $k ]] || die "$name: gmail-triggers must not mount $k; only its state and the Google volumes"
+  for p in "$state" "$garden" "$garden/gmail-triggers"; do
+    [[ ! -L $p ]] || die "$name: $p is a symlink; Docker would follow it, so the gmail-triggers rules need real directories"
+  done
+  while IFS=$'\t' read -r k p; do
+    ! reaches "$p" "$garden" || die "$name: $k mounts $p, which reaches $garden, where the gmail-triggers rules live; only gmail-triggers may"
+  done < <(jq -r '.services | to_entries[] | select(.key != "gmail-triggers") | .key as $k
+    | (.value.volumes // [])[] | select(.type == "bind") | [$k, .source] | @tsv' <<<"$rendered")
+  while IFS=$'\t' read -r k p o; do
+    if [[ $p != /* ]]; then
+      [[ $o != *bind* ]] || die "$name: volume $k binds the relative path $p; use an absolute one"
+      continue
+    fi
+    ! reaches "$p" "$garden" || die "$name: volume $k is bound to $p, which reaches $garden, where the gmail-triggers rules live"
+  done < <(jq -r '(.volumes // {}) | to_entries[] | select(.value.driver_opts.device != null)
+    | [.key, .value.driver_opts.device, (.value.driver_opts.o // "")] | @tsv' <<<"$rendered")
 }

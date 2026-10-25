@@ -1,7 +1,10 @@
 # The Lettuce secret broker (see docs/secret-broker.md). Built by lettucectl via
-# compose/secrets.yml. tests/run-broker.sh builds the `test` stage and runs it.
+# compose/secrets.yml. `tests/run-sidecar.sh broker` builds the `test` stage and
+# runs it. Both need the `garden-common` build context (the repo's garden-common/).
 FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+COPY --from=garden-common . /tmp/garden-common
+RUN pip install --root-user-action=ignore /tmp/garden-common && rm -rf /tmp/garden-common
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src

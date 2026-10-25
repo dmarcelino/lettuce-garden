@@ -5,10 +5,10 @@ from __future__ import annotations
 import sys
 
 import uvicorn
+from garden_common.auth import Authenticator
 
 from . import logs
 from .app import create_app
-from .auth import Authenticator
 from .config import ConfigError, Settings
 from .push import Pusher
 from .service import Broker

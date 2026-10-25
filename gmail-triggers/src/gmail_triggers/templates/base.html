@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e7eaf0">
+  <meta name="color-scheme" content="light">
+  <title>{% block title %}Gmail triggers{% endblock %} - Lettuce</title>
+  <link rel="icon" href="{{ base }}/icon-192.png">
+  <link rel="apple-touch-icon" href="{{ base }}/icon-192.png">
+  <link rel="stylesheet" href="{{ base }}/garden.css">
+  <link rel="stylesheet" href="{{ base }}/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <img class="app-icon" src="{{ base }}/icon-192.png" width="28" height="28" alt="">
+      <a class="title" href="{{ base }}/">Gmail triggers</a>
+      <span class="topbar-note">Lettuce garden</span>
+    </div>
+  </header>
+  <main class="shell">
+    {% block content %}{% endblock %}
+  </main>
+  {% if email %}<footer class="footer">Signed in as {{ email }}</footer>{% endif %}
+</body>
+</html>
