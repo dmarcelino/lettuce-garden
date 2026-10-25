@@ -173,9 +173,13 @@ compose() { compose_env "$(stack_env "$1")" "$@"; }
 # compose_env ENV_FILE NAME ARGS... -> `compose`, reading ENV_FILE in place of
 # the stack's stack.env (check_stack renders a profile list before it is written)
 compose_env() {
-  local env_file=$1 name=$2 up
+  local env_file=$1 name=$2 up proxy=()
   shift 2
   up=$(upstream_dir)
+  # Only with the profile: without it, no container gets a proxy setting.
+  if has_profile "$(env_get "$env_file" COMPOSE_PROFILES)" pipelock; then
+    proxy=(-f "$LETTUCE_HOME/compose/pipelock-proxy.yml")
+  fi
   env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
     docker compose -p "lettuce-$name" \
     --project-directory "$up/docker" \
@@ -184,6 +188,8 @@ compose_env() {
     -f "$LETTUCE_HOME/compose/multi.yml" \
     -f "$LETTUCE_HOME/compose/secrets.yml" \
     -f "$LETTUCE_HOME/compose/gmail-triggers.yml" \
+    -f "$LETTUCE_HOME/compose/pipelock.yml" \
+    "${proxy[@]}" \
     --env-file "$env_file" \
     "$@"
 }
@@ -199,6 +205,23 @@ vault_volume() { printf 'lettuce-%s_secret-broker-data' "$1"; }
 # has_vault NAME -> success when the vault's volume exists. Turning the secrets
 # profile off keeps it, and `compose down -v` deletes it either way.
 has_vault() { host_docker volume inspect "$(vault_volume "$1")" >/dev/null 2>&1; }
+
+# receipts_volume NAME -> the Docker volume holding the stack's pipelock receipts
+# and their signing key
+receipts_volume() { printf 'lettuce-%s_pipelock-data' "$1"; }
+
+# has_receipts NAME -> success when that volume exists; like the vault's, it
+# outlives the profile and goes with `compose down -v`
+has_receipts() { host_docker volume inspect "$(receipts_volume "$1")" >/dev/null 2>&1; }
+
+# compose_label_mask CONFIG -> `--label KEY=` for each Compose label of an
+# image's config (`image inspect`'s .Config, as JSON). A container inherits its
+# image's labels, so Compose and `stale_services` would count a one-off
+# container of a Compose-built image as one of the stack's; emptied, the labels
+# no longer match the project filters.
+compose_label_mask() {
+  jq -r '.Labels // {} | keys[] | select(startswith("com.docker.compose.")) | "--label", "\(.)="' <<<"$1"
+}
 
 # stack_running NAME -> success when any of the stack's containers is running
 stack_running() {
@@ -321,14 +344,22 @@ check_stack() {
   [[ -z $k ]] || die "$name: $k mount(s) google-creds (the Google token); only bff, google-mcp and gmail-triggers may"
   # volumes_from would hand another service every mount of the one it names.
   k=$(jq -r '([.services | to_entries[]
-      | select([(.value.volumes // [])[] | select(.source == "google-creds" or .source == "secret-broker-data")] | length > 0)
-      | .key] + ["gmail-triggers", "secret-broker"]) as $held
+      | select([(.value.volumes // [])[] | select(.source == "google-creds" or .source == "secret-broker-data" or .source == "pipelock-data")] | length > 0)
+      | .key] + ["gmail-triggers", "secret-broker", "pipelock"]) as $held
     | [.services | to_entries[] | .key as $k | (.value.volumes_from // [])[]
       | sub("^service:"; "") | sub(":(ro|rw)$"; "") | select(. as $t | $held | index($t)) | "\($k) from \(.)"]
     | join(", ")' <<<"$rendered")
-  [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault or the gmail-triggers rules ($k)"
+  [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault, the gmail-triggers rules or the pipelock receipts ($k)"
+  # Both volumes outlive their profile, so these hold whatever the profiles.
+  k=$(volume_users "$rendered" secret-broker-data secret-broker)
+  [[ -z $k ]] || die "$name: $k mount(s) the vault's volume; only secret-broker may"
+  k=$(volume_users "$rendered" pipelock-data pipelock)
+  [[ -z $k ]] || die "$name: $k mount(s) pipelock's volume (its signing key and receipts); only pipelock may"
   if has_profile "$profiles" secrets; then
-    check_broker "$name" "$rendered"
+    check_sidecar "$name" "$rendered" secrets secret-broker compose/secrets.yml
+  fi
+  if has_profile "$profiles" pipelock; then
+    check_pipelock "$name" "$rendered"
   fi
   if has_profile "$profiles" gmail-triggers; then
     [[ $(env_get "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] ||
@@ -373,18 +404,36 @@ check_hardened() {
   [[ -z $k ]] || die "$name: $s must not set $k"
 }
 
-# check_broker NAME RENDERED -> the vault service keeps the isolation
-# compose/secrets.yml gives it: hardened (check_hardened), its volume is its
-# alone and it has no host paths.
-check_broker() {
-  local name=$1 rendered=$2 broker others
-  broker=$(jq -c '.services["secret-broker"] // empty' <<<"$2")
-  [[ -n $broker ]] || die "$name: the secrets profile is on but secret-broker is not in the rendered config (compose/secrets.yml)"
-  check_hardened "$name" secret-broker "$broker"
-  jq -e '[(.volumes // [])[] | select(.type != "volume" and .type != "tmpfs")] | length == 0' <<<"$broker" >/dev/null ||
-    die "$name: secret-broker must not mount host paths"
-  others=$(volume_users "$rendered" secret-broker-data secret-broker)
-  [[ -z $others ]] || die "$name: $others mount(s) the vault's volume; only secret-broker may"
+# check_sidecar NAME RENDERED PROFILE SERVICE OVERLAY -> the sidecar SERVICE,
+# whose PROFILE is on, keeps the isolation OVERLAY gives it: it is rendered,
+# hardened (check_hardened) and has no host paths
+check_sidecar() {
+  local name=$1 profile=$3 s=$4 overlay=$5 svc
+  svc=$(jq -c --arg s "$s" '.services[$s] // empty' <<<"$2")
+  [[ -n $svc ]] || die "$name: the $profile profile is on but $s is not in the rendered config ($overlay)"
+  check_hardened "$name" "$s" "$svc"
+  jq -e '[(.volumes // [])[] | select(.type != "volume" and .type != "tmpfs")] | length == 0' <<<"$svc" >/dev/null ||
+    die "$name: $s must not mount host paths"
+}
+
+# check_pipelock NAME RENDERED -> the pipelock service keeps what
+# compose/pipelock.yml gives it (check_sidecar), and the app-server uses it
+# (compose/pipelock-proxy.yml) for everything but stack-internal traffic:
+# pipelock must never see the vault's values or the executor's token.
+check_pipelock() {
+  local name=$1 rendered=$2 k v
+  check_sidecar "$name" "$rendered" pipelock pipelock compose/pipelock.yml
+  for k in HTTPS_PROXY https_proxy HTTP_PROXY http_proxy; do
+    v=$(jq -r --arg k "$k" '.services["app-server"].environment[$k] // ""' <<<"$rendered")
+    [[ $v == http://pipelock:8888 ]] ||
+      die "$name: the app-server's $k must be http://pipelock:8888 with the pipelock profile (compose/pipelock-proxy.yml)"
+  done
+  for k in NO_PROXY no_proxy; do
+    for v in secret-broker gmail-triggers; do
+      jq -e --arg k "$k" --arg v "$v" '.services["app-server"].environment[$k] // "" | split(",") | index($v)' <<<"$rendered" >/dev/null ||
+        die "$name: the app-server's $k must list $v; pipelock must not see its traffic (compose/pipelock-proxy.yml)"
+    done
+  done
 }
 
 # check_gmail_triggers NAME RENDERED STATE_DIR -> the gmail-triggers service keeps

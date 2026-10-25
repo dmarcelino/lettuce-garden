@@ -580,6 +580,122 @@ test_check_refuses_secrets_profile_without_the_broker() {
   out_has "secret-broker"
 }
 
+# pipelock_config [PIPELOCK_JSON] -> the rendered config also holds this pipelock
+# (default: the hardened one compose/pipelock.yml renders) and the app-server's
+# proxy settings from compose/pipelock-proxy.yml
+pipelock_config() {
+  local svc=${1:-'{"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"volumes":[{"type":"volume","source":"pipelock-data","target":"/data"}]}'}
+  local np=localhost,127.0.0.1,::1,pipelock,secret-broker,gmail-triggers,searxng,ddg-mcp,google-mcp,host.docker.internal
+  config_edit '.services.pipelock = '"$svc"'
+    | .services["app-server"].environment += {"HTTPS_PROXY":"http://pipelock:8888","HTTP_PROXY":"http://pipelock:8888",
+      "https_proxy":"http://pipelock:8888","http_proxy":"http://pipelock:8888","NO_PROXY":"'"$np"'","no_proxy":"'"$np"'",
+      "NODE_USE_ENV_PROXY":"1"}'
+}
+
+# with_pipelock [PIPELOCK_JSON] -> alfred runs the `pipelock` profile and the
+# rendered config holds this pipelock (default: the hardened one)
+with_pipelock() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,pipelock/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,pipelock/' "$H/stacks/alfred/stack.env"
+  pipelock_config "$@"
+}
+
+test_check_accepts_the_hardened_pipelock() {
+  added
+  with_pipelock
+  ctl check alfred
+  ok_rc
+}
+
+test_check_refuses_a_pipelock_that_is_not_hardened() {
+  added
+  local p
+  for p in \
+    '{"cap_drop":["ALL"],"volumes":[]}' \
+    '{"read_only":true,"volumes":[]}' \
+    '{"read_only":true,"cap_drop":["ALL"],"network_mode":"service:app-server","volumes":[]}' \
+    '{"read_only":true,"cap_drop":["ALL"],"volumes":[{"type":"bind","source":"/srv","target":"/data"}]}'; do
+    with_pipelock "$p"
+    ctl check alfred
+    bad_rc
+    out_has "alfred: pipelock must"
+  done
+}
+
+test_check_refuses_another_service_on_the_pipelock_volume() {
+  added
+  with_pipelock
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"pipelock-data","target":"/x"}]'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: bff mount(s) pipelock's volume"
+}
+
+test_check_refuses_the_pipelock_volume_without_the_profile() {
+  added
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"pipelock-data","target":"/x"}]'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: bff mount(s) pipelock's volume"
+}
+
+test_check_refuses_the_vault_volume_without_the_profile() {
+  added
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"secret-broker-data","target":"/x"}]'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: bff mount(s) the vault's volume"
+}
+
+test_check_refuses_volumes_from_pipelock() {
+  added
+  config_edit '.services.searxng = {"volumes_from":["pipelock"]}'
+  ctl check alfred
+  bad_rc
+  out_has "(searxng from pipelock)"
+}
+
+test_check_refuses_pipelock_profile_without_the_service() {
+  added
+  with_pipelock
+  config_edit 'del(.services.pipelock)'
+  ctl check alfred
+  bad_rc
+  out_has "pipelock is not in the rendered config"
+}
+
+test_check_refuses_an_app_server_that_skips_pipelock() {
+  added
+  local k
+  for k in HTTPS_PROXY https_proxy HTTP_PROXY http_proxy; do
+    with_pipelock
+    config_edit '.services["app-server"].environment["'"$k"'"] = "http://elsewhere:3128"'
+    ctl check alfred
+    bad_rc
+    out_has "the app-server's $k must be http://pipelock:8888"
+  done
+}
+
+test_check_refuses_a_proxy_that_would_see_the_vault_or_the_executor() {
+  added
+  local k v
+  for k in NO_PROXY no_proxy; do
+    for v in secret-broker gmail-triggers; do
+      with_pipelock
+      config_edit '.services["app-server"].environment["'"$k"'"] |= (split(",") - ["'"$v"'"] | join(","))'
+      ctl check alfred
+      bad_rc
+      out_has "the app-server's $k must list $v"
+    done
+  done
+}
+
+test_check_ignores_proxy_settings_without_pipelock() {
+  added
+  ctl check alfred
+  ok_rc
+}
+
 # with_triggers -> alfred runs the gmail-triggers profile (with google), and the
 # rendered config holds the hardened service
 with_triggers() {
@@ -708,7 +824,7 @@ test_check_refuses_another_service_on_a_symlink_to_the_rules() {
 }
 
 test_check_refuses_volumes_from_gmail_triggers() {
-  triggers_refused ".services.bff.volumes_from = [\"gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault or the gmail-triggers rules (bff from gmail-triggers)"
+  triggers_refused ".services.bff.volumes_from = [\"gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules or the pipelock receipts (bff from gmail-triggers)"
 }
 
 test_check_refuses_a_volume_bound_to_the_rules() {
@@ -769,7 +885,7 @@ test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
     | .services.searxng = {"volumes_from":["service:bff"]}'
   ctl check alfred
   bad_rc
-  out_has "alfred: volumes_from reaches the Google token, the vault or the gmail-triggers rules (searxng from bff)"
+  out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules or the pipelock receipts (searxng from bff)"
 }
 
 test_check_refuses_volumes_from_the_broker() {
@@ -965,7 +1081,16 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml --env-file $H/stacks/alfred/stack.env"
+  log_lacks "pipelock-proxy.yml"
+}
+
+test_compose_adds_the_proxy_overlay_only_with_pipelock() {
+  added
+  with_pipelock
+  ctl up alfred
+  ok_rc
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/pipelock-proxy.yml --env-file $H/stacks/alfred/stack.env"
 }
 
 test_up_all_starts_every_stack() {
@@ -1128,6 +1253,23 @@ test_remove_says_nothing_of_gmail_triggers_never_used() {
   out_lacks "Gmail triggers"
 }
 
+test_remove_says_the_receipts_go_too() {
+  added
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  out_has "Its pipelock receipts and their signing key are deleted too"
+  log_has "volume inspect lettuce-alfred_pipelock-data"
+}
+
+test_remove_says_nothing_of_receipts_never_written() {
+  added
+  stub STUB_VOLUMES_MISSING=lettuce-alfred_pipelock-data
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  out_lacks "pipelock"
+  out_has "Its vault"
+}
+
 test_remove_says_nothing_of_a_vault_that_was_never_created() {
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
   broker_config
@@ -1174,6 +1316,18 @@ test_profiles_removes_services_of_dropped_profiles() {
   log_has "up -d --build"
   grep -q '^docker compose -p lettuce-alfred .* rm -sf ddg-mcp searxng$' "$T/calls.log" || fail "dropped services not removed"
   out_lacks "oauth/callback"
+}
+
+test_profiles_dropping_pipelock_removes_it_and_the_proxy_settings() {
+  added
+  with_pipelock
+  containers alfred app-server bff cloudflared pipelock
+  : >"$T/calls.log"
+  ctl profiles cloudflared
+  ok_rc
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf pipelock$' "$T/calls.log" || fail "pipelock not removed"
+  grep '^docker compose -p lettuce-alfred .* up -d' "$T/calls.log" | grep -q pipelock-proxy.yml && fail "up still merged the proxy settings"
+  true
 }
 
 test_profiles_removes_leftovers_on_a_rerun() {
@@ -2077,6 +2231,136 @@ test_executor_script_uninstall_keeps_a_token_dir_in_use() {
   eq "$(files_in "$r/etc/lettuce-garden")" ". ./other"
 }
 
+# ── receipts ─────────────────────────────────────────────────────────────────
+# receipt_files -> the pipelock containers list two sessions: proxy.run.b (newer,
+# two files) and proxy.run.a
+receipt_files() {
+  printf '%s\n' "1760000000 /data/evidence/evidence-proxy.run.a-1.jsonl" \
+    "1760000300 /data/evidence/evidence-proxy.run.b-1.jsonl" "1760000600 /data/evidence/evidence-proxy.run.b-2.jsonl" >"$T/run-stdout"
+}
+
+PIPELOCK_RUN="docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --label com.docker.compose.project= --label com.docker.compose.service= --label lettucectl.receipts=alfred -v lettuce-alfred_pipelock-data:/data:ro"
+
+test_receipts_verifies_and_lists_sessions_newest_first() {
+  added
+  receipt_files
+  ctl receipts alfred
+  ok_rc
+  log_has "$PIPELOCK_RUN --entrypoint pipelock lettuce-pipelock:local verify-receipt --whole-recorder --chain /data/evidence --key /data/keys/receipt-signing.json.pub"
+  eq "$(grep -o 'proxy\.run\.[ab]$' "$OUT" | paste -sd' ')" "proxy.run.b proxy.run.a"
+}
+
+test_receipts_writes_the_newest_session_by_default() {
+  added
+  receipt_files
+  ctl receipts alfred "$T/report.html"
+  ok_rc
+  log_has "$PIPELOCK_RUN --entrypoint pipelock lettuce-pipelock:local evidence view --receipt-dir /data/evidence --session proxy.run.b --trusted-signer file=/data/keys/receipt-signing.json.pub"
+  eq "$(stat -c %a "$T/report.html")" 600
+  out_has "alfred: session proxy.run.b -> $T/report.html"
+  eq "$(grep -c 'image inspect lettuce-pipelock:local' "$T/calls.log")" 1
+}
+
+test_receipts_makes_an_existing_report_private() {
+  added
+  receipt_files
+  echo old >"$T/report.html"
+  chmod 644 "$T/report.html"
+  ctl receipts alfred "$T/report.html"
+  ok_rc
+  eq "$(stat -c %a "$T/report.html")" 600
+  grep -q proxy.run.b "$T/report.html" || fail "report not replaced"
+}
+
+test_receipts_keeps_an_existing_file_when_it_fails() {
+  added
+  receipt_files
+  echo keep >"$T/report.html"
+  stub STUB_RUN_FAIL=--receipt-dir
+  ctl receipts alfred "$T/report.html"
+  bad_rc
+  eq "$(cat "$T/report.html")" keep
+  eq "$(find "$T" -maxdepth 1 -name '.receipts.*')" ""
+}
+
+verifications() { grep -c "verify-receipt" "$T/calls.log" || true; }
+
+test_receipts_retries_a_verification_that_fails_once() {
+  added
+  receipt_files
+  stub STUB_RUN_FAIL=verify-receipt STUB_RUN_FAIL_TIMES=1
+  ctl receipts alfred
+  ok_rc
+  eq "$(verifications)" 2
+  out_has "proxy.run.b"
+}
+
+test_receipts_says_when_they_do_not_verify() {
+  added
+  receipt_files
+  stub STUB_RUN_FAIL=verify-receipt
+  ctl receipts alfred
+  bad_rc
+  eq "$(verifications)" 3
+  out_has "alfred: the receipts do not verify"
+  out_lacks "pipelock is running"
+}
+
+test_receipts_says_when_pipelock_was_writing() {
+  added
+  receipt_files
+  containers alfred app-server pipelock
+  stub STUB_RUN_FAIL=verify-receipt
+  ctl receipts alfred
+  bad_rc
+  out_has "pipelock is running"
+}
+
+test_receipts_writes_a_named_session() {
+  added
+  receipt_files
+  ctl receipts alfred "$T/report.html" proxy.run.a
+  ok_rc
+  log_has "--session proxy.run.a "
+  ctl receipts alfred "$T/report.html" proxy.run.zz
+  bad_rc
+  out_has "no session proxy.run.zz"
+}
+
+test_receipts_refuses_a_report_inside_the_repo() {
+  added
+  receipt_files
+  ctl receipts alfred "$H/report.html"
+  bad_rc
+  out_has "cannot be inside $H"
+  [[ ! -e $H/report.html ]] || fail "report written inside the repo"
+}
+
+test_receipts_needs_the_volume() {
+  added
+  stub STUB_VOLUMES_MISSING=lettuce-alfred_pipelock-data
+  ctl receipts alfred
+  bad_rc
+  out_has "no pipelock receipts"
+  log_lacks "docker run"
+}
+
+test_receipts_says_when_there_are_none_yet() {
+  added
+  ctl receipts alfred
+  bad_rc
+  out_has "pipelock has written no receipts yet"
+  log_lacks "verify-receipt"
+}
+
+test_receipts_fails_when_its_container_fails() {
+  added
+  receipt_files
+  stub STUB_RUN_RC=1
+  ctl receipts alfred
+  bad_rc
+}
+
 # ── backup ───────────────────────────────────────────────────────────────────
 # backed -> a fresh alfred stack with a backup destination at $B
 backed() {
@@ -2188,6 +2472,25 @@ test_backup_skips_a_vault_that_does_not_exist() {
   ok_rc
   out_has "the vault volume lettuce-alfred_secret-broker-data does not exist yet"
   log_lacks "/src/vault"
+}
+
+test_backup_includes_the_receipts() {
+  backed
+  stub STUB_VOLUMES_MISSING=lettuce-alfred_secret-broker-data
+  ctl backup alfred "$B"
+  ok_rc
+  log_has "docker volume inspect lettuce-alfred_pipelock-data"
+  log_has "-v lettuce-alfred_pipelock-data:/src/pipelock:ro -v $B/alfred:/dst"
+  log_lacks "/src/vault"
+}
+
+test_backup_skips_receipts_that_do_not_exist() {
+  backed
+  stub STUB_VOLUMES_MISSING=lettuce-alfred_pipelock-data
+  ctl backup alfred "$B"
+  ok_rc
+  log_has "-v lettuce-alfred_secret-broker-data:/src/vault:ro -v $B/alfred:/dst"
+  log_lacks "/src/pipelock"
 }
 
 test_backup_pauses_a_running_stack_when_asked() {

@@ -30,7 +30,7 @@ Operation (<target> is a stack name or "all")
   restart <target>              down + up (app-server and bff share a namespace; never restart one alone)
   check <target>                refuse unsafe or inconsistent configuration
   skills <target>               install agent-skills/ into running stacks (every agent of the stack)
-  backup <target> <dir> [opts]  copy agents, memory, workspaces, tools and vault to a snapshot in <dir>/<name>/
+  backup <target> <dir> [opts]  copy agents, memory, workspaces, tools, vault and receipts to a snapshot in <dir>/<name>/
                                 (--compress: a tar.gz instead; --no-tools; --pause|--live; --keep N)
   status                        containers and health of every stack
   list                          stacks, hostnames and allowed users
@@ -39,6 +39,8 @@ Operation (<target> is a stack name or "all")
   shell <name> [agent]          bash in the app-server, in /work or in an agent's workspace (name or id)
   toolbox <name> <agent> [cmd]  bash (or cmd) in an agent's workspace with your own ssh, git, gh and Claude Code
                                 (--tools before <name>: the agents' installed tools, read-only; --tools=rw: writable)
+  receipts <name> [<file.html>] verify pipelock's signed receipts and list its sessions, or write one session's
+           [<session>]          report (default: the newest) to <file.html>
 EOF
 }
 
@@ -418,6 +420,9 @@ cmd_remove() {
   info "This stops '$name' and deletes its DNS record, tunnel and Access application."
   if has_vault "$name"; then
     info "Its vault (the people's saved personal data) is deleted too: its volume goes with the stack."
+  fi
+  if has_receipts "$name"; then
+    info "Its pipelock receipts and their signing key are deleted too; keep a backup if you need them."
   fi
   state=$(env_get "$f" LETTA_STATE_DIR)
   if has_profile "$(env_get "$f" COMPOSE_PROFILES)" gmail-triggers || [[ -n $state && -d $state/garden/gmail-triggers ]]; then
@@ -869,7 +874,7 @@ cmd_toolbox() {
   (($# >= 2)) || die "$usage"
   validate_name "$1"
   require_stack "$1"
-  local name=$1 id ws state image config path label i run=() agent_env=() secret_names=() secret_values=() have=() argv=("${@:3}")
+  local name=$1 id ws state image config path mask i run=() agent_env=() secret_names=() secret_values=() have=() argv=("${@:3}")
   open_agent "$name" "$2"
   if [[ -n $tools ]]; then
     # Docker would create a missing bind source as root; the app-server's `up` does that.
@@ -886,12 +891,9 @@ cmd_toolbox() {
 
   run=(run --rm --init -i)
   if [[ -t 0 && -t 1 ]]; then run+=(-t); fi
-  # Compose labelled the image it built, and a container inherits those labels, so
-  # Compose and `stale_services` would take the toolbox for one of the stack's
-  # app-server containers. Emptied, they no longer match the project filters.
-  for label in $(jq -r '.Labels // {} | keys[] | select(startswith("com.docker.compose."))' <<<"$config"); do
-    run+=(--label "$label=")
-  done
+  # Or Compose and `stale_services` would take it for an app-server container.
+  mapfile -t mask < <(compose_label_mask "$config")
+  run+=("${mask[@]}")
   # shellcheck disable=SC2054 # the commas are tmpfs options
   run+=(--hostname "toolbox-$name" --label "lettucectl.toolbox=$name" --label "lettucectl.agent=$id"
     --security-opt no-new-privileges --memory 8g --pids-limit 4096
@@ -1049,6 +1051,9 @@ backup_stack() {
   elif has_profile "$(env_get "$f" COMPOSE_PROFILES)" secrets; then
     warn "$name: the vault volume $vol does not exist yet; backing up without it"
   fi
+  if has_receipts "$name"; then
+    mounts+=(-v "$(receipts_volume "$name"):/src/pipelock:ro")
+  fi
   excludes=(state/letta-home/mod-cache state/letta-home/claude/paste-cache state/letta-home/claude/backups)
   # The BFF rewrites upstream's skills on every connect.
   for s in "$(upstream_dir)"/docker/agent-skills/*/; do
@@ -1150,6 +1155,97 @@ cmd_backup() {
   fi
 }
 
+# ── receipts ─────────────────────────────────────────────────────────────────
+PIPELOCK_IMAGE=lettuce-pipelock:local
+PIPELOCK_KEY_PUB=/data/keys/receipt-signing.json.pub
+PIPELOCK_RUN=()
+
+# pipelock_setup NAME -> sets PIPELOCK_RUN to the `docker run` options of
+# pipelock_run: no network, no capabilities, the volume read-only, and the
+# image's Compose labels emptied (compose_label_mask), so Compose and
+# stale_services don't take its containers for the stack's pipelock
+pipelock_setup() {
+  local name=$1 config mask
+  config=$(host_docker image inspect "$PIPELOCK_IMAGE" --format '{{json .Config}}') ||
+    die "$name: no $PIPELOCK_IMAGE image; run lettucectl up $name with the pipelock profile"
+  mapfile -t mask < <(compose_label_mask "$config")
+  PIPELOCK_RUN=(--rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges
+    "${mask[@]}" --label "lettucectl.receipts=$name" -v "$(receipts_volume "$name"):/data:ro")
+}
+
+# pipelock_run ENTRYPOINT ARGS... -> a one-off container of the pipelock image
+# (after pipelock_setup)
+pipelock_run() {
+  local entry=$1
+  shift
+  host_docker run "${PIPELOCK_RUN[@]}" --entrypoint "$entry" "$PIPELOCK_IMAGE" "$@"
+}
+
+# receipts_verify NAME -> verifies every receipt and prints pipelock's report.
+# pipelock refuses a file that changes while it reads it, which a running
+# pipelock does with every request, so a failure is retried twice.
+receipts_verify() {
+  local name=$1 out i
+  for i in 1 2 3; do
+    ((i == 1)) || sleep 1
+    if out=$(pipelock_run pipelock verify-receipt --whole-recorder --chain /data/evidence --key "$PIPELOCK_KEY_PUB" 2>&1); then
+      printf '%s\n' "$out"
+      return 0
+    fi
+  done
+  printf '%s\n' "$out" >&2
+  if compose "$name" ps --status running --services | grep -qx pipelock; then
+    die "$name: the receipts do not verify, but pipelock is running and may have written to them during each check; retry when the stack is quiet, or after: lettucectl down $name"
+  fi
+  die "$name: the receipts do not verify"
+}
+
+# receipt_sessions NAME -> "<epoch> <session>" per pipelock run, newest first.
+# Each start of the proxy is a session, written as evidence-<session>-<n>.jsonl.
+receipt_sessions() {
+  # shellcheck disable=SC2016 # expanded by sh in the container
+  pipelock_run sh -c 'for f in /data/evidence/evidence-*.jsonl; do [ -e "$f" ] && stat -c "%Y %n" "$f"; done; true' |
+    sed -E 's#^([0-9]+) /data/evidence/evidence-(.*)-[0-9]+\.jsonl$#\1 \2#' |
+    sort -rn | awk '!seen[$2]++'
+}
+
+cmd_receipts() {
+  local usage="usage: lettucectl receipts <name> [<file.html> [<session>]]"
+  local name=${1:-} report=${2:-} session=${3:-} sessions t s tmp
+  [[ -n $name && $# -le 3 ]] || die "$usage"
+  validate_name "$name"
+  require_stack "$name"
+  has_receipts "$name" || die "$name: no pipelock receipts (its volume $(receipts_volume "$name") does not exist)"
+  pipelock_setup "$name"
+  sessions=$(receipt_sessions "$name") || die "$name: could not list the receipts"
+  [[ -n $sessions ]] || die "$name: pipelock has written no receipts yet"
+  if [[ -z $report ]]; then
+    receipts_verify "$name"
+    info "sessions (one per start of pipelock), newest first:"
+    while read -r t s; do
+      printf '%s  %s\n' "$(date -d "@$t" '+%F %T')" "$s"
+    done <<<"$sessions"
+    return 0
+  fi
+  if [[ -z $session ]]; then
+    session=$(head -n 1 <<<"$sessions" | cut -d' ' -f2)
+  else
+    awk -v s="$session" '$2 == s { f = 1 } END { exit !f }' <<<"$sessions" || die "$name: no session $session"
+  fi
+  [[ -d $(dirname -- "$report") ]] || die "$(dirname -- "$report") is not a directory"
+  # This repo is public, and receipts name every site the agents reached.
+  [[ $(realpath -m -- "$report") != "$LETTUCE_HOME"/* ]] || die "the report cannot be inside $LETTUCE_HOME"
+  # Written beside it (mktemp makes it 600) and renamed: an existing file
+  # takes the new mode, and survives a failure.
+  tmp=$(mktemp "$(dirname -- "$report")/.receipts.XXXXXX") || die "could not write in $(dirname -- "$report")"
+  if ! pipelock_run pipelock evidence view --receipt-dir /data/evidence \
+    --session "$session" --trusted-signer "file=$PIPELOCK_KEY_PUB" >"$tmp" || ! mv -f -- "$tmp" "$report"; then
+    rm -f -- "$tmp"
+    die "$name: could not write the report"
+  fi
+  info "$name: session $session -> $report"
+}
+
 cmd_skills() {
   (($# == 1)) || die "usage: lettucectl skills <name|all>"
   local n targets k
@@ -1164,7 +1260,7 @@ main() {
   local cmd=${1:-help}
   shift || true
   case $cmd in
-    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | toolbox | skills | backup)
+    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | toolbox | skills | backup | receipts)
       "cmd_$cmd" "$@"
       ;;
     help | -h | --help) usage ;;
