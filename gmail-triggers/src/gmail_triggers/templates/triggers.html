@@ -35,7 +35,7 @@
       </span>
       <span class="rule-last">
         {% if last %}{{ run_status(last) }} <span class="muted">{{ last.at | time }}</span>{% else %}<span class="muted">Not run yet</span>{% endif %}
-        {% if pending.get(rule.id) %}<span class="pill warn">{{ pending[rule.id] }} waiting for the hourly limit</span>{% endif %}
+        {% if pending.get(rule.id) %}<span class="pill warn">{{ pending[rule.id] }} waiting</span>{% endif %}
       </span>
     </a>
     <a class="rule-history" href="{{ base }}/r/{{ rule.id }}/history">History</a>

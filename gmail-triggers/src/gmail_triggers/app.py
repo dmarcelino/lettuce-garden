@@ -28,7 +28,9 @@ from .config import (
     HEARTBEAT_STALE_SECONDS,
     LOST_AFTER_SECONDS,
     MAX_LABELS,
+    MAX_LISTED_MESSAGES,
     MAX_MAX_PER_HOUR,
+    MAX_PENDING_PER_RULE,
     MAX_RULE_NAME,
     MAX_RULE_PROMPT,
     MAX_RULES,
@@ -39,7 +41,7 @@ from .executor_api import AGENT_ID, executor_routes
 from .google import LABEL_ID, Google, GoogleUnavailable, Label, Status
 from .matcher import ADDRESS
 from .poller import Poller
-from .store import GAP_PAUSED, GAP_SKIPPED, RULE_ID, Agent, Rule, Store
+from .store import GAP_DROPPED, GAP_PAUSED, GAP_SKIPPED, RULE_ID, Agent, Rule, Store
 from .text import encodable
 from .triggers import send_test
 
@@ -141,20 +143,28 @@ class FormError(Exception):
     pass
 
 
-def gap_text(gap: dict[str, Any]) -> str:
+def gap_text(gap: dict[str, Any]) -> tuple[str, str]:
+    """The notice's title and text."""
     start, end = _fmt_time(gap["start"]), _fmt_time(gap["end"])
+    n = gap["skipped"]
+    if gap["kind"] == GAP_DROPPED:
+        return "Some matched mail wasn't sent", (
+            f"{n} matched email{'s' if n != 1 else ''} around {end} {'were' if n != 1 else 'was'} dropped: "
+            f"more than {MAX_PENDING_PER_RULE} were waiting for one trigger. "
+            "Raise its runs per hour, or narrow its labels or senders."
+        )
+    title = "Some mail wasn't checked"
     if gap["kind"] == GAP_SKIPPED:
-        n = gap["skipped"]
-        return (
+        return title, (
             f"{n} new message{'s' if n != 1 else ''} around {end} {'were' if n != 1 else 'was'} not checked: "
             "too many arrived at once."
         )
     if gap["kind"] == GAP_PAUSED:
-        return (
+        return title, (
             f"Mail between {start} and {end} was not checked while Google was unavailable. "
             "Old mail is not replayed; checking continues from now."
         )
-    return (
+    return title, (
         f"Mail between {start} and {end} was not checked (Gmail's change history had expired). "
         "Checking continues from now."
     )
@@ -358,7 +368,8 @@ def create_app(
                 }
             )
         for gap in store.gaps_since(now - 7 * 86400)[:3]:
-            out.append({"level": "warn", "title": "Some mail wasn't checked", "text": gap_text(gap)})
+            title, text = gap_text(gap)
+            out.append({"level": "warn", "title": title, "text": text})
         return out
 
     # -- pages ----------------------------------------------------------------
@@ -414,6 +425,7 @@ def create_app(
             senders_text=senders_text if senders_text is not None else "\n".join(rule.senders),
             examples=EXAMPLES,
             max_per_hour_limit=MAX_MAX_PER_HOUR,
+            max_per_run=MAX_LISTED_MESSAGES,
         )
 
     async def new_form(request: Request, email: str) -> Response:
@@ -468,6 +480,7 @@ def create_app(
             rule=rule,
             runs=store.runs(rule.id),
             held=len(store.pending(rule.id)),
+            max_per_run=MAX_LISTED_MESSAGES,
             notice=NOTICES.get(request.query_params.get("done", "")),
         )
 

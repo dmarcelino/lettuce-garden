@@ -35,8 +35,8 @@ MAX_SENDERS = 50
 MAX_LABELS = 20
 # Subjects reach the agent as one line of at most this many characters.
 MAX_SUBJECT = 120
-# Messages listed in one request; the rest are counted.
-MAX_LISTED_MESSAGES = 15
+# Emails per request; the rest wait for the next run.
+MAX_LISTED_MESSAGES = 30
 # Held matches kept per rule while its hourly limit is reached.
 MAX_PENDING_PER_RULE = 500
 # Message metadata fetched per poll. Candidates beyond this are not checked
