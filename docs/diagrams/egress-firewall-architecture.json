@@ -1,0 +1,259 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Pipelock: what passes the egress proxy, and what does not",
+    "output": "docs/diagrams/egress-firewall-architecture.html",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "components": [
+    {
+      "id": "letta",
+      "type": "backend",
+      "label": "letta-code",
+      "sublabel": "Node 22.19: ignores the proxy",
+      "pos": [
+        40,
+        100
+      ],
+      "size": [
+        220,
+        64
+      ]
+    },
+    {
+      "id": "agents",
+      "type": "backend",
+      "label": "agent tools",
+      "sublabel": "shells, Claude Code, Codex",
+      "tag": "HTTPS_PROXY set",
+      "pos": [
+        40,
+        280
+      ],
+      "size": [
+        220,
+        64
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "backend",
+      "label": "secret-broker, gmail-triggers",
+      "sublabel": "stack-internal services",
+      "pos": [
+        40,
+        460
+      ],
+      "size": [
+        220,
+        64
+      ]
+    },
+    {
+      "id": "search",
+      "type": "backend",
+      "label": "searxng, ddg-mcp",
+      "sublabel": "search sidecars",
+      "tag": "HTTPS_PROXY set",
+      "pos": [
+        440,
+        100
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "pipelock",
+      "type": "security",
+      "label": "pipelock :8888",
+      "sublabel": "forward proxy + /fetch",
+      "tag": "balanced, advisory",
+      "pos": [
+        440,
+        280
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "evidence",
+      "type": "database",
+      "label": "pipelock-data",
+      "sublabel": "signing key + receipts",
+      "pos": [
+        440,
+        460
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "lettucectl",
+      "type": "external",
+      "label": "lettucectl",
+      "sublabel": "receipts, backup",
+      "pos": [
+        440,
+        640
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "internet",
+      "type": "external",
+      "label": "Internet",
+      "sublabel": "allowed sites",
+      "pos": [
+        860,
+        273
+      ],
+      "size": [
+        176,
+        64
+      ]
+    },
+    {
+      "id": "blocked",
+      "type": "external",
+      "label": "Blocked destinations",
+      "sublabel": "paste sites, LAN, metadata",
+      "pos": [
+        860,
+        460
+      ],
+      "size": [
+        176,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "app-server: agents run here as root",
+      "wraps": [
+        "letta",
+        "agents"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "mounted by pipelock only",
+      "wraps": [
+        "evidence"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "agents-to-pipelock",
+      "from": "agents",
+      "to": "pipelock",
+      "label": "CONNECT, /fetch?url=",
+      "variant": "emphasis"
+    },
+    {
+      "id": "search-to-pipelock",
+      "from": "search",
+      "to": "pipelock",
+      "label": "search queries"
+    },
+    {
+      "id": "pipelock-to-internet",
+      "from": "pipelock",
+      "to": "internet",
+      "label": "allowed: host checked",
+      "variant": "emphasis"
+    },
+    {
+      "id": "pipelock-to-blocked",
+      "from": "pipelock",
+      "to": "blocked",
+      "label": "403 + receipt",
+      "variant": "security"
+    },
+    {
+      "id": "pipelock-receipts",
+      "from": "pipelock",
+      "to": "evidence",
+      "label": "signed receipt per decision",
+      "variant": "security"
+    },
+    {
+      "id": "lettucectl-reads",
+      "from": "lettucectl",
+      "to": "evidence",
+      "label": "read-only, no network"
+    },
+    {
+      "id": "agents-no-proxy",
+      "from": "agents",
+      "to": "vault",
+      "label": "NO_PROXY: direct"
+    },
+    {
+      "id": "letta-direct",
+      "from": "letta",
+      "to": "internet",
+      "label": "direct until Node 22.21+",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          310,
+          132
+        ],
+        [
+          310,
+          24
+        ],
+        [
+          948,
+          24
+        ]
+      ],
+      "labelSegment": 2
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "What pipelock checks",
+      "items": [
+        "Destination of every proxied request: paste and file-drop blocklist, private and cloud-metadata addresses, data hidden in host names, 600 requests per minute per site",
+        "Page text and full URL only for pages read through /fetch (the fetching-web-pages skill)",
+        "Every allow and block is a hash-chained receipt signed with the stack's own Ed25519 key"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "What it does not do",
+      "items": [
+        "Advisory, not a boundary: the stack network still reaches the internet, and any agent can unset HTTPS_PROXY",
+        "No TLS interception: for HTTPS it sees the host name, not paths, bodies or responses",
+        "letta-code, the BFF, the vault, google-mcp and gmail-triggers connect directly"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Guarded by lettucectl check",
+      "items": [
+        "pipelock hardened: read-only, no capabilities, no host mounts",
+        "Only pipelock mounts pipelock-data, whatever the profiles",
+        "The app-server's proxy points at pipelock, and NO_PROXY keeps the vault and the executor's token away from it"
+      ]
+    }
+  ]
+}

@@ -22,11 +22,26 @@ case $args in
       prev=$a
     done
     [[ ${STUB_RUN_RC:-0} == 0 ]] || exit "$STUB_RUN_RC"
+    # STUB_RUN_FAIL: runs whose arguments contain it fail, only the first
+    # STUB_RUN_FAIL_TIMES of them when that is set.
+    if [[ -n ${STUB_RUN_FAIL:-} && $args == *"$STUB_RUN_FAIL"* ]]; then
+      n=$(($(cat "$STUB_ROOT/run-fails" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$STUB_ROOT/run-fails"
+      [[ -n ${STUB_RUN_FAIL_TIMES:-} && $n -gt $STUB_RUN_FAIL_TIMES ]] || exit 1
+    fi
+    # What the container prints, if the test gave it any.
+    [[ -f $STUB_ROOT/run-stdout ]] && cat "$STUB_ROOT/run-stdout"
     # Like the backup copy: a snapshot appears in the destination.
     [[ -n $dst && -n $out ]] && mkdir -p "$dst/$out"
     exit 0
     ;;
-  " volume inspect "*) exit "${STUB_VOLUME_RC:-0}" ;;
+  " volume inspect "*)
+    # STUB_VOLUMES_MISSING: volume names that do not exist, whatever STUB_VOLUME_RC says.
+    for v in ${STUB_VOLUMES_MISSING:-}; do
+      [[ $args == *" $v "* ]] && exit 1
+    done
+    exit "${STUB_VOLUME_RC:-0}"
+    ;;
   *" pause ") exit "${STUB_PAUSE_RC:-0}" ;;
   *" ps --status running --services "*)
     # Every container in $STUB_ROOT/containers.txt counts as running.
@@ -94,6 +109,7 @@ case $args in
         cloudflared) echo cloudflared ;;
         secrets) echo secret-broker ;;
         gmail-triggers) echo gmail-triggers ;;
+        pipelock) echo pipelock ;;
       esac
     done
     ;;

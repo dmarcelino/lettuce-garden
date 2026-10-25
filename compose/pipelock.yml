@@ -1,0 +1,39 @@
+# Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
+# Pipelock (pipelock/, docs/egress-firewall.md): an egress proxy that checks
+# where the agents' tools connect and signs a receipt for every decision.
+# Opt-in behind the `pipelock` profile; without it this file adds nothing.
+# compose/pipelock-proxy.yml, merged only with the profile, points the agents'
+# tools at it.
+#
+# Advisory: the stack network keeps its direct route, so a process that ignores
+# HTTPS_PROXY (letta-code itself, on Node 22.19) or unsets it goes around it.
+# No TLS interception: for HTTPS it sees the host name, not the content.
+#
+# Its data (the receipt signing key and the receipts) lives on a named volume
+# that no other service mounts; `lettucectl check` refuses a stack where one
+# does, or where this service loses its hardening or gains a host path.
+# Relative paths resolve against --project-directory (upstream/docker).
+services:
+  pipelock:
+    profiles: ["pipelock"]
+    build:
+      context: ../../pipelock
+    image: lettuce-pipelock:local
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - pipelock-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 256
+    restart: unless-stopped
+
+volumes:
+  # Deleted by `lettucectl remove` (compose down -v) with the stack. Not under
+  # stacks/<name>/, where agents could write; `lettucectl backup` copies it
+  # from a one-off container that mounts it read-only.
+  pipelock-data:

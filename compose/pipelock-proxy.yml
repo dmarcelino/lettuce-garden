@@ -1,0 +1,41 @@
+# Merged by lettucectl after compose/pipelock.yml, only when the stack has the
+# `pipelock` profile (the `compose` wrapper in lib/common.sh), so without it no
+# container gets a proxy setting. Points the tools that fetch what agents ask
+# for at pipelock: agent shells and subagents in the app-server, ddg-mcp's
+# searches and page fetches, and searxng's queries to its search engines.
+# searxng documents only its own `outgoing.proxies` (in upstream's
+# settings.yml, which is not ours); it follows these variables because its
+# HTTP client (curl_cffi) does by default (a named upstream dependency in
+# CLAUDE.md, to check on every upgrade).
+#
+# Both spellings: curl reads only the lowercase http_proxy, other tools only
+# the uppercase. NODE_USE_ENV_PROXY makes Node's fetch and https follow them,
+# from Node 22.21; the app-server's Node 22.19 ignores it, so letta-code itself
+# still connects directly until its image moves on.
+#
+# NO_PROXY keeps stack-internal traffic away from pipelock: it refuses private
+# addresses, and it must never see the vault's values (secret-broker), the
+# executor's token (gmail-triggers) or the BFF and app-server on localhost.
+# host.docker.internal is a local model server, if any. `lettucectl check`
+# refuses an app-server without the proxy or without the vault and
+# gmail-triggers in NO_PROXY. A new service agents call inside the stack goes
+# in this list too, or pipelock refuses its private address.
+x-proxy: &proxy
+  HTTPS_PROXY: http://pipelock:8888
+  HTTP_PROXY: http://pipelock:8888
+  https_proxy: http://pipelock:8888
+  http_proxy: http://pipelock:8888
+  NO_PROXY: localhost,127.0.0.1,::1,pipelock,secret-broker,gmail-triggers,searxng,ddg-mcp,google-mcp,host.docker.internal
+  no_proxy: localhost,127.0.0.1,::1,pipelock,secret-broker,gmail-triggers,searxng,ddg-mcp,google-mcp,host.docker.internal
+
+services:
+  app-server:
+    environment:
+      <<: *proxy
+      NODE_USE_ENV_PROXY: "1"
+  ddg-mcp:
+    environment:
+      <<: *proxy
+  searxng:
+    environment:
+      <<: *proxy

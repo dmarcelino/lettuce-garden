@@ -1,0 +1,39 @@
+# Pipelock config for one Lettuce stack (pipelock v3.6.0, Community edition).
+# Agents' tools reach it as HTTPS_PROXY=http://pipelock:8888; the same listener
+# serves /fetch?url=... . Unknown keys are refused at load, so check with
+# `pipelock check --config` after editing.
+version: 1
+mode: balanced
+# Block hints name the rule that fired, which helps an agent work around it.
+explain_blocks: false
+
+fetch_proxy:
+  monitoring:
+    # Per base domain, counting every plain-HTTP request and every CONNECT
+    # tunnel. The default, 60, stops an apt-get or pip install partway (one
+    # request per package from one host).
+    max_requests_per_minute: 600
+    # blocklist is left out on purpose: omitting it keeps the shipped list
+    # (pastebin, transfer.sh, ...), while setting it replaces it.
+
+# CONNECT tunnels and plain-HTTP proxy requests. TLS interception stays off, so
+# for HTTPS only the destination is checked, never the content.
+forward_proxy:
+  enabled: true
+  # An LLM call from a Claude Code or Codex subagent can sit silent for up to
+  # 30 minutes while the model works on a long prompt.
+  idle_timeout_seconds: 1800
+
+# /metrics and /stats would otherwise be served on the agent-facing listener.
+metrics_listen: 127.0.0.1:9090
+
+flight_recorder:
+  enabled: true
+  dir: /data/evidence
+  # Created by the entrypoint on first start and never replaced.
+  signing_key_path: /data/keys/receipt-signing.json
+  redact: true
+  # Pipelock never deletes receipt-chain shards (deleting one breaks offline
+  # verification); retention_days only expires raw-escrow sidecars, which are
+  # off here. Shards rotate every max_entries_per_file entries.
+  max_entries_per_file: 10000
