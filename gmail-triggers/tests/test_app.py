@@ -6,9 +6,9 @@ import time
 import pytest
 from starlette.testclient import TestClient
 
-from gmail_triggers.app import EXAMPLES, create_app
-from gmail_triggers.config import PREFIX
-from gmail_triggers.store import Rule
+from gmail_triggers.app import EXAMPLES, create_app, gap_text
+from gmail_triggers.config import MAX_LISTED_MESSAGES, PREFIX
+from gmail_triggers.store import GAP_DROPPED, Held, Rule
 
 from .conftest import AGENT, BODY, ORIGIN, OTHER_AGENT, TOKEN, make_jwt, write_creds, write_policy
 
@@ -317,6 +317,24 @@ async def test_gap_banner_and_body_never_on_pages(env, authenticator, signing_ke
     assert "Your invoice" in pages[2] and "hal@example.com" in pages[2]
     for text in pages + [caplog.text, env.db_text(), json.dumps(env.requests())]:
         assert BODY not in text
+
+
+def test_dropped_matches_get_their_own_notice():
+    title, text = gap_text({"start": 0, "end": 0, "kind": GAP_DROPPED, "skipped": 2})
+    assert title == "Some matched mail wasn't sent"
+    assert text.startswith("2 matched emails around ") and "more than 500 were waiting" in text
+
+
+def test_waiting_matches_are_not_blamed_on_the_hourly_limit(client, env):
+    rule = saved_rule(env, max_per_hour=6)
+    env.store.record_poll(handled=[], history_id="1", held={rule.id: [Held("18c0000000000001", "", "")]}, sent=[])
+    index = client.get(f"{B}/").text
+    history = client.get(f"{B}/r/{rule.id}/history").text
+    assert "1 waiting" in index
+    assert f"1 matched email waits. Up to {MAX_LISTED_MESSAGES} go in each run, within" in history
+    assert "6 per hour" in history
+    for page in (index, history):
+        assert "for the hourly limit" not in page and "sent together" not in page
 
 
 def test_verified_sender_help_mentions_unchecked_workspace_mail(client, env):

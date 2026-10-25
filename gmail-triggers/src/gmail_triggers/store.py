@@ -17,8 +17,6 @@ from typing import Any
 from .config import HANDLED_KEEP_SECONDS, MAX_PENDING_PER_RULE, RUNS_KEEP_PER_RULE
 
 RULE_ID = re.compile(r"[0-9a-f]{16}")
-# Messages kept per run for the history page.
-MAX_RUN_MESSAGES = 50
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS rules (
@@ -76,8 +74,9 @@ CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, name TEXT NOT NULL, pos 
 
 # queued: waiting for the executor; claimed: handed to it, waiting for its result.
 QUEUED, CLAIMED, OK, FAILED, LOST = "queued", "claimed", "ok", "failed", "lost"
-# Gap kinds: Gmail's history expired; Google was unusable for a while; too many at once.
-GAP_EXPIRED, GAP_PAUSED, GAP_SKIPPED = "expired", "paused", "skipped"
+# Gap kinds: Gmail's history expired; Google was unusable for a while; too many
+# at once; matches dropped because too many were waiting.
+GAP_EXPIRED, GAP_PAUSED, GAP_SKIPPED, GAP_DROPPED = "expired", "paused", "skipped", "dropped"
 
 
 @dataclass
@@ -331,7 +330,7 @@ class Store:
                 run.rule_id,
                 run.at,
                 int(run.test),
-                json.dumps(run.messages[:MAX_RUN_MESSAGES]),
+                json.dumps(run.messages),
                 run.total,
                 run.status,
                 run.task_id,
@@ -426,32 +425,42 @@ class Store:
         sent: Sequence[Run],
         skipped: int = 0,
     ) -> None:
-        """Marks messages handled, moves the history position, holds matches over
-        the limit, queues the runs for the executor and records messages left
-        unchecked, in one transaction: after a crash, either all of it happened
-        or none of it."""
+        """Marks messages handled, moves the history position, takes the sent
+        matches out of the queue, holds matches over the limit, queues the runs
+        for the executor and records messages left unchecked, in one
+        transaction: after a crash, either all of it happened or none of it."""
         now = self.now()
         with self._db:
             self._db.executemany(
                 "INSERT OR IGNORE INTO handled (message_id, at) VALUES (?, ?)", [(m, now) for m in handled]
             )
+            # Before holding: the cap below must not count what was just sent.
+            for run in sent:
+                self._db.executemany(
+                    "DELETE FROM pending WHERE rule_id = ? AND message_id = ?",
+                    [(run.rule_id, m["id"]) for m in run.messages],
+                )
+            dropped = 0
             for rule_id, items in held.items():
                 self._db.executemany(
                     "INSERT OR IGNORE INTO pending (rule_id, message_id, sender, subject, at) VALUES (?, ?, ?, ?, ?)",
                     [(rule_id, h.id, h.sender, h.subject, now) for h in items],
                 )
                 # Oldest kept: a flood past the cap is dropped, not queued forever.
-                self._db.execute(
+                dropped += self._db.execute(
                     "DELETE FROM pending WHERE rule_id = ? AND rowid NOT IN "
                     "(SELECT rowid FROM pending WHERE rule_id = ? ORDER BY at, rowid LIMIT ?)",
                     (rule_id, rule_id, MAX_PENDING_PER_RULE),
-                )
+                ).rowcount
             for run in sent:
-                self._db.execute("DELETE FROM pending WHERE rule_id = ?", (run.rule_id,))
                 self._insert_run(run)
             if skipped:
                 self._db.execute(
                     "INSERT INTO gaps (start, end, kind, skipped) VALUES (?, ?, ?, ?)", (now, now, GAP_SKIPPED, skipped)
+                )
+            if dropped:
+                self._db.execute(
+                    "INSERT INTO gaps (start, end, kind, skipped) VALUES (?, ?, ?, ?)", (now, now, GAP_DROPPED, dropped)
                 )
             self._set({"history_id": history_id, "last_ok": str(now), "paused_since": None})
             self._prune(now)

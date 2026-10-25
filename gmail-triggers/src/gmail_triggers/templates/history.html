@@ -10,9 +10,9 @@
     <button type="submit" class="button ghost">Send a test</button>
   </form>
 </div>
-<p class="muted">"Send a test" asks {{ rule.agent_name or rule.agent_id }} to follow this trigger's instructions now, with "(test run, no email)" in place of the emails.</p>
+<p class="muted">"Send a test" checks that this trigger reaches {{ rule.agent_name or rule.agent_id }}: it gets the trigger's instructions with "(test run, no email)" in place of the emails, and is told to reply with one line and touch no mail.</p>
 {% if notice %}<div class="banner ok" role="status"><p>{{ notice }}</p></div>{% endif %}
-{% if held %}<div class="banner warn" role="status"><p>{{ held }} matched email{{ "s" if held != 1 }} wait{{ "s" if held == 1 }} for the hourly limit ({{ rule.max_per_hour }} per hour) and will be sent together.</p></div>{% endif %}
+{% if held %}<div class="banner warn" role="status"><p>{{ held }} matched email{{ "s" if held != 1 }} wait{{ "s" if held == 1 }}. Up to {{ max_per_run }} go in each run, within the hourly limit ({{ rule.max_per_hour }} per hour), oldest first.</p></div>{% endif %}
 {% if runs %}
 <ul class="runs">
   {% for run in runs %}

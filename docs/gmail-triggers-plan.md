@@ -174,10 +174,10 @@ connection could therefore end up owning scheduled turns that are not even its o
 | Path into Lettuce | Spool + executor + `letta cron add --once` | No second socket; the scheduler owns the turn |
 | Conversation target | "A new conversation each time" (`new`) or the agent's default conversation | The CLI takes these without knowing conversation ids; picking an existing conversation needs a conversation list the CLI may not have (spike) |
 | Agent picker | The executor writes `letta agents list` to the spool each run; the page reads it | No socket; at most a minute stale |
-| What the agent is told | Rule prompt + message ids + sender address + subject (one line, max 120 chars, marked as untrusted text); never the body or snippet | Email content is untrusted input |
+| What the agent is told | Rule prompt between a prologue and an epilogue that scope the turn to the listed emails (others may be read for context, not acted on), plus one row per email: id; sender address; subject (JSON-quoted, max 120 chars, marked as untrusted text; rows shrink to the id when the 8000-character request runs long); never the body or snippet | Email content is untrusted input; a trigger means "these emails", not the whole inbox. The scope is guidance, not a boundary |
 | Own mail, spam, trash | Ignore messages with the `SENT`, `DRAFT`, `SPAM` or `TRASH` label or from the account's own address | An agent replying must not set off its own trigger again; spam is attacker-controlled, and a filter may label mail it also deletes |
 | Sender filter | Exact addresses; per-rule "only if Gmail verified the sender" (DMARC pass in `Authentication-Results`), on by default when senders are set | `From` alone is easy to forge |
-| Bursts | One request per rule per poll with all its matches; hourly limit per rule (default 6); matches over the limit wait for the next allowed run | Bounds model cost |
+| Bursts | One request per rule per poll with up to 30 matches, oldest first; hourly limit per rule (default 6); matches over either wait for the next allowed run, at most 500 per rule (newer ones are dropped and recorded as a gap the page shows) | Bounds model cost and keeps every id in the request |
 | Missed history | When the stored `historyId` has expired (Gmail 404), start again from now and show "mail between A and B was not checked" | Never replay old mail |
 | Spool file handling | Write `tmp` with `O_CREAT|O_EXCL|O_NOFOLLOW`, then `rename`; read only regular files, never through symlinks, with a size cap; validate every field | Agents can plant symlinks or junk in the spool |
 | Executor | A small Node script (Node is in the image, as letta-code needs it). It runs `letta` with an argument array (no shell), with the environment of PID 1 (`/proc/1/environ`) so `LETTA_LOCAL_BACKEND_*` match the server | Request text is untrusted; cron jobs get an empty environment |
@@ -251,7 +251,8 @@ need CSRF and answer with a 303 redirect, like the vault. The page needs no Java
 - **History** (per rule): when it matched, how many emails, sender and subject, and what the
   executor reported (task created, or the error).
 - **Send a test** (per rule): queues one request with "(test run, no email)" in place of the
-  ids, so the user can see what the agent does.
+  ids and an epilogue asking for a one-line acknowledgement and no mail touched, so the user
+  can see the trigger reach the agent.
 
 ## Executor API
 

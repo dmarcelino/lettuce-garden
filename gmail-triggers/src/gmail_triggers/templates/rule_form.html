@@ -83,13 +83,14 @@
 
   <label class="field narrow">At most
     <span class="inline-input"><input type="number" name="max_per_hour" min="1" max="{{ max_per_hour_limit }}" value="{{ rule.max_per_hour }}" required> runs per hour</span>
-    <span class="hint">Emails over the limit wait and go together in the next run.</span>
+    <span class="hint">Up to {{ max_per_run }} emails go in one run. Emails over that, or over the limit, wait and go in the next run.</span>
   </label>
 
   <div class="note">
     <strong>What the agent sees.</strong>
     Your instructions, and for each email its Gmail message id, the sender's address and the subject line (one line, at most 120 characters).
     Not the email's text: the agent reads the email itself with its Gmail tools, as far as Lettuce's Settings -> Google allows.
+    It is told to act only on those emails: it may read other mail for context, but not reply to it, change it or act on it.
   </div>
 
   <div class="form-actions">
