@@ -175,7 +175,7 @@ connection could therefore end up owning scheduled turns that are not even its o
 | Conversation target | "A new conversation each time" (`new`) or the agent's default conversation | The CLI takes these without knowing conversation ids; picking an existing conversation needs a conversation list the CLI may not have (spike) |
 | Agent picker | The executor writes `letta agents list` to the spool each run; the page reads it | No socket; at most a minute stale |
 | What the agent is told | Rule prompt + message ids + sender address + subject (one line, max 120 chars, marked as untrusted text); never the body or snippet | Email content is untrusted input |
-| Own mail | Ignore messages with the `SENT` label or from the account's own address | An agent replying must not set off its own trigger again |
+| Own mail, spam, trash | Ignore messages with the `SENT`, `DRAFT`, `SPAM` or `TRASH` label or from the account's own address | An agent replying must not set off its own trigger again; spam is attacker-controlled, and a filter may label mail it also deletes |
 | Sender filter | Exact addresses; per-rule "only if Gmail verified the sender" (DMARC pass in `Authentication-Results`), on by default when senders are set | `From` alone is easy to forge |
 | Bursts | One request per rule per poll with all its matches; hourly limit per rule (default 6); matches over the limit wait for the next allowed run | Bounds model cost |
 | Missed history | When the stored `historyId` has expired (Gmail 404), start again from now and show "mail between A and B was not checked" | Never replay old mail |
@@ -376,7 +376,7 @@ lettucectl (`tests/run.sh`):
 
 Sidecar (pytest, no network):
 - **Gmail fake**: Gmail through an `httpx.MockTransport`, plus a fake clock.
-- **Matching**: labels, senders, verified sender, `SENT` and own address ignored.
+- **Matching**: labels, senders, verified sender, `SENT`, `DRAFT`, `SPAM`, `TRASH` and own address ignored.
 - **Batching and limits**: one request per rule per poll; the hourly limit holds back
   matches and sends them later.
 - **Restarts and history**: nothing is handled twice after a restart; an expired

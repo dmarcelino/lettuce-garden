@@ -359,15 +359,28 @@ volume_users() {
     | select([(.value.volumes // [])[] | select(.source == $v)] | length > 0) | .key] | join(", ")' --args "$@" <<<"$rendered"
 }
 
+# check_hardened NAME SERVICE SVC -> the sidecar SERVICE (rendered as the JSON
+# SVC) keeps what its overlay gives it: a read-only root filesystem, no
+# capabilities or privileges, its own namespaces and no devices
+check_hardened() {
+  local name=$1 s=$2 svc=$3 k
+  jq -e '.read_only == true' <<<"$svc" >/dev/null || die "$name: $s must have read_only: true"
+  jq -e '(.cap_drop // []) | index("ALL")' <<<"$svc" >/dev/null || die "$name: $s must drop all capabilities (cap_drop: [ALL])"
+  k=$(jq -r '[(select(.privileged == true) | "privileged"), (select((.cap_add // []) | length > 0) | "cap_add"),
+    (select(.network_mode != null) | "network_mode"), (select(.pid != null) | "pid"), (select(.ipc != null) | "ipc"),
+    (select((.volumes_from // []) | length > 0) | "volumes_from"), (select((.devices // []) | length > 0) | "devices")]
+    | join(", ")' <<<"$svc")
+  [[ -z $k ]] || die "$name: $s must not set $k"
+}
+
 # check_broker NAME RENDERED -> the vault service keeps the isolation
-# compose/secrets.yml gives it: its volume is its alone, its root filesystem is
-# read-only, it has no capabilities and no host paths.
+# compose/secrets.yml gives it: hardened (check_hardened), its volume is its
+# alone and it has no host paths.
 check_broker() {
   local name=$1 rendered=$2 broker others
   broker=$(jq -c '.services["secret-broker"] // empty' <<<"$2")
   [[ -n $broker ]] || die "$name: the secrets profile is on but secret-broker is not in the rendered config (compose/secrets.yml)"
-  jq -e '.read_only == true' <<<"$broker" >/dev/null || die "$name: secret-broker must have read_only: true"
-  jq -e '(.cap_drop // []) | index("ALL")' <<<"$broker" >/dev/null || die "$name: secret-broker must drop all capabilities (cap_drop: [ALL])"
+  check_hardened "$name" secret-broker "$broker"
   jq -e '[(.volumes // [])[] | select(.type != "volume" and .type != "tmpfs")] | length == 0' <<<"$broker" >/dev/null ||
     die "$name: secret-broker must not mount host paths"
   others=$(volume_users "$rendered" secret-broker-data secret-broker)
@@ -375,23 +388,16 @@ check_broker() {
 }
 
 # check_gmail_triggers NAME RENDERED STATE_DIR -> the gmail-triggers service keeps
-# what compose/gmail-triggers.yml gives it: a read-only root filesystem, no
-# capabilities or privileges, its own namespaces, one host path
-# (STATE_DIR/garden/gmail-triggers), the Google volumes read-only and nothing
-# else; and nothing else reaches the rules: no other bind mount or volume
-# device at, in or above STATE_DIR/garden, and no symlink on the way there.
+# what compose/gmail-triggers.yml gives it: hardened (check_hardened), one host
+# path (STATE_DIR/garden/gmail-triggers), the Google volumes read-only and
+# nothing else; and nothing else reaches the rules: no other bind mount or
+# volume device at, in or above STATE_DIR/garden, and no symlink on the way there.
 check_gmail_triggers() {
   local name=$1 rendered=$2 state=${3%/} svc garden k p o
   garden=$state/garden
   svc=$(jq -c '.services["gmail-triggers"] // empty' <<<"$rendered")
   [[ -n $svc ]] || die "$name: the gmail-triggers profile is on but gmail-triggers is not in the rendered config (compose/gmail-triggers.yml)"
-  jq -e '.read_only == true' <<<"$svc" >/dev/null || die "$name: gmail-triggers must have read_only: true"
-  jq -e '(.cap_drop // []) | index("ALL")' <<<"$svc" >/dev/null || die "$name: gmail-triggers must drop all capabilities (cap_drop: [ALL])"
-  k=$(jq -r '[(select(.privileged == true) | "privileged"), (select((.cap_add // []) | length > 0) | "cap_add"),
-    (select(.network_mode != null) | "network_mode"), (select(.pid != null) | "pid"), (select(.ipc != null) | "ipc"),
-    (select((.volumes_from // []) | length > 0) | "volumes_from"), (select((.devices // []) | length > 0) | "devices")]
-    | join(", ")' <<<"$svc")
-  [[ -z $k ]] || die "$name: gmail-triggers must not set $k"
+  check_hardened "$name" gmail-triggers "$svc"
   k=$(jq -c '[(.volumes // [])[] | select(.type == "bind") | [.source, .target]]' <<<"$svc")
   [[ $k == "$(jq -cn --arg s "$garden/gmail-triggers" '[[$s, "/data"]]')" ]] ||
     die "$name: gmail-triggers may mount from the host only $garden/gmail-triggers (at /data)"

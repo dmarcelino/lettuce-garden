@@ -68,6 +68,13 @@ def test_own_mail_and_sent_and_drafts_are_ignored():
     assert match([msg()], [r], EMAIL)
 
 
+def test_spam_and_trash_are_ignored():
+    r = rule(labels=("CATEGORY_PROMOTIONS", "Label_1"))
+    assert not match([msg(labels=("CATEGORY_PROMOTIONS", "SPAM"))], [r], EMAIL)
+    assert not match([msg(labels=("Label_1", "TRASH"))], [r], EMAIL)
+    assert match([msg(labels=("Label_1",))], [r], EMAIL)
+
+
 def test_one_request_per_rule_with_all_its_messages():
     msgs = [msg("m1"), msg("m2", labels=("Label_1",)), msg("m3")]
     out = match(msgs, [rule("a"), rule("b", labels=("Label_1",))], EMAIL)

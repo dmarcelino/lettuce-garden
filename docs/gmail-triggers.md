@@ -28,7 +28,7 @@ An interactive diagram of the containers and boundaries, [gmail-triggers-archite
 
 Each person can have up to 50 triggers. A matching email reaches the agent within about five minutes: Gmail is checked every 2 minutes, the executor picks requests up once a minute, and Lettuce starts the task at the next minute.
 
-The agent never gets the email itself from the trigger, only its id, sender and subject, and it reads the mail through Lettuce's Google tools, under the permissions in Settings -> Google. Your own sent mail never sets off a trigger, so an agent's reply can't start itself again.
+The agent never gets the email itself from the trigger, only its id, sender and subject, and it reads the mail through Lettuce's Google tools, under the permissions in Settings -> Google. Your own sent mail never sets off a trigger, so an agent's reply can't start itself again, and neither does mail in Spam or Trash, whatever labels it carries.
 
 ## For the operator
 ```bash

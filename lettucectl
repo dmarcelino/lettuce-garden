@@ -192,12 +192,12 @@ MAILTO=\"\"
 # now), each by a rename from a dot file next to it. The token comes on stdin,
 # never in argv. Nothing changes unless the stream holds both files.
 # uninstall removes both cron files, the token (and its directory once empty)
-# and DIR/bin. Both drop the manifest older versions kept.
+# and DIR/bin.
 # shellcheck disable=SC2016 # expanded by sh in the container
 GARDEN_INSTALL='set -e
 mode=$1 d=$2 job=$3 sys=$4 etc=$5 tok=$6
 if [ "$mode" = uninstall ]; then
-  rm -f "$etc/$job" "$sys/$job" "$tok" "$d/.lettucectl-garden"
+  rm -f "$etc/$job" "$sys/$job" "$tok"
   rmdir "${tok%/*}" 2>/dev/null || :
   rm -rf "${d:?}/bin"
   exit 0
@@ -216,8 +216,7 @@ chmod 700 "${tok%/*}"
 put "$t/run.mjs" 0644 "$d/bin/run.mjs"
 put "$t/token" 0600 "$tok"
 put "$t/cron" 0644 "$sys/$job"
-put "$t/cron" 0644 "$etc/$job"
-rm -f "$d/.lettucectl-garden"'
+put "$t/cron" 0644 "$etc/$job"'
 
 # executor_installed NAME -> success when the stack's letta-home holds the
 # executor or its cron file (seen from the host, so stacks that never had it
@@ -268,6 +267,12 @@ sync_executor() {
     warn "$1: could not remove the gmail-triggers executor, so it may still run"
     return 1
   fi
+}
+
+# executor_out_of_step NAME... -> fails, naming the stacks whose executor could
+# not be synced; `up` syncs it again, whatever command stopped
+executor_out_of_step() {
+  die "the gmail-triggers executor is out of step on: $*; fix the cause, then run: lettucectl up <name>"
 }
 
 # up_stack NAME -> checks one stack, then builds and starts it
@@ -328,7 +333,7 @@ cmd_init() {
 
 cmd_add() {
   (($# == 2)) || die "usage: lettucectl add <name> <email>[,<email>]"
-  local name=$1 emails f host acc id pair
+  local name=$1 emails f host acc id pair synced=1
   validate_name "$name"
   emails=$(normalise_emails "$2")
   require_initialised
@@ -370,13 +375,17 @@ cmd_add() {
   id=$(cf_dns_cname_create "$(cfg CF_ZONE_ID)" "$host" "$(env_get "$f" CF_TUNNEL_ID)" "lettucectl stack $name") || die "$hint"
   env_set "$f" CF_DNS_RECORD_ID "$id"
 
-  cmd_up "$name"
+  # Not cmd_up: the stack is complete now, so `add` can't be re-run, and a
+  # failed executor install must not hide the Google step.
+  up_stack "$name"
+  sync_executor "$name" || synced=0
   info ""
   info "'$name' is up: https://$host (sign in with Google as $emails)"
   info "First boot builds images and can take a few minutes; the hostname may need a minute to resolve."
   if has_profile "$(cfg PROFILES)" google; then
     google_reminder "$name"
   fi
+  ((synced)) || executor_out_of_step "$name"
 }
 
 cmd_users() {
@@ -604,8 +613,7 @@ cmd_up() {
     up_stack "$n"
     sync_executor "$n" || unsynced+=("$n")
   done
-  ((${#unsynced[@]} == 0)) ||
-    die "the gmail-triggers executor is out of step on: ${unsynced[*]} (run the same command again)"
+  ((${#unsynced[@]} == 0)) || executor_out_of_step "${unsynced[@]}"
 }
 
 cmd_down() {

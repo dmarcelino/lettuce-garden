@@ -178,6 +178,21 @@ async def test_messages_outside_the_rules_labels_are_not_fetched(env):
     assert not [r for r in env.fake.gmail_calls if "/messages/" in r.url.path]
 
 
+async def test_mail_in_spam_or_trash_sets_off_nothing(env):
+    add_rule(env, label_ids=["Label_1"])
+    await started(env)
+    env.fake.add(labels=("Label_1", "SPAM"))
+    env.fake.add(labels=("Label_1", "TRASH"))
+    env.fake.requests.clear()
+    await env.poller.run_once()
+    assert not [r for r in env.fake.gmail_calls if "/messages/" in r.url.path]
+    # Moved to Spam after it arrived, before the poll fetched it.
+    mid = env.fake.add(labels=("Label_1",))
+    env.fake.messages[mid]["labelIds"].append("SPAM")
+    await env.poller.run_once()
+    assert env.requests() == []
+
+
 async def test_test_request_says_no_email(env):
     rule = add_rule(env)
     send_test(env.store, rule, env.store.now())

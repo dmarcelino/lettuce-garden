@@ -339,6 +339,17 @@ test_add_prints_the_google_redirect_uri() {
   out_has "https://alfred.example.org/api/google/oauth/callback"
 }
 
+test_add_keeps_the_google_hint_when_the_executor_cannot_be_installed() {
+  triggers_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  stub STUB_EXEC_RC=1
+  ctl add alfred alfred@example.com
+  bad_rc
+  out_has "https://alfred.example.org/api/google/oauth/callback"
+  out_has "the gmail-triggers executor is out of step on: alfred; fix the cause, then run: lettucectl up <name>"
+  out_lacks "lettucectl add alfred"
+}
+
 test_add_skips_the_google_hint_without_the_profile() {
   ctl add alfred alfred@example.com
   ok_rc
@@ -528,6 +539,25 @@ test_check_refuses_a_broker_that_is_not_hardened() {
     bad_rc
     out_has "secret-broker"
   done
+}
+
+test_check_refuses_a_broker_with_privileges_or_shared_namespaces() {
+  added
+  local k v
+  while read -r k v; do
+    with_secrets '{"read_only":true,"cap_drop":["ALL"],"volumes":[],"'"$k"'":'"$v"'}'
+    ctl check alfred
+    bad_rc
+    out_has "alfred: secret-broker must not set $k"
+  done <<'EOF'
+privileged true
+cap_add ["SYS_ADMIN"]
+network_mode "service:app-server"
+pid "host"
+ipc "host"
+volumes_from ["app-server"]
+devices [{"source":"/dev/fuse","target":"/dev/fuse","permissions":"rwm"}]
+EOF
 }
 
 test_check_refuses_another_service_on_the_broker_volume() {
@@ -864,7 +894,7 @@ test_up_fails_clearly_when_the_executor_cannot_be_installed() {
   ctl up alfred
   bad_rc
   out_has "alfred: could not install the gmail-triggers executor; the stack is up but its Gmail triggers will not run"
-  out_has "the gmail-triggers executor is out of step on: alfred"
+  out_has "the gmail-triggers executor is out of step on: alfred; fix the cause, then run: lettucectl up <name>"
 }
 
 test_up_all_continues_past_a_failed_executor_install() {
@@ -883,7 +913,7 @@ test_up_all_continues_past_a_failed_executor_install() {
   bad_rc
   log_has "-p lettuce-alfred"
   grep -q '^docker compose -p lettuce-hal .* up -d --build' "$T/calls.log" || fail "hal not started after alfred's failed install"
-  out_has "the gmail-triggers executor is out of step on: alfred hal"
+  out_has "the gmail-triggers executor is out of step on: alfred hal; fix the cause, then run: lettucectl up <name>"
 }
 
 test_up_without_gmail_triggers_runs_no_exec() {
@@ -1971,12 +2001,11 @@ test_executor_script_installs_files_token_and_cron() {
   eq "$(stat -c %a "$r/letta/system-cron/lettuce-garden-gmail-triggers")" 644
 }
 
-test_executor_script_replaces_its_files_and_drops_old_manifests() {
+test_executor_script_replaces_its_files() {
   installed_up
   local r=$T/root g
   g=$r/letta/garden/gmail-triggers
   mkdir -p "$g/bin" "$r/etc/lettuce-garden"
-  printf 'run.mjs\n' >"$g/.lettucectl-garden"
   touch "$g/bin/notes.txt" "$g/executor.log"
   printf 'stale\n' >"$g/bin/run.mjs"
   printf 'old-token\n' >"$r/etc/lettuce-garden/gmail-triggers-token"
@@ -2022,7 +2051,7 @@ test_executor_script_uninstall_removes_executor_token_and_both_cron_files() {
   installed_up
   local r=$T/root
   run_exec_script "$r"
-  touch "$r/letta/garden/gmail-triggers/executor.log" "$r/letta/garden/gmail-triggers/.lettucectl-garden"
+  touch "$r/letta/garden/gmail-triggers/executor.log"
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
   sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$H/stacks/alfred/stack.env"
   mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"

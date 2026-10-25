@@ -14,9 +14,10 @@ from email.utils import parseaddr
 from .config import MAX_SUBJECT
 from .text import CONTROL, encodable, one_line
 
-# Never "arriving mail": the account's own sent mail and drafts. An agent
-# replying must not set off its own trigger again.
-IGNORED_LABELS = frozenset({"SENT", "DRAFT"})
+# Never "arriving mail": the account's own sent mail and drafts (an agent
+# replying must not set off its own trigger again), and mail in Spam or Trash,
+# whatever other labels it carries.
+IGNORED_LABELS = frozenset({"SENT", "DRAFT", "SPAM", "TRASH"})
 # Gmail's own Authentication-Results carry this authserv-id.
 GOOGLE_AUTHSERV_ID = "mx.google.com"
 ADDRESS = re.compile(r"[^@\s\"'<>(),;:\\\[\]]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z0-9-]{2,63}")
@@ -90,7 +91,7 @@ def parse_message(raw: dict) -> Message:
     )
 
 
-def is_own(message: Message, own_address: str) -> bool:
+def is_ignored(message: Message, own_address: str) -> bool:
     return bool(message.label_ids & IGNORED_LABELS) or (bool(own_address) and message.sender == own_address.lower())
 
 
@@ -107,7 +108,7 @@ def match(messages: Iterable[Message], rules: Iterable[RuleView], own_address: s
     rules = list(rules)
     out: dict[str, list[Message]] = {}
     for message in messages:
-        if is_own(message, own_address):
+        if is_ignored(message, own_address):
             continue
         for rule in rules:
             if rule_matches(rule, message):
