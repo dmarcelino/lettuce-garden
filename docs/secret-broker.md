@@ -34,7 +34,7 @@ An interactive version, [secret-broker-architecture.html](diagrams/secret-broker
    - **Name:** give each secret a name you and your agents will recognise, such as "Home address" or "Work Visa".
    - **"What agents may use it for":** an optional note that agents see, for example "online shopping deliveries".
 4. **Get notified:** on your phone, add the page to the Home Screen (on iPhone: Share, then Add to Home Screen), open it from there, go to **Notifications**, then **Enable on this device**.
-5. **Answer requests:** when an agent asks for something, a notification arrives. It shows the secret, the private fields the agent wants and the reason it gave. Untick anything it doesn't need, then press **Share once** or **Deny**. **Requests** lists what is waiting and what you answered recently; **History** lists everything.
+5. **Answer requests:** when an agent asks for something, a notification arrives, and the agent is told to post the request's link in the chat too, so you can answer without notifications. The request shows the secret, the private fields the agent wants and the reason it gave. Untick anything it doesn't need, then press **Share once** or **Deny**. **Requests** lists what is waiting and what you answered recently; **History** lists everything.
 6. **Locking:** the vault locks when the server restarts, after 12 hours without you using the page, or when you press **Lock**. While it is locked, agents get nothing and you get a notification asking you to unlock.
 
 **Connect your agents:** in Lettuce, go to **Settings -> MCP** and add an HTTP server named `vault` with URL `http://secret-broker:8000/mcp`.

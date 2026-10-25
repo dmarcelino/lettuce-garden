@@ -23,9 +23,11 @@ only where the approved purpose needs them.
 1. **Write and test the script first**, with placeholder values. It must read the values from
    its environment, for example `process.env.VAULT_NUMBER` in Node or
    `os.environ["VAULT_PASSWORD"]` in Python.
-2. **Request the secret** with `delivery: "env"` and a clear purpose. Once the user approves,
-   `get_result` answers with a `handle`, the variable names in `env` (one `VAULT_<FIELD>` per
-   field, e.g. `VAULT_NUMBER`, `VAULT_SECURITY_CODE`, `VAULT_PASSWORD`) and a `run` example.
+2. **Request the secret** with `delivery: "env"` and a clear purpose. If the answer is pending,
+   post its `approve_url` to the user in your reply (they may not get a notification). Once the
+   user approves, `get_result` answers with a `handle`, the variable names in `env` (one
+   `VAULT_<FIELD>` per field, e.g. `VAULT_NUMBER`, `VAULT_SECURITY_CODE`, `VAULT_PASSWORD`) and a
+   `run` example.
 3. **Run it within 5 minutes.** The handle works once:
 
 ```bash

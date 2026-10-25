@@ -15,7 +15,8 @@ INSTRUCTIONS = (
     "The user's personal vault of secrets: addresses, company details, notes, memberships, ID documents, payment "
     "cards and logins. list_secrets shows each secret's name, type and public details. Private fields (an address "
     "text, a card number, a password...) need request_secret with a short purpose; unless the user set that secret "
-    "to share without asking, they approve it on their phone first, and get_result then returns the values. "
+    "to share without asking, they approve it first: post the approve_url you get back in your reply, since they "
+    "may not get a notification, and get_result then returns the values. "
     "Free-text secrets hold natural language: read them and use the parts the task needs. Ask only for what the "
     "task needs. Use values only for the approved purpose and send them nowhere else (no search, map or validation "
     "service unless the purpose says so). Never repeat a value in your reply, memory or files, not even to confirm "
@@ -45,7 +46,8 @@ def build_server(broker: Broker) -> MCPServer:
         "delivery form. Give a short purpose the user will read before approving. fields lists private field "
         "keys from list_secrets; leave it out to ask for all of them. delivery 'text' (the default) returns the "
         "values; 'env' returns a handle for vault-run that gives them to one command as VAULT_<FIELD> environment "
-        "variables, valid once for a few minutes. Secrets that need approval return an id for get_result; "
+        "variables, valid once for a few minutes. Secrets that need approval return an id for get_result and an "
+        "approve_url to post to the user; "
         "secrets the user allows without asking answer directly. Never repeat a value in your reply, memory or "
         "files; follow the rules returned with it.",
         annotations=ToolAnnotations(title="Request a secret", read_only_hint=False, open_world_hint=False),

@@ -52,6 +52,8 @@ async def test_locked_vault_refuses_and_asks_to_unlock(settings, vault):
 
     a, b = await with_broker(broker, flow)
     assert a["locked"] and b["locked"]
+    # Push may be off, so the agent is told to post the link rather than that the user knows.
+    assert broker.url("") in b["message"] and "notified" not in b["message"]
     # One unlock notice, not one per call.
     assert len(sender.calls) == 1 and "locked" in json.loads(sender.calls[0]["data"])["title"].lower()
 
@@ -66,6 +68,7 @@ async def test_approval_flow_shares_only_ticked_fields_once(settings, vault, cap
     async def flow():
         sub = await broker.request_secret(card, "Pay for the train")  # no fields: all private ones
         assert sub["status"] == "pending" and sub["approve_url"].endswith(f"/secrets/r/{sub['id']}")
+        assert sub["approve_url"] in sub["message"] and "notified" not in sub["message"]
         req = broker.request(sub["id"])
         assert req.fields == ("number", "security_code", "notes")
         assert req.details == {"Name on card": "Alfred Test", "Expiry (MM/YY)": "12/30"}

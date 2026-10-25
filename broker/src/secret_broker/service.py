@@ -133,8 +133,8 @@ class Broker:
             )
         return {
             "locked": True,
-            "message": "The user's vault is locked. They were notified; ask them to unlock it "
-            f"at {self.url('')} and then try again.",
+            "message": "The user's vault is locked. Send them this link in your reply now, since they may not "
+            f"get a notification, and ask them to unlock it: {self.url('')} Then try again.",
         }
 
     # ── housekeeping ─────────────────────────────────────────────────────────
@@ -314,12 +314,14 @@ class Broker:
                 "tag": f"vault-request-{req.id}",
             }
         )
+        approve_url = self.url(f"r/{req.id}")
         return {
             "id": req.id,
             "status": PENDING,
-            "approve_url": self.url(f"r/{req.id}"),
-            "message": "Waiting for the user's approval; they were notified. "
-            f"Call get_result with this id (wait_seconds up to {MAX_WAIT_SECONDS} waits for the answer).",
+            "approve_url": approve_url,
+            "message": "Waiting for the user's approval. Send them this link in your reply now, since they may "
+            f"not get a notification: {approve_url} Then call get_result with this id (wait_seconds up to "
+            f"{MAX_WAIT_SECONDS} waits for the answer).",
         }
 
     async def get_result(self, rid: str, wait_seconds: float = 0) -> dict[str, Any]:
