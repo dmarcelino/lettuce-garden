@@ -5,10 +5,10 @@ import time
 
 import jwt
 import pytest
+from garden_common.auth import Authenticator
 from starlette.testclient import TestClient
 
 from secret_broker.app import create_app
-from secret_broker.auth import Authenticator
 from secret_broker.vault import Vault
 
 from .conftest import (

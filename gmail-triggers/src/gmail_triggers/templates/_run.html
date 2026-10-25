@@ -1,0 +1,1 @@
+{% macro run_status(run) %}{% set cls, text = status_text(run.status) %}<span class="pill {{ cls }}">{{ "Test: " if run.test }}{{ text }}</span>{% endmacro %}

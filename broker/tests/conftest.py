@@ -7,8 +7,8 @@ import anyio
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
+from garden_common.auth import Authenticator
 
-from secret_broker.auth import Authenticator
 from secret_broker.config import Settings
 from secret_broker.crypto import KdfParams
 from secret_broker.push import Pusher

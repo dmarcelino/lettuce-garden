@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_box.html" import box %}
+{% from "_run.html" import run_status %}
+{% block title %}Triggers{% endblock %}
+{% block content %}
+<div class="row-between">
+  <h1>Triggers</h1>
+  {% if can_add %}<a class="button" href="{{ base }}/new">New trigger</a>{% endif %}
+</div>
+<p class="muted intro">When an email arrives in a label you choose, ask an agent to do something about it. Gmail is checked every few minutes.</p>
+{% if notice %}<div class="banner ok" role="status"><p>{{ notice }}</p></div>{% endif %}
+{% for b in banners %}
+<div class="banner {{ b.level }}" role="status">
+  <strong class="banner-title">{{ b.title }}</strong>
+  <p>{{ b.text }}</p>
+</div>
+{% endfor %}
+{% if rules %}
+<ul class="rules">
+  {% for rule in rules %}
+  {% set last = last_runs.get(rule.id) %}
+  <li class="rule{% if not rule.enabled %} off{% endif %}">
+    <form method="post" action="{{ base }}/r/{{ rule.id }}/toggle" class="rule-toggle">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="enabled" value="{{ '0' if rule.enabled else '1' }}">
+      <button type="submit" aria-pressed="{{ 'true' if rule.enabled else 'false' }}"
+              aria-label="{{ 'Turn off' if rule.enabled else 'Turn on' }} {{ rule.name }}"
+              title="{{ 'On: click to turn off' if rule.enabled else 'Off: click to turn on' }}">{{ box(rule.enabled) }}</button>
+    </form>
+    <a class="rule-main" href="{{ base }}/r/{{ rule.id }}">
+      <span class="rule-name">{{ rule.name }}{% if not rule.enabled %} <span class="pill">Off</span>{% endif %}</span>
+      <span class="rule-desc">
+        {{ rule.label_display() | join(", ") }}{% if rule.senders %}, from {{ rule.senders | length }} sender{{ "s" if rule.senders | length != 1 }}{% endif %}
+        &middot; asks {{ rule.agent_name or rule.agent_id }}
+      </span>
+      <span class="rule-last">
+        {% if last %}{{ run_status(last) }} <span class="muted">{{ last.at | time }}</span>{% else %}<span class="muted">Not run yet</span>{% endif %}
+        {% if pending.get(rule.id) %}<span class="pill warn">{{ pending[rule.id] }} waiting for the hourly limit</span>{% endif %}
+      </span>
+    </a>
+    <a class="rule-history" href="{{ base }}/r/{{ rule.id }}/history">History</a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty">
+  <p><strong>No triggers yet.</strong></p>
+  <p class="muted">For example: when an invoice arrives in your "Bills" label, ask your agent to note the amount and due date.</p>
+</div>
+{% endif %}
+{% endblock %}

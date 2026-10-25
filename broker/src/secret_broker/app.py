@@ -15,6 +15,7 @@ from importlib import resources
 from typing import Any
 
 import anyio
+from garden_common.auth import Authenticator, AuthError
 from jinja2 import Environment, PackageLoader, select_autoescape
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
@@ -23,7 +24,6 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, R
 from starlette.routing import Mount, Route
 
 from . import icons
-from .auth import Authenticator, AuthError
 from .config import UNLOCK_ATTEMPTS_PER_MINUTE
 from .kinds import KINDS, preview
 from .mcp_tools import build_server

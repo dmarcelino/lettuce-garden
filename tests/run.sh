@@ -65,6 +65,27 @@ broker_config() {
   mv "$T/c.json" "$T/compose-config.json"
 }
 
+# config_edit JQ -> applies the jq filter JQ to the rendered compose config
+config_edit() {
+  jq -c "$1" "$T/compose-config.json" >"$T/c.json"
+  mv "$T/c.json" "$T/compose-config.json"
+}
+
+# triggers_config -> the rendered config also holds the gmail-triggers service
+# compose/gmail-triggers.yml renders for alfred, and the services upstream gives
+# google-creds; the repo copy has an executor
+triggers_config() {
+  config_edit '.services["gmail-triggers"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],"volumes":[
+      {"type":"bind","source":"'"$H"'/stacks/alfred/state/garden/gmail-triggers","target":"/data"},
+      {"type":"volume","source":"google-creds","target":"/creds","read_only":true},
+      {"type":"volume","source":"google-policy","target":"/policy","read_only":true}]}
+    | .services.bff.volumes = [{"type":"volume","source":"google-creds","target":"/app/google/creds"}]
+    | .services["google-mcp"] = {"volumes":[{"type":"volume","source":"google-creds","target":"/creds"}]}'
+  mkdir -p "$H/gmail-triggers/executor/tests"
+  printf '// executor\n' >"$H/gmail-triggers/executor/run.mjs"
+  printf '// test\n' >"$H/gmail-triggers/executor/tests/run.test.mjs"
+}
+
 run_test() {
   local name=$1
   [[ -z $FILTER || $name == *"$FILTER"* ]] || return 0
@@ -255,6 +276,16 @@ test_add_routes_the_secrets_path_with_the_profile() {
   ok_rc
   eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
     '[{"hostname":"alfred.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+}
+
+test_add_routes_gmail_triggers_with_the_profile() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets/' "$H/config.env"
+  broker_config
+  triggers_config
+  ctl add alfred alfred@example.com
+  ok_rc
+  eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
+    '[{"hostname":"alfred.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","path":"^/garden/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
 }
 
 test_add_falls_back_when_name_resolves() {
@@ -519,6 +550,378 @@ test_check_refuses_secrets_profile_without_the_broker() {
   out_has "secret-broker"
 }
 
+# with_triggers -> alfred runs the gmail-triggers profile (with google), and the
+# rendered config holds the hardened service
+with_triggers() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,gmail-triggers/' "$H/stacks/alfred/stack.env"
+  triggers_config
+}
+
+test_check_accepts_the_hardened_gmail_triggers() {
+  added
+  with_triggers
+  ctl check alfred
+  ok_rc
+}
+
+test_check_refuses_gmail_triggers_without_google() {
+  added
+  with_triggers
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,gmail-triggers/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,gmail-triggers/' "$H/stacks/alfred/stack.env"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: the gmail-triggers profile needs google"
+}
+
+# triggers_refused JQ EXPECTED -> with alfred's hardened gmail-triggers edited by
+# the jq filter JQ, `check` fails and says EXPECTED
+triggers_refused() {
+  added
+  with_triggers
+  config_edit "$1"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: $2"
+}
+GT='.services["gmail-triggers"]'
+
+test_check_refuses_gmail_triggers_missing() {
+  triggers_refused "del($GT)" "the gmail-triggers profile is on but gmail-triggers is not in the rendered config"
+}
+
+test_check_refuses_gmail_triggers_without_read_only() {
+  triggers_refused "del($GT.read_only)" "gmail-triggers must have read_only: true"
+}
+
+test_check_refuses_gmail_triggers_with_capabilities() {
+  triggers_refused "$GT.cap_drop = [\"NET_RAW\"]" "gmail-triggers must drop all capabilities"
+}
+
+test_check_refuses_gmail_triggers_privileged() {
+  triggers_refused "$GT.privileged = true" "gmail-triggers must not set privileged"
+}
+
+test_check_refuses_gmail_triggers_cap_add() {
+  triggers_refused "$GT.cap_add = [\"SYS_ADMIN\"]" "gmail-triggers must not set cap_add"
+}
+
+test_check_refuses_gmail_triggers_network_mode() {
+  # In the app-server's namespace an agent could take over its port.
+  triggers_refused "$GT.network_mode = \"service:app-server\"" "gmail-triggers must not set network_mode"
+}
+
+test_check_refuses_gmail_triggers_pid() {
+  triggers_refused "$GT.pid = \"host\"" "gmail-triggers must not set pid"
+}
+
+test_check_refuses_gmail_triggers_ipc() {
+  triggers_refused "$GT.ipc = \"host\"" "gmail-triggers must not set ipc"
+}
+
+test_check_refuses_gmail_triggers_volumes_from() {
+  triggers_refused "$GT.volumes_from = [\"app-server\"]" "gmail-triggers must not set volumes_from"
+}
+
+test_check_refuses_gmail_triggers_devices() {
+  triggers_refused "$GT.devices = [{\"source\":\"/dev/fuse\",\"target\":\"/dev/fuse\",\"permissions\":\"rwm\"}]" "gmail-triggers must not set devices"
+}
+
+test_check_refuses_gmail_triggers_with_another_host_path() {
+  triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "gmail-triggers may mount from the host only"
+}
+
+test_check_refuses_gmail_triggers_without_its_state() {
+  triggers_refused "del($GT.volumes[0])" "gmail-triggers may mount from the host only"
+}
+
+test_check_refuses_gmail_triggers_on_a_parent_of_its_state() {
+  triggers_refused "$GT.volumes[0].source = \"$H/stacks/alfred/state/garden\"" "gmail-triggers may mount from the host only"
+}
+
+test_check_refuses_gmail_triggers_with_its_state_elsewhere() {
+  triggers_refused "$GT.volumes[0].target = \"/root\"" "gmail-triggers may mount from the host only"
+}
+
+test_check_refuses_gmail_triggers_the_old_spool() {
+  triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/letta-home/garden/gmail-triggers/spool\",\"target\":\"/spool\"}]" \
+    "gmail-triggers may mount from the host only"
+}
+
+test_check_refuses_gmail_triggers_writable_google_creds() {
+  triggers_refused "del($GT.volumes[1].read_only)" "gmail-triggers must mount google-creds and google-policy read-only"
+}
+
+test_check_refuses_gmail_triggers_writable_google_policy() {
+  triggers_refused "$GT.volumes[2].read_only = false" "gmail-triggers must mount google-creds and google-policy read-only"
+}
+
+test_check_refuses_gmail_triggers_other_volumes() {
+  triggers_refused "$GT.volumes += [{\"type\":\"volume\",\"source\":\"bff-auth\",\"target\":\"/x\"}]" "gmail-triggers must not mount bff-auth"
+}
+
+test_check_refuses_another_service_on_the_rules() {
+  triggers_refused ".services[\"app-server\"].volumes = [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/garden/gmail-triggers\",\"target\":\"/x\"}]" \
+    "app-server mounts $H/stacks/alfred/state/garden/gmail-triggers, which reaches $H/stacks/alfred/state/garden"
+}
+
+test_check_refuses_another_service_on_a_parent_of_the_rules() {
+  triggers_refused ".services.bff.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state\",\"target\":\"/x\"}]" \
+    "bff mounts $H/stacks/alfred/state, which reaches"
+}
+
+test_check_refuses_another_service_on_a_symlink_to_the_rules() {
+  ln -s "$H/stacks/alfred/state/garden" "$T/link"
+  triggers_refused ".services.bff.volumes += [{\"type\":\"bind\",\"source\":\"$T/link/gmail-triggers\",\"target\":\"/x\"}]" \
+    "bff mounts $T/link/gmail-triggers, which reaches"
+}
+
+test_check_refuses_volumes_from_gmail_triggers() {
+  triggers_refused ".services.bff.volumes_from = [\"gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault or the gmail-triggers rules (bff from gmail-triggers)"
+}
+
+test_check_refuses_a_volume_bound_to_the_rules() {
+  triggers_refused ".volumes = {\"rules\":{\"driver\":\"local\",\"driver_opts\":{\"type\":\"none\",\"o\":\"bind\",\"device\":\"$H/stacks/alfred/state/garden/\"}}}" \
+    "volume rules is bound to $H/stacks/alfred/state/garden/, which reaches"
+}
+
+test_check_refuses_a_volume_bound_to_a_parent_of_the_rules() {
+  triggers_refused ".volumes = {\"st\":{\"driver_opts\":{\"type\":\"none\",\"o\":\"bind\",\"device\":\"$H/stacks\"}}}" \
+    "volume st is bound to $H/stacks, which reaches"
+}
+
+test_check_refuses_a_volume_bound_to_a_relative_path() {
+  triggers_refused '.volumes = {"st":{"driver_opts":{"type":"none","o":"bind,ro","device":"../state"}}}' "volume st binds the relative path ../state"
+}
+
+test_check_accepts_volumes_bound_elsewhere() {
+  added
+  with_triggers
+  config_edit '.volumes = {"srv":{"driver_opts":{"type":"none","o":"bind","device":"/srv/x"}},"nfs":{"driver_opts":{"type":"nfs","o":"addr=192.0.2.10","device":":/x"}}}'
+  ctl check alfred
+  ok_rc
+}
+
+test_check_refuses_a_symlinked_state_dir() {
+  added
+  mv "$H/stacks/alfred/state" "$H/stacks/alfred/real-state"
+  ln -s real-state "$H/stacks/alfred/state"
+  with_triggers
+  ctl check alfred
+  bad_rc
+  out_has "alfred: $H/stacks/alfred/state is a symlink"
+}
+
+test_check_refuses_a_symlinked_garden() {
+  added
+  mkdir -p "$T/elsewhere"
+  ln -s "$T/elsewhere" "$H/stacks/alfred/state/garden"
+  with_triggers
+  ctl check alfred
+  bad_rc
+  out_has "alfred: $H/stacks/alfred/state/garden is a symlink"
+}
+
+test_check_refuses_a_symlinked_rules_dir() {
+  added
+  mkdir -p "$T/elsewhere" "$H/stacks/alfred/state/garden"
+  ln -s "$T/elsewhere" "$H/stacks/alfred/state/garden/gmail-triggers"
+  with_triggers
+  ctl check alfred
+  bad_rc
+  out_has "alfred: $H/stacks/alfred/state/garden/gmail-triggers is a symlink"
+}
+
+test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
+  added
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"google-creds","target":"/app/google/creds"}]
+    | .services.searxng = {"volumes_from":["service:bff"]}'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: volumes_from reaches the Google token, the vault or the gmail-triggers rules (searxng from bff)"
+}
+
+test_check_refuses_volumes_from_the_broker() {
+  added
+  config_edit '.services.searxng = {"volumes_from":["secret-broker"]}'
+  ctl check alfred
+  bad_rc
+  out_has "(searxng from secret-broker)"
+}
+
+test_check_accepts_volumes_from_elsewhere() {
+  added
+  config_edit '.services.searxng = {"volumes_from":["ddg-mcp"]}'
+  ctl check alfred
+  ok_rc
+}
+
+test_check_refuses_a_missing_executor_token() {
+  added
+  with_triggers
+  sed -i '/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+}
+
+test_check_refuses_a_malformed_executor_token() {
+  added
+  with_triggers
+  sed -i 's/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=.*/GMAIL_TRIGGERS_EXECUTOR_TOKEN=ABCDEF/' "$H/stacks/alfred/stack.env"
+  ctl check alfred
+  bad_rc
+  out_has "GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+}
+
+test_check_needs_no_executor_token_without_the_profile() {
+  added
+  sed -i '/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  ctl check alfred
+  ok_rc
+}
+
+test_up_creates_the_executor_token_once() {
+  added
+  local tok
+  tok=$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)
+  [[ $tok =~ ^[0-9a-f]{64}$ ]] || fail "bad token [$tok]"
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)" "$tok"
+  eq "$(stat -c %a "$H/stacks/alfred/stack.env")" 600
+  sed -i '/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  ctl up alfred
+  ok_rc
+  [[ $(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "token not recreated"
+}
+
+test_executor_tokens_differ_between_stacks() {
+  ctl add alfred alfred@example.com
+  ctl add hal hal@example.com
+  ok_rc
+  [[ $(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN) != "$(senv hal GMAIL_TRIGGERS_EXECUTOR_TOKEN)" ]] || fail "same token"
+}
+
+test_check_refuses_google_creds_in_other_services_whatever_the_profiles() {
+  added
+  config_edit '.services.searxng = {"volumes":[{"type":"volume","source":"google-creds","target":"/x","read_only":true}]}'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: searxng mount(s) google-creds"
+}
+
+test_check_lets_the_upstream_google_services_mount_google_creds() {
+  added
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"google-creds","target":"/app/google/creds"}]
+    | .services["google-mcp"] = {"volumes":[{"type":"volume","source":"google-creds","target":"/creds"}]}'
+  ctl check alfred
+  ok_rc
+}
+
+# exec_args -> the arguments of the last `compose exec ... sh -c SCRIPT`, one per line
+exec_args() { tr '\0' '\n' <"$T/exec-args"; }
+
+GT_CRON_TEXT='# Installed by lettucectl (gmail-triggers profile). Removed with the profile.
+PATH=/usr/local/bin:/usr/bin:/bin
+MAILTO=""
+* * * * * root /usr/local/bin/agent-env node /root/.letta/garden/gmail-triggers/bin/run.mjs >> /root/.letta/garden/gmail-triggers/executor.log 2>&1'
+
+test_up_installs_the_gmail_triggers_executor() {
+  added
+  with_triggers
+  ctl up alfred
+  ok_rc
+  log_has "exec -T app-server sh -c"
+  # Only the executor and its token ship, not its tests.
+  eq "$(shipped)" "run.mjs token"
+  eq "$(exec_args | head -7 | paste -sd' ')" "sh install /root/.letta/garden/gmail-triggers lettuce-garden-gmail-triggers /root/.letta/system-cron /etc/cron.d /etc/lettuce-garden/gmail-triggers-token"
+  local a=()
+  mapfile -d '' a <"$T/exec-args"
+  eq "${a[7]}" "$GT_CRON_TEXT"
+  eq "${#a[@]}" 8
+}
+
+test_up_passes_the_executor_token_only_on_stdin() {
+  added
+  with_triggers
+  ctl up alfred
+  ok_rc
+  local tok
+  tok=$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)
+  eq "$(tar -xOf "$T/exec-stdin.log" token)" "$tok"
+  eq "$(tar -tvf "$T/exec-stdin.log" token | cut -c1-10)" "-rw-------"
+  ! grep -qF "$tok" "$T/calls.log" || fail "token in docker argv"
+  ! grep -qF "$tok" "$T/exec-args" || fail "token in exec args"
+  ! grep -qF "$tok" "$OUT" || fail "token in output"
+}
+
+test_up_fails_clearly_when_the_executor_cannot_be_installed() {
+  added
+  with_triggers
+  stub STUB_EXEC_RC=1
+  ctl up alfred
+  bad_rc
+  out_has "alfred: could not install the gmail-triggers executor; the stack is up but its Gmail triggers will not run"
+  out_has "the gmail-triggers executor is out of step on: alfred"
+}
+
+test_up_all_continues_past_a_failed_executor_install() {
+  triggers_config
+  ctl add alfred alfred@example.com
+  ctl add hal hal@example.com
+  ok_rc
+  # One rendered config serves both stacks in the stub, so hal shares alfred's
+  # state path to pass the bind-mount check.
+  sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$H/stacks/alfred/state|" "$H/stacks/hal/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,gmail-triggers/' "$H/stacks/alfred/stack.env" "$H/stacks/hal/stack.env"
+  : >"$T/calls.log"
+  stub STUB_EXEC_RC=1
+  ctl up all
+  bad_rc
+  log_has "-p lettuce-alfred"
+  grep -q '^docker compose -p lettuce-hal .* up -d --build' "$T/calls.log" || fail "hal not started after alfred's failed install"
+  out_has "the gmail-triggers executor is out of step on: alfred hal"
+}
+
+test_up_without_gmail_triggers_runs_no_exec() {
+  added
+  ctl up alfred
+  ok_rc
+  log_lacks " exec "
+}
+
+test_up_removes_the_executor_when_the_profile_is_off() {
+  added
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  ctl up alfred
+  ok_rc
+  log_has "exec -T app-server sh -c"
+  eq "$(exec_args | paste -sd' ')" "sh uninstall /root/.letta/garden/gmail-triggers lettuce-garden-gmail-triggers /root/.letta/system-cron /etc/cron.d /etc/lettuce-garden/gmail-triggers-token"
+  out_has "alfred: removed the gmail-triggers executor"
+}
+
+test_up_removes_an_executor_known_by_its_cron_file() {
+  added
+  mkdir -p "$H/stacks/alfred/state/letta-home/system-cron"
+  touch "$H/stacks/alfred/state/letta-home/system-cron/lettuce-garden-gmail-triggers"
+  ctl up alfred
+  ok_rc
+  log_has "sh uninstall /root/.letta/garden/gmail-triggers"
+}
+
+test_up_fails_clearly_when_the_executor_cannot_be_removed() {
+  added
+  mkdir -p "$H/stacks/alfred/state/letta-home/system-cron"
+  touch "$H/stacks/alfred/state/letta-home/system-cron/lettuce-garden-gmail-triggers"
+  stub STUB_EXEC_RC=1
+  ctl up alfred
+  bad_rc
+  out_has "alfred: could not remove the gmail-triggers executor"
+}
+
 test_up_refuses_readable_stack_env() {
   added
   chmod 644 "$H/stacks/alfred/stack.env"
@@ -532,7 +935,7 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml --env-file $H/stacks/alfred/stack.env"
 }
 
 test_up_all_starts_every_stack() {
@@ -584,6 +987,48 @@ test_remove_purge_deletes_the_stack_directory() {
   [[ ! -e $H/stacks/alfred ]] || fail "stack directory still exists"
 }
 
+# state_elsewhere -> alfred's LETTA_STATE_DIR is $T/state, not stacks/alfred/state
+state_elsewhere() {
+  mkdir -p "$T/state"
+  sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$T/state|" "$H/stacks/alfred/stack.env"
+}
+
+test_remove_purge_empties_the_gmail_trigger_rules_too() {
+  # The rules are root-owned and outside the app-server's mounts, so `rm -rf`
+  # as the operator would fail on them unless the container empties them too.
+  # They live under stack.env's LETTA_STATE_DIR, like every other mount.
+  added
+  state_elsewhere
+  mkdir -p "$T/state/garden/gmail-triggers" "$H/stacks/alfred/state/garden/gmail-triggers"
+  ctl remove alfred --purge <<<"alfred"
+  ok_rc
+  log_has "-v $T/state/garden:/garden"
+  log_lacks "-v $H/stacks/alfred/state/garden:/garden"
+  log_has "/root/.letta /data /work /garden -mindepth 1 -delete"
+}
+
+test_remove_purge_mounts_no_garden_when_there_is_none() {
+  added
+  state_elsewhere
+  mkdir -p "$H/stacks/alfred/state/garden/gmail-triggers"
+  ctl remove alfred --purge <<<"alfred"
+  ok_rc
+  log_lacks ":/garden"
+}
+
+test_remove_purge_refuses_a_symlinked_garden() {
+  # Docker would follow it, and the purge would empty whatever it points at.
+  added
+  mkdir -p "$T/elsewhere"
+  touch "$T/elsewhere/keep"
+  ln -s "$T/elsewhere" "$H/stacks/alfred/state/garden"
+  ctl remove alfred --purge <<<"alfred"
+  bad_rc
+  out_has "$H/stacks/alfred/state/garden is a symlink"
+  log_lacks ":/garden"
+  log_lacks "run --rm --no-deps"
+}
+
 test_remove_continues_past_already_deleted_resources() {
   added
   stub 'STUB_CF_FAIL="DELETE /accounts/acc1/cfd_tunnel/tun1"'
@@ -617,6 +1062,40 @@ test_remove_warns_about_a_vault_whose_profile_is_off() {
   ok_rc
   out_has "Its vault"
   log_has "volume inspect lettuce-alfred_secret-broker-data"
+}
+
+test_remove_says_where_the_gmail_triggers_are() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  triggers_config
+  added
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  out_has "Its Gmail triggers stop with it; their rules are in its state, so they go only with --purge."
+}
+
+test_remove_finds_gmail_triggers_under_the_state_dir() {
+  added
+  state_elsewhere
+  mkdir -p "$T/state/garden/gmail-triggers"
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  out_has "Its Gmail triggers stop with it"
+}
+
+test_remove_says_nothing_of_gmail_triggers_outside_the_state_dir() {
+  added
+  state_elsewhere
+  mkdir -p "$H/stacks/alfred/state/garden/gmail-triggers"
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  out_lacks "Gmail triggers"
+}
+
+test_remove_says_nothing_of_gmail_triggers_never_used() {
+  added
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  out_lacks "Gmail triggers"
 }
 
 test_remove_says_nothing_of_a_vault_that_was_never_created() {
@@ -748,6 +1227,154 @@ test_profiles_reports_a_failed_route_update() {
   ctl profiles cloudflared,search,secrets
   bad_rc
   out_has "run the same command again"
+}
+
+test_profiles_routes_gmail_triggers_and_installs_the_executor() {
+  triggers_config
+  added
+  containers alfred app-server
+  sed -i '/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  ctl profiles cloudflared,search,google,gmail-triggers
+  ok_rc
+  [[ $(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "profiles gave no executor token"
+  eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
+    '[{"hostname":"alfred.example.org","path":"^/garden/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+  log_has "sh install /root/.letta/garden/gmail-triggers"
+  [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
+    fail "stack started before its route"
+}
+
+test_profiles_dropping_gmail_triggers_removes_route_container_and_executor() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  triggers_config
+  added
+  containers alfred app-server bff cloudflared google-mcp gmail-triggers
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  ctl profiles cloudflared,google
+  ok_rc
+  log_has "curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations"
+  log_lacks "gmail-triggers:8000"
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf gmail-triggers$' "$T/calls.log" || fail "gmail-triggers container not removed"
+  log_has "sh uninstall /root/.letta/garden/gmail-triggers"
+  out_has "alfred: removed the gmail-triggers executor"
+}
+
+test_profiles_rerun_removes_a_leftover_executor() {
+  added
+  containers alfred app-server
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  ctl profiles cloudflared,search
+  ok_rc
+  out_has "nothing to change"
+  log_has "sh uninstall /root/.letta/garden/gmail-triggers"
+}
+
+test_profiles_reports_an_executor_it_could_not_remove() {
+  added
+  containers alfred app-server
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  stub STUB_EXEC_RC=1
+  ctl profiles cloudflared,search
+  bad_rc
+  out_has "alfred: could not remove the gmail-triggers executor"
+  out_has "could not sync the gmail-triggers executor of: alfred"
+  out_has "run the same command again"
+}
+
+test_profiles_skips_a_stopped_stack_when_removing_the_executor() {
+  added
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  ctl profiles cloudflared,search
+  ok_rc
+  out_has "alfred: not running; its executor is removed at its next up"
+  log_lacks "sh uninstall"
+}
+
+test_profiles_rerun_repairs_a_failed_executor_install() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  triggers_config
+  added
+  containers alfred app-server
+  ctl profiles cloudflared,google,gmail-triggers
+  ok_rc
+  out_has "nothing to change"
+  log_has "sh install /root/.letta/garden/gmail-triggers"
+}
+
+test_profiles_continues_past_a_failed_executor_install() {
+  triggers_config
+  ctl add alfred alfred@example.com
+  ctl add hal hal@example.com
+  ok_rc
+  # One rendered config serves both stacks in the stub, so hal shares alfred's
+  # state path to pass the bind-mount check.
+  sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$H/stacks/alfred/state|" "$H/stacks/hal/stack.env"
+  containers alfred app-server
+  containers hal app-server
+  : >"$T/calls.log"
+  stub STUB_EXEC_RC=1
+  ctl profiles cloudflared,search,google,gmail-triggers
+  bad_rc
+  grep -q '^docker compose -p lettuce-hal .* up -d --build' "$T/calls.log" || fail "hal not started"
+  out_has "alfred: could not install the gmail-triggers executor"
+  out_has "hal: could not install the gmail-triggers executor"
+  out_has "could not sync the gmail-triggers executor of: alfred hal"
+  out_has "run the same command again"
+  eq "$(senv hal COMPOSE_PROFILES)" cloudflared,search,google,gmail-triggers
+}
+
+test_profiles_checks_gmail_triggers_under_the_new_list_before_writing() {
+  added
+  # The rendered config has no gmail-triggers service.
+  ctl profiles cloudflared,search,google,gmail-triggers
+  bad_rc
+  out_has "alfred: the gmail-triggers profile is on but gmail-triggers is not in the rendered config"
+  eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search
+  eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
+  log_lacks "up -d"
+}
+
+test_profiles_checks_the_executor_token_before_writing() {
+  triggers_config
+  added
+  sed -i 's/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=.*/GMAIL_TRIGGERS_EXECUTOR_TOKEN=not-hex/' "$H/stacks/alfred/stack.env"
+  ctl profiles cloudflared,search,google,gmail-triggers
+  bad_rc
+  out_has "alfred: GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+  eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
+  log_lacks "up -d"
+}
+
+test_profiles_checks_symlinks_under_the_new_list_before_writing() {
+  triggers_config
+  added
+  mkdir -p "$T/elsewhere"
+  ln -s "$T/elsewhere" "$H/stacks/alfred/state/garden"
+  ctl profiles cloudflared,search,google,gmail-triggers
+  bad_rc
+  out_has "alfred: $H/stacks/alfred/state/garden is a symlink"
+  eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
+}
+
+test_profiles_renders_the_new_list_for_the_check() {
+  triggers_config
+  added
+  ctl profiles cloudflared,search,google,gmail-triggers
+  ok_rc
+  # The first rendering, before anything is written, already uses the new list.
+  eq "$(grep '^docker-env-file ' "$T/calls.log" | head -1)" "docker-env-file COMPOSE_PROFILES=cloudflared,search,google,gmail-triggers"
+  eq "$(grep -c '^docker-env-file COMPOSE_PROFILES=cloudflared,search$' "$T/calls.log")" 0
+  # The rendering's temp env file is gone.
+  eq "$(find "$H/stacks/alfred" -maxdepth 1 -name 'stack.env.*' | wc -l)" 0
+}
+
+test_profiles_refuses_gmail_triggers_without_google() {
+  added
+  ctl profiles cloudflared,gmail-triggers
+  bad_rc
+  out_has "the gmail-triggers profile needs google"
+  eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search
+  log_lacks "up -d"
 }
 
 test_profiles_refuses_a_bad_list() {
@@ -1299,6 +1926,126 @@ test_skills_script_keeps_skills_on_a_broken_stream() {
   printf 'alpha\n' >"$d/.lettucectl-skills"
   ! sh -c "$(cat "$T/exec-script")" sh "$d" alpha <<<'not a tar' 2>/dev/null || fail "script accepted a broken stream"
   eq "$(cd "$d" && find . | LC_ALL=C sort | paste -sd' ')" ". ./.lettucectl-skills ./alpha ./alpha/SKILL.md"
+}
+
+# ── gmail-triggers executor ──────────────────────────────────────────────────
+# run_exec_script ROOT [STDIN] -> runs the last exec's script with its arguments
+# as lettucectl passed them, but with the container's /root/.letta and /etc
+# under ROOT; stdin is the streamed tar unless STDIN is given
+run_exec_script() {
+  local r=$1 in=${2:-$T/exec-stdin.log} a args=()
+  while IFS= read -r -d '' a; do
+    case $a in
+      /root/.letta/*) a=$r/letta/${a#/root/.letta/} ;;
+      /etc/*) a=$r/etc/${a#/etc/} ;;
+    esac
+    args+=("$a")
+  done <"$T/exec-args"
+  sh -c "$(cat "$T/exec-script")" "${args[@]}" <"$in"
+}
+files_in() { (cd "$1" && find . | LC_ALL=C sort | paste -sd' '); }
+INSTALLED=". ./etc ./etc/cron.d ./etc/cron.d/lettuce-garden-gmail-triggers ./etc/lettuce-garden ./etc/lettuce-garden/gmail-triggers-token ./letta ./letta/garden ./letta/garden/gmail-triggers ./letta/garden/gmail-triggers/bin ./letta/garden/gmail-triggers/bin/run.mjs ./letta/system-cron ./letta/system-cron/lettuce-garden-gmail-triggers"
+
+# installed_up -> alfred with the profile, after an `up` whose install script can be replayed
+installed_up() {
+  added
+  with_triggers
+  ctl up alfred
+  ok_rc
+}
+
+test_executor_script_installs_files_token_and_cron() {
+  installed_up
+  local r=$T/root g
+  g=$r/letta/garden/gmail-triggers
+  run_exec_script "$r"
+  eq "$(files_in "$r")" "$INSTALLED"
+  eq "$(cat "$g/bin/run.mjs")" "// executor"
+  # The token is in the container layer, not under the state directory.
+  eq "$(cat "$r/etc/lettuce-garden/gmail-triggers-token")" "$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)"
+  eq "$(stat -c %a "$r/etc/lettuce-garden/gmail-triggers-token")" 600
+  eq "$(stat -c %a "$r/etc/lettuce-garden")" 700
+  eq "$(cat "$r/letta/system-cron/lettuce-garden-gmail-triggers")" "$GT_CRON_TEXT"
+  cmp -s "$r/letta/system-cron/lettuce-garden-gmail-triggers" "$r/etc/cron.d/lettuce-garden-gmail-triggers" || fail "cron copies differ"
+  eq "$(stat -c %a "$r/etc/cron.d/lettuce-garden-gmail-triggers")" 644
+  eq "$(stat -c %a "$r/letta/system-cron/lettuce-garden-gmail-triggers")" 644
+}
+
+test_executor_script_replaces_its_files_and_drops_old_manifests() {
+  installed_up
+  local r=$T/root g
+  g=$r/letta/garden/gmail-triggers
+  mkdir -p "$g/bin" "$r/etc/lettuce-garden"
+  printf 'run.mjs\n' >"$g/.lettucectl-garden"
+  touch "$g/bin/notes.txt" "$g/executor.log"
+  printf 'stale\n' >"$g/bin/run.mjs"
+  printf 'old-token\n' >"$r/etc/lettuce-garden/gmail-triggers-token"
+  run_exec_script "$r"
+  eq "$(files_in "$g")" ". ./bin ./bin/notes.txt ./bin/run.mjs ./executor.log"
+  eq "$(cat "$g/bin/run.mjs")" "// executor"
+  eq "$(cat "$r/etc/lettuce-garden/gmail-triggers-token")" "$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)"
+  run_exec_script "$r"
+  eq "$(files_in "$g")" ". ./bin ./bin/notes.txt ./bin/run.mjs ./executor.log"
+}
+
+test_executor_script_keeps_the_install_on_a_broken_stream() {
+  installed_up
+  local r=$T/root before
+  run_exec_script "$r"
+  before=$(files_in "$r")
+  printf 'not a tar' >"$T/broken"
+  ! run_exec_script "$r" "$T/broken" 2>/dev/null || fail "script accepted a broken stream"
+  eq "$(files_in "$r")" "$before"
+  eq "$(cat "$r/letta/garden/gmail-triggers/bin/run.mjs")" "// executor"
+}
+
+# partial_stream FILE -> a tar holding only FILE
+partial_stream() {
+  rm -rf "$T/part"
+  mkdir -p "$T/part"
+  printf 'x\n' >"$T/part/$1"
+  tar -C "$T/part" -cf "$T/part.tar" "$1"
+}
+
+test_executor_script_changes_nothing_on_an_incomplete_stream() {
+  installed_up
+  local r=$T/root f
+  mkdir -p "$r"
+  for f in run.mjs token; do
+    partial_stream "$f"
+    ! run_exec_script "$r" "$T/part.tar" 2>/dev/null || fail "script accepted a stream with only $f"
+    eq "$(files_in "$r")" "."
+  done
+}
+
+test_executor_script_uninstall_removes_executor_token_and_both_cron_files() {
+  installed_up
+  local r=$T/root
+  run_exec_script "$r"
+  touch "$r/letta/garden/gmail-triggers/executor.log" "$r/letta/garden/gmail-triggers/.lettucectl-garden"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$H/stacks/alfred/stack.env"
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  ctl up alfred
+  ok_rc
+  run_exec_script "$r" /dev/null
+  eq "$(files_in "$r")" ". ./etc ./etc/cron.d ./letta ./letta/garden ./letta/garden/gmail-triggers ./letta/garden/gmail-triggers/executor.log ./letta/system-cron"
+  # Again, on what is left: nothing to do, no error.
+  run_exec_script "$r" /dev/null
+}
+
+test_executor_script_uninstall_keeps_a_token_dir_in_use() {
+  installed_up
+  local r=$T/root
+  run_exec_script "$r"
+  touch "$r/etc/lettuce-garden/other"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$H/stacks/alfred/stack.env"
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  ctl up alfred
+  ok_rc
+  run_exec_script "$r" /dev/null
+  eq "$(files_in "$r/etc/lettuce-garden")" ". ./other"
 }
 
 # ── backup ───────────────────────────────────────────────────────────────────

@@ -65,20 +65,23 @@ Day-to-day commands, optional features, upgrades, backups and troubleshooting ar
 | `compose/hardening.yml` | yes | `no-new-privileges`, memory/pid caps for every service, no `NET_RAW` where agents run, letta-code self-update off |
 | `compose/multi.yml` | yes | drops all published ports, so stacks never collide |
 | `compose/secrets.yml`, `broker/` | yes | the optional vault (`secrets` profile) and its source |
+| `compose/gmail-triggers.yml`, `gmail-triggers/` | yes | optional Gmail triggers (`gmail-triggers` profile) and their source |
+| `garden-common/` | yes | code the vault and Gmail triggers share (sign-in checks, page styles) |
 | `config.env.example` | yes | template for `config.env` |
 | `scripts/dns-preflight.sh` | yes | compares two nameservers before and after moving a domain |
-| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) and the broker's tests (`tests/run-broker.sh`) |
+| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) and the sidecars' tests (`tests/run-sidecar.sh broker`, `tests/run-sidecar.sh gmail-triggers`) |
 | `config.env` | **no** | your settings plus cached Cloudflare ids (mode 600) |
 | `.secrets/cloudflare-api-token` | **no** | Cloudflare API token (mode 600) |
 | `upstream/` | **no** | Lettuce, cloned at `LETTUCE_REF` |
 | `stacks/<name>/stack.env` | **no** | that stack's secrets and Cloudflare ids (mode 600) |
-| `stacks/<name>/state/` | **no** | that stack's data: `letta-home/`, `letta-data/`, `workspaces/` |
+| `stacks/<name>/state/` | **no** | that stack's data: `letta-home/`, `letta-data/`, `workspaces/`, and `garden/` for Gmail trigger rules |
 
 The compose files of each stack are applied in this order:
 1. `upstream/docker/compose.yml`
 2. `compose/hardening.yml`
 3. `compose/multi.yml`
 4. `compose/secrets.yml` (adds nothing unless the `secrets` profile is on)
+5. `compose/gmail-triggers.yml` (adds nothing unless the `gmail-triggers` profile is on)
 
 Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<name>/stack.env`.
 

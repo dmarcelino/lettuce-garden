@@ -53,14 +53,30 @@ case $args in
     ;;
   *" exec "*)
     cat >>"$STUB_ROOT/exec-stdin.log"
-    prev=""
+    # The `sh -c` script goes to exec-script and the arguments after it to
+    # exec-args (NUL-separated, $0 included), so tests can run it themselves.
+    prev="" script=""
     for a in "$@"; do
-      [[ $prev == -c ]] && printf '%s' "$a" >"$STUB_ROOT/exec-script"
+      if [[ -n $script ]]; then
+        printf '%s\0' "$a" >>"$STUB_ROOT/exec-args"
+      elif [[ $prev == -c ]]; then
+        printf '%s' "$a" >"$STUB_ROOT/exec-script"
+        : >"$STUB_ROOT/exec-args"
+        script=1
+      fi
       prev=$a
     done
     exit "${STUB_EXEC_RC:-0}"
     ;;
-  *" config --format json "*) cat "$STUB_ROOT/compose-config.json" 2>/dev/null ;;
+  *" config --format json "*)
+    # The profiles the rendering used, from its --env-file.
+    prev=""
+    for a in "$@"; do
+      [[ $prev == --env-file ]] && printf 'docker-env-file %s\n' "$(grep '^COMPOSE_PROFILES=' "$a")" >>"$STUB_LOG"
+      prev=$a
+    done
+    cat "$STUB_ROOT/compose-config.json" 2>/dev/null
+    ;;
   *" config --services "*)
     # Like upstream: two services always, the rest per COMPOSE_PROFILES in --env-file.
     env_file="" prev=""
@@ -77,6 +93,7 @@ case $args in
         telegram) echo channel-gateway ;;
         cloudflared) echo cloudflared ;;
         secrets) echo secret-broker ;;
+        gmail-triggers) echo gmail-triggers ;;
       esac
     done
     ;;
