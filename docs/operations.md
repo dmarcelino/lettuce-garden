@@ -179,10 +179,12 @@ Each stack's push-notification keypairs (`PUSH_VAPID_*` for Lettuce, `BROKER_VAP
 | Someone forgot their vault passphrase | It cannot be recovered. They can erase the vault in Settings after unlocking; if they cannot unlock, stop the service and delete its volume: `./lettucectl compose <name> rm -sf secret-broker`, `docker volume rm lettuce-<name>_secret-broker-data`, `./lettucectl up <name>`. |
 | `/secrets/` says "direct access is not allowed" or "may not use this stack" | The request did not come through Cloudflare Access, or the email is not in `ALLOWED_USERS`. |
 | A wildcard warning during `add` | The domain has a `*` record, so public DNS can't show which names are free. Only the Cloudflare zone is checked. |
+| `ping` in an agent shell: "Operation not permitted" | The app-server has no `NET_RAW` (see Security notes), and the image's `ping` is set to require it. A copy without that setting works: `cp /usr/bin/ping /tmp/ping && /tmp/ping <host>`. Tools that need raw sockets (`tcpdump`, `arping`, `nmap` SYN scans) don't work there; `curl` and `tracepath` do. |
 
 ## Security notes
 - Keep `config.env`, `.secrets/` and `stacks/` mode 600/700. `lettucectl` creates them that way and `check` enforces it for `stack.env`.
 - Never add `DEV_BYPASS_*` to a stack. It disables authentication, and `check` refuses to start a stack that has it.
 - The Cloudflare API token can change your DNS. Scope it to one zone and one account, and consider an IP restriction.
 - Agents in one stack can read everything else in that stack, including its provider keys. That is why each person gets their own stack. The vault is the exception: it lives on a volume only the vault service mounts (`check` enforces that), encrypted with each person's passphrase. Root on the host can still read the vault service's memory while it is unlocked, and anything a person shares with an agent is stored in that conversation like the rest of it.
+- The app-server, and the containers sharing its network (BFF, channel-gateway), drop `NET_RAW`, so agents can't capture the Access token on its way to the BFF and use it on the vault. `check` refuses a stack that keeps it. The cost is raw sockets in agent shells, including the image's `ping` (see Troubleshooting).
 - Run `tests/run.sh` and `shellcheck -x lettucectl lib/*.sh scripts/*.sh tests/run.sh tests/run-broker.sh tests/stubs/*` before changing the CLI, and `tests/run-broker.sh` before changing `broker/`.

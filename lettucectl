@@ -295,7 +295,7 @@ cmd_remove() {
   zone=$(cfg CF_ZONE_ID)
 
   info "This stops '$name' and deletes its DNS record, tunnel and Access application."
-  if has_profile "$(env_get "$f" COMPOSE_PROFILES)" secrets; then
+  if has_vault "$name"; then
     info "Its vault (the people's saved personal data) is deleted too: its volume goes with the stack."
   fi
   if [[ -n $purge ]]; then
@@ -886,8 +886,8 @@ backup_stack() {
   mounts=(--label "lettucectl.backup=$name" -v "$state:/src/state:ro" -v "$f:/src/stack.env:ro")
   # Turning the secrets profile off keeps the volume, so look for it either way;
   # `run -v` would create a missing one.
-  vol=lettuce-${name}_secret-broker-data
-  if host_docker volume inspect "$vol" >/dev/null 2>&1; then
+  vol=$(vault_volume "$name")
+  if has_vault "$name"; then
     mounts+=(-v "$vol:/src/vault:ro")
   elif has_profile "$(env_get "$f" COMPOSE_PROFILES)" secrets; then
     warn "$name: the vault volume $vol does not exist yet; backing up without it"

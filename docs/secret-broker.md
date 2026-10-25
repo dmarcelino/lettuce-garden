@@ -11,6 +11,10 @@ agent ──get_result───────────────────�
 vault-run ──/redeem (handle)─────────────> vault   the values, into one command's environment
 ```
 
+![The vault's containers, trust boundaries and requests](diagrams/secret-broker-architecture.svg)
+
+An interactive version, [secret-broker-architecture.html](diagrams/secret-broker-architecture.html), opens in a browser from a clone of this repo.
+
 ## For the person using it
 1. **Open `https://<your stack>/secrets/`** and sign in as usual.
 2. **Create your vault:** choose a passphrase of at least 12 characters. Four or five unrelated words work well. **Nobody can recover it**, not even whoever runs the server. If you forget it, you have to erase the vault and start again.
@@ -44,7 +48,7 @@ Free-text secrets (addresses, companies, notes) are still read by the agent, so 
 - **The vault file is encrypted.** Each secret is encrypted with AES-256-GCM using a random data key. That key is stored only wrapped with a key derived from your passphrase (scrypt, 128 MiB). Secret names, fields and the history details are all encrypted. Someone who copies the vault file or a backup sees only secret ids, types and timestamps, and can only try guessing your passphrase, which scrypt makes slow.
 - **The key is only in memory:** from when you unlock until you lock, the 12-hour auto-lock, or a restart. Agents asking for secrets do not keep the vault open.
 - **Agents never get a private value without your say-so:**
-  - Every page, every unlock and every approval requires your Cloudflare Access sign-in, which the vault itself checks. Agents can reach the vault service but cannot sign in as you.
+  - Every page, every unlock and every approval requires your Cloudflare Access sign-in, which the vault itself checks. Agents can reach the vault service but cannot sign in as you. Your sign-in token also passes, unencrypted, through the network the agents share with Lettuce; `lettucectl` takes away the capability they would need to read that traffic, and `check` refuses a stack that has it. One gap remains: while Lettuce's web server restarts and the agents keep running, an agent could take its place and receive the token.
   - Agents cannot add, change or delete secrets.
   - ID documents, payment cards and logins always ask. Notes, addresses, companies and memberships ask unless you switch that secret to "Agents may use it without asking".
   - Public fields (programme, document type, name on card, expiry, website, username) and the name are visible to agents, so they can pick the right secret.
@@ -60,9 +64,9 @@ Free-text secrets (addresses, companies, notes) are still read by the agent, so 
   ```
   This routes `https://<stack>/secrets/` to the vault on every stack, using the same hostname and Access app with no new DNS record, then builds and starts it. Each stack gets its own push keys for the vault (`BROKER_VAPID_*` in `stack.env`). Dropping `secrets` from the list removes the route and the container, and leaves the data where it is.
 - **Data:** the vault lives in the Docker volume `lettuce-<name>_secret-broker-data`, not under `stacks/<name>/`. `lettucectl backup` includes it (see [operations.md](operations.md#backups)). The backup is useless without the passphrase.
-- **Removal:** `lettucectl remove <name>` deletes the volume, so removing a stack deletes its vault.
+- **Removal:** `lettucectl remove <name>` deletes the volume, so removing a stack deletes its vault, also after the `secrets` profile was turned off. It says so before asking for confirmation whenever the volume exists.
 - **Forgotten passphrase:** there is no recovery. The person can erase the vault in Settings. If they can't unlock to do that, delete the volume (see the troubleshooting table in [operations.md](operations.md#troubleshooting)).
-- **Isolation:** the vault container has a read-only root filesystem and no capabilities, runs as a non-root user and has no host mounts. Its volume is mounted by nothing else. `lettucectl check` refuses a stack where any of that is not true.
+- **Isolation:** the vault container has a read-only root filesystem and no capabilities, runs as a non-root user and has no host mounts. Its volume is mounted by nothing else. The containers agents run in, and those sharing their network, drop `NET_RAW`, so agents cannot capture the Access token on its way to Lettuce. `lettucectl check` refuses a stack where any of that is not true.
 - **Rules for changing it:** never add a tool that lets agents edit secrets or skip approval, and never let a value or key reach a log or an unencrypted file.
 
 ## Limits

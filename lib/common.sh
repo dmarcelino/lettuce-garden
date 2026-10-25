@@ -178,6 +178,13 @@ host_docker() {
   env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} docker "$@"
 }
 
+# vault_volume NAME -> the Docker volume holding the stack's vault
+vault_volume() { printf 'lettuce-%s_secret-broker-data' "$1"; }
+
+# has_vault NAME -> success when the vault's volume exists. Turning the secrets
+# profile off keeps it, and `compose down -v` deletes it either way.
+has_vault() { host_docker volume inspect "$(vault_volume "$1")" >/dev/null 2>&1; }
+
 # stack_running NAME -> success when any of the stack's containers is running
 stack_running() {
   local running
@@ -234,7 +241,7 @@ ensure_push_keys() {
 # check_stack NAME [--skip-profiles] -> dies with the first reason the stack must
 # not start. `profiles` skips the profile checks before it rewrites the lists.
 check_stack() {
-  local name=$1 skip_profiles=${2:-} f k profiles rendered published updating
+  local name=$1 skip_profiles=${2:-} f k profiles rendered published updating sniffing
   f=$(stack_env "$name")
   [[ -f $f ]] || die "$name: stack.env missing"
   [[ $(file_mode "$f") == 600 ]] || die "$name: stack.env must be mode 600"
@@ -263,6 +270,11 @@ check_stack() {
     | select(.value.environment.DISABLE_AUTOUPDATER != "1") | .key] | join(", ")' <<<"$rendered")
   [[ -z $updating ]] ||
     die "$name: DISABLE_AUTOUPDATER is not 1 for $updating; letta-code would reinstall itself over the pinned version (compose/hardening.yml)"
+  sniffing=$(jq -r '[.services | to_entries[]
+    | select(.key == "app-server" or .value.network_mode == "service:app-server")
+    | select((.value.cap_drop // []) | (index("NET_RAW") or index("ALL")) | not) | .key] | join(", ")' <<<"$rendered")
+  [[ -z $sniffing ]] ||
+    die "$name: $sniffing must drop NET_RAW; agents in the app-server's network namespace could capture the Access JWT (compose/hardening.yml)"
   if has_profile "$(env_get "$f" COMPOSE_PROFILES)" secrets; then
     check_broker "$name" "$rendered"
   fi

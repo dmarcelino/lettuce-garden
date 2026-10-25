@@ -25,7 +25,7 @@ setup() {
     -e 's/^PUSH_CONTACT_EMAIL=.*/PUSH_CONTACT_EMAIL=ops@example.org/' \
     "$ROOT/config.env.example" >"$H/config.env"
   chmod 600 "$H/config.env"
-  echo '{"services":{"app-server":{"ports":[],"environment":{"DISABLE_AUTOUPDATER":"1"}},"bff":{}}}' >"$T/compose-config.json"
+  echo '{"services":{"app-server":{"ports":[],"cap_drop":["NET_RAW"],"environment":{"DISABLE_AUTOUPDATER":"1"}},"bff":{"network_mode":"service:app-server","cap_drop":["NET_RAW"]}}}' >"$T/compose-config.json"
   touch "$T/calls.log" "$T/argv.log" "$T/stdin.log" "$T/stub.env" "$T/containers.txt"
   OUT=$T/out
 }
@@ -435,6 +435,32 @@ test_check_refuses_missing_push_keys() {
   out_has "PUSH_VAPID_PRIVATE_KEY"
 }
 
+test_check_refuses_net_raw_in_the_app_server_namespace() {
+  added
+  local base case
+  base=$(cat "$T/compose-config.json")
+  # Agents are root in the app-server; with NET_RAW they could capture the Access
+  # JWT on its way to the BFF and use it on the vault. SERVICE|EDIT
+  for case in \
+    'app-server|del(.services["app-server"].cap_drop)' \
+    'bff|.services.bff.cap_drop = ["MKNOD"]' \
+    'channel-gateway|.services["channel-gateway"] = {"network_mode":"service:app-server","environment":{"DISABLE_AUTOUPDATER":"1"}}'; do
+    jq -c "${case#*|}" <<<"$base" >"$T/compose-config.json"
+    ctl check alfred
+    bad_rc
+    out_has "NET_RAW"
+    out_has "${case%%|*}"
+  done
+}
+
+test_check_accepts_dropping_every_capability() {
+  added
+  jq -c '.services["app-server"].cap_drop = ["ALL"]' "$T/compose-config.json" >"$T/c.json"
+  mv "$T/c.json" "$T/compose-config.json"
+  ctl check alfred
+  ok_rc
+}
+
 # with_secrets [BROKER_JSON] -> alfred runs the `secrets` profile and the
 # rendered config holds this secret-broker (default: the hardened one)
 with_secrets() {
@@ -582,6 +608,25 @@ test_remove_says_the_vault_goes_too() {
   ctl remove alfred <<<"alfred"
   ok_rc
   out_has "Its vault"
+}
+
+test_remove_warns_about_a_vault_whose_profile_is_off() {
+  # Turning `secrets` off keeps the volume, and `down -v` still deletes it.
+  added
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  out_has "Its vault"
+  log_has "volume inspect lettuce-alfred_secret-broker-data"
+}
+
+test_remove_says_nothing_of_a_vault_that_was_never_created() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  added
+  stub STUB_VOLUME_RC=1
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  out_lacks "Its vault"
 }
 
 # ── profiles ─────────────────────────────────────────────────────────────────

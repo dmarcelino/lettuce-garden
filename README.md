@@ -62,7 +62,7 @@ Day-to-day commands, optional features, upgrades, backups and troubleshooting ar
 | Path | Tracked | What |
 |---|---|---|
 | `lettucectl`, `lib/` | yes | the CLI |
-| `compose/hardening.yml` | yes | `no-new-privileges`, memory/pid caps for every service, letta-code self-update off |
+| `compose/hardening.yml` | yes | `no-new-privileges`, memory/pid caps for every service, no `NET_RAW` where agents run, letta-code self-update off |
 | `compose/multi.yml` | yes | drops all published ports, so stacks never collide |
 | `compose/secrets.yml`, `broker/` | yes | the optional vault (`secrets` profile) and its source |
 | `config.env.example` | yes | template for `config.env` |
