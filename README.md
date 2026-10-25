@@ -70,7 +70,7 @@ Day-to-day commands, optional features, upgrades, backups and troubleshooting ar
 | `garden-common/` | yes | code the vault and Gmail triggers share (sign-in checks, page styles) |
 | `config.env.example` | yes | template for `config.env` |
 | `scripts/dns-preflight.sh` | yes | compares two nameservers before and after moving a domain |
-| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) and the sidecars' tests (`tests/run-sidecar.sh broker`, `tests/run-sidecar.sh gmail-triggers`) |
+| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) the sidecars' tests (`tests/run-sidecar.sh broker`, `tests/run-sidecar.sh gmail-triggers`) and pipelock's (`tests/run-pipelock.sh`) |
 | `config.env` | **no** | your settings plus cached Cloudflare ids (mode 600) |
 | `.secrets/cloudflare-api-token` | **no** | Cloudflare API token (mode 600) |
 | `upstream/` | **no** | Lettuce, cloned at `LETTUCE_REF` |

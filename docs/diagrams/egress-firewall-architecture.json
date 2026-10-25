@@ -233,7 +233,7 @@
       "title": "What pipelock checks",
       "items": [
         "Destination of every proxied request: paste and file-drop blocklist, private and cloud-metadata addresses, data hidden in host names, 600 requests per minute per site",
-        "Page text and full URL only for pages read through /fetch (the fetching-web-pages skill)",
+        "Page text and full URL only for pages read through /fetch (the fetching-web-pages skill); a page with prompt injection is blocked",
         "Every allow and block is a hash-chained receipt signed with the stack's own Ed25519 key"
       ]
     },

@@ -28,8 +28,12 @@ APIs, package installs and git.
 
 A 403 with an `X-Pipelock-Block-Reason` header, a `CONNECT tunnel failed, response 403`, or
 `blocked: true` means pipelock refused the request: a paste or file-drop site, a private or
-internal address, something that looks like a secret or encoded data in the URL, or too many
-requests to one site in a minute.
+internal address, something that looks like a secret or encoded data in the URL, too many
+requests to one site in a minute, or (from `/fetch`) a page that contains prompt injection
+(`block_reason` starts with `response contains prompt injection`).
+
+A page can be refused for prompt injection when it only discusses it (security articles,
+research). Say so when you report it.
 
 - **Do not retry another way** (another tool, unsetting the proxy, another URL for the same
   data). Tell the user what was blocked and why, and let them decide.

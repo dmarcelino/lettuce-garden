@@ -44,7 +44,11 @@ receipts.
 - **Page checks, for pages read through `/fetch`.** Agents that follow the
   `fetching-web-pages` skill read pages through `http://pipelock:8888/fetch?url=...`. Pipelock
   fetches the page itself, so it checks the whole URL for secrets and the page's text for
-  prompt injection, and returns the text as JSON.
+  prompt injection, and returns the text as JSON. A page with prompt injection is **blocked**
+  (pipelock's balanced mode would only log a warning and hand the agent the page): the agent
+  gets a 403 with `"block_reason": "response contains prompt injection: ..."` and a block
+  receipt is signed. A page that only discusses prompt injection can be refused too; the agent
+  tells you, and you decide. `tests/run-pipelock.sh` checks this against a local test page.
 - **Signed receipts.** Every allow and block is written to a hash-chained log, each entry signed
   with the stack's own Ed25519 key. They show where the agents' tools went, and that this
   pipelock decided it.
@@ -63,6 +67,9 @@ receipts.
   a site is not detected.
 - **Prompt-injection checks are pattern matching.** They catch common phrasings, not text
   written to evade them. Treat every page as data either way.
+- **Request bodies are only warned about.** Pipelock's check for secrets in a plain-HTTP request
+  body only writes a warning to its log (and it never sees HTTPS bodies). Secrets in a URL are
+  blocked.
 - **Receipts are signed by the operator's key.** They show what this pipelock decided and that
   it was this key; they don't prove the operator honest, nor that nothing went around the proxy.
 
@@ -89,7 +96,8 @@ pipelock mounts. Receipts are never pruned (removing one would break the chain);
 roughly one line per request. `backup` copies them, and `remove` deletes them with the stack.
 
 ## When an agent is blocked
-The agent gets a 403 with an `X-Pipelock-Block-Reason` header (or `blocked: true` from `/fetch`).
+The agent gets a 403 with an `X-Pipelock-Block-Reason` header (or `blocked: true` and a
+`block_reason` from `/fetch`).
 The skill tells agents to report it rather than try another way. To see why, read the receipts
 or `./lettucectl logs alfred pipelock`. The policy is the same for every stack and lives in
 `pipelock/pipelock.yaml`; after changing it, `./lettucectl up all` rebuilds the image.

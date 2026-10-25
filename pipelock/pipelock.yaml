@@ -16,6 +16,15 @@ fetch_proxy:
     # blocklist is left out on purpose: omitting it keeps the shipped list
     # (pastebin, transfer.sh, ...), while setting it replaces it.
 
+# Prompt injection in what pipelock reads itself: pages fetched through /fetch
+# (for HTTPS through the forward proxy it never sees the response). Balanced
+# mode only warns, in pipelock's log, and hands the agent the page as is; a
+# block gives the agent a 403 to report and signs a block receipt. A page that
+# merely discusses prompt injection may be refused too. tests/run-pipelock.sh
+# checks it.
+response_scanning:
+  action: block
+
 # CONNECT tunnels and plain-HTTP proxy requests. TLS interception stays off, so
 # for HTTPS only the destination is checked, never the content.
 forward_proxy:
