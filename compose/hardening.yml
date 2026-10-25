@@ -1,7 +1,7 @@
 # Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
-# Limits, no-new-privileges and the letta-code self-update switch only; no paths,
-# so file resolution stays with the upstream file. Entries for services whose
-# profile is off are ignored.
+# Limits, no-new-privileges, NET_RAW and the letta-code self-update switch only;
+# no paths, so file resolution stays with the upstream file. Entries for services
+# whose profile is off are ignored.
 #
 # DISABLE_AUTOUPDATER: every `letta` process (including the subagents the server
 # spawns) otherwise runs `npm install -g @letta-ai/letta-code@latest` inside the
@@ -9,15 +9,23 @@
 # while it works, so the running server loses files such as
 # image-resize-worker.js, and a successful update would break the version pin.
 # `lettucectl check` refuses a stack where this is not set.
+#
+# NET_RAW: agents are root in the app-server, and the BFF and channel-gateway
+# share its network namespace. With NET_RAW (in Docker's defaults) a process
+# there can capture the plain HTTP that cloudflared sends to the BFF, Access JWT
+# included, and the vault accepts that JWT. Every container in the namespace
+# drops it; `lettucectl check` refuses a stack where one does not.
 services:
   app-server:
     security_opt: ["no-new-privileges:true"]
+    cap_drop: [NET_RAW]
     mem_limit: 8g
     pids_limit: 4096
     environment:
       DISABLE_AUTOUPDATER: "1"
   bff:
     security_opt: ["no-new-privileges:true"]
+    cap_drop: [NET_RAW]
     mem_limit: 1g
   cloudflared:
     security_opt: ["no-new-privileges:true"]
@@ -33,6 +41,7 @@ services:
     mem_limit: 1g
   channel-gateway:
     security_opt: ["no-new-privileges:true"]
+    cap_drop: [NET_RAW]
     mem_limit: 1g
     environment:
       DISABLE_AUTOUPDATER: "1"
