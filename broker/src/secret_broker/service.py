@@ -37,8 +37,22 @@ log = logging.getLogger("secret_broker")
 PENDING, DONE, DENIED, EXPIRED = "pending", "done", "denied", "expired"
 TEXT, ENV = "text", "env"
 VAULT_RUN = "python3 /root/.letta/skills/using-vault-secrets/vault-run"
+
 # Pushes asking to unlock are sent at most this often.
 UNLOCK_NOTICE_SECONDS = 300
+
+
+def rules(purpose: str) -> str:
+    """Sent with every value shared as text, so the agent has them in front of it
+    when it uses the values. Asked to check an address, an agent once pasted it
+    back into the chat."""
+    return (
+        f"Use these values only for the purpose the user approved ({purpose}), and send them only where that "
+        "purpose needs them: not to a search, map, lookup or validation service unless the purpose says so. "
+        "Never repeat them, in full or in part, in your reply, memory, files or logs. Refer to the secret by its "
+        "name; when asked to check or confirm it, say what you checked and the result, not the value. The user "
+        "can see it in the vault."
+    )
 
 
 @dataclass
@@ -190,7 +204,7 @@ class Broker:
     ) -> dict[str, Any]:
         """The values themselves, or for "env" a handle that vault-run redeems."""
         if delivery == TEXT:
-            return {"secret": secret_name, "values": values}
+            return {"secret": secret_name, "values": values, "rules": rules(purpose)}
         handle = Handle(
             id=token_urlsafe(32),
             secret_id=secret_id,

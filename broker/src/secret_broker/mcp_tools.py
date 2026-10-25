@@ -12,15 +12,17 @@ from .config import MAX_WAIT_SECONDS
 from .service import Broker
 
 INSTRUCTIONS = (
-    "The user's personal vault of secrets: addresses, company details, notes, memberships, ID documents, "
-    "payment cards and logins. list_secrets shows each secret's name, type and public details. Private "
-    "fields (an address text, a card number, a password...) need request_secret with a short purpose; "
-    "unless the user set that secret to share without asking, they approve it on their phone first, and "
-    "get_result then returns the values. Free-text secrets hold natural language: read them and use the parts "
-    "the task needs. Ask only for what the task needs. For a password, card number, security code or document "
-    "number that a script or shell command will use, ask with delivery 'env': you then get a single-use handle "
-    "instead of the values, and run the command with vault-run (load the using-vault-secrets skill first), so "
-    "the values never enter the conversation."
+    "The user's personal vault of secrets: addresses, company details, notes, memberships, ID documents, payment "
+    "cards and logins. list_secrets shows each secret's name, type and public details. Private fields (an address "
+    "text, a card number, a password...) need request_secret with a short purpose; unless the user set that secret "
+    "to share without asking, they approve it on their phone first, and get_result then returns the values. "
+    "Free-text secrets hold natural language: read them and use the parts the task needs. Ask only for what the "
+    "task needs. Use values only for the approved purpose and send them nowhere else (no search, map or validation "
+    "service unless the purpose says so). Never repeat a value in your reply, memory or files, not even to confirm "
+    "it: refer to the secret by its name. For a password, card number, security code or document number that a "
+    "script or shell command will use, ask with delivery 'env': you then get a single-use handle instead of the "
+    "values, and run the command with vault-run (load the using-vault-secrets skill first), so the values never "
+    "enter the conversation."
 )
 
 
@@ -44,7 +46,8 @@ def build_server(broker: Broker) -> MCPServer:
         "keys from list_secrets; leave it out to ask for all of them. delivery 'text' (the default) returns the "
         "values; 'env' returns a handle for vault-run that gives them to one command as VAULT_<FIELD> environment "
         "variables, valid once for a few minutes. Secrets that need approval return an id for get_result; "
-        "secrets the user allows without asking answer directly.",
+        "secrets the user allows without asking answer directly. Never repeat a value in your reply, memory or "
+        "files; follow the rules returned with it.",
         annotations=ToolAnnotations(title="Request a secret", read_only_hint=False, open_world_hint=False),
     )
     async def request_secret(
@@ -56,7 +59,8 @@ def build_server(broker: Broker) -> MCPServer:
         description="Get the answer to a request_secret: pending, denied, expired, or done with the values the "
         "user agreed to share (they may withhold some fields), or for delivery 'env' a handle and the names of "
         f"the environment variables vault-run will set. wait_seconds (0-{MAX_WAIT_SECONDS}) waits for the "
-        "answer. Values and handles are returned once.",
+        "answer. Values and handles are returned once. Never repeat a value in your reply, memory or files; "
+        "follow the rules returned with it.",
         annotations=ToolAnnotations(title="Get request result", read_only_hint=True, open_world_hint=False),
     )
     async def get_result(request_id: str, wait_seconds: float = 0) -> dict[str, Any]:

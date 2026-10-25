@@ -123,13 +123,36 @@ async def test_cannot_approve_twice_or_add_fields(settings, vault):
     assert (await with_broker(broker, flow))["values"] == {"number": CARD}
 
 
+async def test_shared_values_come_with_the_rules_for_using_them(settings, vault):
+    # Asked to "check" an address, an agent pasted it back into the chat. The
+    # rules arrive with the values, so they are in front of the agent when it
+    # uses them, whether the user approved or the secret is shared without asking.
+    auto = add_address(vault, share_mode="auto")
+    card = add_card(vault)
+    broker = make_broker(settings, vault)
+
+    async def flow():
+        direct = await broker.request_secret(auto, "Check my delivery address")
+        sub = await broker.request_secret(card, "Pay for the train", ["number"])
+        broker.decide(sub["id"], True, ["number"], EMAIL)
+        return direct, await broker.get_result(sub["id"])
+
+    direct, approved = await with_broker(broker, flow)
+    for res, purpose, value in ((direct, "Check my delivery address", STREET), (approved, "Pay for the train", CARD)):
+        rules = res["rules"]
+        assert purpose in rules and value not in rules
+        assert "never repeat" in rules.lower() and "your reply" in rules
+        assert "lookup" in rules and "service" in rules
+        assert "say what you checked" in rules
+
+
 async def test_free_text_address_shared_without_asking(settings, vault):
     secret = add_address(vault, share_mode="auto")
     sender = FakeSender()
     vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
     broker = make_broker(settings, vault, sender)
     res = await with_broker(broker, lambda: broker.request_secret(secret, "delivery form"))
-    assert res == {"status": "done", "secret": "Home address", "values": {"text": ADDRESS_TEXT}}
+    assert res["status"] == "done" and res["secret"] == "Home address" and res["values"] == {"text": ADDRESS_TEXT}
     assert vault.audit_log()[0].action == "shared without asking"
     assert STREET not in json.dumps([c["data"] for c in sender.calls])
 

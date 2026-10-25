@@ -290,6 +290,8 @@ def test_mcp_tools(env):
     assert tools["request_secret"]["inputSchema"]["required"] == ["secret_id", "purpose"]
     delivery = tools["request_secret"]["inputSchema"]["properties"]["delivery"]
     assert delivery["enum"] == ["text", "env"] and delivery["default"] == "text"
+    for name in ("request_secret", "get_result"):
+        assert "never repeat" in tools[name]["description"].lower(), name
 
 
 def test_mcp_refuses_public_host(env):

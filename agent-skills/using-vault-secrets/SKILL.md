@@ -13,7 +13,10 @@ stored with the chat.
 
 Use it for opaque values that a program types in for you: passwords, card numbers, security
 codes, document numbers. For free text you need to read (an address, company details, notes),
-use the default `delivery: "text"`.
+use the default `delivery: "text"`. Those values are in your conversation, so follow the rules
+that come with them: never repeat them in your reply, memory or files (refer to the secret by
+its name, and when asked to check one, say what you checked and the result), and send them
+only where the approved purpose needs them.
 
 ## Steps
 
