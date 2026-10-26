@@ -55,10 +55,21 @@ tool's parameters with `$W schema mcp__office__<tool>` before you first use it.
 
 - Every call takes `"connectionId": "workspace"`. Files are named by their path in your
   workspace (`"source": "reports/q3.docx"`); `create_document` takes a bare file `name`.
-- **Existing file, one edit:** `edit_document` with `source`, a `planJson` (a JSON *string* of
-  operations) and `saveMode`: `"NewVersion"` plus `newName` keeps the original, `"Replace"`
-  edits in place. Operations find their text themselves, e.g.
-  `[{"op":"changeText","target":{"find":"net 60"},"with":"net 30","mode":"Tracked"}]`.
+- **Existing file, one edit:** `edit_document` with `connectionId`, `source`, a `planJson` (a
+  JSON *string* of operations) and `saveMode`: `"NewVersion"` plus `newName` keeps the
+  original, `"Replace"` edits in place. Operations find their text themselves:
+  ```sh
+  jq -n --arg p '[{"op":"changeText","target":{"find":"net 60"},"with":"net 30","mode":"Tracked"}]' \
+    '{connectionId:"workspace", source:"contract.docx", planJson:$p, saveMode:"NewVersion", newName:"contract-v2.docx"}' \
+    | $W call mcp__office__edit_document --args-file -
+  ```
+- **Reading results:** the office server's answer in `content[0].text` is JSON encoded twice,
+  and an error is plain text with `"isError": true`. Pipe calls through
+  `jq -r 'if .isError then .content[0].text else .content[0].text | fromjson | fromjson end'`.
+  The pdf server's answer is plain JSON, also in `structuredContent`.
+- **`An error occurred invoking '<tool>'`** with no detail usually means a missing or misnamed
+  argument (most often `connectionId`). Read `$W schema` for that tool and fix the arguments
+  instead of retrying the same call.
 - **Existing file, careful edit:** `register_document` (`source`) gives a `documentId`;
   `inspect_document` gives anchors (paragraph ids, table and image paths) and a `snapshot`
   string; build `{"snapshot":{"eTag":"<snapshot>"},"operations":[...]}`, check it with
@@ -85,8 +96,13 @@ tool's parameters with `$W schema mcp__office__<tool>` before you first use it.
   them with `lettucectl restart <stack>`.
 
 ## Create an Office document
-1. Create it with `office`.
-2. Convert it with `pdf_convert` and render a few pages with `pdf_render_pages`.
+1. Create it with `office`. Pick a `name` that is not in your workspace yet (`ls` first):
+   `create_document` never overwrites. Inserted paragraphs copy the formatting of the paragraph
+   they follow, so in a `planJson` insert the body first and format the title last (or set
+   `alignment` on the body).
+2. Convert it with `pdf_convert` (`{"path": "report.docx"}`) and render a few pages with
+   `pdf_render_pages` (`{"path": "report.pdf", "pages": "1", "output_dir": "render"}`; add
+   `"overwrite": true` to render again into the same folder).
 3. Look at the images; fix problems in the Office file, not in the PDF.
 4. Deliver what was asked: the Office file, the PDF, or both.
 
@@ -95,7 +111,7 @@ tool's parameters with `$W schema mcp__office__<tool>` before you first use it.
 2. Preview the plan, then apply it (or `edit_document` for a simple find-and-change). For a Word
    file someone else wrote, use tracked changes so the person can review them.
 3. Check `writeOutcome` (above).
-4. Render it to PDF and look at the changed pages. A PDF of a file with pending tracked changes
+4. Render it to PDF and look at the changed pages (the calls in "Create an Office document"). A PDF of a file with pending tracked changes
    shows both the old and the new text; for a clean PDF, convert a copy whose changes were
    accepted (a `revision` operation), and only if the person wants that.
 5. Keep the editable format; don't replace the person's file with a PDF.
