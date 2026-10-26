@@ -45,6 +45,7 @@ jobs:
         with:
           persist-credentials: false
       - run: tests/run.sh
+      - run: node --test tests/mcp-servers.test.mjs
 
   sidecar:
     runs-on: ubuntu-24.04

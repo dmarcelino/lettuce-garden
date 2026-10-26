@@ -33,20 +33,32 @@ app-server (agents, root)                      app-server
 ```bash
 ./lettucectl profiles cloudflared,search,doc-tools   # your current list plus doc-tools
 ./lettucectl skills all                              # installs the working-with-documents skill
+./lettucectl mcp all                                 # adds office and pdf to each Settings -> MCP
 ```
-Then **each person** adds the two servers in their Lettuce, under **Settings -> MCP -> Add
-server**, as you did for the vault. `add` and `profiles` print these entries:
+`mcp` adds the two servers to each stack's **Settings -> MCP**, where each person sees them next
+to their own:
 
 | Name | Transport | Command |
 |---|---|---|
 | `office` | stdio | `/opt/lettuce-doc-tools/bin/officeagent` |
 | `pdf` | stdio | `/opt/lettuce-doc-tools/bin/pdf-mcp` |
 
-No arguments and no environment variables are needed. lettucectl never writes Lettuce's MCP
-list: it belongs to Lettuce, and each person's own entries stay as they are. The entries
-survive restarts and upgrades (they live in the stack's `letta-home`).
+No arguments and no environment variables are needed, and a person can also add them by hand
+there. The entries survive restarts and upgrades (they live in the stack's `letta-home`).
 
-New stacks get the tools when the profile is on; each person adds the two entries once.
+`mcp` runs once per stack: it remembers that it did (`DOC_TOOLS_MCP_REGISTERED` in `stack.env`),
+so a person who removes a server keeps it removed; `mcp <name> --force` adds it again. It adds
+only what is missing, and leaves alone every other server and a server of the same name with
+another command (it says so). `add` registers a new stack's servers itself.
+
+The list belongs to Lettuce's BFF, which reads it from disk before every change, so an entry
+added from outside stays. `mcp` writes only the entries whose command is under
+`/opt/lettuce-doc-tools/`, and refuses, changing nothing, when the file is not the shape it
+knows (after a Lettuce upgrade, say): then add the servers by hand. Two things can still undo
+it: a Settings -> MCP page that was open before `mcp` ran and is saved afterwards writes back
+the list it loaded, without the servers; run `mcp <name> --force` again. And the
+`mcp-servers` skill lists the new servers only from the BFF's next start (the next `up`); the
+servers work before that, and the `working-with-documents` skill names them.
 
 What `up` does with the profile:
 1. It builds `lettuce-doc-tools:<hash>` (`doc-tools/Dockerfile`), once per host. The hash covers
@@ -67,9 +79,11 @@ refuses the profile otherwise. Docker 29 prints "Image mount is an experimental 
 ./lettucectl profiles cloudflared,search   # the list without doc-tools
 ```
 The app-servers restart without the mount and the network, Gotenberg stops and is removed, and
-every `lettuce-doc-tools-*` network is deleted. Documents stay in the workspaces. The MCP
-entries stay in each person's Settings and fail until the profile is back; they can remove
-them. The image stays until you delete it (`docker image rm lettuce-doc-tools:<hash>`).
+every `lettuce-doc-tools-*` network is deleted. Documents stay in the workspaces. The servers
+`mcp` registered are removed from Settings -> MCP (a stdio server that cannot start makes every
+`letta mcp tools` call fail, the other servers' included); servers a person added by hand stay,
+and they should remove them. If a removal fails, the next `up` or `profiles` retries it. The
+image stays until you delete it (`docker image rm lettuce-doc-tools:<hash>`).
 
 ## What agents do with it
 The `working-with-documents` skill tells agents which server to use for what, and how to check
@@ -170,6 +184,11 @@ If removing the network fails, the next `up` or `profiles` removes it.
   puts the image reference and the mount target into one file name, which fits only 53
   characters of the two together. `check` refuses a longer one; if you renamed the image or the
   mount point, shorten them.
+- **`mcp` says the MCP settings are not what lettucectl expects**: Lettuce changed the file's
+  layout; add the servers by hand in Settings -> MCP, and report it so `lib/mcp-servers.mjs`
+  can follow.
+- **`office` or `pdf` gone from Settings -> MCP**: a Settings page that was open before `mcp` ran
+  was saved over them; run `./lettucectl mcp <name> --force`.
 - **`check` refuses the stack**: the message names the rule; the overlay and the shared file are
   the reference (`compose/doc-tools.yml`, `compose/shared/gotenberg.yml`).
 

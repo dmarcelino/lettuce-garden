@@ -3043,7 +3043,7 @@ test_profiles_dropping_doc_tools_stops_gotenberg_and_removes_the_networks() {
   log_lacks "network rm"
 }
 
-test_profiles_adding_doc_tools_prints_the_mcp_entries() {
+test_profiles_adding_doc_tools_prints_the_mcp_entries_and_registers_nothing() {
   added
   docs_config
   ctl profiles cloudflared,doc-tools
@@ -3051,15 +3051,130 @@ test_profiles_adding_doc_tools_prints_the_mcp_entries() {
   log_has "network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
   out_has "office -> /opt/lettuce-doc-tools/bin/officeagent"
   out_has "pdf -> /opt/lettuce-doc-tools/bin/pdf-mcp"
+  out_has "or run: lettucectl mcp alfred"
+  log_lacks "node --input-type=module"
 }
 
-test_add_with_doc_tools_prints_the_mcp_entries() {
+test_add_with_doc_tools_registers_the_mcp_servers() {
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
   docs_config
+  mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
   ctl add alfred alfred@example.com
   ok_rc
-  out_has "https://alfred.example.org Settings -> MCP"
   log_has "network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
+  log_has "$MCP_ADD"
+  # After the stack and Gotenberg are up.
+  (($(line_of "$MCP_ADD") > $(line_of "network connect --alias gotenberg"))) || fail "registered before Gotenberg"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
+  out_has "office and pdf are in https://alfred.example.org Settings -> MCP"
+}
+
+test_add_still_succeeds_when_registering_the_mcp_servers_fails() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
+  docs_config
+  stub STUB_EXEC_RC=3
+  ctl add alfred alfred@example.com
+  ok_rc
+  out_has "run: lettucectl mcp alfred"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
+}
+
+# The `node -` call that adds or removes the document tools in Settings -> MCP.
+MCP_ADD="exec -T app-server node --input-type=module - add /root/.letta/mcp-home/.letta/settings.json"
+MCP_REMOVE="exec -T app-server node --input-type=module - remove /root/.letta/mcp-home/.letta/settings.json"
+
+# mcp_answer JSON -> what lib/mcp-servers.mjs prints in the stack (the exec's output)
+mcp_answer() { printf '%s\n' "$1" >"$T/exec-stdout"; }
+
+test_mcp_adds_the_document_tools_to_settings() {
+  added
+  with_docs
+  mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
+  ctl mcp alfred
+  ok_rc
+  log_has "$MCP_ADD"
+  # The script goes in on stdin: nothing is copied into the stack.
+  grep -q 'agent-local-mcp-global' "$T/exec-stdin.log" || fail "the script was not streamed"
+  out_has "alfred: added office, pdf to Settings -> MCP"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
+}
+
+test_mcp_runs_once_per_stack_unless_forced() {
+  added
+  with_docs
+  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  ctl mcp alfred
+  ok_rc
+  log_lacks "node --input-type=module"
+  out_has "alfred: registered before; a server the person removed stays removed (--force adds it again)"
+  mcp_answer '{"added":["pdf"],"present":["office"],"conflicts":[],"removed":[],"attempts":1}'
+  ctl mcp alfred --force
+  ok_rc
+  log_has "$MCP_ADD"
+  out_has "alfred: added pdf to Settings -> MCP (already there: office)"
+}
+
+test_mcp_leaves_a_persons_server_of_the_same_name() {
+  added
+  with_docs
+  mcp_answer '{"added":["office"],"present":[],"conflicts":["pdf"],"removed":[],"attempts":1}'
+  ctl mcp alfred
+  ok_rc
+  out_has "alfred: Settings -> MCP already has a pdf server with another command; it was left as it is"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
+}
+
+test_mcp_needs_the_doc_tools_profile() {
+  added
+  ctl mcp alfred
+  bad_rc
+  out_has "the doc-tools profile is off"
+  log_lacks "node --input-type=module"
+}
+
+test_mcp_failures_fail_at_the_end_without_a_mark() {
+  added
+  with_docs
+  stub STUB_EXEC_RC=3
+  ctl mcp alfred
+  bad_rc
+  out_has "could not register the document tools in: alfred"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
+}
+
+test_profiles_dropping_doc_tools_removes_the_registered_servers() {
+  added
+  with_docs
+  ctl up alfred
+  ok_rc
+  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  : >"$T/calls.log"
+  mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["office","pdf"],"attempts":1}'
+  ctl profiles cloudflared
+  ok_rc
+  log_has "$MCP_REMOVE"
+  out_has "alfred: removed office, pdf from Settings -> MCP (the doc-tools profile is off)"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
+}
+
+test_up_retries_a_removal_that_failed_and_skips_unregistered_stacks() {
+  added
+  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  stub STUB_EXEC_RC=1
+  ctl up alfred
+  bad_rc
+  log_has "$MCP_REMOVE"
+  out_has "could not remove the document tools from Settings -> MCP in: alfred"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
+  # Once removed, the stack is left alone.
+  sed -i '/^STUB_EXEC_RC=/d' "$T/stub.env"
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
+  : >"$T/calls.log"
+  ctl up alfred
+  ok_rc
+  log_lacks "node --input-type=module"
 }
 
 test_shared_project_is_not_a_stack_named_shared() {

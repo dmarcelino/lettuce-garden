@@ -190,7 +190,9 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 EOF
 }
 
-write_settings() { # write_settings FILE: Lettuce's MCP list, plus measuring entries
+# write_settings FILE: Lettuce's MCP list with the measuring entries; office and
+# pdf are added by lib/mcp-servers.mjs, as `lettucectl mcp` adds them
+write_settings() {
   jq -n '{
     autoConversationTitles: false,
     autoConversationTitlesRollbackApplied: true,
@@ -198,8 +200,6 @@ write_settings() { # write_settings FILE: Lettuce's MCP list, plus measuring ent
       agentId: "agent-local-mcp-global",
       baseUrl: "local:/data/local-backend",
       mcpServers: [
-        {name: "office", transport: "stdio", command: "/opt/lettuce-doc-tools/bin/officeagent"},
-        {name: "pdf", transport: "stdio", command: "/opt/lettuce-doc-tools/bin/pdf-mcp"},
         {name: "officem", transport: "stdio", command: "/usr/bin/python3",
          args: ["-I", "/root/.letta/e2e/measure.py", "office", "/opt/lettuce-doc-tools/bin/officeagent"]},
         {name: "pdfm", transport: "stdio", command: "/usr/bin/python3",
@@ -367,6 +367,9 @@ for s in "${STACKS[@]}"; do
     die "app-server $s did not start: $(cat "$TMP/run.err")"
   docker network connect "$P-$s-doctools" "$P-$s-app"
   docker network connect --alias gotenberg "$P-$s-doctools" "$GOT"
+  added=$(docker exec -i "$P-$s-app" node --input-type=module - add /root/.letta/mcp-home/.letta/settings.json 0 0 \
+    <"$ROOT/lib/mcp-servers.mjs" | jq -r '.added | join(",")') || die "lib/mcp-servers.mjs failed in $s"
+  [[ $added == office,pdf ]] || die "lib/mcp-servers.mjs added '$added' in $s, expected office,pdf"
 done
 
 info "waiting for Gotenberg"

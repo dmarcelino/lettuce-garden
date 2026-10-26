@@ -151,6 +151,8 @@ case $args in
       fi
       prev=$a
     done
+    # What the command prints, if the test gave it anything.
+    [[ -f $STUB_ROOT/exec-stdout ]] && cat "$STUB_ROOT/exec-stdout"
     exit "${STUB_EXEC_RC:-0}"
     ;;
   *" config --format json "*)
