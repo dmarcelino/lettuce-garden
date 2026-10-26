@@ -30,6 +30,8 @@ Operation (<target> is a stack name or "all")
   restart <target>              down + up (app-server and bff share a namespace; never restart one alone)
   check <target>                refuse unsafe or inconsistent configuration
   skills <target>               install agent-skills/ into running stacks (every agent of the stack)
+  mcp <target> [--force]        add the document tools (office, pdf) to Settings -> MCP, once per stack
+                                (doc-tools profile; --force: again, also where the person removed them)
   backup <target> <dir> [opts]  copy agents, memory, workspaces, tools, vault and receipts to a snapshot in <dir>/<name>/
                                 (--compress: a tar.gz instead; --no-tools; --pause|--live; --keep N)
   status                        containers and health of every stack
@@ -45,8 +47,6 @@ EOF
 }
 
 # ── helpers ──────────────────────────────────────────────────────────────────
-version_ge() { printf '%s\n%s\n' "$2" "$1" | sort -V -C; }
-
 # pick_hostname NAME -> <name>.<domain>, or the fallback when that name exists in DNS
 pick_hostname() {
   local name=$1 domain zone probe wildcard="" host rc fallback
@@ -283,8 +283,176 @@ up_stack() {
   ensure_executor_token "$1"
   sync_garden_profiles "$1"
   check_stack "$1"
+  # The app-server mounts the image and joins the network; both must exist.
+  if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" doc-tools; then
+    ensure_doc_tools_image || die "could not build $(doc_tools_image) (doc-tools/Dockerfile)"
+    ensure_doc_tools_network "$1" || die "$1: could not create the network $(doc_tools_network "$1")"
+  fi
   info "starting $1"
   compose "$1" up -d --build --remove-orphans
+}
+
+# ── document tools ───────────────────────────────────────────────────────────
+# The image is shared by every stack and built here, not by Compose: it is
+# only ever mounted. The networks are lettucectl's too, so Compose never removes
+# one Gotenberg is still attached to (see compose/doc-tools.yml).
+
+# ensure_doc_tools_image -> builds lettuce-doc-tools:<content hash> unless it exists
+ensure_doc_tools_image() {
+  local image
+  image=$(doc_tools_image)
+  host_docker image inspect "$image" >/dev/null 2>&1 && return 0
+  info "building $image (the document tools; the first build downloads them and takes a few minutes)"
+  host_docker build -q -t "$image" "$LETTUCE_HOME/doc-tools" >/dev/null
+}
+
+# ensure_doc_tools_network NAME -> the stack's internal network to Gotenberg exists
+ensure_doc_tools_network() {
+  local net
+  net=$(doc_tools_network "$1")
+  host_docker network inspect "$net" >/dev/null 2>&1 && return 0
+  host_docker network create --internal --label "$DOC_TOOLS_LABEL=$1" "$net" >/dev/null
+}
+
+# gotenberg_id -> the shared Gotenberg's container id; nothing when it doesn't exist
+gotenberg_id() { compose_shared ps -aq gotenberg; }
+
+# drop_doc_tools_network NET [GOTENBERG_ID] -> detaches Gotenberg from NET and
+# deletes it; fails when a stack's container still uses it
+drop_doc_tools_network() {
+  if [[ -n ${2:-} ]]; then
+    host_docker network disconnect -f "$1" "$2" >/dev/null 2>&1 || true
+  fi
+  host_docker network rm "$1" >/dev/null
+}
+
+# sync_doc_tools -> makes the shared Gotenberg and the networks match the
+# profiles: with doc-tools on, Gotenberg runs and is attached to the network of
+# every complete stack that has the profile, when that network is internal and
+# labelled for that stack (ensure_doc_tools_network keeps any network of that
+# name, so one made by hand is refused here, as check_doc_tools refuses it at
+# the stack's own `up`); networks of stacks that are gone or removed are
+# deleted; with it off, Gotenberg and every network go. It compares what exists
+# rather than what changed, so a re-run repairs an interrupted one. Warns and
+# fails when it cannot.
+sync_doc_tools() {
+  local n net id rendered rc=0 attached listed
+  local -a have=() want=() names=()
+  listed=$(host_docker network ls --filter "label=$DOC_TOOLS_LABEL" --format '{{.Name}}') || return 1
+  mapfile -t have <<<"$listed"
+  if has_profile "$(cfg PROFILES)" doc-tools; then
+    for n in $(list_stacks); do
+      has_profile "$(env_get "$(stack_env "$n")" COMPOSE_PROFILES)" doc-tools || continue
+      [[ -n $(env_get "$(stack_env "$n")" CF_DNS_RECORD_ID) ]] || continue
+      want+=("$(doc_tools_network "$n")")
+      names+=("$n")
+      ensure_doc_tools_network "$n" || {
+        warn "$n: could not create the network $(doc_tools_network "$n")"
+        rc=1
+      }
+    done
+    rendered=$(compose_shared config --format json) || return 1
+    check_gotenberg "$rendered"
+    compose_shared up -d --remove-orphans || return 1
+    id=$(gotenberg_id) || return 1
+    [[ -n $id ]] || return 1
+    for n in "${!want[@]}"; do
+      net=${want[n]}
+      # shellcheck disable=SC2016 # a Go template, not shell
+      attached=$(host_docker network inspect "$net" --format '{{range $k, $v := .Containers}}{{$k}} {{end}}' 2>/dev/null) || {
+        rc=1
+        continue
+      }
+      if [[ $(host_docker network inspect "$net" --format "{{.Internal}} {{index .Labels \"$DOC_TOOLS_LABEL\"}}") != "true ${names[n]}" ]]; then
+        warn "${names[n]}: $net must be an internal network lettucectl made for ${names[n]}; Gotenberg stays off it. Remove it (docker network rm $net) and run: lettucectl up ${names[n]}"
+        [[ " $attached " != *" $id "* ]] || host_docker network disconnect -f "$net" "$id" >/dev/null 2>&1 || true
+        rc=1
+        continue
+      fi
+      [[ " $attached " == *" $id "* ]] && continue
+      host_docker network connect --alias gotenberg "$net" "$id" || {
+        warn "could not connect Gotenberg to $net"
+        rc=1
+      }
+    done
+  else
+    id=$(gotenberg_id) || return 1
+    if [[ -n $id ]]; then
+      info "stopping the shared Gotenberg (the doc-tools profile is off)"
+      compose_shared down || return 1
+      id=""
+    fi
+  fi
+  for net in "${have[@]}"; do
+    [[ -n $net ]] || continue
+    ((${#want[@]})) && printf '%s\n' "${want[@]}" | grep -qxF -- "$net" && continue
+    drop_doc_tools_network "$net" "$id" || {
+      warn "could not remove the network $net; a container may still use it"
+      rc=1
+    }
+  done
+  return "$rc"
+}
+
+# doc_tools_reminder NAME -> whether the stack's Settings -> MCP has the document
+# tools, as far as lettucectl knows (it registers them once: `mcp`, `add`)
+doc_tools_reminder() {
+  local f
+  f=$(stack_env "$1")
+  if [[ -n $(env_get "$f" DOC_TOOLS_MCP_REGISTERED) ]]; then
+    info "Documents: office and pdf are in https://$(env_get "$f" LETTUCE_HOSTNAME) Settings -> MCP (docs/doc-tools.md)"
+    return 0
+  fi
+  info "Documents: in https://$(env_get "$f" LETTUCE_HOSTNAME) Settings -> MCP, add two stdio servers:"
+  info "  office -> /opt/lettuce-doc-tools/bin/officeagent   pdf -> /opt/lettuce-doc-tools/bin/pdf-mcp (docs/doc-tools.md)"
+  info "  or run: lettucectl mcp $1"
+}
+
+# ── document tools in Settings -> MCP ────────────────────────────────────────
+# Lettuce's shared MCP list belongs to its BFF. lib/mcp-servers.mjs adds or
+# removes only the entries that run a document tool, and refuses a file of any
+# other shape; see it for why that is safe next to the BFF's own writes.
+# Registering is once per stack (DOC_TOOLS_MCP_REGISTERED in stack.env), so a
+# server the person removed stays removed; with the profile off, the servers
+# are taken out again, since a stdio server that cannot start makes every
+# `letta mcp tools` call fail, the other servers' included.
+MCP_SETTINGS=/root/.letta/mcp-home/.letta/settings.json
+
+# mcp_servers NAME add|remove -> runs lib/mcp-servers.mjs in the stack's
+# app-server (streamed on stdin, nothing copied in); prints its JSON summary
+mcp_servers() {
+  compose "$1" exec -T app-server node --input-type=module - "$2" "$MCP_SETTINGS" <"$LETTUCE_HOME/lib/mcp-servers.mjs"
+}
+
+# register_mcp_servers NAME -> adds office and pdf to the stack's Settings -> MCP
+# and marks the stack; fails, unmarked, when it could not
+register_mcp_servers() {
+  local out added present c
+  out=$(mcp_servers "$1" add) || return 1
+  env_set "$(stack_env "$1")" DOC_TOOLS_MCP_REGISTERED 1
+  added=$(jq -r '.added // [] | join(", ")' <<<"$out" 2>/dev/null)
+  present=$(jq -r '.present // [] | join(", ")' <<<"$out" 2>/dev/null)
+  if [[ -n $added ]]; then
+    info "$1: added $added to Settings -> MCP${present:+ (already there: $present)}"
+  elif [[ -n $present ]]; then
+    info "$1: $present already in Settings -> MCP"
+  fi
+  for c in $(jq -r '.conflicts // [] | .[]' <<<"$out" 2>/dev/null); do
+    info "$1: Settings -> MCP already has a $c server with another command; it was left as it is"
+  done
+}
+
+# drop_mcp_servers NAME -> with the doc-tools profile off, removes the servers
+# registered in the stack's Settings -> MCP; fails, still marked, when it could not
+drop_mcp_servers() {
+  local f out removed
+  f=$(stack_env "$1")
+  [[ -n $(env_get "$f" DOC_TOOLS_MCP_REGISTERED) ]] || return 0
+  ! has_profile "$(env_get "$f" COMPOSE_PROFILES)" doc-tools || return 0
+  out=$(mcp_servers "$1" remove) || return 1
+  env_unset "$f" DOC_TOOLS_MCP_REGISTERED
+  removed=$(jq -r '.removed // [] | join(", ")' <<<"$out" 2>/dev/null)
+  [[ -z $removed ]] || info "$1: removed $removed from Settings -> MCP (the doc-tools profile is off)"
 }
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -336,7 +504,7 @@ cmd_init() {
 
 cmd_add() {
   (($# == 2)) || die "usage: lettucectl add <name> <email>[,<email>]"
-  local name=$1 emails f host acc id pair synced=1
+  local name=$1 emails f host acc id pair synced=1 docs=1
   validate_name "$name"
   emails=$(normalise_emails "$2")
   require_initialised
@@ -382,13 +550,23 @@ cmd_add() {
   # failed executor install must not hide the Google step.
   up_stack "$name"
   sync_executor "$name" || synced=0
+  sync_doc_tools || docs=0
+  # A new stack: nobody has chosen its MCP servers yet.
+  if has_profile "$(cfg PROFILES)" doc-tools && ((docs)); then
+    register_mcp_servers "$name" ||
+      warn "$name: could not add office and pdf to Settings -> MCP; run: lettucectl mcp $name"
+  fi
   info ""
   info "'$name' is up: https://$host (sign in with Google as $emails)"
   info "First boot builds images and can take a few minutes; the hostname may need a minute to resolve."
   if has_profile "$(cfg PROFILES)" google; then
     google_reminder "$name"
   fi
+  if has_profile "$(cfg PROFILES)" doc-tools; then
+    doc_tools_reminder "$name"
+  fi
   ((synced)) || executor_out_of_step "$name"
+  ((docs)) || die "the document tools (shared Gotenberg, networks) are out of step; fix the cause, then run: lettucectl up $name"
 }
 
 cmd_users() {
@@ -443,6 +621,12 @@ cmd_remove() {
   [[ $answer == "$name" ]] || die "aborted"
 
   compose "$name" down -v || warn "docker compose down failed; continuing"
+  # The stack's network to the shared Gotenberg; Gotenberg stays for the others.
+  # A failure here is repaired by the next sync_doc_tools (`up`, `profiles`).
+  if host_docker network inspect "$(doc_tools_network "$name")" >/dev/null 2>&1; then
+    drop_doc_tools_network "$(doc_tools_network "$name")" "$(gotenberg_id 2>/dev/null)" ||
+      warn "could not remove the network $(doc_tools_network "$name"); 'lettucectl up all' retries"
+  fi
   local left=()
   id=$(env_get "$f" CF_DNS_RECORD_ID)
   if [[ -n $id ]]; then
@@ -494,10 +678,18 @@ cmd_remove() {
       extra=(-v "$garden:/garden")
       dirs+=(/garden)
     fi
-    compose "$name" run --rm --no-deps -T "${extra[@]}" --entrypoint find app-server \
-      "${dirs[@]}" -mindepth 1 -delete || die "could not empty the state of '$name'"
+    # Rendered without doc-tools: the app-server's doc-tools image and network
+    # are not needed to empty the state, and the network is gone already.
+    local renv
+    renv=$(env_without_profile "$f" doc-tools)
+    compose_env "$renv" "$name" run --rm --no-deps -T "${extra[@]}" --entrypoint find app-server \
+      "${dirs[@]}" -mindepth 1 -delete || {
+      rm -f "$renv"
+      die "could not empty the state of '$name'"
+    }
     # `run` recreated the project network; remove it again before the env file goes.
-    compose "$name" down || warn "could not remove the network of '$name'"
+    compose_env "$renv" "$name" down || warn "could not remove the network of '$name'"
+    rm -f "$renv"
     rm -rf "$(stack_dir "$name")"
     info "'$name' removed, data included"
   else
@@ -507,8 +699,8 @@ cmd_remove() {
 
 cmd_profiles() {
   (($# <= 1)) || die "usage: lettucectl profiles [<profile>,<profile>...]"
-  local new n changed="" stale running
-  local -a stacks gone failed=() unrouted=() executors=()
+  local new n changed="" stale running docs=1
+  local -a stacks gone failed=() unrouted=() executors=() undropped=()
   mapfile -t stacks < <(list_stacks)
   if (($# == 0)); then
     require_config
@@ -585,16 +777,29 @@ cmd_profiles() {
     fi
     sync_executor "$n" || executors+=("$n")
   done
+  # Gotenberg and the networks follow the profile on every run too, and so do
+  # the servers registered in Settings -> MCP.
+  sync_doc_tools || docs=0
+  for n in "${stacks[@]}"; do
+    drop_mcp_servers "$n" || undropped+=("$n")
+  done
 
   if has_profile "$new" google; then
     for n in "${stacks[@]}"; do
       google_reminder "$n"
     done
   fi
+  if [[ -n $changed ]] && has_profile "$new" doc-tools; then
+    for n in "${stacks[@]}"; do
+      doc_tools_reminder "$n"
+    done
+  fi
   ((${#unrouted[@]} == 0)) || warn "could not update the tunnel routes of: ${unrouted[*]}"
   ((${#failed[@]} == 0)) || warn "could not remove the containers of dropped profiles in: ${failed[*]}"
   ((${#executors[@]} == 0)) || warn "could not sync the gmail-triggers executor of: ${executors[*]}"
-  ((${#unrouted[@]} + ${#failed[@]} + ${#executors[@]} == 0)) || die "run the same command again"
+  ((docs)) || warn "could not sync the document tools (shared Gotenberg, networks)"
+  ((${#undropped[@]} == 0)) || warn "could not remove the document tools from Settings -> MCP in: ${undropped[*]}"
+  ((${#unrouted[@]} + ${#failed[@]} + ${#executors[@]} + ${#undropped[@]} == 0 && docs)) || die "run the same command again"
 }
 
 cmd_upgrade() {
@@ -612,14 +817,19 @@ cmd_upgrade() {
 
 cmd_up() {
   (($# == 1)) || die "usage: lettucectl up <name|all>"
-  local n targets unsynced=()
+  local n targets unsynced=() undropped=() docs=1
   require_initialised
   targets=$(expand_targets "$1")
   for n in $targets; do
     up_stack "$n"
     sync_executor "$n" || unsynced+=("$n")
+    drop_mcp_servers "$n" || undropped+=("$n")
   done
+  sync_doc_tools || docs=0
   ((${#unsynced[@]} == 0)) || executor_out_of_step "${unsynced[@]}"
+  ((${#undropped[@]} == 0)) || warn "could not remove the document tools from Settings -> MCP in: ${undropped[*]}; run: lettucectl up $1"
+  ((docs)) || die "the document tools (shared Gotenberg, networks) are out of step; fix the cause, then run: lettucectl up $1"
+  ((${#undropped[@]} == 0)) || die "the document tools are still in Settings -> MCP with the doc-tools profile off"
 }
 
 cmd_down() {
@@ -1257,11 +1467,29 @@ cmd_skills() {
   done
 }
 
+cmd_mcp() {
+  (($# == 1)) || [[ $# == 2 && $2 == --force ]] || die "usage: lettucectl mcp <name|all> [--force]"
+  local n targets failed=()
+  require_initialised
+  has_profile "$(cfg PROFILES)" doc-tools ||
+    die "the doc-tools profile is off; turn it on first: lettucectl profiles $(cfg PROFILES),doc-tools"
+  targets=$(expand_targets "$1")
+  for n in $targets; do
+    if [[ -n $(env_get "$(stack_env "$n")" DOC_TOOLS_MCP_REGISTERED) && ${2:-} != --force ]]; then
+      info "$n: registered before; a server the person removed stays removed (--force adds it again)"
+      continue
+    fi
+    register_mcp_servers "$n" || failed+=("$n")
+  done
+  ((${#failed[@]} == 0)) ||
+    die "could not register the document tools in: ${failed[*]}; see the messages above (is the stack up?), then run: lettucectl mcp <name>"
+}
+
 main() {
   local cmd=${1:-help}
   shift || true
   case $cmd in
-    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | toolbox | skills | backup | receipts)
+    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | toolbox | skills | mcp | backup | receipts)
       "cmd_$cmd" "$@"
       ;;
     help | -h | --help) usage ;;

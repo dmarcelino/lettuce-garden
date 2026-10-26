@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Tests for a sidecar image (broker/, gmail-triggers/). They run in a container
-# built from the image's `test` stage, so the host needs only Docker.
+# Tests for a sidecar image (broker/, gmail-triggers/) or the document tools
+# (doc-tools/). They run in a container built from the image's `test` stage,
+# so the host needs only Docker.
 # agent-skills/ is mounted for the broker's vault-run helper tests. For
 # gmail-triggers, the executor's tests also run in a Node image, unless pytest
 # arguments narrow the run. Node 22's --test takes files or globs, not a
@@ -12,7 +13,7 @@ NODE_IMAGE=node:22.22.0-slim
 
 dir=${1:-}
 if [[ ! $dir =~ ^[a-z][a-z0-9-]*$ || ! -f $ROOT/$dir/Dockerfile ]]; then
-  echo "usage: tests/run-sidecar.sh <dir> [pytest args...]   (dir: broker, gmail-triggers)" >&2
+  echo "usage: tests/run-sidecar.sh <dir> [pytest args...]   (dir: broker, gmail-triggers, doc-tools)" >&2
   exit 2
 fi
 shift

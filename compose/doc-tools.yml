@@ -1,0 +1,36 @@
+# Merged by lettucectl after compose/pipelock.yml, only when the stack has the
+# `doc-tools` profile (the `compose` wrapper in lib/common.sh). Gives the
+# app-server the document tools (doc-tools/, docs/doc-tools.md):
+#
+# - the doc-tools image, mounted read-only at /opt/lettuce-doc-tools: one copy
+#   per host, shared by every stack. It holds OfficeAgent and the PDF MCP, which
+#   Lettuce starts as stdio MCP servers (Settings -> MCP), one process per call.
+#   DOC_TOOLS_TAG is the image's content hash, computed by lettucectl, so a
+#   change in doc-tools/ is a new tag and Compose recreates the app-server.
+# - the stack's own internal network to the host's shared Gotenberg
+#   (compose/shared/gotenberg.yml), which converts documents to PDF. lettucectl
+#   creates it (DOC_TOOLS_NETWORK, lettuce-doc-tools-<name>) and connects
+#   Gotenberg to it; Compose only joins it, so `down` never removes it.
+#   `default` is listed too: naming any network drops the implicit one, and with
+#   it cloudflared, the vault and every other service of the stack.
+#
+# This adds to an upstream service (a mount and a network) instead of
+# restricting it: a named exception in AGENTS.md. It replaces nothing.
+# `lettucectl check` refuses a stack where the mount is not this read-only image,
+# where another service mounts it or joins the network, or where the app-server
+# loses `default`.
+services:
+  app-server:
+    volumes:
+      - type: image
+        source: lettuce-doc-tools:${DOC_TOOLS_TAG:?set by lettucectl}
+        target: /opt/lettuce-doc-tools
+        read_only: true
+    networks:
+      - default
+      - doc-tools
+
+networks:
+  doc-tools:
+    external: true
+    name: ${DOC_TOOLS_NETWORK:?set by lettucectl}

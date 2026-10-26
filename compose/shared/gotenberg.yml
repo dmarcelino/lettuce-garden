@@ -1,0 +1,74 @@
+# The host's shared Gotenberg (docs/doc-tools.md): one container for every stack
+# with the doc-tools profile, run by lettucectl as the Compose project
+# `lettuce_shared` (compose_shared in lib/common.sh). It converts documents the
+# PDF MCP uploads (LibreOffice for Office files, Chromium for HTML) and merges,
+# rotates, watermarks and stamps PDFs; it keeps nothing, and it mounts no
+# workspace.
+#
+# Networks: its own internal one here, plus each stack's internal
+# lettuce-doc-tools-<name>, which lettucectl creates and connects it to with the
+# alias `gotenberg` (sync_doc_tools). It is the only container on more than one
+# of them, and none has a route out.
+#
+# The flags close what a document could reach on its own (Gotenberg's defaults
+# let HTML and Office files fetch any URL): no private or public addresses for
+# Chromium or LibreOffice, no JavaScript, no downloadFrom, no webhooks. There
+# is no allow-list, since a match there would skip the address checks. Both
+# engines start on the first job and stop after a minute idle. The timeout stays
+# under letta-code's 60 s per MCP request. At warn, the log holds no document
+# content, but it does hold every URL an HTML file tried to load and any value
+# a request was refused for; it covers every stack, so never run it at debug,
+# which logs file names.
+#
+# Pinned by its multi-arch index digest. `lettucectl check` refuses this service
+# without its hardening (non-root user and no-new-privileges included), with a
+# port, or without the deny flags (or with one set back to false).
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8.38.1@sha256:aa552cc115db488e0f0bcb07446aac13071ad51505b642c84bb894500907b42b
+    command:
+      - gotenberg
+      - --api-body-limit=50MB
+      - --api-timeout=50s
+      - --api-disable-download-from
+      - --webhook-disable
+      - --prometheus-disable-collect
+      - --libreoffice-auto-start=false
+      - --libreoffice-idle-shutdown-timeout=60s
+      - --libreoffice-restart-after=10
+      - --libreoffice-max-queue-size=10
+      - --libreoffice-deny-private-ips
+      - --libreoffice-deny-public-ips
+      - --chromium-auto-start=false
+      - --chromium-idle-shutdown-timeout=60s
+      - --chromium-restart-after=50
+      - --chromium-max-queue-size=10
+      - --chromium-max-concurrency=2
+      - --chromium-deny-private-ips
+      - --chromium-deny-public-ips
+      - --chromium-disable-javascript
+      - --pdfengines-max-concurrency=2
+      - --log-level=warn
+      - --gotenberg-hide-banner
+    user: "1001:1001"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=1g
+      # Chromium's profile; without it, HTML conversions fail.
+      - /home/gotenberg:rw,nosuid,nodev,size=256m,uid=1001,gid=1001,mode=0700
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+    restart: unless-stopped
+    networks: [internal]
+
+networks:
+  internal:
+    internal: true

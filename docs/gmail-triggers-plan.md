@@ -10,7 +10,7 @@ Let each person on a stack say, from a web page and without any technical knowle
 "when an email arrives in label X (optionally only from these senders), ask agent Y to do Z".
 Polling Gmail costs no model turns; a turn happens only when a rule matches.
 
-Everything ships in lettuce-multi-user. Upstream Lettuce and letta-code are not changed.
+Everything ships in lettuce-garden. Upstream Lettuce and letta-code are not changed.
 
 It is the first **garden sidecar**: an opt-in service with its own page at
 `https://<stack>/garden/<sidecar>/`, here `https://<stack>/garden/gmail-triggers/`.
@@ -467,4 +467,4 @@ executor tests for `gmail-triggers`), and update CLAUDE.md's commands.
   Google's permissions.
 - Other mail providers.
 - An upstream change letting the BFF accept triggers itself. It's the cleanest fit for
-  upstream's architecture, but it belongs to Lettuce, not lettuce-multi-user.
+  upstream's architecture, but it belongs to Lettuce, not lettuce-garden.

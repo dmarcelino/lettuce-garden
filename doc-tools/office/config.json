@@ -1,0 +1,19 @@
+{
+  "OfficeAgent": {
+    "Transport": "stdio",
+    "AllowRegistration": true,
+    "AllowCreation": true,
+    "AllowInlineContent": false,
+    "FileSystemConnections": [
+      {
+        "ConnectionId": "workspace",
+        "RootPath": "/opt/lettuce-doc-tools/office/no-workspace",
+        "AllowedExtensions": [".docx", ".pptx", ".xlsx"],
+        "DefaultChangeMode": "Tracked",
+        "MaximumBytes": 52428800,
+        "CalculateFormulas": true
+      }
+    ]
+  },
+  "Logging": { "LogLevel": { "Default": "Warning" } }
+}
