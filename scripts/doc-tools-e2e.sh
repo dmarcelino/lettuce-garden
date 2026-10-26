@@ -12,8 +12,8 @@
 # It simulates four stacks (a-d) the way compose/doc-tools.yml and lettucectl
 # wire them, without Cloudflare, the BFF or an agent: per stack, a default
 # network and an internal doc-tools network, an app-server container (the real
-# image, kept idle with `sleep`) on both with the doc-tools image mounted
-# read-only, and Lettuce's MCP settings with the `office` and `pdf` stdio
+# image, kept idle with `sleep`) on both with the tools' volume (filled from the
+# doc-tools image as lettucectl fills it) mounted read-only, and Lettuce's MCP settings with the `office` and `pdf` stdio
 # entries. Calls go through `letta mcp call` from the agent's workspace, as the
 # upstream mcp-servers skill makes them. One Gotenberg from
 # compose/shared/gotenberg.yml joins every doc-tools network as `gotenberg`.
@@ -23,7 +23,7 @@
 # to start while anything named doctools-e2e-* exists, and removes what it
 # created on exit, including the root-owned files in its temp dir (through a
 # throwaway container). It builds the doc-tools image when missing and keeps it,
-# as `lettucectl up` would. Exit status: 0 when every scenario passes.
+# as `lettucectl up` would; its volume is its own and goes on exit. Exit status: 0 when every scenario passes.
 # Scenarios and cleanup are called by name (run_scenario, trap).
 # shellcheck disable=SC2329
 set -euo pipefail
@@ -55,7 +55,6 @@ LBL=doctools-e2e=$R
 STACKS=(a b c d)
 TMP=
 SAMPLER_PID=
-ALIAS_TAG=
 
 # ── refuse to run next to leftovers ──────────────────────────────────────────
 leftovers=$(
@@ -88,7 +87,6 @@ cleanup() {
   docker network ls -q --filter "label=$LBL" | xargs -r docker network rm >/dev/null
   docker network ls -q --filter "name=$P-" | xargs -r docker network rm >/dev/null
   docker volume ls -q --filter "name=$P-" | xargs -r docker volume rm >/dev/null
-  [[ -z $ALIAS_TAG ]] || docker image rm "$ALIAS_TAG" >/dev/null
   if [[ -n $TMP && -d $TMP && $TMP == */"$P".* ]]; then
     # The containers wrote as root into the bind mounts.
     docker run --rm --name "$P-cleanup" --label "$LBL" --network none -v "$TMP:/t" \
@@ -325,23 +323,17 @@ if ! docker image inspect "$IMG" >/dev/null 2>&1; then
   docker build -q -t "$IMG" "$ROOT/doc-tools" >/dev/null
 fi
 
-# Mount the image exactly as compose/doc-tools.yml does. If Docker refuses the
-# product's reference, record why and go on with a short alias of the same
-# image, so the rest still runs.
-MOUNT_IMG=$IMG
-MOUNT_ERR=
-if ! MOUNT_ERR=$(docker run --rm --name "$P-probe" --label "$LBL" --network none \
-  --mount "type=image,source=$IMG,target=/opt/lettuce-doc-tools,readonly" \
-  --entrypoint test "$APP" -x /opt/lettuce-doc-tools/bin/pdf-mcp 2>&1); then
-  ALIAS_TAG=$P:img
-  docker tag "$IMG" "$ALIAS_TAG"
-  MOUNT_IMG=$ALIAS_TAG
-  # The engine's message names a hex-encoded path; keep the rest.
-  MOUNT_ERR=$(grep -v '^WARNING' <<<"$MOUNT_ERR" | head -n1 | sed -E 's/[0-9a-f]{64,}/<hex>/g' | cut -c1-300)
-  info "the image mount of $IMG failed; using $ALIAS_TAG: $MOUNT_ERR"
-else
-  MOUNT_ERR=
-fi
+# Fill a volume as ensure_doc_tools_volume does: a container of the image,
+# created and never started, copied out and unpacked in another container (here
+# the app-server image, which has tar), the marker last.
+VOL=$P-tools
+info "filling $VOL"
+docker volume create --label "$LBL" "$VOL" >/dev/null
+cid=$(docker create --label "$LBL" "$IMG" /none)
+docker cp "$cid:/opt/lettuce-doc-tools/." - |
+  docker run --rm -i --label "$LBL" --network none -v "$VOL:/dst" --entrypoint sh "$APP" \
+    -c 'tar -x -C /dst && touch /dst/.lettuce-doc-tools-complete' || die "could not fill $VOL"
+docker rm -f "$cid" >/dev/null
 
 info "starting Gotenberg ($P-shared)"
 compose_e2e up -d --quiet-pull >/dev/null 2>&1 || compose_e2e up -d
@@ -362,7 +354,7 @@ for s in "${STACKS[@]}"; do
   docker run -d --name "$P-$s-app" --label "$LBL" --init --network "$P-$s-default" \
     -e LETTA_LOCAL_BACKEND_EXPERIMENTAL=true -e LETTA_LOCAL_BACKEND_DIR=/data/local-backend -e USER_CWD=/work \
     -v "$d/work:/work" -v "$d/home:/root/.letta" -v "$d/data:/data" \
-    --mount "type=image,source=$MOUNT_IMG,target=/opt/lettuce-doc-tools,readonly" \
+    --mount "type=volume,source=$VOL,target=/opt/lettuce-doc-tools,readonly,volume-nocopy" \
     -w /work --entrypoint sleep "$APP" infinity >/dev/null 2>"$TMP/run.err" ||
     die "app-server $s did not start: $(cat "$TMP/run.err")"
   docker network connect "$P-$s-doctools" "$P-$s-app"
@@ -386,7 +378,7 @@ IDLE_START=$(mem_bytes)
 s0_wiring() {
   local s nets
   for s in "${STACKS[@]}"; do
-    expect "$s: the image mount is writable" \
+    expect "$s: the tools' mount is writable" \
       docker exec "$P-$s-app" sh -c '! touch /opt/lettuce-doc-tools/.w 2>/dev/null' || return 1
     nets=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$P-$s-app")
     expect "$s: app-server networks are '$nets'" test "$nets" = "$P-$s-default $P-$s-doctools " || return 1
@@ -395,8 +387,12 @@ s0_wiring() {
     expect "$s: gotenberg unreachable" \
       docker exec "$P-$s-app" curl -fsS -m 5 -o /dev/null http://gotenberg:3000/health || return 1
   done
-  expect "Docker refused to mount $IMG at /opt/lettuce-doc-tools, as compose/doc-tools.yml does \
-(reference + target = ${#IMG} + 22 characters): $MOUNT_ERR" test -z "$MOUNT_ERR" || return 1
+}
+
+# tools_there STACK -> the launchers are in the stack's app-server
+tools_there() {
+  expect "$1: /opt/lettuce-doc-tools/bin lacks the launchers after a restart" \
+    test "$(docker exec "$P-$1-app" ls /opt/lettuce-doc-tools/bin | paste -sd' ')" = "officeagent pdf-mcp"
 }
 
 s1_office() {
@@ -595,6 +591,7 @@ s5_restart_remove() {
   pid=$!
   docker restart -t 2 "$P-b-app" >/dev/null
   wait "$pid" || true
+  tools_there b || return 1
   expect "a's conversion during b's restart failed: $(brief "$(cat "$TMP/out/during.json" 2>/dev/null || echo '{}')")" \
     succeeded "$(cat "$TMP/out/during.json" 2>/dev/null || echo '{}')" || return 1
   ok a pdf pdf_convert '{"path":"conc-2.docx","output":"after-restart.pdf"}' || return 1
@@ -618,6 +615,7 @@ s6_persistence() {
   f=$TMP/a/home/mcp-home/.letta/settings.json
   before=$(sha256sum <"$f")
   docker restart -t 2 "$P-a-app" >/dev/null
+  tools_there a || return 1
   ok a office list_connections '{}' || return 1
   expect "office lost its workspace connection" test "$(field '.result | tostring | contains("workspace")')" = true ||
     return 1
@@ -625,6 +623,19 @@ s6_persistence() {
   ok a pdf pdf_info '{"path":"brief.pdf"}' || return 1
   ok a pdf pdf_convert '{"path":"brief.docx","output":"after-a-restart.pdf"}' || return 1
   expect "settings.json changed" test "$(sha256sum <"$f")" = "$before" || return 1
+}
+
+s7_stop_start() {
+  local s left=()
+  for s in "${STACKS[@]}"; do
+    docker inspect "$P-$s-app" >/dev/null 2>&1 && left+=("$s")
+  done
+  for s in "${left[@]}"; do docker stop -t 2 "$P-$s-app" >/dev/null; done
+  for s in "${left[@]}"; do docker start "$P-$s-app" >/dev/null; done
+  for s in "${left[@]}"; do
+    tools_there "$s" || return 1
+    ok "$s" pdf pdf_create "{\"output\":\"after-stop-$s.pdf\",\"text\":\"After a stop.\"}" || return 1
+  done
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -730,7 +741,7 @@ measure_disk() {
     mrow "Disk, stack $s: documents in the workspace / .officeagent index" "$docs B / ${idx:-0} B" \
       "the documents the tests made"
     mrow "Disk, stack $s: container layer (SizeRw) / of which /tmp/lettuce-doc-tools" "$rw B / $tmpb B" \
-      "the image mount adds nothing per stack"
+      "the shared volume adds nothing per stack"
   done
   mrow "Disk, per stack: MCP settings (mcp-home)" "$(stat -c %s "$TMP/a/home/mcp-home/.letta/settings.json") B" \
     "unchanged by calls"
@@ -748,13 +759,14 @@ measure_images() {
 mrow "Gotenberg idle RAM after start (engines not started)" "$(mib "$IDLE_START")" ""
 measure_conversions
 measure_calls
-run_scenario "0. Wiring: image mount, networks, gotenberg alias" s0_wiring
+run_scenario "0. Wiring: tools volume, networks, gotenberg alias" s0_wiring
 run_scenario "1. Office in a: docx tracked edit and comment, pptx, xlsx formula, invalid operations" s1_office
 run_scenario "2. PDF in a: convert, PDF/A-2b, merge, split, rotate, watermark, encrypt, redact, render" s2_pdf
 run_scenario "3. Isolation between a and b: files, networks, gotenberg, pdf-mcp jail" s3_isolation
 run_scenario "4. Concurrency: 3 conversions each in a and b at once" s4_concurrency
 run_scenario "5. Restart b while a converts; remove b; a still converts" s5_restart_remove
 run_scenario "6. Registration survives an app-server restart" s6_persistence
+run_scenario "7. The tools are still there after every app-server stops and starts" s7_stop_start
 measure_images
 measure_disk
 if ((IDLE_WAIT)); then
@@ -768,7 +780,7 @@ fi
 report() {
   echo "## doc-tools E2E ($P)"
   echo
-  echo "App-server image \`$APP\`, doc-tools image \`$IMG\`$([[ -z $ALIAS_TAG ]] || echo " (mounted through the alias \`$ALIAS_TAG\`)")."
+  echo "App-server image \`$APP\`, doc-tools image \`$IMG\`, copied into the volume \`$VOL\`."
   echo
   echo "| Result | Scenario | Time | Reason |"
   echo "|---|---|---|---|"

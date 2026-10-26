@@ -181,10 +181,10 @@ compose_env() {
   up=$(upstream_dir)
   profiles=$(env_get "$env_file" COMPOSE_PROFILES)
   # Only with the profile: without it, the app-server has no doc-tools mount or
-  # network. The two values are lettucectl's, never stack.env's.
+  # network. The values are lettucectl's, never stack.env's.
   if has_profile "$profiles" doc-tools; then
     extra+=(-f "$LETTUCE_HOME/compose/doc-tools.yml")
-    vars+=(DOC_TOOLS_TAG="$(doc_tools_tag)" DOC_TOOLS_NETWORK="$(doc_tools_network "$name")")
+    vars+=(DOC_TOOLS_NETWORK="$(doc_tools_network "$name")" DOC_TOOLS_VOLUME="$(doc_tools_volume)")
   fi
   # Only with the profile: without it, no container gets a proxy setting.
   if has_profile "$profiles" pipelock; then
@@ -219,12 +219,10 @@ compose_shared() {
 
 # ── document tools ───────────────────────────────────────────────────────────
 # doc_tools_tag -> the content hash of doc-tools/ (its tests excluded), the tag
-# of the image every stack with the doc-tools profile mounts. Any change to what
-# goes into the image is a new tag, so `up` rebuilds it and recreates the
-# app-servers; an unchanged tree reuses the image. Ten hex characters: Docker
-# with the containerd snapshotter puts the image reference and the mount target
-# into one hex-encoded file name, so together they must stay within 53
-# characters (check_doc_tools).
+# of the tools' image and volume every stack with the doc-tools profile shares.
+# Any change to what goes into the image is a new tag, so `up` rebuilds it,
+# fills a new volume and recreates the app-servers; an unchanged tree reuses
+# both. Ten hex characters.
 doc_tools_tag() {
   local d=$LETTUCE_HOME/doc-tools
   [[ -f $d/Dockerfile ]] || die "doc-tools/Dockerfile is missing"
@@ -234,18 +232,19 @@ doc_tools_tag() {
 
 doc_tools_image() { printf 'lettuce-doc-tools:%s' "$(doc_tools_tag)"; }
 
+# doc_tools_volume -> the volume the app-servers mount: the image's tools, copied
+# out by lettucectl (ensure_doc_tools_volume). Not an image mount: Docker 29
+# brings those back empty after a daemon restart.
+doc_tools_volume() { printf 'lettuce-doc-tools-%s' "$(doc_tools_tag)"; }
+
 # doc_tools_network NAME -> the stack's internal network to the shared Gotenberg
 doc_tools_network() { printf 'lettuce-doc-tools-%s' "$1"; }
 
 # DOC_TOOLS_LABEL marks the networks lettucectl made, with the stack's name.
 DOC_TOOLS_LABEL=lettuce.doc-tools.stack
-# Where the app-server mounts the image (compose/doc-tools.yml, the launchers and
-# the MCP entries people add use it too).
+# Where the app-server mounts the tools (compose/doc-tools.yml, the launchers and
+# the MCP entries people add use it too), and where the image holds them.
 DOC_TOOLS_TARGET=/opt/lettuce-doc-tools
-# The most an image mount's reference plus target may hold: Docker names the
-# mount's directory hex(<64-char container id>,src=<ref>,dst=<target>), and a
-# file name has 255 bytes.
-DOC_TOOLS_MOUNT_NAME_MAX=53
 
 # host_docker ARGS... -> plain docker, under `env -i` like `compose`
 host_docker() {
@@ -445,9 +444,12 @@ check_stack() {
       die "$name: GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters (delete the line and run: lettucectl up $name)"
     check_gmail_triggers "$name" "$rendered" "$(env_get "$f" LETTA_STATE_DIR)"
   fi
-  # Whatever the profiles: the tools' image and network are the app-server's only.
-  k=$(jq -r '[.services | to_entries[] | select(.key != "app-server")
-    | select([(.value.volumes // [])[] | select(.type == "image" or ((.source // "") | startswith("lettuce-doc-tools")))] | length > 0)
+  # Whatever the profiles: the tools' volume (by key or by name) and image mounts
+  # are the app-server's only.
+  k=$(jq -r '[.volumes // {} | to_entries[] | select((.value.name // "") | startswith("lettuce-doc-tools")) | .key] as $tools
+    | [.services | to_entries[] | select(.key != "app-server")
+    | select([(.value.volumes // [])[] | select(.type == "image" or ((.source // "") as $s
+        | $s == "doc-tools" or ($s | startswith("lettuce-doc-tools")) or ($tools | index($s))))] | length > 0)
     | .key] | join(", ")' <<<"$rendered")
   [[ -z $k ]] || die "$name: $k mount(s) an image or the document tools; only the app-server may (compose/doc-tools.yml)"
   if has_profile "$profiles" doc-tools; then
@@ -456,22 +458,18 @@ check_stack() {
 }
 
 # check_doc_tools NAME RENDERED -> the app-server keeps what compose/doc-tools.yml
-# gives it and nothing more: the doc-tools image of this tree, read-only, at
+# gives it and nothing more: the tools' volume of this tree, read-only, at
 # /opt/lettuce-doc-tools; its default network beside the stack's internal one
-# to Gotenberg, which no other service joins; and a Docker that has image mounts.
+# to Gotenberg, which no other service joins.
 check_doc_tools() {
-  local name=$1 rendered=$2 image net k
-  image=$(doc_tools_image)
+  local name=$1 rendered=$2 vol net k
+  vol=$(doc_tools_volume)
   net=$(doc_tools_network "$name")
-  k=$(docker_version)
-  version_ge "$k" 28.0.0 || die "$name: the doc-tools profile needs Docker >= 28 for image mounts (found ${k:-unknown})"
-  k=$(host_docker compose version --short 2>/dev/null)
-  version_ge "${k#v}" 2.35.0 || die "$name: the doc-tools profile needs Docker Compose >= 2.35 for image mounts (found ${k:-unknown})"
-  ((${#image} + ${#DOC_TOOLS_TARGET} <= DOC_TOOLS_MOUNT_NAME_MAX)) ||
-    die "$name: $image at $DOC_TOOLS_TARGET is too long for an image mount (Docker fails with 'file name too long' past $DOC_TOOLS_MOUNT_NAME_MAX characters)"
-  jq -e --arg i "$image" --arg t "$DOC_TOOLS_TARGET" '[.services["app-server"].volumes // [] | .[] | select(.target == $t)]
-    | length == 1 and .[0].type == "image" and .[0].source == $i and .[0].read_only == true' <<<"$rendered" >/dev/null ||
-    die "$name: the app-server must mount $image read-only at /opt/lettuce-doc-tools, and nothing else there (compose/doc-tools.yml)"
+  jq -e --arg t "$DOC_TOOLS_TARGET" '[.services["app-server"].volumes // [] | .[] | select(.target == $t)]
+    | length == 1 and .[0].type == "volume" and .[0].source == "doc-tools" and .[0].read_only == true' <<<"$rendered" >/dev/null ||
+    die "$name: the app-server must mount the volume $vol read-only at /opt/lettuce-doc-tools, and nothing else there (compose/doc-tools.yml)"
+  jq -e --arg v "$vol" '.volumes["doc-tools"] | .external == true and .name == $v' <<<"$rendered" >/dev/null ||
+    die "$name: the doc-tools volume must be the external $vol (compose/doc-tools.yml)"
   jq -e '.services["app-server"].networks // {} | has("default") and has("doc-tools")' <<<"$rendered" >/dev/null ||
     die "$name: the app-server must be on its default network and doc-tools; without default it loses the rest of the stack (compose/doc-tools.yml)"
   k=$(jq -r '[.services | to_entries[] | select(.key != "app-server") | select(.value.networks // {} | has("doc-tools")) | .key] | join(", ")' <<<"$rendered")
@@ -485,8 +483,6 @@ check_doc_tools() {
   fi
 }
 
-# docker_version -> the Docker Engine's version
-docker_version() { host_docker version --format '{{.Server.Version}}' 2>/dev/null; }
 
 # check_gotenberg RENDERED -> the shared Gotenberg (compose/shared/gotenberg.yml,
 # rendered) keeps its hardening (a non-root user and no-new-privileges too),
