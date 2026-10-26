@@ -24,14 +24,14 @@ This repo composes Lettuce and adds to it: multi-user stacks plus an opinionated
 ```bash
 tests/run.sh                 # all offline tests (docker, curl, dig, gh, secret-tool are stubbed)
 tests/run.sh <pattern>       # only tests whose function name contains <pattern>, e.g. tests/run.sh test_add_
-shellcheck -x lettucectl lib/*.sh scripts/*.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/*
+shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/*
 tests/run-sidecar.sh broker            # vault tests (pytest in its image's `test` stage; needs Docker)
 tests/run-sidecar.sh broker -k vault   # extra args go to pytest
 tests/run-sidecar.sh gmail-triggers    # sidecar tests, plus the executor's (node --test in node:22.22.0-slim) when no args are given
 node --test 'gmail-triggers/executor/tests/*.test.mjs'   # executor tests on the host
 tests/run-pipelock.sh                  # the pipelock image and config against a real pipelock (needs Docker, not the internet)
 ```
-Run the first two before changing the CLI, and `tests/run-sidecar.sh <dir>` before changing `broker/`, `gmail-triggers/` or `garden-common/` (which both use), and `tests/run-pipelock.sh` before changing `pipelock/`. The CLI has no build step; the sidecar images are built by `lettucectl up`.
+Run the first two before changing the CLI, and `tests/run-sidecar.sh <dir>` before changing `broker/`, `gmail-triggers/` or `garden-common/` (which both use), and `tests/run-pipelock.sh` before changing `pipelock/`. The CLI has no build step; the sidecar images are built by `lettucectl up`. CI (`.github/workflows/ci.yml`) runs all of these on every branch push and by hand (Actions, "Run workflow"); a new test script or linted file goes there too.
 
 ## Layout and flow
 - `lettucectl`: argument handling and the `cmd_*` functions (one per subcommand, dispatched from `main`).
