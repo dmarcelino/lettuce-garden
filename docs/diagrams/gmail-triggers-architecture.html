@@ -5266,7 +5266,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </g>
         <g data-graph-role="automatic-crossover" style="--step:2">
           <path data-graph-role="automatic-crossover-underlay" d="M 515 220 L 515 104" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="cloudflared" data-edge-to="vault" data-edge-label="/secrets/" data-edge-key="2" data-edge-id="route-secrets" data-composition-points="515,220;515,104" data-composition-crossover="halo" data-composition-independent="true" d="M 515 220 L 515 104" class="a-default" data-animate="edge" style="--step:2" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-edge-from="cloudflared" data-edge-to="vault" data-edge-label="/garden/secrets/" data-edge-key="2" data-edge-id="route-secrets" data-composition-points="515,220;515,104" data-composition-crossover="halo" data-composition-independent="true" d="M 515 220 L 515 104" class="a-default" data-animate="edge" style="--step:2" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:3">
           <path data-graph-role="automatic-crossover-underlay" d="M 590 243.95 L 627 243.95 Q 635 243.95 635 235.95 L 635 80 Q 635 72 643 72 L 680 72" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -5440,9 +5440,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <rect x="388.1" y="232" width="38.8" height="14" rx="3" class="c-mask"/>
           <text x="407.5" y="242" class="t-edge-emphasis" font-size="8" text-anchor="middle">tunnel</text>
         </g>
-        <g data-detail="context" data-edge-from="cloudflared" data-edge-to="vault" data-edge-label="/secrets/" data-edge-key="2" data-edge-id="route-secrets">
-          <rect x="488.4" y="200" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
-          <text x="515" y="210" class="t-edge-default" font-size="8" text-anchor="middle">/secrets/</text>
+        <g data-detail="context" data-edge-from="cloudflared" data-edge-to="vault" data-edge-label="/garden/secrets/" data-edge-key="2" data-edge-id="route-secrets">
+          <rect x="471.6" y="200" width="86.8" height="14" rx="3" class="c-mask"/>
+          <text x="515" y="210" class="t-edge-default" font-size="8" text-anchor="middle">/garden/secrets/</text>
         </g>
         <g data-detail="context" data-edge-from="cloudflared" data-edge-to="bff" data-edge-label="everything else" data-edge-key="3" data-edge-id="route-app">
           <rect x="594" y="137.975" width="82" height="14" rx="3" class="c-mask"/>
@@ -5744,7 +5744,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </div>
         <ul>
           <li>compose/gmail-triggers.yml behind the gmail-triggers profile (needs google)</li>
-          <li>Tunnel route ^/garden/gmail-triggers(/|$) to gmail-triggers:8000</li>
+          <li>Tunnel route ^/garden/gmail-triggers(/|$) to gmail-triggers:8000; ^/garden/?$ to the first garden sidecar that is on</li>
           <li>Generates the executor token once per stack; installs and removes the executor with the profile</li>
           <li>check_gmail_triggers: one bind mount, no symlinks on its path, Google volumes read-only, no privileges</li>
         </ul>

@@ -286,6 +286,17 @@ ensure_executor_token() {
     env_set "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN "$(openssl rand -hex 32)"
 }
 
+# sync_garden_profiles NAME -> GARDEN_PROFILES, the garden pages the landing page
+# links to, follows COMPOSE_PROFILES. The sidecars get only this list, so a
+# profile without a garden page changes nothing in their config and Compose
+# does not recreate them (which would relock the vault).
+sync_garden_profiles() {
+  local f garden
+  f=$(stack_env "$1")
+  garden=$(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)")
+  [[ $(env_get "$f" GARDEN_PROFILES) == "$garden" ]] || env_set "$f" GARDEN_PROFILES "$garden"
+}
+
 # check_stack NAME [--profiles LIST] -> dies with the first reason the stack must
 # not start. With --profiles, `profiles` checks the stack as it will be under
 # LIST, before it writes the lists: the stack.env and config.env lists may differ

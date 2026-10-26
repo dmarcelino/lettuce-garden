@@ -24,7 +24,9 @@ def main() -> None:
         sys.exit(2)
     vault = Vault(settings.db_path)
     broker = Broker(vault, Pusher(settings, vault), settings.public_origin)
-    app = create_app(broker, Authenticator(settings), settings.vapid_public_key)
+    app = create_app(
+        broker, Authenticator(settings), settings.vapid_public_key, garden_profiles=settings.garden_profiles
+    )
     uvicorn.run(
         app,
         host="0.0.0.0",

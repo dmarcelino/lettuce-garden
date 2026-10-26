@@ -5,6 +5,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from garden_common.garden import profiles_from_env
+
+# The pages live under this path, behind the tunnel route of the same name.
+PREFIX = "/garden/secrets"
 # An agent's request waits this long for the user's decision.
 REQUEST_TTL_SECONDS = 600
 # Shared values wait this long for the agent to fetch them (once).
@@ -43,6 +47,8 @@ class Settings:
     vapid_private_key: str
     vapid_contact: str
     db_path: str
+    # The garden pages that are on, for the /garden/ landing page's links.
+    garden_profiles: str = ""
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -69,4 +75,5 @@ class Settings:
             vapid_private_key=required("BROKER_VAPID_PRIVATE_KEY"),
             vapid_contact=required("PUSH_VAPID_CONTACT_EMAIL"),
             db_path=env.get("BROKER_DB_PATH", "/data/vault.db"),
+            garden_profiles=profiles_from_env(env),
         )

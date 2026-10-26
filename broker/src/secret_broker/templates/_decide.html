@@ -1,22 +1,30 @@
 {# The question the user answers: which private fields of which secret, and why. #}
-<form method="post" action="/secrets/r/{{ req.id }}/decide" class="decide">
+<form method="post" action="{{ base }}/r/{{ req.id }}/decide" class="stack">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <p><strong>{{ req.secret_name }}</strong> <span class="muted">{{ req.secret_kind }}{% if req.preview %} - {{ req.preview }}{% endif %}</span></p>
-  {% if req.details %}<p class="muted small">{% for label, value in req.details.items() %}{{ label }}: {{ value }}{% if not loop.last %} - {% endif %}{% endfor %}</p>{% endif %}
-  <p>An agent wants:</p>
+  <div>
+    <p><strong>{{ req.secret_name }}</strong> <span class="muted">{{ req.secret_kind }}{% if req.preview %} - {{ req.preview }}{% endif %}</span></p>
+    {% if req.details %}<p class="muted small">{% for label, value in req.details.items() %}{{ label }}: {{ value }}{% if not loop.last %} - {% endif %}{% endfor %}</p>{% endif %}
+  </div>
   <fieldset>
-    {% for key in req.fields %}
-    <label class="inline"><input type="checkbox" name="fields" value="{{ key }}" checked> {{ req.labels[key] }}</label>
-    {% endfor %}
+    <legend>An agent wants:</legend>
+    <div class="menu-list">
+      {% for key in req.fields %}
+      <label class="menu-row"><input type="checkbox" name="fields" value="{{ key }}" checked><span class="menu-row-text"><span class="menu-row-title">{{ req.labels[key] }}</span></span></label>
+      {% endfor %}
+    </div>
   </fieldset>
-  <p>It says it needs them to:</p>
-  <blockquote>{{ req.purpose }}</blockquote>
+  <div>
+    <p>It says it needs them to:</p>
+    <blockquote>{{ req.purpose }}</blockquote>
+  </div>
   {% if req.delivery == "env" %}
-  <p class="muted small">The agent asked to pass these to a command it runs, so they won't appear in the conversation. It can still use them however that command does.</p>
+  <p class="hint">The agent asked to pass these to a command it runs, so they won't appear in the conversation. It can still use them however that command does.</p>
   {% else %}
-  <p class="muted small">What you share is given to the agent and stays in that conversation, which the AI provider also sees.</p>
+  <p class="hint">What you share is given to the agent and stays in that conversation, which the AI provider also sees.</p>
   {% endif %}
-  <button name="action" value="share">Share once</button>
-  <button name="action" value="deny" class="deny">Deny</button>
-  <span class="muted small">expires {{ req.expires_at|time }}</span>
+  <div class="form-actions">
+    <button class="button" name="action" value="share">Share once</button>
+    <button class="button danger outline" name="action" value="deny">Deny</button>
+    <span class="leading muted small">Expires {{ req.expires_at|time }}</span>
+  </div>
 </form>

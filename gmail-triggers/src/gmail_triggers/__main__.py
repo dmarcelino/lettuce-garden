@@ -29,7 +29,14 @@ def main() -> None:
     client = httpx.AsyncClient(timeout=httpx.Timeout(20.0), follow_redirects=False)
     google = Google(settings.policy_dir, settings.creds_dir, client)
     poller = Poller(store, google, settings.poll_seconds)
-    app = create_app(store, google, Authenticator(settings), settings.executor_token, poller=poller)
+    app = create_app(
+        store,
+        google,
+        Authenticator(settings),
+        settings.executor_token,
+        poller=poller,
+        garden_profiles=settings.garden_profiles,
+    )
     uvicorn.run(
         app,
         host="0.0.0.0",
