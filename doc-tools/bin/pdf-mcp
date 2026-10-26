@@ -1,0 +1,9 @@
+#!/bin/sh
+# The PDF MCP server (stdio). Lettuce's MCP entry: command /opt/lettuce-doc-tools/bin/pdf-mcp
+set -eu
+. /opt/lettuce-doc-tools/lib/launch.sh
+doc_tools_env
+export PDF_WORKSPACE_ROOT="$WORKSPACE" GOTENBERG_URL=http://gotenberg:3000
+# -I: nothing from the workspace or the environment lands on sys.path; -B: the
+# tree is read-only.
+exec "$DOC_TOOLS/venv/bin/python" -I -B -m pdf_mcp

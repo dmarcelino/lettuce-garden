@@ -1,0 +1,17 @@
+#!/bin/sh
+# OfficeAgent's MCP server (stdio), confined to the calling agent's workspace.
+# Lettuce's MCP entry: command /opt/lettuce-doc-tools/bin/officeagent
+set -eu
+. /opt/lettuce-doc-tools/lib/launch.sh
+doc_tools_env
+mkdir -p "$TMPDIR/dotnet-bundle"
+export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_EnableDiagnostics=0 \
+  DOTNET_BUNDLE_EXTRACT_BASE_DIR="$TMPDIR/dotnet-bundle"
+# .NET loads appsettings*.json from its content root, which is otherwise the
+# cwd (the workspace): a file there could add a connection rooted at / or turn
+# on inline content. Pin it to the read-only tree.
+export DOTNET_CONTENTROOT="$DOC_TOOLS/office"
+# Replaces config.json's placeholder root, which sits in the read-only mount so
+# a start without this launcher fails instead of writing somewhere.
+export OfficeAgent__FileSystemConnections__0__RootPath="$WORKSPACE"
+exec "$DOC_TOOLS/office/officeagent-mcp" --stdio --config "$DOC_TOOLS/office/config.json"

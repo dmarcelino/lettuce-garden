@@ -2658,6 +2658,377 @@ test_backup_script_copies_what_matters() {
   eq "$got" "./stack.env ./state/letta-home/claude/projects/t.jsonl ./state/letta-home/skills/from-settings/SKILL.md ./state/workspaces/agent-1/notes.md ./vault/vault.db"
 }
 
+# ── document tools ───────────────────────────────────────────────────────────
+# docs_tree -> the test copy has a doc-tools/ to hash (setup copies only the CLI)
+docs_tree() {
+  mkdir -p "$H/doc-tools/tests"
+  printf 'FROM scratch\n' >"$H/doc-tools/Dockerfile"
+}
+
+# docs_tag -> the tag lettucectl computes for the test copy's doc-tools/
+docs_tag() { (LETTUCE_HOME=$H && . "$H/lib/common.sh" && doc_tools_tag); }
+
+# docs_config [NAME] -> the rendered config also holds what compose/doc-tools.yml
+# renders for NAME (default alfred), and the shared project renders a Gotenberg
+# with the flags of the real compose/shared/gotenberg.yml
+docs_config() {
+  local name=${1:-alfred}
+  docs_tree
+  config_edit '.services["app-server"].volumes = [{"type":"image","source":"lettuce-doc-tools:'"$(docs_tag)"'",
+      "target":"/opt/lettuce-doc-tools","read_only":true}]
+    | .services["app-server"].networks = {"default":null,"doc-tools":null}
+    | .networks = {"default":{"name":"lettuce-'"$name"'_default"},"doc-tools":{"name":"lettuce-doc-tools-'"$name"'","external":true}}'
+  sed -n 's/^      - \(--.*\)$/\1/p' "$ROOT/compose/shared/gotenberg.yml" |
+    jq -R . | jq -sc '{services: {gotenberg: {read_only: true, cap_drop: ["ALL"], user: "1001:1001",
+      security_opt: ["no-new-privileges:true"], command: (["gotenberg"] + .), networks: {internal: null}}}, networks: {internal: {internal: true}}}' >"$T/shared-config.json"
+}
+
+# with_docs -> alfred runs the doc-tools profile (docs_config)
+with_docs() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,doc-tools/' "$H/stacks/alfred/stack.env"
+  docs_config
+}
+
+# docs_refused JQ MESSAGE -> `check` refuses alfred's rendered config after JQ
+docs_refused() {
+  config_edit "$1"
+  ctl check alfred
+  bad_rc
+  out_has "$2"
+}
+
+# line_of TEXT -> the number of the first calls.log line containing TEXT
+line_of() { grep -nF -- "$1" "$T/calls.log" | head -1 | cut -d: -f1; }
+
+test_doc_tools_tag_follows_what_goes_into_the_image() {
+  docs_tree
+  local a
+  a=$(docs_tag)
+  [[ $a =~ ^[0-9a-f]{10}$ ]] || fail "bad tag $a"
+  printf 'x\n' >"$H/doc-tools/tests/test_x.py"
+  eq "$(docs_tag)" "$a"
+  printf 'RUN true\n' >>"$H/doc-tools/Dockerfile"
+  [[ $(docs_tag) != "$a" ]] || fail "the tag did not change with the Dockerfile"
+}
+
+test_doc_tools_image_reference_fits_dockers_image_mount_name() {
+  # Docker 29 with the containerd snapshotter names an image mount's directory
+  # after hex(<container id>,src=<ref>,dst=<target>): past 53 characters of
+  # reference plus target, the name passes 255 bytes and the mount fails.
+  docs_tree
+  local got
+  got=$( (LETTUCE_HOME=$H && . "$H/lib/common.sh" && printf '%s %s' "$(doc_tools_image)" "$DOC_TOOLS_TARGET"))
+  ((${#got} - 1 <= 53)) || fail "${got% *} at ${got#* } is too long for an image mount"
+  grep -qF "target: ${got#* }" "$ROOT/compose/doc-tools.yml" || fail "compose/doc-tools.yml mounts elsewhere"
+}
+
+test_compose_adds_the_doc_tools_overlay_and_its_values_only_with_the_profile() {
+  added
+  with_docs
+  ctl up alfred
+  ok_rc
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "docker-env DOC_TOOLS_TAG=$(docs_tag) DOC_TOOLS_NETWORK=lettuce-doc-tools-alfred"
+  grep -q '^DOC_TOOLS' "$H/stacks/alfred/stack.env" && fail "doc-tools values written to stack.env"
+  true
+}
+
+test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
+  added
+  with_docs
+  stub STUB_IMAGES_MISSING=lettuce-doc-tools
+  ctl up alfred
+  ok_rc
+  log_has "docker build -q -t lettuce-doc-tools:$(docs_tag) $H/doc-tools"
+  log_has "docker network create --internal --label lettuce.doc-tools.stack=alfred lettuce-doc-tools-alfred"
+  log_has "docker network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
+  # The network exists before the app-server joins it, and Gotenberg joins after.
+  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
+    fail "the network was created after compose up"
+  (($(line_of "-p lettuce_shared") > $(line_of "up -d --build --remove-orphans"))) || fail "gotenberg started before the stack"
+}
+
+test_up_again_connects_nothing_twice() {
+  added
+  with_docs
+  ctl up alfred
+  ok_rc
+  : >"$T/calls.log"
+  ctl up alfred
+  ok_rc
+  log_lacks "network create"
+  log_lacks "network connect"
+  log_lacks "docker build"
+}
+
+test_up_without_doc_tools_makes_no_network_or_gotenberg() {
+  added
+  ctl up alfred
+  ok_rc
+  log_lacks "network create"
+  log_lacks "-p lettuce_shared --project-directory $H/compose/shared -f $H/compose/shared/gotenberg.yml --env-file /dev/null up"
+  log_lacks "doc-tools.yml"
+}
+
+test_check_accepts_the_doc_tools_overlay() {
+  added
+  with_docs
+  ctl check alfred
+  ok_rc
+}
+
+test_check_refuses_a_doc_tools_mount_that_is_not_this_image_read_only() {
+  added
+  with_docs
+  docs_refused '.services["app-server"].volumes[0].read_only = false' "read-only at /opt/lettuce-doc-tools"
+  docs_refused '.services["app-server"].volumes[0].read_only = true | .services["app-server"].volumes[0].source = "lettuce-doc-tools:old"' "read-only at /opt/lettuce-doc-tools"
+  docs_refused '.services["app-server"].volumes[0] = {"type":"bind","source":"/tmp/x","target":"/opt/lettuce-doc-tools"}' "read-only at /opt/lettuce-doc-tools"
+}
+
+test_check_refuses_an_app_server_without_its_default_network() {
+  added
+  with_docs
+  docs_refused '.services["app-server"].networks = {"doc-tools":null}' "without default it loses the rest of the stack"
+}
+
+test_check_refuses_another_service_on_the_doc_tools_network() {
+  added
+  with_docs
+  docs_refused '.services.bff.networks = {"doc-tools":null}' "bff join(s) the doc-tools network"
+}
+
+test_check_refuses_a_doc_tools_network_that_is_not_lettucectls() {
+  added
+  with_docs
+  docs_refused '.networks["doc-tools"].external = false' "must be the external lettuce-doc-tools-alfred"
+  config_edit '.networks["doc-tools"].external = true'
+  echo "lettuce-doc-tools-alfred - false -" >>"$T/networks"
+  ctl check alfred
+  bad_rc
+  out_has "must be an internal network lettucectl made for alfred"
+}
+
+test_check_refuses_another_service_mounting_the_tools_whatever_the_profiles() {
+  added
+  config_edit '.services.bff.volumes = [{"type":"image","source":"lettuce-doc-tools:x","target":"/x","read_only":true}]'
+  ctl check alfred
+  bad_rc
+  out_has "bff mount(s) an image or the document tools"
+}
+
+test_check_refuses_doc_tools_on_an_old_docker() {
+  added
+  with_docs
+  stub STUB_DOCKER_VERSION=27.5.1
+  ctl check alfred
+  bad_rc
+  out_has "needs Docker >= 28"
+  stub STUB_DOCKER_VERSION=29.1.3
+  stub STUB_COMPOSE_VERSION=2.34.0
+  ctl check alfred
+  bad_rc
+  out_has "needs Docker Compose >= 2.35"
+}
+
+test_up_refuses_a_gotenberg_without_its_deny_flags() {
+  added
+  with_docs
+  jq -c '.services.gotenberg.command -= ["--chromium-deny-private-ips"]' "$T/shared-config.json" >"$T/s.json"
+  mv "$T/s.json" "$T/shared-config.json"
+  ctl up alfred
+  bad_rc
+  out_has "must run with --chromium-deny-private-ips"
+  log_lacks "-f $H/compose/shared/gotenberg.yml --env-file /dev/null up"
+}
+
+test_up_refuses_a_gotenberg_that_turns_a_deny_flag_back_off() {
+  added
+  with_docs
+  jq -c '.services.gotenberg.command += ["--libreoffice-deny-public-ips=false"]' "$T/shared-config.json" >"$T/s.json"
+  mv "$T/s.json" "$T/shared-config.json"
+  ctl up alfred
+  bad_rc
+  out_has "must run with --libreoffice-deny-public-ips"
+  log_lacks "-f $H/compose/shared/gotenberg.yml --env-file /dev/null up"
+}
+
+test_up_refuses_a_gotenberg_running_as_root_or_able_to_gain_privileges() {
+  local f
+  added
+  with_docs
+  cp "$T/shared-config.json" "$T/base.json"
+  for f in 'del(.services.gotenberg.user)' '.services.gotenberg.user = "root"' '.services.gotenberg.user = "0:1001"' \
+    'del(.services.gotenberg.security_opt)'; do
+    jq -c "$f" "$T/base.json" >"$T/shared-config.json"
+    : >"$T/calls.log"
+    ctl up alfred
+    bad_rc
+    out_has "gotenberg must run as a non-root user with no-new-privileges"
+    log_lacks "-f $H/compose/shared/gotenberg.yml --env-file /dev/null up"
+  done
+}
+
+test_up_refuses_a_gotenberg_that_publishes_a_port_or_is_not_hardened() {
+  added
+  with_docs
+  jq -c '.services.gotenberg.ports = [{"target":3000,"published":"3000"}]' "$T/shared-config.json" >"$T/s.json"
+  mv "$T/s.json" "$T/shared-config.json"
+  ctl up alfred
+  bad_rc
+  out_has "gotenberg must not publish ports"
+  jq -c 'del(.services.gotenberg.ports) | .services.gotenberg.read_only = false' "$T/shared-config.json" >"$T/s.json"
+  mv "$T/s.json" "$T/shared-config.json"
+  ctl up alfred
+  bad_rc
+  out_has "gotenberg must have read_only: true"
+}
+
+test_up_fails_at_the_end_when_gotenberg_cannot_start() {
+  added
+  with_docs
+  stub STUB_SHARED_UP_RC=1
+  ctl up alfred
+  bad_rc
+  log_has "up -d --build --remove-orphans"
+  out_has "the document tools (shared Gotenberg, networks) are out of step"
+}
+
+test_sync_removes_the_networks_of_stacks_that_are_gone() {
+  added
+  with_docs
+  echo "lettuce-doc-tools-ghost ghost true gotenberg-id" >>"$T/networks"
+  ctl up alfred
+  ok_rc
+  log_has "network disconnect -f lettuce-doc-tools-ghost gotenberg-id"
+  log_has "network rm lettuce-doc-tools-ghost"
+  grep -q '^lettuce-doc-tools-ghost ' "$T/networks" && fail "the orphan network is still there"
+  grep -q '^lettuce-doc-tools-alfred ' "$T/networks" || fail "alfred's network went too"
+}
+
+test_sync_connects_gotenberg_only_to_networks_lettucectl_made() {
+  added
+  ctl add hal hal@example.com
+  ok_rc
+  with_docs
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,doc-tools/' "$H/stacks/hal/stack.env"
+  # hal's name is taken by a network with a route out, made by someone else.
+  echo "lettuce-doc-tools-hal - false -" >>"$T/networks"
+  : >"$T/calls.log"
+  ctl up alfred
+  bad_rc
+  out_has "lettuce-doc-tools-hal must be an internal network lettucectl made for hal"
+  log_has "network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
+  log_lacks "network connect --alias gotenberg lettuce-doc-tools-hal"
+  # Nor one labelled for another stack, and Gotenberg leaves one it is already on.
+  sed -i 's/^lettuce-doc-tools-hal .*/lettuce-doc-tools-hal alfred true gotenberg-id/' "$T/networks"
+  : >"$T/calls.log"
+  ctl up alfred
+  bad_rc
+  log_has "network disconnect -f lettuce-doc-tools-hal gotenberg-id"
+  log_lacks "network connect --alias gotenberg lettuce-doc-tools-hal"
+}
+
+test_sync_fails_when_it_cannot_list_the_networks() {
+  added
+  with_docs
+  echo "lettuce-doc-tools-ghost ghost true -" >>"$T/networks"
+  stub STUB_NETWORK_LS_RC=1
+  ctl up alfred
+  bad_rc
+  out_has "the document tools (shared Gotenberg, networks) are out of step"
+}
+
+test_remove_drops_the_stacks_network_and_keeps_gotenberg() {
+  added
+  with_docs
+  ctl up alfred
+  ok_rc
+  : >"$T/calls.log"
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  (($(line_of "down -v") < $(line_of "network disconnect -f lettuce-doc-tools-alfred gotenberg-id"))) || fail "network dropped before down"
+  log_has "network rm lettuce-doc-tools-alfred"
+  log_lacks "-f $H/compose/shared/gotenberg.yml --env-file /dev/null down"
+  grep -qx 'lettuce_shared gotenberg' "$T/containers.txt" || fail "gotenberg removed with the stack"
+}
+
+test_remove_purge_renders_the_stack_without_doc_tools() {
+  added
+  with_docs
+  ctl up alfred
+  ok_rc
+  : >"$T/calls.log"
+  ctl remove alfred --purge <<<"alfred"
+  ok_rc
+  grep 'run --rm --no-deps' "$T/calls.log" | grep -q doc-tools.yml && fail "the purge run mounts the doc-tools image"
+  eq "$(grep '^docker compose' "$T/calls.log" | tail -1 | grep -o ' down$')" " down"
+  [[ ! -e $H/stacks/alfred ]] || fail "stack directory still exists"
+  true
+}
+
+test_restart_keeps_gotenberg_attached() {
+  added
+  with_docs
+  ctl up alfred
+  ok_rc
+  : >"$T/calls.log"
+  ctl restart alfred
+  ok_rc
+  log_lacks "network rm"
+  log_lacks "network disconnect"
+}
+
+test_profiles_dropping_doc_tools_stops_gotenberg_and_removes_the_networks() {
+  added
+  with_docs
+  ctl up alfred
+  ok_rc
+  : >"$T/calls.log"
+  ctl profiles cloudflared
+  ok_rc
+  log_has "-p lettuce_shared --project-directory $H/compose/shared -f $H/compose/shared/gotenberg.yml --env-file /dev/null down"
+  log_has "network rm lettuce-doc-tools-alfred"
+  [[ ! -s $T/networks ]] || fail "networks left: $(cat "$T/networks")"
+  # A re-run has nothing left to do.
+  : >"$T/calls.log"
+  ctl profiles cloudflared
+  ok_rc
+  log_lacks "down"
+  log_lacks "network rm"
+}
+
+test_profiles_adding_doc_tools_prints_the_mcp_entries() {
+  added
+  docs_config
+  ctl profiles cloudflared,doc-tools
+  ok_rc
+  log_has "network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
+  out_has "office -> /opt/lettuce-doc-tools/bin/officeagent"
+  out_has "pdf -> /opt/lettuce-doc-tools/bin/pdf-mcp"
+}
+
+test_add_with_doc_tools_prints_the_mcp_entries() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
+  docs_config
+  ctl add alfred alfred@example.com
+  ok_rc
+  out_has "https://alfred.example.org Settings -> MCP"
+  log_has "network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
+}
+
+test_shared_project_is_not_a_stack_named_shared() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
+  docs_config shared
+  ctl add shared shared@example.com
+  ok_rc
+  log_has "-p lettuce-shared --project-directory $H/upstream/docker"
+  # The stack's files never go to the shared project, nor the other way round.
+  grep -- '-p lettuce_shared ' "$T/calls.log" | grep -q upstream && fail "the shared project got a stack's files"
+  grep -- '-p lettuce-shared ' "$T/calls.log" | grep -q compose/shared && fail "the stack got the shared project's files"
+  true
+}
+
 for t in $(declare -F | awk '$3 ~ /^test_/ { print $3 }'); do
   run_test "$t"
 done

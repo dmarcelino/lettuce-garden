@@ -49,6 +49,9 @@ env_unset() {
 
 file_mode() { stat -c '%a' "$1"; }
 
+# version_ge A B -> success when version A >= B
+version_ge() { printf '%s\n%s\n' "$2" "$1" | sort -V -C; }
+
 # ── paths and config ─────────────────────────────────────────────────────────
 config_file() { printf '%s/config.env' "$LETTUCE_HOME"; }
 upstream_dir() { printf '%s/upstream' "$LETTUCE_HOME"; }
@@ -173,14 +176,21 @@ compose() { compose_env "$(stack_env "$1")" "$@"; }
 # compose_env ENV_FILE NAME ARGS... -> `compose`, reading ENV_FILE in place of
 # the stack's stack.env (check_stack renders a profile list before it is written)
 compose_env() {
-  local env_file=$1 name=$2 up proxy=()
+  local env_file=$1 name=$2 up profiles extra=() vars=()
   shift 2
   up=$(upstream_dir)
-  # Only with the profile: without it, no container gets a proxy setting.
-  if has_profile "$(env_get "$env_file" COMPOSE_PROFILES)" pipelock; then
-    proxy=(-f "$LETTUCE_HOME/compose/pipelock-proxy.yml")
+  profiles=$(env_get "$env_file" COMPOSE_PROFILES)
+  # Only with the profile: without it, the app-server has no doc-tools mount or
+  # network. The two values are lettucectl's, never stack.env's.
+  if has_profile "$profiles" doc-tools; then
+    extra+=(-f "$LETTUCE_HOME/compose/doc-tools.yml")
+    vars+=(DOC_TOOLS_TAG="$(doc_tools_tag)" DOC_TOOLS_NETWORK="$(doc_tools_network "$name")")
   fi
-  env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
+  # Only with the profile: without it, no container gets a proxy setting.
+  if has_profile "$profiles" pipelock; then
+    extra+=(-f "$LETTUCE_HOME/compose/pipelock-proxy.yml")
+  fi
+  env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} "${vars[@]}" \
     docker compose -p "lettuce-$name" \
     --project-directory "$up/docker" \
     -f "$up/docker/compose.yml" \
@@ -189,10 +199,53 @@ compose_env() {
     -f "$LETTUCE_HOME/compose/secrets.yml" \
     -f "$LETTUCE_HOME/compose/gmail-triggers.yml" \
     -f "$LETTUCE_HOME/compose/pipelock.yml" \
-    "${proxy[@]}" \
+    "${extra[@]}" \
     --env-file "$env_file" \
     "$@"
 }
+
+# compose_shared ARGS... -> docker compose for the host's shared services
+# (compose/shared/), one project for every stack. Its name has an underscore,
+# which no stack name can, so it can never be a stack's project. No stack.env:
+# an explicit empty env file keeps Compose from reading any .env.
+compose_shared() {
+  env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
+    docker compose -p lettuce_shared \
+    --project-directory "$LETTUCE_HOME/compose/shared" \
+    -f "$LETTUCE_HOME/compose/shared/gotenberg.yml" \
+    --env-file /dev/null \
+    "$@"
+}
+
+# ── document tools ───────────────────────────────────────────────────────────
+# doc_tools_tag -> the content hash of doc-tools/ (its tests excluded), the tag
+# of the image every stack with the doc-tools profile mounts. Any change to what
+# goes into the image is a new tag, so `up` rebuilds it and recreates the
+# app-servers; an unchanged tree reuses the image. Ten hex characters: Docker
+# with the containerd snapshotter puts the image reference and the mount target
+# into one hex-encoded file name, so together they must stay within 53
+# characters (check_doc_tools).
+doc_tools_tag() {
+  local d=$LETTUCE_HOME/doc-tools
+  [[ -f $d/Dockerfile ]] || die "doc-tools/Dockerfile is missing"
+  (cd "$d" && find . -type f ! -path './tests/*' ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 |
+    LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-10)
+}
+
+doc_tools_image() { printf 'lettuce-doc-tools:%s' "$(doc_tools_tag)"; }
+
+# doc_tools_network NAME -> the stack's internal network to the shared Gotenberg
+doc_tools_network() { printf 'lettuce-doc-tools-%s' "$1"; }
+
+# DOC_TOOLS_LABEL marks the networks lettucectl made, with the stack's name.
+DOC_TOOLS_LABEL=lettuce.doc-tools.stack
+# Where the app-server mounts the image (compose/doc-tools.yml, the launchers and
+# the MCP entries people add use it too).
+DOC_TOOLS_TARGET=/opt/lettuce-doc-tools
+# The most an image mount's reference plus target may hold: Docker names the
+# mount's directory hex(<64-char container id>,src=<ref>,dst=<target>), and a
+# file name has 255 bytes.
+DOC_TOOLS_MOUNT_NAME_MAX=53
 
 # host_docker ARGS... -> plain docker, under `env -i` like `compose`
 host_docker() {
@@ -286,6 +339,21 @@ ensure_executor_token() {
     env_set "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN "$(openssl rand -hex 32)"
 }
 
+# env_without_profile FILE PROFILE -> the path of a private temp copy of the env
+# FILE whose COMPOSE_PROFILES lacks PROFILE; the caller removes it
+env_without_profile() {
+  local tmp list p out=()
+  tmp=$(mktemp "$1.XXXXXX")
+  chmod 600 "$tmp"
+  list=$(env_get "$1" COMPOSE_PROFILES)
+  local IFS=,
+  for p in $list; do
+    [[ $p == "$2" ]] || out+=("$p")
+  done
+  { grep -v '^COMPOSE_PROFILES=' "$1" || true; printf 'COMPOSE_PROFILES=%s\n' "${out[*]}"; } >"$tmp"
+  printf '%s' "$tmp"
+}
+
 # check_stack NAME [--profiles LIST] -> dies with the first reason the stack must
 # not start. With --profiles, `profiles` checks the stack as it will be under
 # LIST, before it writes the lists: the stack.env and config.env lists may differ
@@ -366,6 +434,73 @@ check_stack() {
       die "$name: GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters (delete the line and run: lettucectl up $name)"
     check_gmail_triggers "$name" "$rendered" "$(env_get "$f" LETTA_STATE_DIR)"
   fi
+  # Whatever the profiles: the tools' image and network are the app-server's only.
+  k=$(jq -r '[.services | to_entries[] | select(.key != "app-server")
+    | select([(.value.volumes // [])[] | select(.type == "image" or ((.source // "") | startswith("lettuce-doc-tools")))] | length > 0)
+    | .key] | join(", ")' <<<"$rendered")
+  [[ -z $k ]] || die "$name: $k mount(s) an image or the document tools; only the app-server may (compose/doc-tools.yml)"
+  if has_profile "$profiles" doc-tools; then
+    check_doc_tools "$name" "$rendered"
+  fi
+}
+
+# check_doc_tools NAME RENDERED -> the app-server keeps what compose/doc-tools.yml
+# gives it and nothing more: the doc-tools image of this tree, read-only, at
+# /opt/lettuce-doc-tools; its default network beside the stack's internal one
+# to Gotenberg, which no other service joins; and a Docker that has image mounts.
+check_doc_tools() {
+  local name=$1 rendered=$2 image net k
+  image=$(doc_tools_image)
+  net=$(doc_tools_network "$name")
+  k=$(docker_version)
+  version_ge "$k" 28.0.0 || die "$name: the doc-tools profile needs Docker >= 28 for image mounts (found ${k:-unknown})"
+  k=$(host_docker compose version --short 2>/dev/null)
+  version_ge "${k#v}" 2.35.0 || die "$name: the doc-tools profile needs Docker Compose >= 2.35 for image mounts (found ${k:-unknown})"
+  ((${#image} + ${#DOC_TOOLS_TARGET} <= DOC_TOOLS_MOUNT_NAME_MAX)) ||
+    die "$name: $image at $DOC_TOOLS_TARGET is too long for an image mount (Docker fails with 'file name too long' past $DOC_TOOLS_MOUNT_NAME_MAX characters)"
+  jq -e --arg i "$image" --arg t "$DOC_TOOLS_TARGET" '[.services["app-server"].volumes // [] | .[] | select(.target == $t)]
+    | length == 1 and .[0].type == "image" and .[0].source == $i and .[0].read_only == true' <<<"$rendered" >/dev/null ||
+    die "$name: the app-server must mount $image read-only at /opt/lettuce-doc-tools, and nothing else there (compose/doc-tools.yml)"
+  jq -e '.services["app-server"].networks // {} | has("default") and has("doc-tools")' <<<"$rendered" >/dev/null ||
+    die "$name: the app-server must be on its default network and doc-tools; without default it loses the rest of the stack (compose/doc-tools.yml)"
+  k=$(jq -r '[.services | to_entries[] | select(.key != "app-server") | select(.value.networks // {} | has("doc-tools")) | .key] | join(", ")' <<<"$rendered")
+  [[ -z $k ]] || die "$name: $k join(s) the doc-tools network; only the app-server may (compose/doc-tools.yml)"
+  jq -e --arg n "$net" '.networks["doc-tools"] | .external == true and .name == $n' <<<"$rendered" >/dev/null ||
+    die "$name: the doc-tools network must be the external $net (compose/doc-tools.yml)"
+  if host_docker network inspect "$net" >/dev/null 2>&1; then
+    k=$(host_docker network inspect "$net" --format "{{.Internal}} {{index .Labels \"$DOC_TOOLS_LABEL\"}}")
+    [[ $k == "true $name" ]] ||
+      die "$name: $net must be an internal network lettucectl made for $name; remove it (docker network rm $net) and run: lettucectl up $name"
+  fi
+}
+
+# docker_version -> the Docker Engine's version
+docker_version() { host_docker version --format '{{.Server.Version}}' 2>/dev/null; }
+
+# check_gotenberg RENDERED -> the shared Gotenberg (compose/shared/gotenberg.yml,
+# rendered) keeps its hardening (a non-root user and no-new-privileges too),
+# publishes nothing, mounts nothing but tmpfs, joins only internal networks,
+# and keeps the flags that stop a document from fetching URLs, none of them
+# turned back off by a later --flag=false
+check_gotenberg() {
+  local rendered=$1 svc flag
+  svc=$(jq -c '.services.gotenberg // empty' <<<"$rendered")
+  [[ -n $svc ]] || die "the shared gotenberg service is missing (compose/shared/gotenberg.yml)"
+  check_hardened shared gotenberg "$svc"
+  jq -e '((.user // "") | . != "" and (test("^(0|root)(:|$)") | not))
+    and ((.security_opt // []) | any(. == "no-new-privileges:true" or . == "no-new-privileges"))' <<<"$svc" >/dev/null ||
+    die "shared: gotenberg must run as a non-root user with no-new-privileges (compose/shared/gotenberg.yml)"
+  jq -e '(.ports // []) | length == 0' <<<"$svc" >/dev/null || die "shared: gotenberg must not publish ports"
+  jq -e '(.volumes // []) | length == 0' <<<"$svc" >/dev/null || die "shared: gotenberg must not mount anything (tmpfs only)"
+  jq -e '[.networks // {} | to_entries[] | select(.value.internal != true)] | length == 0' <<<"$rendered" >/dev/null ||
+    die "shared: gotenberg's own network must be internal"
+  for flag in --chromium-deny-private-ips --chromium-deny-public-ips --chromium-disable-javascript \
+    --libreoffice-deny-private-ips --libreoffice-deny-public-ips --api-disable-download-from --webhook-disable; do
+    jq -e --arg f "$flag" '(.command // []) | index($f) and all(.[]; (startswith($f + "=") | not) or . == $f + "=true")' <<<"$svc" >/dev/null ||
+      die "shared: gotenberg must run with $flag; without it a document can fetch URLs inside the host (compose/shared/gotenberg.yml)"
+  done
+  jq -e '[(.command // [])[] | select(test("allow-list|disable-web-security|log-level=debug"))] | length == 0' <<<"$svc" >/dev/null ||
+    die "shared: gotenberg must not set an allow-list, disable web security or log at debug (compose/shared/gotenberg.yml)"
 }
 
 # paths_overlap A B -> success when A and B are the same path or one contains

@@ -8,8 +8,74 @@ STUB_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STUB_LOG=$STUB_ROOT/calls.log
 printf 'docker %s\n' "$*" >>"$STUB_LOG"
 printf 'docker-env PUBLIC_ORIGIN=%s\n' "${PUBLIC_ORIGIN:-}" >>"$STUB_LOG"
+[[ -z ${DOC_TOOLS_TAG:-} ]] || printf 'docker-env DOC_TOOLS_TAG=%s DOC_TOOLS_NETWORK=%s\n' "$DOC_TOOLS_TAG" "${DOC_TOOLS_NETWORK:-}" >>"$STUB_LOG"
 args=" $* "
+NETS=$STUB_ROOT/networks
+# The last argument (a network or container name).
+last=${*: -1}
 case $args in
+  " version "*) echo "${STUB_DOCKER_VERSION:-29.1.3}" ;;
+  " build "*) exit "${STUB_BUILD_RC:-0}" ;;
+  # Networks live in $STUB_ROOT/networks, lines of
+  # "<name> <stack label or -> <internal true|false> <attached ids, comma-separated or ->".
+  " network ls "*)
+    [[ ${STUB_NETWORK_LS_RC:-0} == 0 ]] || exit "$STUB_NETWORK_LS_RC"
+    awk '$2 != "-" { print $1 }' "$NETS" 2>/dev/null ;;
+  " network inspect "*)
+    for a in "$@"; do
+      line=$(awk -v n="$a" '$1 == n' "$NETS" 2>/dev/null)
+      [[ -n $line ]] && break
+    done
+    [[ -n $line ]] || exit 1
+    read -r _ label internal ids <<<"$line"
+    case $args in
+      *".Internal"*) echo "$internal $([[ $label == - ]] || echo "$label")" ;;
+      *".Containers"*) [[ $ids == - ]] || tr ',' ' ' <<<"$ids" ;;
+      *) echo '[]' ;;
+    esac
+    ;;
+  " network create "*)
+    [[ ${STUB_NETWORK_CREATE_RC:-0} == 0 ]] || exit "$STUB_NETWORK_CREATE_RC"
+    label=- internal=false prev=""
+    for a in "$@"; do
+      [[ $prev == --label ]] && label=${a#*=}
+      [[ $a == --internal ]] && internal=true
+      prev=$a
+    done
+    echo "$last $label $internal -" >>"$NETS"
+    ;;
+  " network connect "*)
+    net=${*: -2:1}
+    awk -v n="$net" -v c="$last" '$1 == n { $4 = ($4 == "-" ? c : $4 "," c) } { print }' "$NETS" >"$NETS.tmp" && mv "$NETS.tmp" "$NETS"
+    ;;
+  " network disconnect "*)
+    net=${*: -2:1}
+    awk -v n="$net" -v c="$last" '$1 == n { k = split($4, a, ","); o = ""; for (i = 1; i <= k; i++) if (a[i] != c && a[i] != "-") o = o (o ? "," : "") a[i]; $4 = (o ? o : "-") } { print }' "$NETS" >"$NETS.tmp" && mv "$NETS.tmp" "$NETS"
+    ;;
+  " network rm "*)
+    [[ ${STUB_NETWORK_RM_RC:-0} == 0 ]] || exit "$STUB_NETWORK_RM_RC"
+    awk -v n="$last" '$1 == n && $4 != "-" { busy = 1 } END { exit busy }' "$NETS" 2>/dev/null || exit 1
+    awk -v n="$last" '$1 != n' "$NETS" >"$NETS.tmp" 2>/dev/null && mv "$NETS.tmp" "$NETS"
+    ;;
+  # The shared project (compose_shared): its config from shared-config.json; its
+  # gotenberg exists once `up` ran, as the line "lettuce_shared gotenberg" in
+  # containers.txt, with the id gotenberg-id.
+  *" -p lettuce_shared "*" config --format json "*) cat "$STUB_ROOT/shared-config.json" 2>/dev/null ;;
+  *" -p lettuce_shared "*" up -d "*)
+    [[ ${STUB_SHARED_UP_RC:-0} == 0 ]] || exit "$STUB_SHARED_UP_RC"
+    grep -qx 'lettuce_shared gotenberg' "$STUB_ROOT/containers.txt" 2>/dev/null ||
+      echo 'lettuce_shared gotenberg' >>"$STUB_ROOT/containers.txt"
+    ;;
+  *" -p lettuce_shared "*" down "*)
+    # Like Docker: a removed container leaves every network it was on.
+    sed -i '/^lettuce_shared gotenberg$/d' "$STUB_ROOT/containers.txt"
+    if [[ -f $NETS ]]; then
+      awk '{ k = split($4, a, ","); o = ""; for (i = 1; i <= k; i++) if (a[i] != "gotenberg-id" && a[i] != "-") o = o (o ? "," : "") a[i]; $4 = (o ? o : "-") } { print }' "$NETS" >"$NETS.tmp" && mv "$NETS.tmp" "$NETS"
+    fi
+    ;;
+  *" -p lettuce_shared "*" ps -aq gotenberg "*)
+    grep -qx 'lettuce_shared gotenberg' "$STUB_ROOT/containers.txt" 2>/dev/null && echo gotenberg-id
+    ;;
   " run "*)
     # Values passed by name (`-e NAME`) go to run-env.log, so tests can tell them
     # from argv, which is all calls.log sees.
@@ -51,6 +117,10 @@ case $args in
     ;;
   " image inspect "*)
     [[ ${STUB_IMAGE_RC:-0} == 0 ]] || exit "$STUB_IMAGE_RC"
+    # STUB_IMAGES_MISSING: image names (or name prefixes) that do not exist.
+    for v in ${STUB_IMAGES_MISSING:-}; do
+      [[ $last == "$v"* ]] && exit 1
+    done
     # Like a Compose-built image: it carries the project's labels.
     echo '{"Env":["NODE_VERSION=22","PATH=/usr/local/bin:/usr/bin:/bin"],"Labels":{"com.docker.compose.project":"lettuce-alfred","com.docker.compose.service":"app-server","org.opencontainers.image.title":"letta-code"}}'
     ;;
@@ -110,6 +180,7 @@ case $args in
         secrets) echo secret-broker ;;
         gmail-triggers) echo gmail-triggers ;;
         pipelock) echo pipelock ;;
+        doc-tools) ;;
       esac
     done
     ;;
