@@ -213,7 +213,7 @@
       "id": "route-secrets",
       "from": "cloudflared",
       "to": "vault",
-      "label": "/secrets/"
+      "label": "/garden/secrets/"
     },
     {
       "id": "route-app",
@@ -314,7 +314,7 @@
       "title": "lettucectl (host)",
       "items": [
         "compose/gmail-triggers.yml behind the gmail-triggers profile (needs google)",
-        "Tunnel route ^/garden/gmail-triggers(/|$) to gmail-triggers:8000",
+        "Tunnel route ^/garden/gmail-triggers(/|$) to gmail-triggers:8000; ^/garden/?$ to the first garden sidecar that is on",
         "Generates the executor token once per stack; installs and removes the executor with the profile",
         "check_gmail_triggers: one bind mount, no symlinks on its path, Google volumes read-only, no privileges"
       ]

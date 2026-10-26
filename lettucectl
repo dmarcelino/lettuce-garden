@@ -279,6 +279,7 @@ executor_out_of_step() {
 up_stack() {
   ensure_push_keys "$1"
   ensure_executor_token "$1"
+  sync_garden_profiles "$1"
   check_stack "$1"
   # The app-server mounts the image and joins the network; both must exist.
   if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" doc-tools; then
@@ -670,7 +671,7 @@ cmd_profiles() {
     info "profiles for every stack: $new"
   fi
 
-  # The tunnel routes /secrets/ only with the `secrets` profile. Applied on
+  # The tunnel routes each garden page only with its profile. Applied on
   # every run, before the stacks start, so a re-run repairs a failed update.
   for n in "${stacks[@]}"; do
     route_stack "$n" || unrouted+=("$n")

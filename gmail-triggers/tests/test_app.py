@@ -123,6 +123,27 @@ def test_healthz_is_open_and_root_redirects(client):
     assert r.status_code == 308 and r.headers["location"] == f"{B}/"
 
 
+def test_garden_landing_needs_access_and_lists_the_features_that_are_on(env, authenticator, signing_key):
+    app = create_app(env.store, env.google, authenticator, TOKEN, garden_profiles="gmail-triggers")
+    jwt = {"cf-access-jwt-assertion": make_jwt(signing_key)}
+    with TestClient(app, base_url=ORIGIN, follow_redirects=False) as c:
+        for path in ("/garden", "/garden/"):
+            assert c.get(path).status_code == 403, path
+            r = c.get(path, headers=jwt)
+            assert r.status_code == 200, path
+            assert "script-src 'none'" in r.headers["content-security-policy"]
+            assert f'href="{B}/"' in r.text and f'href="{B}/garden.css"' in r.text
+            assert 'href="/garden/secrets/"' not in r.text
+    app = create_app(env.store, env.google, authenticator, TOKEN, garden_profiles="secrets,gmail-triggers")
+    with TestClient(app, base_url=ORIGIN) as c:
+        page = c.get("/garden/", headers=jwt).text
+    assert 'href="/garden/secrets/"' in page and f'href="{B}/"' in page
+
+
+def test_pages_link_to_the_garden(client):
+    assert 'href="/garden/">Lettuce Garden</a>' in client.get(f"{B}/").text
+
+
 def test_pages_carry_the_security_headers_and_no_script(client, env):
     env.write_agents()
     rule = saved_rule(env)

@@ -24,6 +24,7 @@ from .config import (
     MAX_PENDING,
     MAX_PURPOSE_LENGTH,
     MAX_WAIT_SECONDS,
+    PREFIX,
     REQUEST_TTL_SECONDS,
     RESULT_TTL_SECONDS,
 )
@@ -117,7 +118,7 @@ class Broker:
             log.warning("push failed error=%s", type(e).__name__)
 
     def url(self, path: str) -> str:
-        return f"{self._origin}/secrets/{path}"
+        return f"{self._origin}{PREFIX}/{path}"
 
     def _locked_answer(self) -> dict[str, Any]:
         now = self.vault.now()
@@ -127,7 +128,7 @@ class Broker:
                 {
                     "title": "Vault locked",
                     "body": "An agent wants to use your vault. Unlock it to continue.",
-                    "url": "/secrets/",
+                    "url": f"{PREFIX}/",
                     "tag": "vault-locked",
                 }
             )
@@ -280,7 +281,7 @@ class Broker:
                 {
                     "title": "Shared with an agent",
                     "body": f"{secret.name}: {labels}",
-                    "url": "/secrets/audit",
+                    "url": f"{PREFIX}/audit",
                     "tag": f"vault-shared-{secret.id}",
                 }
             )
@@ -310,7 +311,7 @@ class Broker:
             {
                 "title": "Approve sharing",
                 "body": f"{secret.name}: {labels}",
-                "url": f"/secrets/r/{req.id}",
+                "url": f"{PREFIX}/r/{req.id}",
                 "tag": f"vault-request-{req.id}",
             }
         )

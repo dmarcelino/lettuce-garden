@@ -111,6 +111,9 @@ def test_settings_refuse_a_missing_or_malformed_token():
             Settings.from_env({**base, "GMAIL_TRIGGERS_EXECUTOR_TOKEN": token})
     settings = Settings.from_env({**base, "GMAIL_TRIGGERS_EXECUTOR_TOKEN": TOKEN})
     assert settings.executor_token == TOKEN and TOKEN not in repr(settings)
+    assert settings.garden_profiles == ""
+    settings = Settings.from_env({**base, "GMAIL_TRIGGERS_EXECUTOR_TOKEN": TOKEN, "GARDEN_PROFILES": "secrets,a b"})
+    assert settings.garden_profiles == "secrets"
 
 
 # -- requests and results ---------------------------------------------------------

@@ -105,21 +105,38 @@ cf_tunnel_token() {
 
 # Routes that profiles add on the stack's hostname, ahead of the app-server:
 # "<profile> <path regex> <service>". Each service has its own UI and Access check.
+# Each serves /garden/<profile>/, which the garden landing page links to.
 PROFILE_ROUTES=(
-  'secrets ^/secrets(/|$) http://secret-broker:8000'
+  'secrets ^/garden/secrets(/|$) http://secret-broker:8000'
   'gmail-triggers ^/garden/gmail-triggers(/|$) http://gmail-triggers:8000'
 )
 
+# garden_profiles PROFILES -> the PROFILE_ROUTES profiles in PROFILES, comma-separated,
+# in PROFILE_ROUTES order
+garden_profiles() {
+  local r p out=''
+  for r in "${PROFILE_ROUTES[@]}"; do
+    p=${r%% *}
+    has_profile "$1" "$p" && out+=${out:+,}$p
+  done
+  printf '%s\n' "$out"
+}
+
 # cf_tunnel_configure ACCOUNT TUNNEL_ID HOST PROFILES -> HOST to the stack's
 # app-server, 404 for anything else; first, the PROFILE_ROUTES of the profiles
-# that are on (same hostname, same Access app).
+# that are on (same hostname, same Access app), then /garden itself to the
+# first of them, which renders the landing page.
 cf_tunnel_configure() {
-  local r p path svc routes='[]'
+  local r p path svc landing='' routes='[]'
   for r in "${PROFILE_ROUTES[@]}"; do
     read -r p path svc <<<"$r"
     has_profile "${4:-}" "$p" || continue
     routes=$(jq -c --arg h "$3" --arg p "$path" --arg s "$svc" '. + [{hostname: $h, path: $p, service: $s}]' <<<"$routes")
+    landing=${landing:-$svc}
   done
+  if [[ -n $landing ]]; then
+    routes=$(jq -c --arg h "$3" --arg s "$landing" '. + [{hostname: $h, path: "^/garden/?$", service: $s}]' <<<"$routes")
+  fi
   cf_api PUT "/accounts/$1/cfd_tunnel/$2/configurations" "$(jq -cn --arg h "$3" --argjson r "$routes" '{config: {ingress: (
     $r + [{hostname: $h, service: "http://app-server:8080"}, {service: "http_status:404"}])}}')" >/dev/null
 }

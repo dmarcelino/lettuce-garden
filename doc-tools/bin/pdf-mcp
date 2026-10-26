@@ -1,6 +1,7 @@
 #!/bin/sh
 # The PDF MCP server (stdio). Lettuce's MCP entry: command /opt/lettuce-doc-tools/bin/pdf-mcp
 set -eu
+# shellcheck source=SCRIPTDIR/../lib/launch.sh
 . /opt/lettuce-doc-tools/lib/launch.sh
 doc_tools_env
 export PDF_WORKSPACE_ROOT="$WORKSPACE" GOTENBERG_URL=http://gotenberg:3000

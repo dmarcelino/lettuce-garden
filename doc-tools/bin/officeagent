@@ -2,6 +2,7 @@
 # OfficeAgent's MCP server (stdio), confined to the calling agent's workspace.
 # Lettuce's MCP entry: command /opt/lettuce-doc-tools/bin/officeagent
 set -eu
+# shellcheck source=SCRIPTDIR/../lib/launch.sh
 . /opt/lettuce-doc-tools/lib/launch.sh
 doc_tools_env
 mkdir -p "$TMPDIR/dotnet-bundle"

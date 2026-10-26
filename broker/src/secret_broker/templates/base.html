@@ -2,39 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="csrf" content="{{ csrf }}">
   <meta name="vapid" content="{{ vapid_public_key }}">
-  <meta name="theme-color" content="#2e7d32">
-  <title>{% block title %}Vault{% endblock %} - Lettuce</title>
+  <meta name="base" content="{{ base }}">
+  <meta name="theme-color" content="#e7eaf0">
+  <meta name="color-scheme" content="light">
+  <title>{% block title %}Vault{% endblock %} - Lettuce Garden</title>
   <!-- use-credentials: the manifest fetch must carry the Access cookie, or Access
        answers with its login page and the app cannot be installed. -->
-  <link rel="manifest" href="/secrets/manifest.webmanifest" crossorigin="use-credentials">
-  <link rel="icon" href="/secrets/icon-192.png">
-  <link rel="apple-touch-icon" href="/secrets/icon-192.png">
-  <link rel="stylesheet" href="/secrets/app.css">
-  <script src="/secrets/app.js" defer></script>
+  <link rel="manifest" href="{{ base }}/manifest.webmanifest" crossorigin="use-credentials">
+  <link rel="icon" href="{{ base }}/icon-192.png">
+  <link rel="apple-touch-icon" href="{{ base }}/icon-192.png">
+  <link rel="stylesheet" href="{{ base }}/garden.css">
+  <link rel="stylesheet" href="{{ base }}/app.css">
+  <script src="{{ base }}/app.js" defer></script>
 </head>
 <body>
-  <header>
-    <strong>Vault</strong>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <img class="app-icon" src="{{ base }}/icon-192.png" width="28" height="28" alt="">
+      <a class="title" href="{{ base }}/">Vault</a>
+      {% if email and unlocked %}
+      <form method="post" action="{{ base }}/lock" class="lock">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="button ghost">Lock</button>
+      </form>
+      {% endif %}
+      <a class="topbar-note" href="/garden/">Lettuce Garden</a>
+    </div>
     {% if email and unlocked %}
-    <nav>
-      <a href="/secrets/">Requests{% if pending_count %} <span class="badge">{{ pending_count }}</span>{% endif %}</a>
-      <a href="/secrets/vault">Secrets</a>
-      <a href="/secrets/notifications">Notifications</a>
-      <a href="/secrets/audit">History</a>
-      <a href="/secrets/settings">Settings</a>
+    <nav class="tabs">
+      <a href="{{ base }}/">Requests{% if pending_count %} <span class="badge">{{ pending_count }}</span>{% endif %}</a>
+      <a href="{{ base }}/vault">Secrets</a>
+      <a href="{{ base }}/notifications">Notifications</a>
+      <a href="{{ base }}/audit">History</a>
+      <a href="{{ base }}/settings">Settings</a>
     </nav>
-    <form method="post" action="/secrets/lock" class="lock">
-      <input type="hidden" name="csrf" value="{{ csrf }}">
-      <button class="secondary">Lock</button>
-    </form>
     {% endif %}
   </header>
-  <main>
+  <main class="shell">
     {% block content %}{% endblock %}
   </main>
-  {% if email %}<footer>Signed in as {{ email }}</footer>{% endif %}
+  {% if email %}<footer class="footer">Signed in as {{ email }}</footer>{% endif %}
 </body>
 </html>

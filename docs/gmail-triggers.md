@@ -14,7 +14,7 @@ An interactive diagram of the containers and boundaries, [gmail-triggers-archite
 
 ## For the person using it
 1. **Connect Google in Lettuce first:** Settings -> Google, with Gmail read access at least.
-2. **Open `https://<your stack>/garden/gmail-triggers/`** and sign in as usual.
+2. **Open `https://<your stack>/garden/gmail-triggers/`** and sign in as usual. `https://<your stack>/garden/` links to it too.
 3. **Add a trigger:** press **New trigger** and fill in:
    - **When mail arrives in**: one or more Gmail labels. A Gmail filter that puts the mail you care about in its own label works best: a label Gmail adds as the mail arrives counts, one you add by hand later doesn't.
    - **Only from**: optionally, the senders allowed to set it off, one address per line. Leave **Only if Gmail verified the sender** on: addresses are easy to fake.

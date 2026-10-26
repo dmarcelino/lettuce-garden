@@ -67,7 +67,7 @@ async def test_approval_flow_shares_only_ticked_fields_once(settings, vault, cap
 
     async def flow():
         sub = await broker.request_secret(card, "Pay for the train")  # no fields: all private ones
-        assert sub["status"] == "pending" and sub["approve_url"].endswith(f"/secrets/r/{sub['id']}")
+        assert sub["status"] == "pending" and sub["approve_url"].endswith(f"/garden/secrets/r/{sub['id']}")
         assert sub["approve_url"] in sub["message"] and "notified" not in sub["message"]
         req = broker.request(sub["id"])
         assert req.fields == ("number", "security_code", "notes")

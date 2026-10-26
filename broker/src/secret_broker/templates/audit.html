@@ -2,11 +2,13 @@
 {% block title %}History{% endblock %}
 {% block content %}
 <h1>History</h1>
-<ul class="list">
+{% if entries %}
+<ul class="entries">
   {% for e in entries %}
   <li><span class="muted small">{{ e.at|time }}</span> {{ e.action }}{% if e.detail %}: {{ e.detail }}{% endif %} <span class="muted small">({{ e.actor }})</span></li>
-  {% else %}
-  <li class="muted">Nothing yet.</li>
   {% endfor %}
 </ul>
+{% else %}
+<div class="empty"><p class="muted">Nothing yet.</p></div>
+{% endif %}
 {% endblock %}

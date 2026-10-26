@@ -275,7 +275,7 @@ test_add_routes_the_secrets_path_with_the_profile() {
   ctl add alfred alfred@example.com
   ok_rc
   eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
-    '[{"hostname":"alfred.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+    '[{"hostname":"alfred.example.org","path":"^/garden/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","path":"^/garden/?$","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
 }
 
 test_add_routes_gmail_triggers_with_the_profile() {
@@ -285,7 +285,52 @@ test_add_routes_gmail_triggers_with_the_profile() {
   ctl add alfred alfred@example.com
   ok_rc
   eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
-    '[{"hostname":"alfred.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","path":"^/garden/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+    '[{"hostname":"alfred.example.org","path":"^/garden/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","path":"^/garden/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","path":"^/garden/?$","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+}
+
+# The landing page links each garden profile to /garden/<profile>/, so every
+# PROFILE_ROUTES row must route that path to its sidecar.
+test_garden_routes_follow_the_profile_names() {
+  local r p path svc
+  # shellcheck source=/dev/null
+  source <(sed -n '/^PROFILE_ROUTES=(/,/^)/p' "$ROOT/lib/cloudflare.sh")
+  ((${#PROFILE_ROUTES[@]} > 0)) || fail "no PROFILE_ROUTES"
+  for r in "${PROFILE_ROUTES[@]}"; do
+    read -r p path svc <<<"$r"
+    eq "$path" "^/garden/$p(/|\$)"
+  done
+}
+
+test_up_gives_the_sidecars_only_the_garden_profiles() {
+  added
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred GARDEN_PROFILES)" ""
+  with_triggers
+  broker_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,gmail-triggers,secrets/' "$H/stacks/alfred/stack.env"
+  ctl up alfred
+  ok_rc
+  # In PROFILE_ROUTES order, which is the landing page's.
+  eq "$(senv alfred GARDEN_PROFILES)" secrets,gmail-triggers
+  eq "$(stat -c %a "$H/stacks/alfred/stack.env")" 600
+}
+
+# A profile that adds no garden page leaves GARDEN_PROFILES, and so the
+# sidecars' config, alone: Compose would recreate them, and the vault relock.
+test_profiles_leave_garden_profiles_alone_for_other_profiles() {
+  broker_config
+  added
+  ctl profiles cloudflared,search,secrets
+  ok_rc
+  eq "$(senv alfred GARDEN_PROFILES)" secrets
+  ctl profiles cloudflared,secrets
+  ok_rc
+  eq "$(senv alfred GARDEN_PROFILES)" secrets
+  ctl profiles cloudflared,search
+  ok_rc
+  eq "$(senv alfred GARDEN_PROFILES)" ""
 }
 
 test_add_falls_back_when_name_resolves() {
@@ -1387,8 +1432,8 @@ test_profiles_routes_secrets_for_every_stack() {
   ctl profiles cloudflared,search,secrets
   ok_rc
   eq "$(grep -c '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log")" 2
-  grep '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log" | grep -qF '"hostname":"hal.example.org","path":"^/secrets(/|$)"' ||
-    fail "hal has no /secrets route"
+  grep '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log" | grep -qF '"hostname":"hal.example.org","path":"^/garden/secrets(/|$)"' ||
+    fail "hal has no /garden/secrets route"
   # The route is in place before the stacks start.
   [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stacks started before their route"
@@ -1422,7 +1467,7 @@ test_profiles_routes_gmail_triggers_and_installs_the_executor() {
   ok_rc
   [[ $(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "profiles gave no executor token"
   eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
-    '[{"hostname":"alfred.example.org","path":"^/garden/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+    '[{"hostname":"alfred.example.org","path":"^/garden/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","path":"^/garden/?$","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
   log_has "sh install /root/.letta/garden/gmail-triggers"
   [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stack started before its route"

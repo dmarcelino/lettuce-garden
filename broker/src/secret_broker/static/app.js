@@ -1,10 +1,12 @@
-// Registers this page's own service worker (scope /secrets/, separate from
+// Registers this page's own service worker (scope: the vault's pages, separate from
 // Lettuce's) and manages Web Push on the Notifications page. Classic script
 // registration: a module worker's script fetch carries no cookies, and
 // Cloudflare Access would redirect it to the login page.
 "use strict";
 
 const meta = (name) => document.querySelector(`meta[name="${name}"]`)?.content ?? "";
+// The vault's path prefix (config.PREFIX), from the page.
+const base = meta("base");
 
 function urlBase64ToBytes(s) {
   const pad = "=".repeat((4 - (s.length % 4)) % 4);
@@ -24,7 +26,7 @@ async function post(path, body) {
 }
 
 async function registration() {
-  return navigator.serviceWorker.register("/secrets/sw.js", { scope: "/secrets/" });
+  return navigator.serviceWorker.register(`${base}/sw.js`, { scope: `${base}/` });
 }
 
 async function setupPush() {
@@ -49,7 +51,7 @@ async function setupPush() {
   const current = await reg.pushManager.getSubscription();
   if (current) {
     // Re-send it: the server may have dropped it, and this is idempotent.
-    await post("/secrets/push/subscribe", current.toJSON()).catch(() => {});
+    await post(`${base}/push/subscribe`, current.toJSON()).catch(() => {});
   }
   show(current ? "Notifications are on for this device." : "Notifications are off for this device.", !!current);
 
@@ -63,7 +65,7 @@ async function setupPush() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToBytes(meta("vapid")),
       });
-      await post("/secrets/push/subscribe", sub.toJSON());
+      await post(`${base}/push/subscribe`, sub.toJSON());
       show("Notifications are on for this device.", true);
     } catch (e) {
       show(`Could not enable notifications: ${e.message}`, false);
@@ -72,14 +74,14 @@ async function setupPush() {
   disable.addEventListener("click", async () => {
     const sub = await reg.pushManager.getSubscription();
     if (sub) {
-      await post("/secrets/push/unsubscribe", { endpoint: sub.endpoint }).catch(() => {});
+      await post(`${base}/push/unsubscribe`, { endpoint: sub.endpoint }).catch(() => {});
       await sub.unsubscribe();
     }
     show("Notifications are off for this device.", false);
   });
   test.addEventListener("click", async () => {
     try {
-      const { delivered } = await post("/secrets/push/test");
+      const { delivered } = await post(`${base}/push/test`);
       status.textContent = `Test sent to ${delivered} device(s).`;
     } catch (e) {
       status.textContent = `Test failed: ${e.message}`;
