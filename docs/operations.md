@@ -10,7 +10,7 @@
 ./lettucectl compose alfred ps    # any docker compose command for one stack
 ```
 
-- Use `restart`, never `compose <name> restart app-server`. The BFF shares the app-server's network namespace and dies when the app-server is recreated on its own. `up` and `restart` always act on the whole stack.
+- Use `restart`, never `compose <name> restart app-server`. The BFF shares the app-server's network namespace and dies when the app-server is recreated on its own. `up` and `restart` always act on the whole stack. (`mcp` restarts the BFF alone, which is safe: the app-server keeps its namespace.)
 - After a host reboot, Docker brings the stacks back by itself (`restart: unless-stopped`).
 
 ## People
@@ -89,7 +89,7 @@ Optional features are compose profiles, the same list for **all** stacks (upstre
 - `telegram`: Telegram channel gateway.
 - `secrets`: a personal vault per stack (address, cards, ID documents, logins...), encrypted with the person's own passphrase and shared with agents only when they agree. Each person uses it at `https://<stack>/garden/secrets/`: see **[secret-broker.md](secret-broker.md)**.
 - `gmail-triggers`: rules like "when mail arrives in this label, ask this agent to do that", which each person sets up at `https://<stack>/garden/gmail-triggers/`. Needs `google` (`profiles` and `check` refuse it otherwise) and each person's Google account connected in Lettuce. `up` installs a small executor in the app-server; dropping the profile removes it and keeps the rules. See **[gmail-triggers.md](gmail-triggers.md)**.
-- `doc-tools`: Office and PDF tools for the agents (create, edit and convert .docx, .pptx, .xlsx and PDFs), as two stdio MCP servers mounted read-only into every app-server from one image, plus one shared Gotenberg per host for conversions. After turning it on, `./lettucectl mcp all` adds the two servers to each stack's Settings -> MCP (once per stack; `add` does it for new stacks). See **[doc-tools.md](doc-tools.md)**.
+- `doc-tools`: Office and PDF tools for the agents (create, edit and convert .docx, .pptx, .xlsx and PDFs), as two stdio MCP servers mounted read-only into every app-server from one shared volume, plus one shared Gotenberg per host for conversions. After turning it on, `./lettucectl mcp all` adds the two servers to each stack's Settings -> MCP (once per stack; `add` does it for new stacks) and restarts the BFF of each stack it changed, so agents see them. See **[doc-tools.md](doc-tools.md)**.
 - `pipelock`: an egress proxy per stack that the agents' shell tools, subagents, SearXNG and the DuckDuckGo reader go through. It checks each destination, blocks a few known exfiltration sites and private addresses, and signs a receipt for every request (`lettucectl receipts`). Advisory for now: letta-code itself and anything that ignores `HTTPS_PROXY` go around it. See **[egress-firewall.md](egress-firewall.md)**.
 
 ```bash

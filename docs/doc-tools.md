@@ -21,7 +21,7 @@ stack alfred                                   stack hal
 app-server (agents, root)                      app-server
   letta mcp call ─► office / pdf (stdio,         letta mcp call ─► office / pdf
   one process per call, /work/<agent-id>)        (/work/<agent-id>)
-        │ /opt/lettuce-doc-tools (read-only image mount, the same image for every stack)
+        │ /opt/lettuce-doc-tools (read-only volume, the same one for every stack)
         │                                               │
   lettuce-doc-tools-alfred (internal)          lettuce-doc-tools-hal (internal)
         └──────────────► gotenberg ◄────────────────────┘
@@ -56,9 +56,15 @@ added from outside stays. `mcp` writes only the entries whose command is under
 `/opt/lettuce-doc-tools/`, and refuses, changing nothing, when the file is not the shape it
 knows (after a Lettuce upgrade, say): then add the servers by hand. Two things can still undo
 it: a Settings -> MCP page that was open before `mcp` ran and is saved afterwards writes back
-the list it loaded, without the servers; run `mcp <name> --force` again. And the
-`mcp-servers` skill lists the new servers only from the BFF's next start (the next `up`); the
-servers work before that, and the `working-with-documents` skill names them.
+the list it loaded, without the servers; run `mcp <name> --force` again.
+
+Agents learn which servers exist from the description of Lettuce's `mcp-servers` skill, which
+the BFF writes from the list when it connects to the app-server, not when the file changes. So
+whenever `mcp` changes a stack's list, it restarts that stack's BFF alone; a turn in progress
+finishes first (up to 10 minutes), and the vault and the app-server keep running. Stacks are
+restarted one after another, so `mcp all` can wait that long for each busy stack, and turning
+the profile off can restart a BFF that `up` has just recreated. If the
+restart fails, it says so, and agents see the servers after the next `./lettucectl restart <name>`.
 
 What `up` does with the profile:
 1. It builds `lettuce-doc-tools:<hash>` (`doc-tools/Dockerfile`), once per host. The hash covers
@@ -66,24 +72,28 @@ What `up` does with the profile:
    downloads OfficeAgent (checked against its pinned SHA-256), a Python runtime and the Python
    packages (hash-pinned in `doc-tools/requirements.lock`), and takes a few minutes.
 2. It creates the stack's internal network `lettuce-doc-tools-<name>`.
-3. It starts the app-server with the image mounted read-only at `/opt/lettuce-doc-tools` and on
+3. It copies the image's tools into the volume `lettuce-doc-tools-<hash>`, once per host (about
+   300 MB, a second or two), and marks it complete last; a volume without the mark is filled again.
+   The copy runs in a container with no network and no capabilities beyond file ownership.
+4. It starts the app-server with the volume mounted read-only at `/opt/lettuce-doc-tools` and on
    that network (`compose/doc-tools.yml`).
-4. It starts the shared Gotenberg (`compose/shared/gotenberg.yml`, project `lettuce_shared`) if it
+5. It starts the shared Gotenberg (`compose/shared/gotenberg.yml`, project `lettuce_shared`) if it
    is not running, and connects it to every stack's network.
 
-The image mount needs Docker Engine 28 or later and Docker Compose 2.35 or later; `check`
-refuses the profile otherwise. Docker 29 prints "Image mount is an experimental feature".
+The tools are a volume rather than an image mount because Docker 29 brings image mounts back
+empty after a daemon restart or a reboot; a volume survives both like the rest of the stack.
 
 ## Turning it off
 ```bash
 ./lettucectl profiles cloudflared,search   # the list without doc-tools
 ```
 The app-servers restart without the mount and the network, Gotenberg stops and is removed, and
-every `lettuce-doc-tools-*` network is deleted. Documents stay in the workspaces. The servers
-`mcp` registered are removed from Settings -> MCP (a stdio server that cannot start makes every
-`letta mcp tools` call fail, the other servers' included); servers a person added by hand stay,
-and they should remove them. If a removal fails, the next `up` or `profiles` retries it. The
-image stays until you delete it (`docker image rm lettuce-doc-tools:<hash>`).
+every `lettuce-doc-tools-*` network and tools volume is deleted. Documents stay in the
+workspaces. The servers `mcp` registered are removed from Settings -> MCP (a stdio server that
+cannot start makes every `letta mcp tools` call fail, the other servers' included), and the BFF
+restarts so agents stop seeing them; servers a person added by hand stay, and they should remove
+them. If a removal fails, the next `up` or `profiles` retries it. The image stays until you
+delete it (`docker image rm lettuce-doc-tools:<hash>`).
 
 ## What agents do with it
 The `working-with-documents` skill tells agents which server to use for what, and how to check
@@ -119,7 +129,7 @@ text in place, and Excel calculation beyond OfficeAgent's list of supported func
   mistakes and confused tool calls. It does not stop the agent, which is root in the same
   container and can read every workspace of its stack with its shell anyway.
 - **OfficeAgent** is started by a launcher that pins its configuration: .NET's content root is
-  the read-only image, so an `appsettings.json` in a workspace cannot add a connection or turn on
+  the read-only tools volume, so an `appsettings.json` in a workspace cannot add a connection or turn on
   inline content; diagnostics and core dumps are off (a core dump holds document content). It
   makes no network calls and sends no telemetry.
 - **Gotenberg** sees only the files a conversion uploads, keeps nothing, mounts no workspace,
@@ -154,7 +164,8 @@ Every version is pinned in `doc-tools/`:
   its release notes for removed or renamed flags: an unknown flag stops it from starting.
 
 Then run `tests/run-sidecar.sh doc-tools` and `./lettucectl up all`. The new hash builds a new
-image and recreates the app-servers; documents, memories, conversations, MCP entries, the vault
+image, fills a new volume and recreates the app-servers (the old volume is deleted once no
+container uses it; old images stay until you delete them); documents, memories, conversations, MCP entries, the vault
 and settings are not touched. On every Lettuce upgrade, check the dependencies listed in
 AGENTS.md (how `letta mcp` starts stdio servers, the `/work/<agent-id>` layout, the app-server's
 glibc and ICU).
@@ -180,10 +191,19 @@ If removing the network fails, the next `up` or `profiles` removes it.
   stop at 50. Split the document or reduce its images.
 - **`not-found` from office after parallel calls**: calls made at the same time in one workspace
   can lose each other's document ids. Open the file again by its path.
-- **`failed to mount ... file name too long`** at `up`: Docker with the containerd image store
-  puts the image reference and the mount target into one file name, which fits only 53
-  characters of the two together. `check` refuses a longer one; if you renamed the image or the
-  mount point, shorten them.
+- **`spawn failed: ENOENT /opt/lettuce-doc-tools/bin/...`**, or an empty `/opt/lettuce-doc-tools`
+  in the app-server: the tools are not mounted. Run `./lettucectl up <name>`; if it says the
+  volume is incomplete and in use, every stack with doc-tools shares it: run
+  `./lettucectl down all`, then `./lettucectl up all`.
+- **`lettuce-doc-tools-<hash> was not made by lettucectl`** at `up`: a volume of that name exists
+  without lettucectl's label, or with driver options (a bind to a host directory, say). Every
+  app-server would run what it holds, so `up` refuses it; remove it and run `up` again.
+- **`could not fill the volume lettuce-doc-tools-<hash>`** at `up`: the copy failed (disk full,
+  say); the stack was not started. Fix the cause and run `up` again: an incomplete volume is
+  filled again.
+- **Agents do not find `office` or `pdf`** although `mcp` added them: the `mcp-servers` skill's
+  description (in the app-server, `/root/.letta/skills/mcp-servers/SKILL.md`) should list them.
+  If it does not, the BFF restart after `mcp` failed: run `./lettucectl restart <name>`.
 - **`mcp` says the MCP settings are not what lettucectl expects**: Lettuce changed the file's
   layout; add the servers by hand in Settings -> MCP, and report it so `lib/mcp-servers.mjs`
   can follow.

@@ -63,6 +63,7 @@ COPY bin /opt/lettuce-doc-tools/bin
 COPY lib /opt/lettuce-doc-tools/lib
 RUN chmod -R a+rX,go-w /opt/lettuce-doc-tools && chmod 0755 /opt/lettuce-doc-tools/bin/*
 
-# Only the tree, at the image root: mounted at /opt/lettuce-doc-tools.
+# Only the tree, at the path the app-servers mount it: never run, only copied
+# into the volume they share (ensure_doc_tools_volume in lettucectl).
 FROM scratch
-COPY --from=assemble /opt/lettuce-doc-tools/ /
+COPY --from=assemble /opt/lettuce-doc-tools/ /opt/lettuce-doc-tools/

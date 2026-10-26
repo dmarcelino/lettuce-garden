@@ -283,9 +283,9 @@ up_stack() {
   ensure_executor_token "$1"
   sync_garden_profiles "$1"
   check_stack "$1"
-  # The app-server mounts the image and joins the network; both must exist.
+  # The app-server mounts the tools' volume and joins the network; both must exist.
   if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" doc-tools; then
-    ensure_doc_tools_image || die "could not build $(doc_tools_image) (doc-tools/Dockerfile)"
+    ensure_doc_tools_volume || die "could not fill the volume $(doc_tools_volume) (docs/doc-tools.md)"
     ensure_doc_tools_network "$1" || die "$1: could not create the network $(doc_tools_network "$1")"
   fi
   info "starting $1"
@@ -294,8 +294,17 @@ up_stack() {
 
 # ── document tools ───────────────────────────────────────────────────────────
 # The image is shared by every stack and built here, not by Compose: it is
-# only ever mounted. The networks are lettucectl's too, so Compose never removes
-# one Gotenberg is still attached to (see compose/doc-tools.yml).
+# never run, only copied into the volume the app-servers mount. The volume and
+# the networks are lettucectl's too, so Compose never removes them (see
+# compose/doc-tools.yml).
+
+# DOC_TOOLS_VOLUME_LABEL marks the volumes lettucectl made, with their tag.
+DOC_TOOLS_VOLUME_LABEL=lettuce.doc-tools.tag
+# Written last into a filled volume: one without it is filled again.
+DOC_TOOLS_MARKER=.lettuce-doc-tools-complete
+# Run by sh in the backup image's container: unpacks the tools streamed on
+# stdin into the volume, then writes the marker.
+DOC_TOOLS_FILL="tar -x -C /dst && touch /dst/$DOC_TOOLS_MARKER"
 
 # ensure_doc_tools_image -> builds lettuce-doc-tools:<content hash> unless it exists
 ensure_doc_tools_image() {
@@ -304,6 +313,63 @@ ensure_doc_tools_image() {
   host_docker image inspect "$image" >/dev/null 2>&1 && return 0
   info "building $image (the document tools; the first build downloads them and takes a few minutes)"
   host_docker build -q -t "$image" "$LETTUCE_HOME/doc-tools" >/dev/null
+}
+
+# ensure_doc_tools_volume -> the tools' volume of this tree exists and is
+# complete, under a host-wide lock: the volume is shared, and a second
+# lettucectl would remove it under the first one's fill (whose `run -v` would
+# then create it unlabelled)
+ensure_doc_tools_volume() {
+  local lock rc=0
+  mkdir -p "$LETTUCE_HOME/stacks"
+  exec {lock}>"$LETTUCE_HOME/stacks/.doc-tools.lock"
+  if ! flock -n "$lock"; then
+    info "waiting for another lettucectl to finish with the volume $(doc_tools_volume)"
+    flock "$lock"
+  fi
+  fill_doc_tools_volume || rc=1
+  exec {lock}>&-
+  return "$rc"
+}
+
+# fill_doc_tools_volume -> fills the tools' volume unless it is complete. It is
+# filled from a container of the image (built only then) that is created, never
+# started, and copied out into the backup image's container (no network, no
+# capabilities but file ownership), which writes the marker last. A volume
+# without the marker (an interrupted fill) is filled again; one lettucectl did
+# not make (no label for this tag, another driver, or driver options such as a
+# bind to a host directory) is refused, since every app-server would run what
+# it holds.
+fill_doc_tools_volume() {
+  local vol cid c rc=0
+  vol=$(doc_tools_volume)
+  ensure_backup_image || return 1
+  if host_docker volume inspect "$vol" >/dev/null 2>&1; then
+    [[ $(host_docker volume inspect --format "{{.Driver}} {{index .Labels \"$DOC_TOOLS_VOLUME_LABEL\"}}|{{len .Options}}" "$vol") == "local $(doc_tools_tag)|0" ]] || {
+      warn "$vol was not made by lettucectl; remove it (docker volume rm $vol), then run the same command again"
+      return 1
+    }
+    host_docker "${BACKUP_RUN[@]}" -v "$vol:/dst:ro" "$BACKUP_IMAGE" test -f "/dst/$DOC_TOOLS_MARKER" >/dev/null 2>&1 && return 0
+    host_docker volume rm "$vol" >/dev/null 2>&1 || {
+      warn "$vol is incomplete and in use; stop every stack with doc-tools (lettucectl down all), then run: lettucectl up all"
+      return 1
+    }
+  fi
+  ensure_doc_tools_image || {
+    warn "could not build $(doc_tools_image) (doc-tools/Dockerfile)"
+    return 1
+  }
+  # Containers an interrupted fill left; they would keep old images in use.
+  for c in $(host_docker ps -aq --filter label=lettucectl.doc-tools=fill); do
+    host_docker rm -f "$c" >/dev/null 2>&1 || true
+  done
+  info "copying the document tools into the volume $vol"
+  host_docker volume create --label "$DOC_TOOLS_VOLUME_LABEL=$(doc_tools_tag)" "$vol" >/dev/null || return 1
+  cid=$(host_docker create --label lettucectl.doc-tools=fill "$(doc_tools_image)" /none) || return 1
+  host_docker cp "$cid:$DOC_TOOLS_TARGET/." - |
+    host_docker "${BACKUP_RUN[@]}" -i --label lettucectl.doc-tools=fill -v "$vol:/dst" "$BACKUP_IMAGE" sh -c "$DOC_TOOLS_FILL" || rc=1
+  host_docker rm -f "$cid" >/dev/null 2>&1 || true
+  return "$rc"
 }
 
 # ensure_doc_tools_network NAME -> the stack's internal network to Gotenberg exists
@@ -326,17 +392,19 @@ drop_doc_tools_network() {
   host_docker network rm "$1" >/dev/null
 }
 
-# sync_doc_tools -> makes the shared Gotenberg and the networks match the
-# profiles: with doc-tools on, Gotenberg runs and is attached to the network of
-# every complete stack that has the profile, when that network is internal and
-# labelled for that stack (ensure_doc_tools_network keeps any network of that
-# name, so one made by hand is refused here, as check_doc_tools refuses it at
-# the stack's own `up`); networks of stacks that are gone or removed are
-# deleted; with it off, Gotenberg and every network go. It compares what exists
-# rather than what changed, so a re-run repairs an interrupted one. Warns and
-# fails when it cannot.
+# sync_doc_tools -> makes the shared Gotenberg, the networks and the tools'
+# volumes match the profiles: with doc-tools on, Gotenberg runs and is attached
+# to the network of every complete stack that has the profile, when that
+# network is internal and labelled for that stack (ensure_doc_tools_network
+# keeps any network of that name, so one made by hand is refused here, as
+# check_doc_tools refuses it at the stack's own `up`); networks of stacks that
+# are gone or removed are deleted, and so are volumes of older tags; with it
+# off, Gotenberg, every network and every volume go. A volume still in use stays
+# for a later run: it is only disk space. It compares what exists rather than
+# what changed, so a re-run repairs an interrupted one. Warns and fails when it
+# cannot.
 sync_doc_tools() {
-  local n net id rendered rc=0 attached listed
+  local n net id rendered rc=0 attached listed vol current=""
   local -a have=() want=() names=()
   listed=$(host_docker network ls --filter "label=$DOC_TOOLS_LABEL" --format '{{.Name}}') || return 1
   mapfile -t have <<<"$listed"
@@ -391,6 +459,10 @@ sync_doc_tools() {
       rc=1
     }
   done
+  has_profile "$(cfg PROFILES)" doc-tools && current=$(doc_tools_volume)
+  for vol in $(host_docker volume ls --filter "label=$DOC_TOOLS_VOLUME_LABEL" --format '{{.Name}}' 2>/dev/null); do
+    [[ $vol == "$current" ]] || host_docker volume rm "$vol" >/dev/null 2>&1 || true
+  done
   return "$rc"
 }
 
@@ -424,6 +496,18 @@ mcp_servers() {
   compose "$1" exec -T app-server node --input-type=module - "$2" "$MCP_SETTINGS" <"$LETTUCE_HOME/lib/mcp-servers.mjs"
 }
 
+# refresh_mcp_skill NAME -> after a change to the list, restarts the stack's BFF
+# alone: agents learn the servers from the mcp-servers skill's description,
+# which the BFF renders from the list when it connects to the app-server
+# (ensureMcpServers), not when the file changes. The app-server, whose network
+# namespace the BFF shares, keeps running, and its stop_grace_period lets an
+# in-flight turn finish first. A failure only delays what agents see.
+refresh_mcp_skill() {
+  info "$1: restarting its BFF so agents see the change (a turn in progress finishes first)"
+  compose "$1" restart --no-deps bff >/dev/null ||
+    warn "$1: could not restart its BFF; agents see the change after: lettucectl restart $1"
+}
+
 # register_mcp_servers NAME -> adds office and pdf to the stack's Settings -> MCP
 # and marks the stack; fails, unmarked, when it could not
 register_mcp_servers() {
@@ -440,6 +524,7 @@ register_mcp_servers() {
   for c in $(jq -r '.conflicts // [] | .[]' <<<"$out" 2>/dev/null); do
     info "$1: Settings -> MCP already has a $c server with another command; it was left as it is"
   done
+  [[ -z $added ]] || refresh_mcp_skill "$1"
 }
 
 # drop_mcp_servers NAME -> with the doc-tools profile off, removes the servers
@@ -452,7 +537,9 @@ drop_mcp_servers() {
   out=$(mcp_servers "$1" remove) || return 1
   env_unset "$f" DOC_TOOLS_MCP_REGISTERED
   removed=$(jq -r '.removed // [] | join(", ")' <<<"$out" 2>/dev/null)
-  [[ -z $removed ]] || info "$1: removed $removed from Settings -> MCP (the doc-tools profile is off)"
+  [[ -n $removed ]] || return 0
+  info "$1: removed $removed from Settings -> MCP (the doc-tools profile is off)"
+  refresh_mcp_skill "$1"
 }
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -1150,6 +1237,17 @@ BACKUP_IMAGE=lettuce-backup:local
 # --init: as PID 1, sh would ignore the signal docker forwards on Ctrl-C.
 BACKUP_RUN=(run --rm --init --network none --read-only --tmpfs /tmp --security-opt no-new-privileges
   --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER)
+# build_backup_image -> (re)builds the image backup copies with; cached layers
+# make an unchanged rebuild cheap
+build_backup_image() { host_docker build -q -t "$BACKUP_IMAGE" "$LETTUCE_HOME/backup" >/dev/null; }
+
+# ensure_backup_image -> the backup image exists (it also fills the tools'
+# volume: ensure_doc_tools_volume)
+ensure_backup_image() {
+  host_docker image inspect "$BACKUP_IMAGE" >/dev/null 2>&1 && return 0
+  build_backup_image
+}
+
 # A backup's name: its UTC start time, which sorts by age.
 BACKUP_TS='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z'
 
@@ -1344,8 +1442,7 @@ cmd_backup() {
   # This repo is public, and a backup holds stack.env and the agents' logins.
   [[ $dest/ != "$LETTUCE_HOME"/* ]] || die "the destination cannot be inside $LETTUCE_HOME"
   command -v flock >/dev/null || die "flock is required but not installed (util-linux)"
-  host_docker build -q -t "$BACKUP_IMAGE" "$LETTUCE_HOME/backup" >/dev/null ||
-    die "could not build $BACKUP_IMAGE (backup/Dockerfile)"
+  build_backup_image || die "could not build $BACKUP_IMAGE (backup/Dockerfile)"
   # One stack failing must not cost the others their backup, but Ctrl-C stops
   # them all (the trap runs once the stack's subshell is done). errexit is off
   # inside a subshell that is part of `||` or `if`, so the status is read after.

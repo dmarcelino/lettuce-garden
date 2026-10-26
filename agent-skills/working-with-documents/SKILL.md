@@ -1,6 +1,6 @@
 ---
 name: working-with-documents
-description: Load this BEFORE creating, reading, editing or converting a Word (.docx), PowerPoint (.pptx), Excel (.xlsx) or PDF file, when the shared MCP servers include `office` or `pdf`. It says which server does what, how to call them, and how to check the result before you report it.
+description: Load this BEFORE creating, reading, editing or converting a Word (.docx), PowerPoint (.pptx), Excel (.xlsx) or PDF file. It says which server does what, how to call them, and how to check the result before you report it.
 ---
 
 # Working with Office and PDF documents
@@ -14,8 +14,8 @@ Two MCP servers handle documents, if this stack has them:
 
 They are stdio servers, so call them through the **`mcp-servers` skill's wrapper** (load that
 skill if you haven't; today the wrapper is `sh /root/.letta/skills/mcp-servers/scripts/mcp.sh`).
-If `list` shows neither `office` nor `pdf`, they are not set up: tell the person they can add
-them in **Settings -> MCP** (see the operator's docs) and stop.
+If `list` shows neither `office` nor `pdf`, this stack does not have them: do the task with
+your usual tools, and the rest of this skill does not apply.
 
 ```sh
 W="sh /root/.letta/skills/mcp-servers/scripts/mcp.sh"
@@ -78,6 +78,11 @@ tool's parameters with `$W schema mcp__office__<tool>` before you first use it.
   each other's document ids (`not-found`): open the file again by its path.
 - A refused start or a crash reaches you only as `MCP error -32000: Connection closed`.
   Check you are in your workspace, then retry once; if it repeats, tell the person.
+- **If the servers are listed but will not start** (`spawn failed`, `ENOENT`, or
+  `-32000` again after the retry), stop. Do not install other tools (LibreOffice,
+  python-docx, pandoc and the like) and do not build the file by hand. Tell the person
+  the document tools are not working on this stack and that whoever runs it can fix
+  them with `lettucectl restart <stack>`.
 
 ## Create an Office document
 1. Create it with `office`.
