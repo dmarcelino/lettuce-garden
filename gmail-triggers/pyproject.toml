@@ -1,7 +1,7 @@
 [project]
 name = "gmail-triggers"
 version = "0.1.0"
-description = "Lettuce garden sidecar: ask an agent to act when matching mail arrives in Gmail"
+description = "Lettuce Garden sidecar: ask an agent to act when matching mail arrives in Gmail"
 requires-python = ">=3.12"
 # Pinned: this is an application image, rebuilt on every `lettucectl up`. Shared
 # libraries use the vault's pins. garden-common is installed by the Dockerfile

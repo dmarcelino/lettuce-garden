@@ -397,6 +397,9 @@ legend {
   text-align: left;
   cursor: pointer;
 }
+a.menu-row {
+  text-decoration: none;
+}
 .menu-row:hover {
   border-color: var(--muted);
 }

@@ -36,6 +36,9 @@ services:
       CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
       ALLOWED_USERS: ${ALLOWED_USERS:-}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
+      # The /garden/ landing page links only to the garden pages that are on
+      # (lettucectl derives the list from COMPOSE_PROFILES).
+      GARDEN_PROFILES: ${GARDEN_PROFILES:-}
       GMAIL_TRIGGERS_EXECUTOR_TOKEN: ${GMAIL_TRIGGERS_EXECUTOR_TOKEN:-}
       TZ: ${TZ:-UTC}
     # Root (with no capabilities) so it owns the state directory Docker creates.

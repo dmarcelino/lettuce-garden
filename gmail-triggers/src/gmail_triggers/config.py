@@ -6,6 +6,8 @@ import os
 import re
 from dataclasses import dataclass, field
 
+from garden_common.garden import profiles_from_env
+
 # The pages live under this path, behind the tunnel route of the same name.
 PREFIX = "/garden/gmail-triggers"
 # The executor's API: deliberately outside PREFIX, so the tunnel never routes it.
@@ -65,6 +67,8 @@ class Settings:
     creds_dir: str = "/creds"
     policy_dir: str = "/policy"
     poll_seconds: int = DEFAULT_POLL_SECONDS
+    # The garden pages that are on, for the /garden/ landing page's links.
+    garden_profiles: str = ""
 
     @property
     def db_path(self) -> str:
@@ -105,4 +109,5 @@ class Settings:
             creds_dir=env.get("GOOGLE_CREDS_DIR", "").strip() or "/creds",
             policy_dir=env.get("GOOGLE_POLICY_DIR", "").strip() or "/policy",
             poll_seconds=poll,
+            garden_profiles=profiles_from_env(env),
         )

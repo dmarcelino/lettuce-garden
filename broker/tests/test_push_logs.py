@@ -11,7 +11,8 @@ def test_push_uses_broker_vapid_key_and_skips_removed_users(settings, vault):
     sender = FakeSender()
     vault.add_subscription("https://push.example/1", "k1", "a1", EMAIL)
     vault.add_subscription("https://push.example/2", "k2", "a2", "removed@example.com")
-    assert Pusher(settings, vault, sender).send_sync({"title": "t", "body": "b", "url": "/secrets/", "tag": "x"}) == 1
+    payload = {"title": "t", "body": "b", "url": "/garden/secrets/", "tag": "x"}
+    assert Pusher(settings, vault, sender).send_sync(payload) == 1
     call = sender.calls[0]
     assert call["subscription_info"]["endpoint"] == "https://push.example/1"
     assert call["vapid_private_key"] == settings.vapid_private_key

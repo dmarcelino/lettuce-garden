@@ -2,10 +2,17 @@
 {% block title %}Add a secret{% endblock %}
 {% block content %}
 <h1>What would you like to keep?</h1>
-<div class="kinds">
+<ul class="menu-list">
   {% for key, kind in kinds.items() %}
-  <a class="card item-link" href="/secrets/vault/new?kind={{ key }}"><strong>{{ kind.label }}</strong>
-    <span class="muted small">{{ kind.fields|map(attribute="label")|join(", ") }}</span></a>
+  <li>
+    <a class="menu-row" href="{{ base }}/vault/new?kind={{ key }}">
+      <span class="menu-row-text">
+        <span class="menu-row-title">{{ kind.label }}</span>
+        <span class="menu-row-desc">{{ kind.fields|map(attribute="label")|join(", ") }}</span>
+      </span>
+    </a>
+  </li>
   {% endfor %}
-</div>
+</ul>
+<p><a href="{{ base }}/vault">Cancel</a></p>
 {% endblock %}

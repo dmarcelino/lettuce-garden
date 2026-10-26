@@ -281,6 +281,7 @@ executor_out_of_step() {
 up_stack() {
   ensure_push_keys "$1"
   ensure_executor_token "$1"
+  sync_garden_profiles "$1"
   check_stack "$1"
   info "starting $1"
   compose "$1" up -d --build --remove-orphans
@@ -539,7 +540,7 @@ cmd_profiles() {
     info "profiles for every stack: $new"
   fi
 
-  # The tunnel routes /secrets/ only with the `secrets` profile. Applied on
+  # The tunnel routes each garden page only with its profile. Applied on
   # every run, before the stacks start, so a re-run repairs a failed update.
   for n in "${stacks[@]}"; do
     route_stack "$n" || unrouted+=("$n")

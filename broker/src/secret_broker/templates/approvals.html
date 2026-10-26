@@ -3,19 +3,22 @@
 {% block content %}
 <h1>Requests</h1>
 {% for req in pending %}
-<section class="card pending">
+<section class="panel pending">
   {% include "_decide.html" %}
 </section>
 {% else %}
-<p class="muted">Nothing is waiting. When an agent asks for something from your vault, it appears here and on your devices.</p>
+<div class="empty">
+  <p><strong>Nothing is waiting.</strong></p>
+  <p class="muted">When an agent asks for something from your vault, it appears here and on your devices.</p>
+</div>
 {% endfor %}
 
 {% if recent %}
 <h2>Answered recently</h2>
-<ul class="list">
+<ul class="entries">
   {% for req in recent %}
   <li>
-    <span class="status {{ req.status }}">{{ {"done": "shared", "denied": "denied", "expired": "expired"}[req.status] }}</span>
+    <span class="pill {{ {'done': 'ok', 'denied': 'bad', 'expired': ''}[req.status] }}">{{ {"done": "shared", "denied": "denied", "expired": "expired"}[req.status] }}</span>
     {{ req.secret_name }}{% if req.shared %}: {% for k in req.shared %}{{ req.labels[k] }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
     <span class="muted small">{{ (req.decided_at or req.created_at)|time }}</span>
   </li>

@@ -5,7 +5,7 @@ Each stack can have a personal vault of secrets: addresses, company details, not
 ```
 agent ──list_secrets─────────────────────> vault   names, types, public details; never private values
 agent ──request_secret(secret, why)───────> vault   ──push──> your phone
-you   ──https://<stack>/secrets/ ───────> vault   see what and why, untick fields, Share once / Deny
+you   ──https://<stack>/garden/secrets/ > vault   see what and why, untick fields, Share once / Deny
 agent ──get_result──────────────────────> vault   the values you agreed to share, once
                                                   (or, with delivery "env", a one-time handle)
 vault-run ──/redeem (handle)─────────────> vault   the values, into one command's environment
@@ -16,7 +16,7 @@ vault-run ──/redeem (handle)─────────────> vault  
 An interactive version, [secret-broker-architecture.html](diagrams/secret-broker-architecture.html), opens in a browser from a clone of this repo.
 
 ## For the person using it
-1. **Open `https://<your stack>/secrets/`** and sign in as usual.
+1. **Open `https://<your stack>/garden/secrets/`** and sign in as usual. `https://<your stack>/garden/` links to it too.
 2. **Create your vault:** choose a passphrase of at least 12 characters. Four or five unrelated words work well. **Nobody can recover it**, not even whoever runs the server. If you forget it, you have to erase the vault and start again.
 3. **Add secrets:** go to **Secrets**, then **Add a secret**, and pick a type. Every secret has a name. Fields in *italics* are private; the others agents can read, like the name.
 
@@ -63,7 +63,7 @@ Free-text secrets (addresses, companies, notes) are still read by the agent, so 
   ```bash
   ./lettucectl profiles <current list>,secrets      # e.g. cloudflared,search,secrets
   ```
-  This routes `https://<stack>/secrets/` to the vault on every stack, using the same hostname and Access app with no new DNS record, then builds and starts it. Each stack gets its own push keys for the vault (`BROKER_VAPID_*` in `stack.env`). Dropping `secrets` from the list removes the route and the container, and leaves the data where it is.
+  This routes `https://<stack>/garden/secrets/` (and `/garden/`, the page linking to the garden features that are on) to the vault on every stack, using the same hostname and Access app with no new DNS record, then builds and starts it. Each stack gets its own push keys for the vault (`BROKER_VAPID_*` in `stack.env`). Dropping `secrets` from the list removes the route and the container, and leaves the data where it is.
 - **Data:** the vault lives in the Docker volume `lettuce-<name>_secret-broker-data`, not under `stacks/<name>/`. `lettucectl backup` includes it (see [operations.md](operations.md#backups)). The backup is useless without the passphrase.
 - **Removal:** `lettucectl remove <name>` deletes the volume, so removing a stack deletes its vault, also after the `secrets` profile was turned off. It says so before asking for confirmation whenever the volume exists.
 - **Forgotten passphrase:** there is no recovery. The person can erase the vault in Settings. If they can't unlock to do that, delete the volume (see the troubleshooting table in [operations.md](operations.md#troubleshooting)).

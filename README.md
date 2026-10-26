@@ -1,10 +1,11 @@
-# lettuce-multi-user
+# Lettuce Garden
 
-Run several [Lettuce](https://github.com/dmarchevsky/lettuce) stacks on one host, one per person. Each stack sits behind its own Cloudflare Tunnel and Cloudflare Access application, and people sign in with Google.
+An opinionated, batteries-included way to run [Lettuce](https://github.com/dmarchevsky/lettuce) for several people on one host: one isolated stack per person behind Cloudflare Access, plus extras such as a secrets vault, Gmail triggers, an egress proxy, MCP servers and agent skills. Each stack sits behind its own Cloudflare Tunnel and Cloudflare Access application, and people sign in with Google.
 
 Each person gets:
 - a private Letta agent server with its own memory, conversations, workspaces and secrets;
-- the Lettuce web UI (a PWA) at `https://<name>.<your-domain>`.
+- the Lettuce web UI (a PWA) at `https://<name>.<your-domain>`;
+- the garden extras that are on, linked from `https://<name>.<your-domain>/garden/`.
 
 Nobody can reach another person's stack. **Cloudflare authenticates the people; Docker separates the assistants.** Upstream Lettuce needs no multi-user code for this.
 
@@ -67,7 +68,7 @@ Day-to-day commands, optional features, upgrades, backups and troubleshooting ar
 | `compose/secrets.yml`, `broker/` | yes | the optional vault (`secrets` profile) and its source |
 | `compose/gmail-triggers.yml`, `gmail-triggers/` | yes | optional Gmail triggers (`gmail-triggers` profile) and their source |
 | `compose/pipelock.yml`, `compose/pipelock-proxy.yml`, `pipelock/` | yes | the optional egress proxy (`pipelock` profile), its proxy settings and its image |
-| `garden-common/` | yes | code the vault and Gmail triggers share (sign-in checks, page styles) |
+| `garden-common/` | yes | code the vault and Gmail triggers share (sign-in checks, page styles, the `/garden/` landing page) |
 | `config.env.example` | yes | template for `config.env` |
 | `scripts/dns-preflight.sh` | yes | compares two nameservers before and after moving a domain |
 | `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) the sidecars' tests (`tests/run-sidecar.sh broker`, `tests/run-sidecar.sh gmail-triggers`) and pipelock's (`tests/run-pipelock.sh`) |

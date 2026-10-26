@@ -1,6 +1,7 @@
 """The ASGI app: MCP at /mcp and vault-run's /redeem (internal only; the tunnel
-forwards /secrets/ alone) and the vault UI at /secrets/ (every route needs a verified Access JWT, and all
-but setup/unlock/notifications an unlocked vault)."""
+forwards /garden/secrets/ and /garden/ alone), the vault UI at /garden/secrets/ (every route needs a
+verified Access JWT, and all but setup/unlock/notifications an unlocked vault) and the garden landing
+page at /garden/ (Access JWT only)."""
 
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from typing import Any
 
 import anyio
 from garden_common.auth import Authenticator, AuthError
+from garden_common.garden import landing_routes, stylesheet
 from jinja2 import Environment, PackageLoader, select_autoescape
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
@@ -24,7 +26,7 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, R
 from starlette.routing import Mount, Route
 
 from . import icons
-from .config import UNLOCK_ATTEMPTS_PER_MINUTE
+from .config import PREFIX, UNLOCK_ATTEMPTS_PER_MINUTE
 from .kinds import KINDS, preview
 from .mcp_tools import build_server
 from .service import Broker
@@ -75,12 +77,15 @@ class RateLimiter:
 
 
 def _safe_next(path: Any) -> str:
-    return path if isinstance(path, str) and path.startswith("/secrets/") and "//" not in path else "/secrets/"
+    return path if isinstance(path, str) and path.startswith(PREFIX + "/") and "//" not in path else PREFIX + "/"
 
 
-def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: str) -> Starlette:
+def create_app(
+    broker: Broker, authenticator: Authenticator, vapid_public_key: str, garden_profiles: str = ""
+) -> Starlette:
     env = Environment(loader=PackageLoader("secret_broker", "templates"), autoescape=select_autoescape(default=True))
     env.filters["time"] = _fmt_time
+    env.globals["base"] = PREFIX
     static = resources.files("secret_broker") / "static"
     vault: Vault = broker.vault
     unlock_limiter = RateLimiter(UNLOCK_ATTEMPTS_PER_MINUTE)
@@ -101,7 +106,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         return render("error.html", email, status=status, message=message)
 
     def back(path: str) -> RedirectResponse:
-        return RedirectResponse(path, status_code=303, headers=SECURITY_HEADERS)
+        return RedirectResponse(PREFIX + path, status_code=303, headers=SECURITY_HEADERS)
 
     def page(
         handler: Handler, post: bool = False, unlocked: bool = True
@@ -126,13 +131,13 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
                 if not vault.is_setup():
                     return render("setup.html", email)
                 if not vault.is_unlocked():
-                    target = request.url.path if request.method == "GET" else "/secrets/"
+                    target = request.url.path if request.method == "GET" else PREFIX + "/"
                     return render("unlock.html", email, next=target)
             vault.touch()
             try:
                 return await handler(request, email)
             except Locked:
-                return render("unlock.html", email, next="/secrets/")
+                return render("unlock.html", email, next=PREFIX + "/")
             except VaultError as e:
                 return error(str(e), 400, email)
 
@@ -149,7 +154,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         except VaultError as e:
             return render("setup.html", email, status=400, problem=str(e))
         vault.audit(email, "created the vault")
-        return back("/secrets/vault")
+        return back("/vault")
 
     async def unlock(request: HttpRequest, email: str) -> Response:
         form = await request.form()
@@ -162,12 +167,12 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             vault.audit(email, "failed unlock")
             return render("unlock.html", email, status=403, next=nxt, problem=str(e))
         vault.audit(email, "unlocked")
-        return back(nxt)
+        return RedirectResponse(nxt, status_code=303, headers=SECURITY_HEADERS)
 
     async def lock(request: HttpRequest, email: str) -> Response:
         vault.lock()
         vault.audit(email, "locked")
-        return back("/secrets/")
+        return back("/")
 
     async def settings_page(request: HttpRequest, email: str) -> Response:
         return render("settings.html", email)
@@ -187,7 +192,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             raise VaultError("type DELETE to erase the vault")
         vault.reset()
         vault.audit(email, "erased the vault")
-        return back("/secrets/")
+        return back("/")
 
     # ── approvals ────────────────────────────────────────────────────────────
     async def approvals(request: HttpRequest, email: str) -> Response:
@@ -208,7 +213,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         if action not in ("share", "deny"):
             raise VaultError("invalid answer")
         broker.decide(rid, action == "share", [str(f) for f in form.getlist("fields")], email)
-        return back(f"/secrets/r/{rid}")
+        return back(f"/r/{rid}")
 
     # ── secrets ──────────────────────────────────────────────────────────────
     def fields_from(form: Any, kind: str, current: Secret | None) -> tuple[Field, ...]:
@@ -255,7 +260,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             share_mode_from(form),
         )
         vault.audit(email, "added secret", secret_id, str(form.get("name", "")))
-        return back(f"/secrets/vault/{secret_id}")
+        return back(f"/vault/{secret_id}")
 
     def show(email: str, secret: Secret, revealed: bool) -> Response:
         return render(
@@ -285,13 +290,13 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             share_mode_from(form),
         )
         vault.audit(email, "changed secret", secret.id, str(form.get("name", "")))
-        return back(f"/secrets/vault/{secret.id}")
+        return back(f"/vault/{secret.id}")
 
     async def secret_delete(request: HttpRequest, email: str) -> Response:
         secret = get_secret(request)
         vault.delete_secret(secret.id)
         vault.audit(email, "deleted secret", secret.id, secret.name)
-        return back("/secrets/vault")
+        return back("/vault")
 
     # ── notifications ────────────────────────────────────────────────────────
     async def notifications(request: HttpRequest, email: str) -> Response:
@@ -329,7 +334,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             {
                 "title": "Test notification",
                 "body": "Vault requests will arrive like this.",
-                "url": "/secrets/",
+                "url": PREFIX + "/",
                 "tag": "test",
             }
         )
@@ -340,13 +345,14 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         return render("audit.html", email, entries=vault.audit_log())
 
     # ── static: behind Access too (fetched with the Access cookie) ───────────
-    def static_file(name: str, media_type: str) -> Handler:
-        body = (static / name).read_bytes()
-
+    def static_bytes(body: bytes, media_type: str) -> Handler:
         async def serve(request: HttpRequest, email: str) -> Response:
             return Response(body, media_type=media_type, headers={**SECURITY_HEADERS, "cache-control": "no-cache"})
 
         return serve
+
+    def static_file(name: str, media_type: str) -> Handler:
+        return static_bytes((static / name).read_bytes(), media_type)
 
     def icon(size: int) -> Handler:
         async def serve(request: HttpRequest, email: str) -> Response:
@@ -400,6 +406,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         Route("/audit", page(audit_page)),
         Route("/sw.js", page(static_file("sw.js", "text/javascript"), **open_page)),
         Route("/app.js", page(static_file("app.js", "text/javascript"), **open_page)),
+        Route("/garden.css", page(static_bytes(stylesheet(), "text/css"), **open_page)),
         Route("/app.css", page(static_file("app.css", "text/css"), **open_page)),
         Route(
             "/manifest.webmanifest", page(static_file("manifest.webmanifest", "application/manifest+json"), **open_page)
@@ -440,14 +447,15 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
                 tg.cancel_scope.cancel()
 
     async def secrets_root(request: HttpRequest) -> Response:
-        return RedirectResponse("/secrets/", status_code=308)
+        return RedirectResponse(PREFIX + "/", status_code=308)
 
     return Starlette(
         routes=[
             Route("/healthz", healthz),
             Route("/redeem", redeem, methods=["POST"]),
-            Route("/secrets", secrets_root),
-            Mount("/secrets", routes=ui),
+            *landing_routes(authenticator, garden_profiles, PREFIX, SECURITY_HEADERS, error),
+            Route(PREFIX, secrets_root),
+            Mount(PREFIX, routes=ui),
             Mount("/", app=mcp_app),
         ],
         lifespan=lifespan,

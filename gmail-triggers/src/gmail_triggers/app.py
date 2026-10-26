@@ -1,7 +1,7 @@
-"""The ASGI app: the Gmail triggers pages under /garden/gmail-triggers (every
-route needs a verified Access JWT, every POST this stack's Origin and a CSRF
-token), the executor's API at /executor/v1/ (executor_api.py; token, no Access)
-and /healthz. The pages need no JavaScript."""
+"""The ASGI app: the Gmail triggers pages under /garden/gmail-triggers and the
+garden landing page at /garden/ (every route needs a verified Access JWT, every
+POST this stack's Origin and a CSRF token), the executor's API at /executor/v1/
+(executor_api.py; token, no Access) and /healthz. The pages need no JavaScript."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from typing import Any
 
 import anyio
 from garden_common.auth import Authenticator, AuthError
+from garden_common.garden import landing_routes, stylesheet
 from jinja2 import Environment, PackageLoader, select_autoescape
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -278,11 +279,12 @@ def create_app(
     authenticator: Authenticator,
     executor_token: str,
     poller: Poller | None = None,
+    garden_profiles: str = "",
 ) -> Starlette:
     env = Environment(loader=PackageLoader("gmail_triggers", "templates"), autoescape=select_autoescape(default=True))
     env.filters["time"] = _fmt_time
     env.globals.update(base=PREFIX, status_text=_status_text, conversations=CONVERSATIONS)
-    garden_css = (resources.files("garden_common") / "static" / "garden.css").read_bytes()
+    garden_css = stylesheet()
     app_css = (resources.files("gmail_triggers") / "static" / "app.css").read_bytes()
 
     def render(name: str, email: str, status: int = 200, **ctx: Any) -> HTMLResponse:
@@ -542,6 +544,7 @@ def create_app(
         routes=[
             Route("/healthz", healthz),
             *executor_routes(store, executor_token),
+            *landing_routes(authenticator, garden_profiles, PREFIX, SECURITY_HEADERS, error),
             Route(PREFIX, root),
             Mount(PREFIX, routes=ui),
         ],
