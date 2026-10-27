@@ -68,5 +68,5 @@ FROM base
 # Root on purpose: agents write the workspaces as root. Compose drops every
 # capability, so without CAP_DAC_OVERRIDE this process edits only what root owns.
 USER 0
-EXPOSE 8080
+# No port: compose/code-server.yml runs it on a Unix socket only the gate mounts.
 ENTRYPOINT ["/opt/lettuce-editor/entrypoint.sh"]

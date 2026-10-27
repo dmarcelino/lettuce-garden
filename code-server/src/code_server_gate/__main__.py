@@ -5,11 +5,10 @@ from __future__ import annotations
 import logging
 import sys
 
-import httpx
 import uvicorn
 from garden_common.auth import Authenticator
 
-from .app import create_app
+from .app import create_app, editor_client, unix_socket_connect
 from .config import ConfigError, Settings
 
 
@@ -26,9 +25,7 @@ def main() -> None:
     except ConfigError as e:
         print(f"code-server gate: {e}", file=sys.stderr)
         sys.exit(2)
-    # No read timeout: downloads and long requests stream for as long as they take.
-    client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None, write=None), follow_redirects=False)
-    app = create_app(settings, Authenticator(settings), client)
+    app = create_app(settings, Authenticator(settings), editor_client(), unix_socket_connect())
     uvicorn.run(
         app,
         host="0.0.0.0",

@@ -1,6 +1,6 @@
 """The gate in front of the real editor, for scripts/code-server-e2e.sh (not a pytest
 module: it needs a running code-server-editor). It builds the gate with a test
-signing key in place of Cloudflare's, a real httpx client and real WebSockets,
+signing key in place of Cloudflare's, real HTTP and WebSockets over the editor's Unix socket,
 and drives it in-process. Prints one line per check; exits 1 when any fails."""
 
 from __future__ import annotations
@@ -10,13 +10,12 @@ import sys
 import time
 from collections.abc import Callable
 
-import httpx
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from garden_common.auth import Authenticator
 from starlette.testclient import TestClient
 
-from code_server_gate.app import create_app
+from code_server_gate.app import create_app, editor_client, unix_socket_connect
 from code_server_gate.config import PREFIX, Settings
 
 ORIGIN = "https://alfred.example.com"
@@ -55,8 +54,7 @@ def main() -> None:
         {"aud": ["aud1"], "iss": settings.issuer, "email": EMAIL, "iat": now, "exp": now + 600}, key, algorithm="RS256"
     )
     authenticator = Authenticator(settings, key_resolver=lambda t: key.public_key())
-    client = httpx.AsyncClient(timeout=httpx.Timeout(30.0))
-    app = create_app(settings, authenticator, client)
+    app = create_app(settings, authenticator, editor_client(), unix_socket_connect())
     with TestClient(app, base_url=ORIGIN, follow_redirects=False) as browser:
         browser.headers["cf-access-jwt-assertion"] = token
         page = {"html": ""}

@@ -10,8 +10,10 @@ from garden_common.garden import profiles_from_env
 
 # The editor lives under this path, behind the tunnel route of the same name.
 PREFIX = "/garden/code-server"
-# code-server-editor, on the internal code-editor network that only this gate shares.
-DEFAULT_UPSTREAM = "http://code-server-editor:8080"
+# code-server-editor listens only on this Unix socket, on a volume only this gate
+# and the editor mount (compose/code-server.yml); the URL names it for Host.
+EDITOR_SOCKET = "/run/code-server/editor.sock"
+DEFAULT_UPSTREAM = "http://code-server-editor"
 
 
 class ConfigError(Exception):

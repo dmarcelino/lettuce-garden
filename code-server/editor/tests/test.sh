@@ -137,6 +137,15 @@ start_editor() {
   /opt/lettuce-editor/entrypoint.sh --auth none /work >/dev/null
 }
 
+test_code_server_starts_with_the_usual_umask_and_no_stale_socket() {
+  mkdir -p /run/code-server /data /keys
+  : >/run/code-server/editor.sock
+  start_editor
+  # The keys are private; what the person creates in the workspaces is not.
+  eq "$(cat "$FAKES/umask")" 0022
+  [[ ! -e /run/code-server/editor.sock ]] || fail "a stale socket was left for code-server to trip on"
+}
+
 test_the_entrypoint_makes_keys_once_and_trusts_only_its_own() {
   mkdir -p /data /keys
   start_editor || fail "first start failed"
@@ -163,11 +172,14 @@ test_the_fixed_settings_come_back_and_the_persons_stay() {
   start_editor
   jq '. + {"terminal.integrated.defaultProfile.linux": "bash", "editor.fontSize": 15}
     | .["terminal.integrated.profiles.linux"].bash = {"path": "bash"}
+    | .["terminal.integrated.profiles.linux"].local = {"path": "/bin/bash"}
     | .["extensions.supportUntrustedWorkspaces"]["vscode.npm"] = {"supported": true}' "$s" >"$s.new"
   mv "$s.new" "$s"
   start_editor
   eq "$(jq -r '."terminal.integrated.defaultProfile.linux"' "$s")" shell
-  eq "$(jq -c '."terminal.integrated.profiles.linux".bash' "$s")" null
+  # Each fixed setting comes back whole: nothing added inside one survives a restart.
+  eq "$(jq -c '."terminal.integrated.profiles.linux"' "$s")" "$(jq -c '."terminal.integrated.profiles.linux"' "$HERE/settings.json")"
+  eq "$(jq -c '."extensions.supportUntrustedWorkspaces"' "$s")" "$(jq -c '."extensions.supportUntrustedWorkspaces"' "$HERE/settings.json")"
   eq "$(jq -r '."editor.fontSize"' "$s")" 15
   eq "$(jq -r '."security.workspace.trust.enabled"' "$s")" true
   eq "$(jq -r '."chat.disableAIFeatures"' "$s")" true
@@ -180,7 +192,7 @@ test_the_fixed_settings_come_back_and_the_persons_stay() {
 # Swapped in after test_code_server_runs_from_the_image.
 fake_code_server() {
   mv /opt/code-server/bin/code-server /opt/code-server/bin/code-server.real
-  printf '#!/bin/bash\nprintf "%%s" "$*" >%q\n' "$FAKES/started" >/opt/code-server/bin/code-server
+  printf '#!/bin/bash\nprintf "%%s" "$*" >%q\numask >%q\n' "$FAKES/started" "$FAKES/umask" >/opt/code-server/bin/code-server
   chmod +x /opt/code-server/bin/code-server
 }
 

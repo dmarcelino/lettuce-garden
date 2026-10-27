@@ -15,7 +15,7 @@ from importlib import resources
 from typing import Any
 
 import anyio
-from garden_common.auth import COOP, FORM, PAGE, Authenticator, AuthError, check_fetch
+from garden_common.auth import COOP, FORM, PAGE, Authenticator, AuthError, admit
 from garden_common.garden import landing_routes, stylesheet
 from jinja2 import Environment, PackageLoader, select_autoescape
 from starlette.applications import Starlette
@@ -303,17 +303,10 @@ def create_app(
 
         async def endpoint(request: Request) -> Response:
             try:
-                email = await authenticator.email(request.headers)
+                email = await admit(authenticator, request.headers, None if asset else FORM if post else PAGE)
             except AuthError as e:
-                log.info("refused %s %s reason=auth", request.method, request.url.path)
+                log.info("refused %s %s reason=%s", request.method, request.url.path, e.reason)
                 return error(str(e), e.status)
-            if not asset:
-                try:
-                    check_fetch(request.headers, FORM if post else PAGE)
-                except AuthError as e:
-                    log.info("refused %s %s reason=fetch", request.method, request.url.path)
-                    # Without the email: pages carrying it also carry the form token.
-                    return error(str(e), e.status)
             if post:
                 try:
                     authenticator.check_origin(request.headers)

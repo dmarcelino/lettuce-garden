@@ -51,9 +51,12 @@ class AccessSettings(Protocol):
 
 
 class AuthError(Exception):
-    def __init__(self, message: str, status: int = 403):
+    """`reason`, for the log: auth (who is asking) or fetch (how it was asked)."""
+
+    def __init__(self, message: str, status: int = 403, reason: str = "auth"):
         super().__init__(message)
         self.status = status
+        self.reason = reason
 
 
 KeyResolver = Callable[[str], Any]
@@ -130,10 +133,22 @@ def check_fetch(headers: Any, use: str) -> None:
     """Refuse a request that didn't arrive the way `use` (PAGE, FORM, FETCH) arrives."""
     mode, dest, site = (headers.get(f"sec-fetch-{k}") for k in ("mode", "dest", "site"))
     if not (mode and dest and site):
-        raise AuthError("this browser did not say how the page was requested; use a current browser")
+        raise AuthError("this browser did not say how the page was requested; use a current browser", reason="fetch")
     if use == FETCH:
         ok = mode in ("cors", "same-origin") and dest == "empty" and site == "same-origin"
     else:
         ok = mode == "navigate" and dest == "document" and (use == PAGE or site == "same-origin")
     if not ok:
-        raise AuthError("open this page in its own browser tab; it can't be loaded from a script or a frame")
+        raise AuthError(
+            "open this page in its own browser tab; it can't be loaded from a script or a frame", reason="fetch"
+        )
+
+
+async def admit(authenticator: Authenticator, headers: Any, use: str | None) -> str:
+    """The signed-in email, once the request also arrived the way `use` (PAGE,
+    FORM, FETCH; None for an asset) arrives. Render a refusal without the email:
+    pages carrying it also carry the form token."""
+    email = await authenticator.email(headers)
+    if use is not None:
+        check_fetch(headers, use)
+    return email

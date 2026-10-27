@@ -5,10 +5,14 @@
 #   and the shell's host key (/keys, which the shell mounts read-only), each made
 #   once; authorized_keys and known_hosts are rewritten from them, so either
 #   volume can be recreated on its own.
-# - The fixed settings (settings.json beside this script) are merged over the
-#   person's: Restricted Mode, the extension allowed in it, the terminal
-#   profiles that lead to the shell. The person can change them in
-#   the UI; a restart puts them back.
+# - The fixed settings (settings.json beside this script) replace the person's
+#   of the same name, whole: Restricted Mode, the extension allowed in it, the
+#   terminal profiles that lead to the shell. The person can change them in
+#   the UI; a restart puts them back, with nothing added inside them.
+# - A socket left by the last run is removed: code-server listens only on
+#   /run/code-server/editor.sock, which only the gate mounts besides it.
+# The keys and settings are written with umask 077; code-server runs with 022,
+# so what the person creates in the workspaces is readable like agents' files.
 set -euo pipefail
 umask 077
 
@@ -39,10 +43,13 @@ if [[ -s $USER_SETTINGS ]] && ! jq -e 'type == "object"' "$USER_SETTINGS" >/dev/
   echo "lettuce-editor: settings.json was not plain JSON; kept as settings.json.unreadable" >&2
 fi
 if [[ -s $USER_SETTINGS ]]; then
-  jq -s '.[0] * .[1]' "$USER_SETTINGS" "$HERE/settings.json" | write "$USER_SETTINGS"
+  jq -s '.[0] + .[1]' "$USER_SETTINGS" "$HERE/settings.json" | write "$USER_SETTINGS"
 else
   write "$USER_SETTINGS" <"$HERE/settings.json"
 fi
 
+rm -f /run/code-server/editor.sock
+
 export HOME=$DATA/home XDG_CONFIG_HOME=$DATA/home/.config XDG_DATA_HOME=$DATA/home/.local/share
+umask 022
 exec /opt/code-server/bin/code-server "$@"

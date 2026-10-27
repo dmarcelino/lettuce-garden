@@ -3225,22 +3225,25 @@ test_shared_project_is_not_a_stack_named_shared() {
 code_config() {
   local st=$H/stacks/alfred/state
   config_edit '.services["code-server"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
-      "networks":{"code-editor":null,"default":null}}
+      "networks":{"default":null},
+      "volumes":[{"type":"volume","source":"code-server-sock","target":"/run/code-server","read_only":true,"volume":{}}]}
     | .services["code-server-editor"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
-      "command":["--bind-addr","0.0.0.0:8080","--auth","none","--disable-proxy","--disable-telemetry",
-        "--disable-update-check","--disable-getting-started-override","--extensions-dir",
+      "command":["--socket","/run/code-server/editor.sock","--socket-mode","666","--auth","none","--disable-proxy",
+        "--disable-telemetry","--disable-update-check","--disable-getting-started-override","--extensions-dir",
         "/opt/lettuce-editor/no-extensions","--user-data-dir","/data/user"],
       "environment":{"EXTENSIONS_GALLERY":"{}","TZ":"UTC"},
-      "networks":{"code-editor":null,"code-exec":null},
+      "networks":{"code-exec":null},
       "volumes":[{"type":"bind","source":"'"$st"'/workspaces","target":"/work","bind":{"create_host_path":true}},
         {"type":"volume","source":"code-server-data","target":"/data","volume":{}},
-        {"type":"volume","source":"code-exec-keys","target":"/keys","volume":{}}]}
+        {"type":"volume","source":"code-exec-keys","target":"/keys","volume":{}},
+        {"type":"volume","source":"code-server-sock","target":"/run/code-server","volume":{}}]}
     | .services["code-server-exec"] = {"cap_drop":["NET_RAW"],"init":true,
+      "depends_on":{"code-server-editor":{"condition":"service_healthy","required":true}},
       "networks":{"code-egress":null,"code-exec":null},
       "volumes":[{"type":"bind","source":"'"$st"'/workspaces","target":"/work","bind":{"create_host_path":true}},
         {"type":"bind","source":"'"$st"'/tools","target":"/opt/agent-tools","bind":{"create_host_path":true}},
         {"type":"volume","source":"code-exec-keys","target":"/keys","read_only":true,"volume":{}}]}
-    | .networks = {"code-editor":{"internal":true},"code-exec":{"internal":true},"code-egress":{},"default":{}}'
+    | .networks = {"code-exec":{"internal":true},"code-egress":{},"default":{}}'
 }
 
 # with_code -> alfred runs the code-server profile, with the services it renders
@@ -3285,7 +3288,16 @@ test_check_refuses_a_gate_without_its_hardening_or_on_another_network() {
   teardown; setup
   code_refused "$CG.volumes = [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "code-server must not mount host paths"
   teardown; setup
-  code_refused "$CG.networks[\"code-exec\"] = null" "code-server (the gate) must be on the default and code-editor networks only"
+  code_refused "$CG.networks[\"code-exec\"] = null" "code-server (the gate) must be on the default network only"
+}
+
+test_check_refuses_a_gate_without_the_editors_socket_or_with_more() {
+  local m="code-server (the gate) may mount only the volume code-server-sock, read-only (at /run/code-server)"
+  code_refused "$CG.volumes = []" "$m"
+  teardown; setup
+  code_refused "$CG.volumes[0].read_only = false" "$m"
+  teardown; setup
+  code_refused "$CG.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "$m"
 }
 
 test_check_refuses_an_editor_without_its_hardening() {
@@ -3300,25 +3312,35 @@ test_check_refuses_an_editor_with_other_mounts() {
   code_refused "$CE.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/tools\",\"target\":\"/opt/agent-tools\"}]" \
     "code-server-editor may mount from the host only $H/stacks/alfred/state/workspaces (at /work)"
   teardown; setup
-  code_refused "$CE.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" \
-    "code-server-editor may mount only the volumes code-server-data (at /data) and code-exec-keys (at /keys)"
+  local m="code-server-editor may mount only the volumes code-server-data (at /data), code-exec-keys (at /keys) and code-server-sock (at /run/code-server)"
+  code_refused "$CE.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "$m"
   teardown; setup
-  code_refused "$CE.volumes = [$CE.volumes[0], $CE.volumes[1]]" \
-    "code-server-editor may mount only the volumes code-server-data (at /data) and code-exec-keys (at /keys)"
+  code_refused "$CE.volumes = [$CE.volumes[0], $CE.volumes[1], $CE.volumes[2]]" "$m"
 }
 
 test_check_refuses_an_editor_on_the_stack_network() {
-  code_refused "$CE.networks.default = null" "code-server-editor must be on the code-editor and code-exec networks only"
+  code_refused "$CE.networks.default = null" "code-server-editor must be on the code-exec network only"
 }
 
 test_check_refuses_an_editor_that_runs_workspace_code_or_trusts_more() {
-  local flag
-  code_refused "$CE.command -= [\"--disable-proxy\"]" "code-server-editor must run with --auth none, --disable-proxy"
+  local flag m="code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lettuce-editor/no-extensions and --user-data-dir /data/user, each once"
+  code_refused "$CE.command -= [\"--disable-proxy\"]" "$m"
   teardown; setup
-  code_refused "$CE.command |= map(if . == \"none\" then \"password\" else . end)" "code-server-editor must run with --auth none"
+  code_refused "$CE.command |= map(if . == \"none\" then \"password\" else . end)" "$m"
   teardown; setup
-  code_refused "$CE.command |= map(if . == \"/opt/lettuce-editor/no-extensions\" then \"/data/extensions\" else . end)" \
-    "code-server-editor must run with --auth none, --disable-proxy and --extensions-dir /opt/lettuce-editor/no-extensions"
+  code_refused "$CE.command |= map(if . == \"/opt/lettuce-editor/no-extensions\" then \"/data/extensions\" else . end)" "$m"
+  teardown; setup
+  code_refused "$CE.command |= map(if . == \"/run/code-server/editor.sock\" then \"/tmp/editor.sock\" else . end)" "$m"
+  # code-server takes the last of a repeated flag, in either form.
+  for flag in '"--auth","password"' '"--auth=password"' '"--extensions-dir","/work/x"' '"--extensions-dir=/work/x"' \
+    '"--user-data-dir","/work/x"' '"--user-data-dir=/work/x"' '"--socket=/tmp/x"' '"--disable-proxy=false"'; do
+    teardown; setup
+    code_refused "$CE.command += [$flag]" "$m"
+  done
+  for flag in --bind-addr --socket-fd; do
+    teardown; setup
+    code_refused "$CE.command += [\"$flag\", \"3\"]" "code-server-editor must not run with $flag"
+  done
   for flag in --disable-workspace-trust --trusted-origins=evil.example.org --link --enable-proposed-api \
     --install-extension --github-auth --builtin-extensions-dir; do
     teardown; setup
@@ -3348,8 +3370,8 @@ test_check_refuses_others_on_the_code_editor_networks() {
   code_refused '.services["app-server"].networks = {"default":null,"code-exec":null}' \
     "only code-server-editor,code-server-exec may join the code-exec network (found: app-server,code-server-editor,code-server-exec)"
   teardown; setup
-  code_refused '.services.cloudflared = {"networks":{"default":null,"code-editor":null}}' \
-    "only code-server,code-server-editor may join the code-editor network"
+  code_refused '.services.cloudflared = {"networks":{"default":null,"code-egress":null}}' \
+    "only code-server-exec may join the code-egress network"
   teardown; setup
   code_refused '.networks["code-exec"].internal = false' "the code-exec network must be internal"
 }
@@ -3383,6 +3405,24 @@ test_check_guards_the_code_editor_volumes_whatever_the_profiles() {
   ctl check alfred
   bad_rc
   out_has "volumes_from reaches"
+  teardown; setup
+  added
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"code-server-sock","target":"/run/code-server"}]'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: bff mount(s) the code editor's socket; only code-server and code-server-editor may"
+}
+
+test_check_refuses_sharing_a_code_editor_network_namespace_whatever_the_profiles() {
+  local mode
+  for mode in service:code-server-editor service:code-server service:code-server-exec container:lettuce-alfred-code-server-editor-1; do
+    teardown; setup
+    added
+    config_edit ".services.searxng = {\"network_mode\":\"$mode\"}"
+    ctl check alfred
+    bad_rc
+    out_has "alfred: searxng shares the network namespace of the code editor ($mode)"
+  done
 }
 
 test_compose_always_merges_the_code_editor_overlay() {

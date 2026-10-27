@@ -3,8 +3,11 @@
 Status: implemented on branch `vscode` (2026-10-27), steps 0-5; step 6, a real stack, is still to
 do. The source review below was checked at runtime (step 0, results at the end), which changed two
 things: the git extension is out (Source Control asks to trust each repository's folder), and
-terminals are allowed in untrusted workspaces by setting. docs/code-server.md is the user guide and
-security model.
+terminals are allowed in untrusted workspaces by setting. A code review after the first real stack
+(2026-10-27) moved the editor off the network: the plan below gives it a port on an internal network
+shared with the gate, but the shell, on the editor's other network, could reach that port too, and
+code-server has no Access check of its own. It now listens only on a Unix socket that only the gate
+mounts (compose/code-server.yml). docs/code-server.md is the user guide and security model.
 
 ## Goal
 

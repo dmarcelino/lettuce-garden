@@ -1,16 +1,19 @@
 """The gate in front of the code editor (docs/code-server.md).
 
 The editor shares an origin with Lettuce and the vault, and has no Access check
-of its own. Everything under PREFIX passes this gate, which:
-- needs a verified Access JWT on every request and WebSocket upgrade, and this
-  stack's own Origin on every upgrade; it closes a WebSocket when its JWT expires;
+of its own; it listens only on a Unix socket that only this gate mounts.
+Everything under PREFIX passes this gate, which:
+- needs a verified Access JWT on every request and WebSocket upgrade, this
+  stack's own Origin on every upgrade, and this origin (Sec-Fetch-Site) for
+  anything but a read; it closes a WebSocket when its JWT expires;
 - strips PREFIX on the way in and puts it back on redirects;
 - passes only listed headers either way: the editor never sees the person's
   Access token, cookies or Lettuce's session, and never sets a cookie, an opener
   policy or a service worker scope wider than PREFIX on the origin;
 - lets only the workbench and code-server's own webview hosts load as documents
   or frames, and serves everything else nosniff with a sandbox CSP, so a file an
-  agent wrote can't become a page on the origin.
+  agent wrote can't become a page on the origin; every answer varies with
+  Sec-Fetch-Dest, so the browser's cache never hands one to another kind of request.
 /garden/ is the garden landing page, as in the other garden sidecars.
 """
 
@@ -37,7 +40,7 @@ from starlette.responses import HTMLResponse, PlainTextResponse, RedirectRespons
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from .config import PREFIX, Settings
+from .config import EDITOR_SOCKET, PREFIX, Settings
 
 log = logging.getLogger("code_server_gate")
 
@@ -110,6 +113,7 @@ STATIC_FRAMES = re.compile(
     r"(?:contrib/webview/browser/pre/(?:index|fake)\.html|services/extensions/worker/webWorkerExtensionHostIframe\.html)"
 )
 METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+READS = frozenset({"GET", "HEAD"})
 
 
 class Upstream(Protocol):
@@ -125,16 +129,32 @@ class Upstream(Protocol):
 Connect = Callable[[str, list[tuple[str, str]], list[str]], Awaitable[Upstream]]
 
 
-async def websockets_connect(url: str, headers: list[tuple[str, str]], subprotocols: list[str]) -> Upstream:
-    from websockets.asyncio.client import connect
-
-    return await connect(
-        url,
-        additional_headers=headers,
-        subprotocols=subprotocols or None,
-        max_size=None,
-        open_timeout=10,
+def editor_client(path: str = EDITOR_SOCKET) -> httpx.AsyncClient:
+    """HTTP to the editor over its Unix socket. No read timeout: downloads and
+    long requests stream for as long as they take."""
+    return httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(uds=path),
+        timeout=httpx.Timeout(10.0, read=None, write=None),
+        follow_redirects=False,
     )
+
+
+def unix_socket_connect(path: str = EDITOR_SOCKET) -> Connect:
+    """WebSockets to the editor over its Unix socket."""
+
+    async def connect(url: str, headers: list[tuple[str, str]], subprotocols: list[str]) -> Upstream:
+        from websockets.asyncio.client import unix_connect
+
+        return await unix_connect(
+            path,
+            url,
+            additional_headers=headers,
+            subprotocols=subprotocols or None,
+            max_size=None,
+            open_timeout=10,
+        )
+
+    return connect
 
 
 def frame_allowed(path: str, dest: str) -> bool:
@@ -155,7 +175,7 @@ def create_app(
     settings: Settings,
     authenticator: Authenticator,
     client: httpx.AsyncClient,
-    connect: Connect = websockets_connect,
+    connect: Connect,
     clock: Callable[[], float] = time.time,
 ) -> Starlette:
     env = Environment(loader=PackageLoader("code_server_gate", "templates"), autoescape=select_autoescape(default=True))
@@ -167,12 +187,14 @@ def create_app(
         html = env.get_template("error.html").render(base=PREFIX, message=message)
         return HTMLResponse(html, status_code=status, headers=GATE_HEADERS)
 
-    def editor_path(scope: Mapping[str, Any]) -> str:
-        """The request's path after PREFIX, still percent-encoded, with its query."""
-        raw = scope.get("raw_path") or scope["path"].encode()
-        path = raw.decode("latin-1")[len(PREFIX) :] or "/"
+    def editor_path(scope: Mapping[str, Any]) -> str | None:
+        """The request's path after PREFIX, still percent-encoded, with its query;
+        None when PREFIX itself was percent-encoded (routing matched the decoded path)."""
+        raw = (scope.get("raw_path") or scope["path"].encode()).decode("latin-1")
+        if not raw.startswith(PREFIX + "/"):
+            return None
         query = scope.get("query_string", b"").decode("latin-1")
-        return path + (f"?{query}" if query else "")
+        return raw[len(PREFIX) :] + (f"?{query}" if query else "")
 
     def forwarded(headers: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
         out = [(k, v) for k, v in headers if k.lower() in REQUEST_HEADERS]
@@ -200,6 +222,7 @@ def create_app(
                 # code-server lets its PWA worker claim "/", the whole origin; it gets PREFIX at most.
                 v = PREFIX + v if v.startswith("/") else PREFIX + "/"
             out[k] = v
+        out["vary"] = ", ".join(filter(None, (out.get("vary"), "Sec-Fetch-Dest")))
         out["x-content-type-options"] = "nosniff"
         out["cross-origin-resource-policy"] = "same-origin"
         if sandboxed:
@@ -210,7 +233,7 @@ def create_app(
         try:
             await authenticator.email(request.headers)
         except AuthError as e:
-            log.info("refused %s %s reason=auth", request.method, request.url.path)
+            log.info("refused %s %s reason=%s", request.method, request.url.path, e.reason)
             return error(str(e), e.status)
         return None
 
@@ -218,14 +241,19 @@ def create_app(
         if refused := await checked(request):
             return refused
         path = editor_path(request.scope)
+        if path is None:
+            return error("Not found.", 404)
         dest = request.headers.get("sec-fetch-dest", "")
         if not dest:
             return error("this browser did not say how the page was requested; use a current browser", 403)
+        if request.method not in READS and request.headers.get("sec-fetch-site") != "same-origin":
+            log.info("refused %s %s reason=site", request.method, request.url.path)
+            return error("cross-site request refused", 403)
         navigation = dest in NAVIGATIONS
         if navigation and not frame_allowed(path.split("?", 1)[0], dest):
             log.info("refused %s %s reason=document dest=%s", request.method, request.url.path, dest)
             return error("This can't be opened as a page; open the file in the editor instead.", 403)
-        body = None if request.method in ("GET", "HEAD") else request.stream()
+        body = None if request.method in READS else request.stream()
         try:
             sent = client.build_request(
                 request.method, settings.upstream + path, headers=forwarded(request.headers.items()), content=body
@@ -242,20 +270,21 @@ def create_app(
         )
 
     async def editor_socket(websocket: WebSocket) -> None:
+        path = editor_path(websocket.scope)
         try:
             await authenticator.email(websocket.headers)
             if websocket.headers.get("origin") != settings.public_origin:
                 raise AuthError("cross-site request refused")
-        except AuthError:
-            log.info("refused websocket %s reason=auth", websocket.url.path)
+            if path is None:
+                raise AuthError("not found", reason="path")
+        except AuthError as e:
+            log.info("refused websocket %s reason=%s", websocket.url.path, e.reason)
             await websocket.close(code=1008)
             return
         remaining = token_expiry(websocket.headers[JWT_HEADER]) - clock()
         headers = forwarded(websocket.headers.items())
         try:
-            peer = await connect(
-                ws_upstream + editor_path(websocket.scope), headers, websocket.scope.get("subprotocols", [])
-            )
+            peer = await connect(ws_upstream + path, headers, websocket.scope.get("subprotocols", []))
         except Exception as e:  # unreachable, refused, timed out: all mean no editor
             log.warning("editor websocket unreachable: %s", type(e).__name__)
             await websocket.close(code=1011)

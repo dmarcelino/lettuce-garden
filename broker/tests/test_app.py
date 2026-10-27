@@ -270,6 +270,20 @@ def test_settings_read_the_garden_profiles():
     assert settings.garden_profiles == "secrets,gmail-triggers"
 
 
+def test_garden_refusals_log_why(env, caplog):
+    client = env[0]
+    caplog.set_level(logging.INFO)
+    assert client.get("/garden/", headers=SCRIPT_FETCH).status_code == 403
+    assert client.get(f"{B}/vault", headers=SCRIPT_FETCH).status_code == 403
+    assert client.get("/garden/", headers={"cf-access-jwt-assertion": ""}).status_code == 403
+    refusals = [r.getMessage() for r in caplog.records if r.getMessage().startswith("refused")]
+    assert refusals == [
+        "refused GET /garden/ reason=fetch",
+        f"refused GET {B}/vault reason=fetch",
+        "refused GET /garden/ reason=auth",
+    ]
+
+
 def test_garden_landing_does_not_hold_the_vault_open(env, clock):
     client, vault = env[0], env[1]
     setup_vault(client)

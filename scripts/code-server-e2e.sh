@@ -19,8 +19,9 @@
 # - the terminal's way into the shell (the SSH session exec-shell opens): git
 #   with a hook that runs in the shell and not in the editor, and the
 #   environment agent-env gives it (PATH, npm's prefix);
-# - what the editor can't do: write its extensions dir, reach the internet, be
-#   reached from the stack network.
+# - what the editor can't do: write its extensions dir, reach the internet,
+#   listen on any port, be reached from the stack network or from the shell
+#   (the gate, as nobody, reaches it only through its socket).
 # - with --browser: agent-1's workspace gets what an agent could plant (a
 #   terminal profile, an automatic task, its own TypeScript and tsserver node,
 #   a tsconfig plugin, git.path, a git repository); Chromium opens the folder, a
@@ -77,12 +78,12 @@ TMP=$(mktemp -d)
 cleanup() {
   if ((KEEP)); then
     echo "kept: containers, networks and volumes named $P-*, images $P-*, files in $TMP"
-    echo "remove: KEEP= by hand, or: docker rm -f \$(docker ps -aq --filter name=$P-); docker network rm \$(docker network ls -q --filter name=$P-); docker volume rm $P-data $P-keys"
+    echo "remove: KEEP= by hand, or: docker rm -f \$(docker ps -aq --filter name=$P-); docker network rm \$(docker network ls -q --filter name=$P-); docker volume rm $P-data $P-keys $P-sock"
     return
   fi
   docker rm -f "$P-editor" "$P-exec" "$P-probe" "$P-gate" >/dev/null 2>&1 || true
-  docker network rm "$P-editor" "$P-exec" "$P-egress" "$P-default" >/dev/null 2>&1 || true
-  docker volume rm "$P-data" "$P-keys" >/dev/null 2>&1 || true
+  docker network rm "$P-exec" "$P-egress" "$P-default" >/dev/null 2>&1 || true
+  docker volume rm "$P-data" "$P-keys" "$P-sock" >/dev/null 2>&1 || true
   docker rmi "$P-gate:test" "$P-editor:e2e" "$P-exec:e2e" >/dev/null 2>&1 || true
   docker run --rm -v "$TMP:/t" "$DEBIAN" sh -c 'rm -rf /t/*' >/dev/null 2>&1 || true
   rmdir "$TMP" 2>/dev/null || true
@@ -123,21 +124,21 @@ docker run --rm -v "$TMP:/t" "$DEBIAN" sh -c '
   mkdir -p /t/workspaces/agent-1 /t/tools
   echo "<html><script>parent.x=1</script>agent-page</html>" >/t/workspaces/agent-1/page.html'
 
-docker network create --internal "$P-editor" >/dev/null
 docker network create --internal "$P-exec" >/dev/null
 docker network create "$P-egress" >/dev/null
 docker network create "$P-default" >/dev/null
 docker volume create "$P-data" >/dev/null
 docker volume create "$P-keys" >/dev/null
+docker volume create "$P-sock" >/dev/null
 
-docker create --name "$P-editor" --network "$P-editor" --network-alias code-server-editor \
+# As compose/code-server.yml runs it: on its socket, which only the gate mounts besides it.
+docker create --name "$P-editor" --network "$P-exec" --network-alias code-server-editor \
   --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true --user 0 \
   -e EXTENSIONS_GALLERY='{}' \
-  -v "$TMP/workspaces:/work" -v "$P-data:/data" -v "$P-keys:/keys" \
-  "$P-editor:e2e" --bind-addr 0.0.0.0:8080 --auth none --disable-proxy --disable-telemetry \
-  --disable-update-check --disable-getting-started-override \
+  -v "$TMP/workspaces:/work" -v "$P-data:/data" -v "$P-keys:/keys" -v "$P-sock:/run/code-server" \
+  "$P-editor:e2e" --socket /run/code-server/editor.sock --socket-mode 666 --auth none --disable-proxy \
+  --disable-telemetry --disable-update-check --disable-getting-started-override \
   --extensions-dir /opt/lettuce-editor/no-extensions --user-data-dir /data/user >/dev/null
-docker network connect "$P-exec" "$P-editor"
 docker start "$P-editor" >/dev/null
 # listening -> success once the editor serves (its log is read whole: grep -q
 # would end the pipe early and fail it under pipefail)
@@ -157,7 +158,9 @@ docker start "$P-exec" >/dev/null
 sleep 2
 
 echo "the gate, in front of the real editor"
-if docker run --rm --network "$P-editor" "$P-gate:test" python tests/e2e/check_gate.py; then
+# As in a stack: nobody, with the socket read-only, and no network to the editor.
+if docker run --rm --network none --user 65534 -v "$P-sock:/run/code-server:ro" "$P-gate:test" \
+  python tests/e2e/check_gate.py; then
   result ok "gate checks"
 else
   result fail "gate checks"
@@ -186,6 +189,12 @@ echo "the editor's limits"
 refuse "nothing can be installed into its extensions dir" docker exec "$P-editor" touch /opt/lettuce-editor/no-extensions/x
 refuse "its root is read-only" docker exec "$P-editor" touch /opt/code-server/x
 refuse "it has no way to the internet" docker exec "$P-editor" bash -c 'exec 3<>/dev/tcp/1.1.1.1/443'
+# listeners CONTAINER -> the TCP sockets listening in CONTAINER (state 0A), one per
+# line, but Docker's own DNS server, which every container on a user-defined
+# network has at 127.0.0.11 (0B00007F)
+listeners() { docker exec "$1" awk 'NR > 1 && $4 == "0A" && $2 !~ /^0B00007F:/' /proc/net/tcp /proc/net/tcp6; }
+expect "it listens on no port, only on its socket" test -z "$(listeners "$P-editor")"
+refuse "the shell can't reach the editor" docker exec "$P-exec" bash -c 'exec 3<>/dev/tcp/code-server-editor/8080'
 docker run -d --name "$P-probe" --network "$P-default" "$DEBIAN" sleep 300 >/dev/null
 refuse "the stack network can't reach the editor" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/code-server-editor/8080'
 refuse "the stack network can't reach the shell" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/code-server-exec/22'
@@ -233,9 +242,8 @@ EOF
 
 ![control](http://localhost:8000/control-md-image.png)
 EOF'
-  docker create --name "$P-gate" --network "$P-default" "$P-gate:test" \
-    python tests/e2e/serve_gate.py >/dev/null
-  docker network connect "$P-editor" "$P-gate"
+  docker create --name "$P-gate" --network "$P-default" --user 65534 -v "$P-sock:/run/code-server:ro" \
+    "$P-gate:test" python tests/e2e/serve_gate.py >/dev/null
   docker start "$P-gate" >/dev/null
   sleep 3
   # The image has the browsers; the Python package of the same version is installed on the fly.

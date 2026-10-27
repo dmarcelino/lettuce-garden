@@ -26,7 +26,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
 from starlette.routing import Route
 
-from .auth import PAGE, Authenticator, AuthError, check_fetch
+from .auth import PAGE, Authenticator, AuthError, admit
 
 log = logging.getLogger("garden_common.garden")
 
@@ -121,10 +121,9 @@ def landing_routes(
 
     async def landing(request: Request) -> Response:
         try:
-            email = await authenticator.email(request.headers)
-            check_fetch(request.headers, PAGE)
+            email = await admit(authenticator, request.headers, PAGE)
         except AuthError as e:
-            log.info("refused %s %s reason=auth", request.method, request.url.path)
+            log.info("refused %s %s reason=%s", request.method, request.url.path, e.reason)
             return error(str(e), e.status)
         return HTMLResponse(render_landing(email, profiles, base), headers=page_headers)
 

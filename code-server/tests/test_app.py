@@ -71,8 +71,8 @@ def test_the_prefix_is_stripped_and_the_path_kept_as_sent(browser, editor):
     browser.get(f"{P}/?folder=/work/agent-1")
     browser.get(f"{P}/vscode-remote-resource?path=/work/a%20b/c%2Fd.png&tkn=1", headers=IMAGE)
     assert [str(r.url) for r in editor.requests] == [
-        "http://code-server-editor:8080/?folder=/work/agent-1",
-        "http://code-server-editor:8080/vscode-remote-resource?path=/work/a%20b/c%2Fd.png&tkn=1",
+        "http://code-server-editor/?folder=/work/agent-1",
+        "http://code-server-editor/vscode-remote-resource?path=/work/a%20b/c%2Fd.png&tkn=1",
     ]
 
 
@@ -136,7 +136,7 @@ def test_only_listed_response_headers_reach_the_browser(browser, editor):
         ("./?folder=%2Fwork", "./?folder=%2Fwork"),
         ("login", "login"),
         (f"{ORIGIN}/?folder=x", f"{ORIGIN}{P}/?folder=x"),
-        ("http://code-server-editor:8080/x", f"{ORIGIN}{P}/x"),
+        ("http://code-server-editor/x", f"{ORIGIN}{P}/x"),
         (f"{ORIGIN}{P}/ok", f"{ORIGIN}{P}/ok"),
         ("https://example.org/elsewhere", "https://example.org/elsewhere"),
     ],
@@ -220,6 +220,36 @@ def test_everything_else_is_served_sandboxed(browser, editor):
 # -- bodies, errors, the landing page --------------------------------------------
 
 
+def test_every_answer_varies_with_how_it_was_asked(browser, editor):
+    # The gate decides by Sec-Fetch-Dest; a cached answer must never be reused for another kind of request.
+    editor.responses["/cached.js"] = httpx.Response(200, text="x", headers={"cache-control": "max-age=3600"})
+    editor.responses["/varied.js"] = httpx.Response(200, text="x", headers={"vary": "Accept-Encoding"})
+    for path, fetch in (("/cached.js", IMAGE), ("/varied.js", SCRIPT), ("/", NAVIGATE)):
+        r = browser.get(f"{P}{path}", headers=fetch)
+        assert r.status_code == 200, path
+        vary = [v.strip().lower() for v in r.headers["vary"].split(",")]
+        assert "sec-fetch-dest" in vary, path
+    assert "accept-encoding" in browser.get(f"{P}/varied.js", headers=SCRIPT).headers["vary"].lower()
+
+
+@pytest.mark.parametrize("site", ["same-site", "cross-site", "none"])
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+def test_only_this_origin_may_send_anything_but_a_read(browser, editor, method, site):
+    # The Access cookie is SameSite=Lax: another stack under the same domain is the same site.
+    r = browser.request(method, f"{P}/x", headers={**SCRIPT, "sec-fetch-site": site}, content=b"x")
+    assert r.status_code == 403
+    assert editor.requests == []
+    r = browser.request(method, f"{P}/x", headers=SCRIPT, content=b"x")
+    assert r.status_code == 200 and len(editor.requests) == 1
+
+
+@pytest.mark.parametrize("path", ["/garden/code-serv%65r/x", "/garden%2Fcode-server/x", "/garden/code-server%2Fx"])
+def test_a_prefix_that_is_not_spelled_out_is_refused(browser, editor, path):
+    r = browser.get(path, headers=SCRIPT)
+    assert r.status_code == 404
+    assert editor.requests == []
+
+
 def test_bodies_stream_both_ways(browser, editor):
     big = bytes(range(256)) * 4096
     editor.responses["/upload"] = httpx.Response(
@@ -277,7 +307,7 @@ def test_settings_from_the_environment():
     assert s.allowed_users == {"alfred@gmail.com", "hal@example.com"}
     assert s.public_origin == ORIGIN and s.public_host == "alfred.example.com"
     assert s.garden_profiles == "secrets,code-server"
-    assert s.upstream == "http://code-server-editor:8080"
+    assert s.upstream == "http://code-server-editor"
     for broken in (
         {"PUBLIC_ORIGIN": "http://alfred.example.com"},
         {"PUBLIC_ORIGIN": f"{ORIGIN}/x"},
@@ -309,7 +339,7 @@ def test_a_websocket_is_relayed_both_ways(settings, authenticator, editor, signi
             ws.send_text("text")
             assert ws.receive_text() == "text"
     peer = editor.sockets[0]
-    assert peer.url == "ws://code-server-editor:8080/?reconnectionToken=abc&skipWebSocketFrames=false"
+    assert peer.url == "ws://code-server-editor/?reconnectionToken=abc&skipWebSocketFrames=false"
     assert peer.received == [b"\x00\x01binary", "text"]
     sent = dict(peer.headers)
     assert "cookie" not in sent and "cf-access-jwt-assertion" not in sent
@@ -331,6 +361,15 @@ def test_a_websocket_needs_access_and_this_origin(settings, authenticator, edito
     with TestClient(gate(settings, authenticator, editor), base_url=ORIGIN) as c:
         with pytest.raises(WebSocketDisconnect) as e:
             with c.websocket_connect(f"{P}/", headers=socket_headers(signing_key, **over)):
+                pass
+    assert e.value.code == 1008
+    assert editor.sockets == []
+
+
+def test_a_websocket_to_a_prefix_that_is_not_spelled_out_is_refused(settings, authenticator, editor, signing_key):
+    with TestClient(gate(settings, authenticator, editor), base_url=ORIGIN) as c:
+        with pytest.raises(WebSocketDisconnect) as e:
+            with c.websocket_connect("/garden/code-server%2F", headers=socket_headers(signing_key)):
                 pass
     assert e.value.code == 1008
     assert editor.sockets == []

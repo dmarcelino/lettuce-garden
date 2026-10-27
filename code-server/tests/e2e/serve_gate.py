@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import time
 
-import httpx
 import jwt
 import uvicorn
 from cryptography.hazmat.primitives.asymmetric import rsa
 from garden_common.auth import JWT_HEADER, Authenticator
 
-from code_server_gate.app import create_app
+from code_server_gate.app import create_app, editor_client, unix_socket_connect
 from code_server_gate.config import Settings
 
 EMAIL = "alfred@example.com"
@@ -31,7 +30,7 @@ def main() -> None:
         garden_profiles="code-server",
     )
     authenticator = Authenticator(settings, key_resolver=lambda t: key.public_key())
-    gate = create_app(settings, authenticator, httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=None)))
+    gate = create_app(settings, authenticator, editor_client(), unix_socket_connect())
 
     async def access(scope, receive, send):
         if scope["type"] in ("http", "websocket"):
