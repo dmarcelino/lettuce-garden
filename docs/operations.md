@@ -75,11 +75,11 @@ Three limits:
 - `--tools` goes further: every agent of the stack writes those tools, and npm's global config (`/opt/agent-tools/etc/npmrc`) and cargo's (`/opt/agent-tools/cargo/config.toml`) are read on every call, so with it the agents' code runs with your credentials whenever you use them. With `rw`, whatever you write there is every agent's to read: never `cargo login` (its token goes to `CARGO_HOME`, on that mount) or `npm config set --location=global` with a token.
 
 ### Agent skills
-`agent-skills/` holds skills this repo gives every agent, for example `scheduling-scripts` (cron jobs that survive restarts, instead of `crontab`). After adding or changing one, push them to the running stacks:
+`agent-skills/` holds skills this repo gives every agent, for example `using-vault-secrets` (the vault's `vault-run` helper). Scheduled jobs that survive restarts are upstream's, in its `installing-tools` skill. After adding or changing one, push them to the running stacks:
 ```bash
 ./lettucectl skills all           # or one stack: skills alfred
 ```
-They go into each stack's global skills (`/root/.letta/skills`), which every agent of that stack loads. `skills` replaces or removes only what it installed before (listed in `.lettucectl-skills` there), so upstream's skills and the ones enabled in Settings stay. A name upstream Lettuce also ships is refused, because its BFF would overwrite ours. `up` does not install skills; run `skills` after setting up a new stack. Skill text reaches every operator's stacks, so keep it generic.
+They go into each stack's global skills (`/root/.letta/skills`), which every agent of that stack loads. `skills` replaces or removes only what it installed before (listed in `.lettucectl-skills` there; a skill deleted from `agent-skills/` is removed from the stack on the next run), so upstream's skills and the ones enabled in Settings stay. A name upstream Lettuce also ships is refused, because its BFF would overwrite ours. `up` does not install skills; run `skills` after setting up a new stack. Skill text reaches every operator's stacks, so keep it generic.
 
 ## Optional features
 Optional features are compose profiles, the same list for **all** stacks (upstream `docs/CONFIGURATION.md` lists them):
