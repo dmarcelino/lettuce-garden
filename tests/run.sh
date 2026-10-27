@@ -224,6 +224,8 @@ test_add_payloads() {
   b=$(body_of POST /accounts/acc1/access/apps)
   eq "$(jq -c '[.type, .domain, .destinations[0].uri, .allowed_idps, .auto_redirect_to_identity, .policies]' <<<"$b")" \
     '["self_hosted","alfred.example.org","alfred.example.org",["idp-g"],true,[{"id":"pol1","precedence":1}]]'
+  # No script on the stack's origin may read the Access token.
+  eq "$(jq -c '[.http_only_cookie_attribute, .same_site_cookie_attribute]' <<<"$b")" '[true,"lax"]'
   b=$(body_of POST /accounts/acc1/cfd_tunnel)
   eq "$(jq -c '[.name, .config_src]' <<<"$b")" '["lettuce-alfred","cloudflare"]'
   b=$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)
@@ -869,7 +871,7 @@ test_check_refuses_another_service_on_a_symlink_to_the_rules() {
 }
 
 test_check_refuses_volumes_from_gmail_triggers() {
-  triggers_refused ".services.bff.volumes_from = [\"gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules or the pipelock receipts (bff from gmail-triggers)"
+  triggers_refused ".services.bff.volumes_from = [\"gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor (bff from gmail-triggers)"
 }
 
 test_check_refuses_a_volume_bound_to_the_rules() {
@@ -930,7 +932,7 @@ test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
     | .services.searxng = {"volumes_from":["service:bff"]}'
   ctl check alfred
   bad_rc
-  out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules or the pipelock receipts (searxng from bff)"
+  out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor (searxng from bff)"
 }
 
 test_check_refuses_volumes_from_the_broker() {
@@ -1126,7 +1128,7 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml --env-file $H/stacks/alfred/stack.env"
   log_lacks "pipelock-proxy.yml"
 }
 
@@ -1135,7 +1137,7 @@ test_compose_adds_the_proxy_overlay_only_with_pipelock() {
   with_pipelock
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/pipelock-proxy.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/pipelock-proxy.yml --env-file $H/stacks/alfred/stack.env"
 }
 
 test_up_all_starts_every_stack() {
@@ -1437,6 +1439,34 @@ test_profiles_routes_secrets_for_every_stack() {
   # The route is in place before the stacks start.
   [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stacks started before their route"
+}
+
+test_profiles_reapplies_every_stacks_access_application() {
+  broker_config
+  ctl add alfred alfred@example.com
+  ctl add hal hal@example.com
+  local created
+  created=$(body_of POST /accounts/acc1/access/apps)
+  : >"$T/calls.log"
+  ctl profiles cloudflared,search,secrets
+  ok_rc
+  # Stacks made before a setting existed (the HttpOnly cookie) get it too.
+  eq "$(grep -c '^curl PUT /accounts/acc1/access/apps/app1 ' "$T/calls.log")" 2
+  eq "$(body_of PUT /accounts/acc1/access/apps/app1 | jq -c 'del(.name, .domain, .destinations)')" \
+    "$(jq -c 'del(.name, .domain, .destinations)' <<<"$created")"
+  grep '^curl PUT /accounts/acc1/access/apps/app1 ' "$T/calls.log" | grep -qF '"name":"lettuce-hal","domain":"hal.example.org"' ||
+    fail "hal's application was not re-applied with its own name and host"
+  [[ $(grep -n '^curl PUT /accounts/acc1/access/apps' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
+    fail "stacks started before their Access application was updated"
+}
+
+test_profiles_reports_a_failed_access_application_update() {
+  added
+  stub 'STUB_CF_FAIL="PUT /accounts/acc1/access/apps/app1"'
+  ctl profiles cloudflared,search
+  bad_rc
+  out_has "could not update the tunnel routes or Access application of: alfred"
+  out_has "run the same command again"
 }
 
 test_profiles_dropping_secrets_removes_the_route() {
@@ -2773,7 +2803,7 @@ test_compose_adds_the_doc_tools_overlay_and_its_values_only_with_the_profile() {
   with_docs
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env"
   log_has "docker-env DOC_TOOLS_TAG=$(docs_tag) DOC_TOOLS_NETWORK=lettuce-doc-tools-alfred"
   grep -q '^DOC_TOOLS' "$H/stacks/alfred/stack.env" && fail "doc-tools values written to stack.env"
   true
@@ -2789,7 +2819,7 @@ test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
   log_has "docker network create --internal --label lettuce.doc-tools.stack=alfred lettuce-doc-tools-alfred"
   log_has "docker network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
   # The network exists before the app-server joins it, and Gotenberg joins after.
-  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
+  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
     fail "the network was created after compose up"
   (($(line_of "-p lettuce_shared") > $(line_of "up -d --build --remove-orphans"))) || fail "gotenberg started before the stack"
 }
@@ -3187,6 +3217,201 @@ test_shared_project_is_not_a_stack_named_shared() {
   grep -- '-p lettuce_shared ' "$T/calls.log" | grep -q upstream && fail "the shared project got a stack's files"
   grep -- '-p lettuce-shared ' "$T/calls.log" | grep -q compose/shared && fail "the stack got the shared project's files"
   true
+}
+
+# ── code editor (code-server) ────────────────────────────────────────────────
+# code_config -> the rendered config also holds the three services and networks
+# compose/code-server.yml renders for alfred (taken from a real render)
+code_config() {
+  local st=$H/stacks/alfred/state
+  config_edit '.services["code-server"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
+      "networks":{"code-editor":null,"default":null}}
+    | .services["code-server-editor"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
+      "command":["--bind-addr","0.0.0.0:8080","--auth","none","--disable-proxy","--disable-telemetry",
+        "--disable-update-check","--disable-getting-started-override","--extensions-dir",
+        "/opt/lettuce-editor/no-extensions","--user-data-dir","/data/user"],
+      "environment":{"EXTENSIONS_GALLERY":"{}","TZ":"UTC"},
+      "networks":{"code-editor":null,"code-exec":null},
+      "volumes":[{"type":"bind","source":"'"$st"'/workspaces","target":"/work","bind":{"create_host_path":true}},
+        {"type":"volume","source":"code-server-data","target":"/data","volume":{}},
+        {"type":"volume","source":"code-exec-keys","target":"/keys","volume":{}}]}
+    | .services["code-server-exec"] = {"cap_drop":["NET_RAW"],"init":true,
+      "networks":{"code-egress":null,"code-exec":null},
+      "volumes":[{"type":"bind","source":"'"$st"'/workspaces","target":"/work","bind":{"create_host_path":true}},
+        {"type":"bind","source":"'"$st"'/tools","target":"/opt/agent-tools","bind":{"create_host_path":true}},
+        {"type":"volume","source":"code-exec-keys","target":"/keys","read_only":true,"volume":{}}]}
+    | .networks = {"code-editor":{"internal":true},"code-exec":{"internal":true},"code-egress":{},"default":{}}'
+}
+
+# with_code -> alfred runs the code-server profile, with the services it renders
+with_code() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,code-server/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,code-server/' "$H/stacks/alfred/stack.env"
+  code_config
+}
+
+# code_refused JQ EXPECTED -> with alfred's code editor edited by the jq filter
+# JQ, `check` fails and says EXPECTED
+code_refused() {
+  added
+  with_code
+  config_edit "$1"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: $2"
+}
+CG='.services["code-server"]'
+CE='.services["code-server-editor"]'
+CX='.services["code-server-exec"]'
+
+test_check_accepts_the_code_editor_as_rendered() {
+  added
+  with_code
+  ctl check alfred
+  ok_rc
+}
+
+test_check_refuses_a_code_editor_service_missing() {
+  local s
+  for s in code-server code-server-editor code-server-exec; do
+    code_refused "del(.services[\"$s\"])" "the code-server profile is on but $s is not in the rendered config"
+    teardown
+    setup
+  done
+}
+
+test_check_refuses_a_gate_without_its_hardening_or_on_another_network() {
+  code_refused "del($CG.read_only)" "code-server must have read_only: true"
+  teardown; setup
+  code_refused "$CG.volumes = [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "code-server must not mount host paths"
+  teardown; setup
+  code_refused "$CG.networks[\"code-exec\"] = null" "code-server (the gate) must be on the default and code-editor networks only"
+}
+
+test_check_refuses_an_editor_without_its_hardening() {
+  code_refused "$CE.cap_drop = [\"NET_RAW\"]" "code-server-editor must drop all capabilities"
+  teardown; setup
+  code_refused "$CE.cap_add = [\"SYS_PTRACE\"]" "code-server-editor must not set cap_add"
+  teardown; setup
+  code_refused "$CE.pid = \"host\"" "code-server-editor must not set pid"
+}
+
+test_check_refuses_an_editor_with_other_mounts() {
+  code_refused "$CE.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/tools\",\"target\":\"/opt/agent-tools\"}]" \
+    "code-server-editor may mount from the host only $H/stacks/alfred/state/workspaces (at /work)"
+  teardown; setup
+  code_refused "$CE.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" \
+    "code-server-editor may mount only the volumes code-server-data (at /data) and code-exec-keys (at /keys)"
+  teardown; setup
+  code_refused "$CE.volumes = [$CE.volumes[0], $CE.volumes[1]]" \
+    "code-server-editor may mount only the volumes code-server-data (at /data) and code-exec-keys (at /keys)"
+}
+
+test_check_refuses_an_editor_on_the_stack_network() {
+  code_refused "$CE.networks.default = null" "code-server-editor must be on the code-editor and code-exec networks only"
+}
+
+test_check_refuses_an_editor_that_runs_workspace_code_or_trusts_more() {
+  local flag
+  code_refused "$CE.command -= [\"--disable-proxy\"]" "code-server-editor must run with --auth none, --disable-proxy"
+  teardown; setup
+  code_refused "$CE.command |= map(if . == \"none\" then \"password\" else . end)" "code-server-editor must run with --auth none"
+  teardown; setup
+  code_refused "$CE.command |= map(if . == \"/opt/lettuce-editor/no-extensions\" then \"/data/extensions\" else . end)" \
+    "code-server-editor must run with --auth none, --disable-proxy and --extensions-dir /opt/lettuce-editor/no-extensions"
+  for flag in --disable-workspace-trust --trusted-origins=evil.example.org --link --enable-proposed-api \
+    --install-extension --github-auth --builtin-extensions-dir; do
+    teardown; setup
+    code_refused "$CE.command += [\"$flag\"]" "code-server-editor must not run with $flag"
+  done
+  teardown; setup
+  code_refused "$CE.environment.EXTENSIONS_GALLERY = \"{\\\"serviceUrl\\\":\\\"https://open-vsx.org/vscode/gallery\\\"}\"" \
+    "code-server-editor must have EXTENSIONS_GALLERY={} (no marketplace)"
+}
+
+test_check_refuses_a_shell_with_more_reach() {
+  code_refused "$CX.networks.default = null" "code-server-exec must be on the code-exec and code-egress networks only"
+  teardown; setup
+  code_refused "$CX.cap_drop = []" "code-server-exec must drop NET_RAW"
+  teardown; setup
+  code_refused "$CX.privileged = true" "code-server-exec must not set privileged"
+  teardown; setup
+  code_refused "$CX.network_mode = \"service:app-server\"" "code-server-exec must not set network_mode"
+  teardown; setup
+  code_refused "$CX.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/letta-home\",\"target\":\"/root/.letta\"}]" \
+    "code-server-exec may mount from the host only"
+  teardown; setup
+  code_refused "$CX.volumes[2].read_only = false" "code-server-exec may mount only the volume code-exec-keys, read-only"
+}
+
+test_check_refuses_others_on_the_code_editor_networks() {
+  code_refused '.services["app-server"].networks = {"default":null,"code-exec":null}' \
+    "only code-server-editor,code-server-exec may join the code-exec network (found: app-server,code-server-editor,code-server-exec)"
+  teardown; setup
+  code_refused '.services.cloudflared = {"networks":{"default":null,"code-editor":null}}' \
+    "only code-server,code-server-editor may join the code-editor network"
+  teardown; setup
+  code_refused '.networks["code-exec"].internal = false' "the code-exec network must be internal"
+}
+
+test_check_refuses_a_symlinked_workspace_for_the_code_editor() {
+  added
+  with_code
+  mkdir -p "$T/elsewhere"
+  rm -rf "$H/stacks/alfred/state/workspaces"
+  ln -s "$T/elsewhere" "$H/stacks/alfred/state/workspaces"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: $H/stacks/alfred/state/workspaces is a symlink"
+}
+
+test_check_guards_the_code_editor_volumes_whatever_the_profiles() {
+  added
+  config_edit '.services["app-server"].volumes = [{"type":"volume","source":"code-server-data","target":"/x"}]'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: app-server mount(s) the code editor's volume"
+  teardown; setup
+  added
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"code-exec-keys","target":"/keys"}]'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: bff mount(s) the code editor's SSH keys"
+  teardown; setup
+  added
+  config_edit '.services.searxng = {"volumes_from":["code-server-exec"]}'
+  ctl check alfred
+  bad_rc
+  out_has "volumes_from reaches"
+}
+
+test_compose_always_merges_the_code_editor_overlay() {
+  added
+  ctl up alfred
+  ok_rc
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml --env-file"
+}
+
+test_profiles_routes_the_code_editor_and_lists_it_on_the_landing_page() {
+  added
+  code_config
+  ctl profiles cloudflared,search,code-server
+  ok_rc
+  eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
+    '[{"hostname":"alfred.example.org","path":"^/garden/code-server(/|$)","service":"http://code-server:8000"},{"hostname":"alfred.example.org","path":"^/garden/?$","service":"http://code-server:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+  eq "$(senv alfred GARDEN_PROFILES)" code-server
+}
+
+test_profiles_dropping_the_code_editor_removes_its_containers() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,code-server/' "$H/config.env"
+  code_config
+  added
+  containers alfred app-server bff cloudflared code-server code-server-editor code-server-exec
+  ctl profiles cloudflared
+  ok_rc
+  log_lacks "code-server:8000"
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf code-server code-server-editor code-server-exec$' "$T/calls.log" ||
+    fail "the code editor's containers were not removed"
 }
 
 for t in $(declare -F | awk '$3 ~ /^test_/ { print $3 }'); do

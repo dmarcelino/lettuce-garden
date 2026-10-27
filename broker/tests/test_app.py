@@ -17,8 +17,10 @@ from .conftest import (
     CARD,
     EMAIL,
     FAST_KDF,
+    NAVIGATE,
     ORIGIN,
     PASSPHRASE,
+    SCRIPT_FETCH,
     SECRET,
     STREET,
     FakeSender,
@@ -36,7 +38,7 @@ def env(settings, authenticator, signing_key, vault_path, clock):
     sender = FakeSender()
     broker = make_broker(settings, vault, sender)
     app = create_app(broker, authenticator, settings.vapid_public_key)
-    with TestClient(app, base_url=ORIGIN, follow_redirects=False) as client:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE, follow_redirects=False) as client:
         client.headers["cf-access-jwt-assertion"] = make_jwt(signing_key)
         yield client, vault, sender
 
@@ -133,7 +135,7 @@ def test_jwks_unavailable_fails_closed(settings, signing_key, vault_path, clock)
 
     vault = Vault(vault_path, clock=clock, kdf=FAST_KDF)
     app = create_app(make_broker(settings, vault), Authenticator(settings, key_resolver=broken), "k")
-    with TestClient(app, base_url=ORIGIN) as client:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE) as client:
         r = client.get(f"{B}/", headers={"cf-access-jwt-assertion": make_jwt(signing_key)})
     assert r.status_code == 503
 
@@ -149,6 +151,76 @@ def test_security_headers_and_static(env):
     assert client.get(f"{B}/sw.js").headers["content-type"].startswith("text/javascript")
     assert client.get(f"{B}/manifest.webmanifest").json()["name"] == "Lettuce Vault"
     assert client.get(f"{B}/icon-192.png").content.startswith(b"\x89PNG")
+
+
+@pytest.mark.parametrize(
+    "fetch",
+    [
+        SCRIPT_FETCH,  # fetch() from a script on the same origin (the code editor's tab)
+        {**NAVIGATE, "sec-fetch-dest": "iframe"},
+        {"sec-fetch-mode": "no-cors", "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin"},
+        {"sec-fetch-mode": "", "sec-fetch-dest": "", "sec-fetch-site": ""},  # no Fetch Metadata at all
+    ],
+)
+def test_pages_load_only_as_top_level_documents(env, fetch):
+    client = env[0]
+    setup_vault(client)
+    token = csrf_of(client.get(f"{B}/notifications").text)
+    for path in [f"{B}/", f"{B}/vault", f"{B}/settings", f"{B}/notifications", "/garden/"]:
+        r = client.get(path, headers=fetch)
+        assert r.status_code == 403, path
+        assert token not in r.text, path
+
+
+def test_pages_open_from_another_site_after_an_access_login(env):
+    """Access sends the person back through a cross-site redirect chain."""
+    client = env[0]
+    for site in ("cross-site", "none", "same-site"):
+        assert client.get(f"{B}/", headers={"sec-fetch-site": site}).status_code == 200, site
+
+
+def test_forms_post_only_from_this_origin(env):
+    client = env[0]
+    csrf = csrf_of(client.get(f"{B}/notifications").text)
+    form = {"passphrase": PASSPHRASE, "confirm": PASSPHRASE, "csrf": csrf}
+    for fetch in ({"sec-fetch-site": "cross-site"}, {"sec-fetch-site": "same-site"}, SCRIPT_FETCH):
+        r = client.post(f"{B}/setup", data=form, headers={**fetch, "origin": ORIGIN})
+        assert r.status_code == 403, fetch
+    assert not env[1].is_setup()
+    assert post(client, f"{B}/setup", {"passphrase": PASSPHRASE, "confirm": PASSPHRASE}).status_code == 303
+
+
+def test_json_calls_only_from_this_origins_script(env):
+    client = env[0]
+    csrf = csrf_of(client.get(f"{B}/notifications").text)
+    sub = {"endpoint": "https://push.example/abc", "keys": {"p256dh": "key", "auth": "auth"}}
+    for fetch in (NAVIGATE, {**SCRIPT_FETCH, "sec-fetch-site": "cross-site"}, {**SCRIPT_FETCH, "sec-fetch-mode": ""}):
+        r = client.post(f"{B}/push/subscribe", json=sub, headers={**fetch, "x-csrf-token": csrf, "origin": ORIGIN})
+        assert r.status_code == 403, fetch
+    assert env[1].subscriptions() == []
+
+
+def test_assets_load_as_subresources(env):
+    client = env[0]
+    worker = {"sec-fetch-mode": "same-origin", "sec-fetch-dest": "serviceworker", "sec-fetch-site": "same-origin"}
+    style = {"sec-fetch-mode": "no-cors", "sec-fetch-dest": "style", "sec-fetch-site": "same-origin"}
+    assert client.get(f"{B}/sw.js", headers=worker).status_code == 200
+    for path in ("/garden.css", "/app.css", "/app.js", "/icon-192.png", "/manifest.webmanifest"):
+        assert client.get(f"{B}{path}", headers=style).status_code == 200, path
+
+
+def test_every_response_isolates_its_window(env):
+    """COOP same-origin: a garden page opened by another same-origin tab without it (the code
+    editor) lands in a separate browsing context group, so that tab gets no handle on it."""
+    client = env[0]
+    for r in (
+        client.get(f"{B}/"),
+        client.get("/garden/"),
+        client.get(f"{B}/", headers=SCRIPT_FETCH),
+        client.get(f"{B}/", headers={"cf-access-jwt-assertion": ""}),
+        client.get(f"{B}/app.css"),
+    ):
+        assert r.headers["cross-origin-opener-policy"] == "same-origin", r.url
 
 
 def test_pages_use_the_garden_look_and_link_to_the_garden(env):
@@ -168,7 +240,7 @@ def test_garden_landing_needs_access_and_lists_the_features_that_are_on(
     vault = Vault(vault_path, clock=clock, kdf=FAST_KDF)
     app = create_app(make_broker(settings, vault), authenticator, "k", garden_profiles="secrets")
     jwt_header = {"cf-access-jwt-assertion": make_jwt(signing_key)}
-    with TestClient(app, base_url=ORIGIN, follow_redirects=False) as client:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE, follow_redirects=False) as client:
         for path in ("/garden", "/garden/"):
             assert client.get(path).status_code == 403, path
             # Open while the vault is not even set up: it holds no vault data.
@@ -178,7 +250,7 @@ def test_garden_landing_needs_access_and_lists_the_features_that_are_on(
             assert f'href="{B}/"' in r.text and f'href="{B}/garden.css"' in r.text
             assert 'href="/garden/gmail-triggers/"' not in r.text
     app = create_app(make_broker(settings, vault), authenticator, "k", garden_profiles="secrets,gmail-triggers")
-    with TestClient(app, base_url=ORIGIN) as client:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE) as client:
         page = client.get("/garden/", headers=jwt_header).text
     assert 'href="/garden/gmail-triggers/"' in page and f'href="{B}/"' in page
 
@@ -417,11 +489,11 @@ def test_request_page_escapes_agent_input(env):
 def test_push_subscription_endpoints_work_while_locked(env):
     client, vault, _ = env
     csrf = csrf_of(client.get(f"{B}/notifications").text)
-    headers = {"x-csrf-token": csrf, "origin": ORIGIN}
+    headers = {**SCRIPT_FETCH, "x-csrf-token": csrf, "origin": ORIGIN}
     sub = {"endpoint": "https://push.example/abc", "keys": {"p256dh": "key", "auth": "auth"}}
     assert client.post(f"{B}/push/subscribe", json=sub, headers=headers).status_code == 200
     assert [s["email"] for s in vault.subscriptions()] == [EMAIL]
-    assert client.post(f"{B}/push/subscribe", json=sub, headers={"origin": ORIGIN}).status_code == 403
+    assert client.post(f"{B}/push/subscribe", json=sub, headers={**SCRIPT_FETCH, "origin": ORIGIN}).status_code == 403
     bad = {"endpoint": "http://internal/x", "keys": {"p256dh": "k", "auth": "a"}}
     assert client.post(f"{B}/push/subscribe", json=bad, headers=headers).status_code == 400
     assert client.post(f"{B}/push/test", json={}, headers=headers).json() == {"delivered": 1}

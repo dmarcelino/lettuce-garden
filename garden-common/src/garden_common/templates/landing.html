@@ -22,7 +22,7 @@
     <p class="muted">Extras that run next to your Lettuce, each with its own page.</p>
     {% if features %}
     <ul class="menu-list">
-      {% for f in features %}
+      {% for f in features if not (script and f.profile == editor_profile) %}
       <li>
         <a class="menu-row" href="{{ f.path }}">
           <span class="menu-row-text">
@@ -33,10 +33,19 @@
       </li>
       {% endfor %}
     </ul>
+    {% if script %}
+    <section id="code-agents" data-editor="{{ editor }}">
+      <h2>{{ editor_label }}</h2>
+      <p class="muted" id="code-agents-status">Asking Lettuce for your agents...</p>
+      <p id="code-agents-fallback" hidden><a href="{{ editor }}">Open the code editor</a> and choose File -&gt; Open Folder.</p>
+      <ul class="menu-list" id="code-agents-list" hidden></ul>
+    </section>
+    {% endif %}
     {% else %}
     <div class="empty"><p class="muted">No garden features are on for this stack.</p></div>
     {% endif %}
   </main>
   {% if email %}<footer class="footer">Signed in as {{ email }}</footer>{% endif %}
+  {% if script %}<script>{{ script }}</script>{% endif %}
 </body>
 </html>

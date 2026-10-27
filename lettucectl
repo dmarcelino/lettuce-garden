@@ -117,13 +117,17 @@ google_reminder() {
 }
 
 # route_stack NAME -> re-applies the stack's tunnel routes for its current
-# profiles; a stack whose setup never got a tunnel is skipped
+# profiles, and its Access application as cf_app_body defines it; a stack whose
+# setup never finished is skipped
 route_stack() {
-  local f tun
+  local f tun host
   f=$(stack_env "$1")
   tun=$(env_get "$f" CF_TUNNEL_ID)
   [[ -n $tun && -n $(env_get "$f" CF_DNS_RECORD_ID) ]] || return 0
-  cf_tunnel_configure "$(cfg CF_ACCOUNT_ID)" "$tun" "$(env_get "$f" LETTUCE_HOSTNAME)" "$(env_get "$f" COMPOSE_PROFILES)"
+  host=$(env_get "$f" LETTUCE_HOSTNAME)
+  cf_tunnel_configure "$(cfg CF_ACCOUNT_ID)" "$tun" "$host" "$(env_get "$f" COMPOSE_PROFILES)" || return 1
+  cf_app_update "$(cfg CF_ACCOUNT_ID)" "$(env_get "$f" CF_ACCESS_APP_ID)" "lettuce-$1" "$host" \
+    "$(cfg CF_GOOGLE_IDP_ID)" "$(cfg ACCESS_SESSION_DURATION)" "$(env_get "$f" CF_ACCESS_POLICY_ID)"
 }
 
 # Run by sh in the app-server as: sh -c "$SKILLS_INSTALL" sh DIR SKILL... with a tar
@@ -794,7 +798,7 @@ cmd_profiles() {
       doc_tools_reminder "$n"
     done
   fi
-  ((${#unrouted[@]} == 0)) || warn "could not update the tunnel routes of: ${unrouted[*]}"
+  ((${#unrouted[@]} == 0)) || warn "could not update the tunnel routes or Access application of: ${unrouted[*]}"
   ((${#failed[@]} == 0)) || warn "could not remove the containers of dropped profiles in: ${failed[*]}"
   ((${#executors[@]} == 0)) || warn "could not sync the gmail-triggers executor of: ${executors[*]}"
   ((docs)) || warn "could not sync the document tools (shared Gotenberg, networks)"

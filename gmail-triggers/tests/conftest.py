@@ -22,6 +22,11 @@ from gmail_triggers.store import Agent, Store
 
 EMAIL = "alfred@gmail.com"
 ORIGIN = "https://alfred.example.com"
+
+# What a browser sends when a person opens a page or posts its form (Fetch
+# Metadata), and when a page's own script calls fetch(); see garden_common.auth.check_fetch.
+NAVIGATE = {"sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-site": "same-origin"}
+SCRIPT_FETCH = {"sec-fetch-mode": "cors", "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin"}
 # Stands in for an email's text: tests assert it never reaches request files,
 # pages or logs.
 BODY = "TEST_BODY_DO_NOT_FORWARD_51734"

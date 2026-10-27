@@ -182,6 +182,7 @@ case $args in
         secrets) echo secret-broker ;;
         gmail-triggers) echo gmail-triggers ;;
         pipelock) echo pipelock ;;
+        code-server) printf '%s\n' code-server code-server-editor code-server-exec ;;
         doc-tools) ;;
       esac
     done

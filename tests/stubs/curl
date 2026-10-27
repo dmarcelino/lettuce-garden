@@ -45,6 +45,7 @@ case "$method ${path%%\?*}" in
   "POST /accounts/acc1/access/policies") ok '{"id":"pol1"}' ;;
   "PUT /accounts/acc1/access/policies/pol1") ok '{"id":"pol1"}' ;;
   "POST /accounts/acc1/access/apps") ok '{"id":"app1","aud":"aud1"}' ;;
+  "PUT /accounts/acc1/access/apps/app1") ok '{"id":"app1","aud":"aud1"}' ;;
   "POST /accounts/acc1/cfd_tunnel") ok '{"id":"tun1"}' ;;
   "GET /accounts/acc1/cfd_tunnel/tun1/token") ok '"tuntok1"' ;;
   "PUT /accounts/acc1/cfd_tunnel/tun1/configurations") ok '{}' ;;

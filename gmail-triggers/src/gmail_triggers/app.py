@@ -15,7 +15,7 @@ from importlib import resources
 from typing import Any
 
 import anyio
-from garden_common.auth import Authenticator, AuthError
+from garden_common.auth import COOP, FORM, PAGE, Authenticator, AuthError, check_fetch
 from garden_common.garden import landing_routes, stylesheet
 from jinja2 import Environment, PackageLoader, select_autoescape
 from starlette.applications import Starlette
@@ -57,6 +57,7 @@ SECURITY_HEADERS = {
     "referrer-policy": "same-origin",
     "cache-control": "no-store",
     "x-frame-options": "DENY",
+    **COOP,
 }
 
 Handler = Callable[[Request, str], Awaitable[Response]]
@@ -297,13 +298,22 @@ def create_app(
     def back(path: str) -> RedirectResponse:
         return RedirectResponse(PREFIX + path, status_code=303, headers=SECURITY_HEADERS)
 
-    def page(handler: Handler, post: bool = False) -> Callable[[Request], Awaitable[Response]]:
+    def page(handler: Handler, post: bool = False, asset: bool = False) -> Callable[[Request], Awaitable[Response]]:
+        """`asset`: a stylesheet or icon, loaded by pages as a subresource; it holds nothing to protect."""
+
         async def endpoint(request: Request) -> Response:
             try:
                 email = await authenticator.email(request.headers)
             except AuthError as e:
                 log.info("refused %s %s reason=auth", request.method, request.url.path)
                 return error(str(e), e.status)
+            if not asset:
+                try:
+                    check_fetch(request.headers, FORM if post else PAGE)
+                except AuthError as e:
+                    log.info("refused %s %s reason=fetch", request.method, request.url.path)
+                    # Without the email: pages carrying it also carry the form token.
+                    return error(str(e), e.status)
             if post:
                 try:
                     authenticator.check_origin(request.headers)
@@ -522,10 +532,10 @@ def create_app(
         Route("/r/{rid}/delete", page(delete, post=True), methods=["POST"]),
         Route("/r/{rid}/history", page(history)),
         Route("/r/{rid}/test", page(test, post=True), methods=["POST"]),
-        Route("/garden.css", page(static(garden_css, "text/css"))),
-        Route("/app.css", page(static(app_css, "text/css"))),
-        Route("/icon-192.png", page(icon(192))),
-        Route("/icon-512.png", page(icon(512))),
+        Route("/garden.css", page(static(garden_css, "text/css"), asset=True)),
+        Route("/app.css", page(static(app_css, "text/css"), asset=True)),
+        Route("/icon-192.png", page(icon(192), asset=True)),
+        Route("/icon-512.png", page(icon(512), asset=True)),
     ]
 
     @asynccontextmanager

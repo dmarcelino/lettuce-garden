@@ -16,7 +16,7 @@ from importlib import resources
 from typing import Any
 
 import anyio
-from garden_common.auth import Authenticator, AuthError
+from garden_common.auth import COOP, FETCH, FORM, PAGE, Authenticator, AuthError, check_fetch
 from garden_common.garden import landing_routes, stylesheet
 from jinja2 import Environment, PackageLoader, select_autoescape
 from mcp.server.transport_security import TransportSecuritySettings
@@ -44,6 +44,7 @@ SECURITY_HEADERS = {
     "referrer-policy": "same-origin",
     "cache-control": "no-store",
     "x-frame-options": "DENY",
+    **COOP,
 }
 
 Handler = Callable[[HttpRequest, str], Awaitable[Response]]
@@ -109,18 +110,29 @@ def create_app(
         return RedirectResponse(PREFIX + path, status_code=303, headers=SECURITY_HEADERS)
 
     def page(
-        handler: Handler, post: bool = False, unlocked: bool = True
+        handler: Handler, post: bool = False, unlocked: bool = True, asset: bool = False
     ) -> Callable[[HttpRequest], Awaitable[Response]]:
+        """`asset`: a script, stylesheet, icon or manifest, loaded by pages as a subresource (or as the
+        service worker); it holds nothing to protect."""
+
         async def endpoint(request: HttpRequest) -> Response:
             try:
                 email = await authenticator.email(request.headers)
             except AuthError as e:
                 log.info("refused %s %s reason=auth", request.method, request.url.path)
                 return error(str(e), e.status)
+            is_json = request.headers.get("content-type", "").startswith("application/json")
+            if not asset:
+                try:
+                    check_fetch(request.headers, (FETCH if is_json else FORM) if post else PAGE)
+                except AuthError as e:
+                    log.info("refused %s %s reason=fetch", request.method, request.url.path)
+                    # Without the email: pages carrying it also carry the form token.
+                    return error(str(e), e.status)
             if post:
                 try:
                     authenticator.check_origin(request.headers)
-                    if request.headers.get("content-type", "").startswith("application/json"):
+                    if is_json:
                         token = request.headers.get("x-csrf-token")
                     else:
                         token = (await request.form()).get("csrf")
@@ -404,15 +416,16 @@ def create_app(
         Route("/push/unsubscribe", page(push_unsubscribe, post=True, **open_page), methods=["POST"]),
         Route("/push/test", page(push_test, post=True, **open_page), methods=["POST"]),
         Route("/audit", page(audit_page)),
-        Route("/sw.js", page(static_file("sw.js", "text/javascript"), **open_page)),
-        Route("/app.js", page(static_file("app.js", "text/javascript"), **open_page)),
-        Route("/garden.css", page(static_bytes(stylesheet(), "text/css"), **open_page)),
-        Route("/app.css", page(static_file("app.css", "text/css"), **open_page)),
+        Route("/sw.js", page(static_file("sw.js", "text/javascript"), **open_page, asset=True)),
+        Route("/app.js", page(static_file("app.js", "text/javascript"), **open_page, asset=True)),
+        Route("/garden.css", page(static_bytes(stylesheet(), "text/css"), **open_page, asset=True)),
+        Route("/app.css", page(static_file("app.css", "text/css"), **open_page, asset=True)),
         Route(
-            "/manifest.webmanifest", page(static_file("manifest.webmanifest", "application/manifest+json"), **open_page)
+            "/manifest.webmanifest",
+            page(static_file("manifest.webmanifest", "application/manifest+json"), **open_page, asset=True),
         ),
-        Route("/icon-192.png", page(icon(192), **open_page)),
-        Route("/icon-512.png", page(icon(512), **open_page)),
+        Route("/icon-192.png", page(icon(192), **open_page, asset=True)),
+        Route("/icon-512.png", page(icon(512), **open_page, asset=True)),
     ]
 
     mcp_server = build_server(broker)

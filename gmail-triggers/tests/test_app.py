@@ -10,7 +10,7 @@ from gmail_triggers.app import EXAMPLES, create_app, gap_text
 from gmail_triggers.config import MAX_LISTED_MESSAGES, PREFIX
 from gmail_triggers.store import GAP_DROPPED, Held, Rule
 
-from .conftest import AGENT, BODY, ORIGIN, OTHER_AGENT, TOKEN, make_jwt, write_creds, write_policy
+from .conftest import AGENT, BODY, NAVIGATE, ORIGIN, OTHER_AGENT, TOKEN, make_jwt, write_creds, write_policy
 
 B = PREFIX
 
@@ -18,7 +18,7 @@ B = PREFIX
 @pytest.fixture
 def client(env, authenticator, signing_key):
     app = create_app(env.store, env.google, authenticator, TOKEN)
-    with TestClient(app, base_url=ORIGIN, follow_redirects=False) as c:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE, follow_redirects=False) as c:
         c.headers["cf-access-jwt-assertion"] = make_jwt(signing_key)
         yield c
 
@@ -126,18 +126,57 @@ def test_healthz_is_open_and_root_redirects(client):
 def test_garden_landing_needs_access_and_lists_the_features_that_are_on(env, authenticator, signing_key):
     app = create_app(env.store, env.google, authenticator, TOKEN, garden_profiles="gmail-triggers")
     jwt = {"cf-access-jwt-assertion": make_jwt(signing_key)}
-    with TestClient(app, base_url=ORIGIN, follow_redirects=False) as c:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE, follow_redirects=False) as c:
         for path in ("/garden", "/garden/"):
             assert c.get(path).status_code == 403, path
             r = c.get(path, headers=jwt)
             assert r.status_code == 200, path
             assert "script-src 'none'" in r.headers["content-security-policy"]
+            assert "connect-src 'none'" in r.headers["content-security-policy"]
+            assert "<script" not in r.text and "code-agents" not in r.text
             assert f'href="{B}/"' in r.text and f'href="{B}/garden.css"' in r.text
             assert 'href="/garden/secrets/"' not in r.text
     app = create_app(env.store, env.google, authenticator, TOKEN, garden_profiles="secrets,gmail-triggers")
-    with TestClient(app, base_url=ORIGIN) as c:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE) as c:
         page = c.get("/garden/", headers=jwt).text
     assert 'href="/garden/secrets/"' in page and f'href="{B}/"' in page
+
+
+SCRIPT = {"sec-fetch-mode": "cors", "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin"}
+
+
+@pytest.mark.parametrize(
+    "fetch",
+    [SCRIPT, {"sec-fetch-dest": "iframe"}, {"sec-fetch-mode": "", "sec-fetch-dest": "", "sec-fetch-site": ""}],
+)
+def test_pages_load_only_as_top_level_documents(client, fetch):
+    token = csrf(client)
+    for path in [f"{B}/", f"{B}/new", "/garden/"]:
+        r = client.get(path, headers=fetch)
+        assert r.status_code == 403, path
+        assert token not in r.text, path
+
+
+def test_pages_open_from_another_site_after_an_access_login(client):
+    assert client.get(f"{B}/", headers={"sec-fetch-site": "cross-site"}).status_code == 200
+
+
+def test_forms_post_only_from_this_origin(client, env):
+    token = csrf(client)
+    for fetch in ({"sec-fetch-site": "cross-site"}, SCRIPT):
+        r = client.post(f"{B}/rules", data={**form(), "csrf": token}, headers={**fetch, "origin": ORIGIN})
+        assert r.status_code == 403, fetch
+    assert env.store.rules() == []
+
+
+def test_stylesheets_and_icons_load_as_subresources_and_everything_carries_coop(client):
+    style = {"sec-fetch-mode": "no-cors", "sec-fetch-dest": "style", "sec-fetch-site": "same-origin"}
+    for path in ("/garden.css", "/app.css", "/icon-192.png"):
+        r = client.get(f"{B}{path}", headers=style)
+        assert r.status_code == 200, path
+        assert r.headers["cross-origin-opener-policy"] == "same-origin", path
+    for r in (client.get(f"{B}/"), client.get("/garden/"), client.get(f"{B}/", headers=SCRIPT)):
+        assert r.headers["cross-origin-opener-policy"] == "same-origin"
 
 
 def test_pages_link_to_the_garden(client):
@@ -311,11 +350,11 @@ async def test_reconnect_banner(env, authenticator, signing_key):
     env.fake.token_error = "invalid_grant"
     await env.poller.run_once()
     app = create_app(env.store, env.google, authenticator, TOKEN)
-    with TestClient(app, base_url=ORIGIN) as c:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE) as c:
         page = c.get(f"{B}/", headers={"cf-access-jwt-assertion": make_jwt(signing_key)}).text
     assert "Google needs reconnecting" in page
     write_creds(env.settings.creds_dir, refresh_token="refresh-token-2")
-    with TestClient(app, base_url=ORIGIN) as c:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE) as c:
         page = c.get(f"{B}/", headers={"cf-access-jwt-assertion": make_jwt(signing_key)}).text
     assert "Google needs reconnecting" not in page
 
@@ -331,7 +370,7 @@ async def test_gap_banner_and_body_never_on_pages(env, authenticator, signing_ke
     env.clock.t += 3600
     await env.poller.run_once()
     app = create_app(env.store, env.google, authenticator, TOKEN)
-    with TestClient(app, base_url=ORIGIN) as c:
+    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE) as c:
         c.headers["cf-access-jwt-assertion"] = make_jwt(signing_key)
         pages = [c.get(f"{B}{p}").text for p in ("/", f"/r/{rule.id}", f"/r/{rule.id}/history")]
     assert "Some mail wasn&#39;t checked" in pages[0]

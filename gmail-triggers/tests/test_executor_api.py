@@ -8,7 +8,7 @@ from gmail_triggers.config import AGENTS_FRESH_SECONDS, LOST_AFTER_SECONDS, MAX_
 from gmail_triggers.store import Rule
 from gmail_triggers.triggers import send_test
 
-from .conftest import AGENT, ORIGIN, OTHER_AGENT, TOKEN, make_jwt
+from .conftest import AGENT, NAVIGATE, ORIGIN, OTHER_AGENT, TOKEN, make_jwt
 
 API = "/executor/v1"
 AUTH = {"authorization": f"Bearer {TOKEN}"}
@@ -322,7 +322,7 @@ def test_agents_are_wanted_after_the_form_is_shown(api, env, signing_key, form):
     put_agents(api)
     assert wanted(api) is False
     path = f"{PREFIX}/new" if form == "new" else f"{PREFIX}/r/{r.id}"
-    page = api.get(path, headers={"cf-access-jwt-assertion": make_jwt(signing_key)})
+    page = api.get(path, headers={**NAVIGATE, "cf-access-jwt-assertion": make_jwt(signing_key)})
     assert page.status_code == 200
     assert wanted(api) is True
     # Asking doesn't clear it; only a new list does.
@@ -335,7 +335,10 @@ def test_other_pages_do_not_ask_for_agents(api, env, signing_key):
     r = rule(env)
     put_agents(api)
     for path in ("/", f"/r/{r.id}/history"):
-        assert api.get(PREFIX + path, headers={"cf-access-jwt-assertion": make_jwt(signing_key)}).status_code == 200
+        assert (
+            api.get(PREFIX + path, headers={**NAVIGATE, "cf-access-jwt-assertion": make_jwt(signing_key)}).status_code
+            == 200
+        )
     assert wanted(api) is False
 
 

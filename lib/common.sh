@@ -199,6 +199,7 @@ compose_env() {
     -f "$LETTUCE_HOME/compose/secrets.yml" \
     -f "$LETTUCE_HOME/compose/gmail-triggers.yml" \
     -f "$LETTUCE_HOME/compose/pipelock.yml" \
+    -f "$LETTUCE_HOME/compose/code-server.yml" \
     "${extra[@]}" \
     --env-file "$env_file" \
     "$@"
@@ -423,22 +424,30 @@ check_stack() {
   [[ -z $k ]] || die "$name: $k mount(s) google-creds (the Google token); only bff, google-mcp and gmail-triggers may"
   # volumes_from would hand another service every mount of the one it names.
   k=$(jq -r '([.services | to_entries[]
-      | select([(.value.volumes // [])[] | select(.source == "google-creds" or .source == "secret-broker-data" or .source == "pipelock-data")] | length > 0)
-      | .key] + ["gmail-triggers", "secret-broker", "pipelock"]) as $held
+      | select([(.value.volumes // [])[] | select(.source == "google-creds" or .source == "secret-broker-data"
+        or .source == "pipelock-data" or .source == "code-server-data" or .source == "code-exec-keys")] | length > 0)
+      | .key] + ["gmail-triggers", "secret-broker", "pipelock", "code-server", "code-server-editor", "code-server-exec"]) as $held
     | [.services | to_entries[] | .key as $k | (.value.volumes_from // [])[]
       | sub("^service:"; "") | sub(":(ro|rw)$"; "") | select(. as $t | $held | index($t)) | "\($k) from \(.)"]
     | join(", ")' <<<"$rendered")
-  [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault, the gmail-triggers rules or the pipelock receipts ($k)"
+  [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor ($k)"
   # Both volumes outlive their profile, so these hold whatever the profiles.
   k=$(volume_users "$rendered" secret-broker-data secret-broker)
   [[ -z $k ]] || die "$name: $k mount(s) the vault's volume; only secret-broker may"
   k=$(volume_users "$rendered" pipelock-data pipelock)
   [[ -z $k ]] || die "$name: $k mount(s) pipelock's volume (its signing key and receipts); only pipelock may"
+  k=$(volume_users "$rendered" code-server-data code-server-editor)
+  [[ -z $k ]] || die "$name: $k mount(s) the code editor's volume (its state and SSH key); only code-server-editor may"
+  k=$(volume_users "$rendered" code-exec-keys code-server-editor code-server-exec)
+  [[ -z $k ]] || die "$name: $k mount(s) the code editor's SSH keys; only code-server-editor and code-server-exec may"
   if has_profile "$profiles" secrets; then
     check_sidecar "$name" "$rendered" secrets secret-broker compose/secrets.yml
   fi
   if has_profile "$profiles" pipelock; then
     check_pipelock "$name" "$rendered"
+  fi
+  if has_profile "$profiles" code-server; then
+    check_code_server "$name" "$rendered" "$(env_get "$f" LETTA_STATE_DIR)"
   fi
   if has_profile "$profiles" gmail-triggers; then
     [[ $(env_get "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] ||
@@ -538,11 +547,18 @@ volume_users() {
 
 # check_hardened NAME SERVICE SVC -> the sidecar SERVICE (rendered as the JSON
 # SVC) keeps what its overlay gives it: a read-only root filesystem, no
-# capabilities or privileges, its own namespaces and no devices
+# capabilities, and what check_isolated checks
 check_hardened() {
-  local name=$1 s=$2 svc=$3 k
+  local name=$1 s=$2 svc=$3
   jq -e '.read_only == true' <<<"$svc" >/dev/null || die "$name: $s must have read_only: true"
   jq -e '(.cap_drop // []) | index("ALL")' <<<"$svc" >/dev/null || die "$name: $s must drop all capabilities (cap_drop: [ALL])"
+  check_isolated "$name" "$s" "$svc"
+}
+
+# check_isolated NAME SERVICE SVC -> SERVICE gains no capability or privilege,
+# keeps its own namespaces, borrows no mounts and has no devices
+check_isolated() {
+  local name=$1 s=$2 svc=$3 k
   k=$(jq -r '[(select(.privileged == true) | "privileged"), (select((.cap_add // []) | length > 0) | "cap_add"),
     (select(.network_mode != null) | "network_mode"), (select(.pid != null) | "pid"), (select(.ipc != null) | "ipc"),
     (select((.volumes_from // []) | length > 0) | "volumes_from"), (select((.devices // []) | length > 0) | "devices")]
@@ -616,4 +632,77 @@ check_gmail_triggers() {
     ! reaches "$p" "$garden" || die "$name: volume $k is bound to $p, which reaches $garden, where the gmail-triggers rules live"
   done < <(jq -r '(.volumes // {}) | to_entries[] | select(.value.driver_opts.device != null)
     | [.key, .value.driver_opts.device, (.value.driver_opts.o // "")] | @tsv' <<<"$rendered")
+}
+
+# check_code_server NAME RENDERED STATE_DIR -> the code editor's three services
+# keep what compose/code-server.yml gives them (docs/code-server.md):
+# - the gate (code-server): a hardened sidecar (check_sidecar), on default and
+#   code-editor only;
+# - the editor (code-server-editor): hardened, the workspaces as its one host
+#   path, its own volume and the SSH keys, on code-editor and code-exec only,
+#   started without the port proxy, extensions or a marketplace, and with
+#   nothing that switches workspace trust off or trusts other origins;
+# - the shell (code-server-exec): isolated (check_isolated) without NET_RAW, the
+#   workspaces and the agents' tools as its host paths, the SSH keys read-only,
+#   on code-exec and code-egress only, never the stack's default network;
+# and nobody else on their networks, which are internal but for code-egress.
+check_code_server() {
+  local name=$1 rendered=$2 state=${3%/} gate editor shell k p net members
+  gate=$(jq -c '.services["code-server"] // empty' <<<"$rendered")
+  editor=$(jq -c '.services["code-server-editor"] // empty' <<<"$rendered")
+  shell=$(jq -c '.services["code-server-exec"] // empty' <<<"$rendered")
+  for k in code-server code-server-editor code-server-exec; do
+    jq -e --arg s "$k" '.services | has($s)' <<<"$rendered" >/dev/null ||
+      die "$name: the code-server profile is on but $k is not in the rendered config (compose/code-server.yml)"
+  done
+
+  check_sidecar "$name" "$rendered" code-server code-server compose/code-server.yml
+  jq -e '(.networks // {} | keys) == ["code-editor", "default"]' <<<"$gate" >/dev/null ||
+    die "$name: code-server (the gate) must be on the default and code-editor networks only"
+
+  check_hardened "$name" code-server-editor "$editor"
+  k=$(jq -c '[(.volumes // [])[] | select(.type == "bind") | [.source, .target]]' <<<"$editor")
+  [[ $k == "$(jq -cn --arg w "$state/workspaces" '[[$w, "/work"]]')" ]] ||
+    die "$name: code-server-editor may mount from the host only $state/workspaces (at /work)"
+  k=$(jq -c '[(.volumes // [])[] | select(.type == "volume") | [.source, .target, (.read_only // false)]] | sort' <<<"$editor")
+  [[ $k == '[["code-exec-keys","/keys",false],["code-server-data","/data",false]]' ]] ||
+    die "$name: code-server-editor may mount only the volumes code-server-data (at /data) and code-exec-keys (at /keys)"
+  jq -e '(.networks // {} | keys) == ["code-editor", "code-exec"]' <<<"$editor" >/dev/null ||
+    die "$name: code-server-editor must be on the code-editor and code-exec networks only"
+  jq -e '(.command // []) as $c | ($c | index("--auth")) as $a | ($c | index("--extensions-dir")) as $e
+    | ($c | index("--disable-proxy")) != null and $a != null and $c[$a + 1] == "none"
+    and $e != null and $c[$e + 1] == "/opt/lettuce-editor/no-extensions"' <<<"$editor" >/dev/null ||
+    die "$name: code-server-editor must run with --auth none, --disable-proxy and --extensions-dir /opt/lettuce-editor/no-extensions (compose/code-server.yml)"
+  k=$(jq -r '[(.command // [])[] | select(test("^--(disable-workspace-trust|link|proxy-domain|trusted-origins|enable-proposed-api|install-extension|github-auth|builtin-extensions-dir|abs-proxy-base-path)(=|$)"))]
+    | join(", ")' <<<"$editor")
+  [[ -z $k ]] || die "$name: code-server-editor must not run with $k (compose/code-server.yml)"
+  jq -e '(.environment // {}).EXTENSIONS_GALLERY == "{}"' <<<"$editor" >/dev/null ||
+    die "$name: code-server-editor must have EXTENSIONS_GALLERY={} (no marketplace)"
+
+  check_isolated "$name" code-server-exec "$shell"
+  jq -e '(.cap_drop // []) | (index("NET_RAW") or index("ALL"))' <<<"$shell" >/dev/null ||
+    die "$name: code-server-exec must drop NET_RAW"
+  k=$(jq -c '[(.volumes // [])[] | select(.type == "bind") | [.source, .target]] | sort' <<<"$shell")
+  [[ $k == "$(jq -cn --arg w "$state/workspaces" --arg t "$state/tools" '[[$t, "/opt/agent-tools"], [$w, "/work"]]')" ]] ||
+    die "$name: code-server-exec may mount from the host only $state/workspaces (at /work) and $state/tools (at /opt/agent-tools)"
+  k=$(jq -c '[(.volumes // [])[] | select(.type == "volume") | [.source, .target, (.read_only // false)]]' <<<"$shell")
+  [[ $k == '[["code-exec-keys","/keys",true]]' ]] ||
+    die "$name: code-server-exec may mount only the volume code-exec-keys, read-only (at /keys)"
+  jq -e '(.networks // {} | keys) == ["code-egress", "code-exec"]' <<<"$shell" >/dev/null ||
+    die "$name: code-server-exec must be on the code-exec and code-egress networks only"
+
+  for net in code-editor:code-server,code-server-editor code-exec:code-server-editor,code-server-exec \
+    code-egress:code-server-exec; do
+    members=$(jq -r --arg n "${net%%:*}" '[.services | to_entries[] | select(.value.networks // {} | has($n)) | .key]
+      | sort | join(",")' <<<"$rendered")
+    [[ $members == "${net#*:}" ]] ||
+      die "$name: only ${net#*:} may join the ${net%%:*} network (found: ${members:-none})"
+  done
+  for net in code-editor code-exec; do
+    jq -e --arg n "$net" '.networks[$n].internal == true' <<<"$rendered" >/dev/null ||
+      die "$name: the $net network must be internal (compose/code-server.yml)"
+  done
+  for p in "$state" "$state/workspaces" "$state/tools"; do
+    [[ ! -L $p ]] || die "$name: $p is a symlink; Docker would follow it into the code editor's containers"
+  done
 }

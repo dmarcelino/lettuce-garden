@@ -1,5 +1,6 @@
 """Who is asking: the Cloudflare Access JWT, verified like upstream's BFF does
-(bff/src/auth/cf-access.ts), and CSRF tokens for every form.
+(bff/src/auth/cf-access.ts), CSRF tokens for every form, and Fetch Metadata
+checks (check_fetch).
 
 Shared by the garden sidecars (the vault, gmail-triggers). Agents reach them
 over the Docker network without passing Access, so they can send any header
@@ -20,6 +21,18 @@ import anyio
 import jwt
 
 JWT_HEADER = "cf-access-jwt-assertion"
+
+# How a request may arrive, by Fetch Metadata (Sec-Fetch-*): browsers set those
+# headers and no script can change them. The code editor (docs/code-server.md)
+# shares this origin, so a script there could otherwise fetch a page, read its
+# form token and post as the person. Pages load only as top-level documents
+# (any site: an Access re-login arrives through a cross-site redirect), forms
+# post only from this origin, and the vault's own fetch() calls only from this
+# origin, carrying a token no script can now read.
+PAGE = "page"
+FORM = "form"
+FETCH = "fetch"
+COOP = {"cross-origin-opener-policy": "same-origin"}
 
 
 class AccessSettings(Protocol):
@@ -65,6 +78,11 @@ class Authenticator:
         # restart invalidates open forms (the page says to reload).
         self._csrf_key = secrets.token_bytes(32)
 
+    @property
+    def origin(self) -> str:
+        """The stack's public origin (PUBLIC_ORIGIN)."""
+        return self._settings.public_origin
+
     async def email(self, headers: Any) -> str:
         token = headers.get(JWT_HEADER)
         if not token:
@@ -106,3 +124,16 @@ class Authenticator:
         """Browsers send Origin on every POST; it must be this stack's own."""
         if headers.get("origin") != self._settings.public_origin:
             raise AuthError("cross-site request refused")
+
+
+def check_fetch(headers: Any, use: str) -> None:
+    """Refuse a request that didn't arrive the way `use` (PAGE, FORM, FETCH) arrives."""
+    mode, dest, site = (headers.get(f"sec-fetch-{k}") for k in ("mode", "dest", "site"))
+    if not (mode and dest and site):
+        raise AuthError("this browser did not say how the page was requested; use a current browser")
+    if use == FETCH:
+        ok = mode in ("cors", "same-origin") and dest == "empty" and site == "same-origin"
+    else:
+        ok = mode == "navigate" and dest == "document" and (use == PAGE or site == "same-origin")
+    if not ok:
+        raise AuthError("open this page in its own browser tab; it can't be loaded from a script or a frame")

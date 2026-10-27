@@ -1,0 +1,28 @@
+# The shell container's SSH server: the editor (code-server-editor) is its only
+# client. Keys come from the code-exec-keys volume, mounted read-only, which the
+# editor's entrypoint writes: the host key and the editor's public key. Key login
+# as root only (agents write the workspaces as root); nothing is forwarded and no
+# environment is accepted, so a session gets the container's own through agent-env.
+Port 22
+ListenAddress 0.0.0.0
+HostKey /keys/ssh_host_ed25519_key
+AuthorizedKeysFile /keys/authorized_keys
+AuthenticationMethods publickey
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+AllowUsers root
+StrictModes yes
+UsePAM no
+PermitUserEnvironment no
+AllowTcpForwarding no
+AllowStreamLocalForwarding no
+AllowAgentForwarding no
+X11Forwarding no
+PermitTunnel no
+GatewayPorts no
+PrintMotd no
+PrintLastLog no
+LoginGraceTime 30
+ClientAliveInterval 30
