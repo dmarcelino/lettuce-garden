@@ -2120,8 +2120,6 @@ test_skills_ships_the_repo_skills() {
   cp -r "$ROOT/agent-skills" "$H/"
   ctl skills alfred
   ok_rc
-  tar -tf "$T/exec-stdin.log" | grep -qx "scheduling-scripts/SKILL.md" || fail "scheduling-scripts not shipped"
-  grep -qx "name: scheduling-scripts" "$ROOT/agent-skills/scheduling-scripts/SKILL.md" || fail "SKILL.md name mismatch"
   for f in using-vault-secrets/SKILL.md using-vault-secrets/vault-run; do
     tar -tf "$T/exec-stdin.log" | grep -qx "$f" || fail "$f not shipped"
   done
@@ -2681,13 +2679,13 @@ test_backup_script_copies_what_matters() {
   ctl backup alfred "$B" --no-tools
   ok_rc
   local src=$T/src dst=$T/dst args got
-  mkdir -p "$src/state/letta-home/"{mod-cache,skills/serving-web-apps,skills/scheduling-scripts,skills/from-settings} \
+  mkdir -p "$src/state/letta-home/"{mod-cache,skills/serving-web-apps,skills/fetching-web-pages,skills/from-settings} \
     "$src/state/letta-home/claude/projects" "$src/state/workspaces/agent-1" "$src/state/tools/bin" "$src/vault" "$dst"
   touch "$src/stack.env" "$src/state/letta-home/mod-cache/x" "$src/state/letta-home/claude/projects/t.jsonl" \
-    "$src/state/letta-home/skills/serving-web-apps/SKILL.md" "$src/state/letta-home/skills/scheduling-scripts/SKILL.md" \
+    "$src/state/letta-home/skills/serving-web-apps/SKILL.md" "$src/state/letta-home/skills/fetching-web-pages/SKILL.md" \
     "$src/state/letta-home/skills/from-settings/SKILL.md" "$src/state/workspaces/agent-1/notes.md" \
     "$src/state/tools/bin/uv" "$src/vault/vault.db"
-  printf 'scheduling-scripts\n' >"$src/state/letta-home/skills/.lettucectl-skills"
+  printf 'fetching-web-pages\n' >"$src/state/letta-home/skills/.lettucectl-skills"
   # The same excludes lettucectl passed, after MODE SRC DST OWNER PREV OUT.
   args=$(grep -o ' \.partial-[^ ]* .*' "$T/calls.log" | head -1 | cut -d' ' -f3-)
   # shellcheck disable=SC2086 # the excludes are single words
