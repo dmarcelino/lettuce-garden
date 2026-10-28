@@ -213,6 +213,8 @@ test_the_fixed_settings_come_back_and_the_persons_stay() {
   eq "$(jq -r '."editor.fontSize"' "$s")" 15
   eq "$(jq -r '."security.workspace.trust.enabled"' "$s")" true
   eq "$(jq -r '."chat.disableAIFeatures"' "$s")" true
+  # Chat is off, so the secondary side bar would open empty.
+  eq "$(jq -r '."workbench.secondarySideBar.defaultVisibility"' "$s")" hidden
   printf '{\n  // a comment\n  "editor.fontSize": 12,\n}\n' >"$s"
   start_editor 2>/dev/null
   [[ -f $s.unreadable ]] || fail "the unreadable file was not kept"
