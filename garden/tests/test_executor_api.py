@@ -1,8 +1,9 @@
 import json
 
 import pytest
+from garden_common.executor import AGENTS_FRESH_SECONDS
 
-from garden_landing.config import AGENTS_FRESH_SECONDS, ConfigError, Settings
+from garden_landing.config import ConfigError, Settings
 
 from .conftest import API, AUTH, LETTUCE, ORIGIN, TOKEN, make_jwt, raw_get
 

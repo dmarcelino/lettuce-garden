@@ -1,6 +1,6 @@
 """The executor's API at /executor/v1/, as the garden sidecars that the garden
 executor calls serve it (garden, gmail-triggers): the guard in front of every
-route, the JSON body reader and the agent list.
+route, the JSON body reader, the agent list and when to ask for a new one.
 
 The API sits outside every page prefix, so the tunnel never routes it, and no
 Access check applies. Instead every call needs the stack's executor token
@@ -15,6 +15,7 @@ import hmac
 import json
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, replace
 from typing import Any
 
 from starlette.requests import Request
@@ -30,6 +31,9 @@ MAX_AGENTS_BODY = 1024 * 1024
 MAX_AGENTS = 1000
 MAX_AGENT_NAME = 200
 AGENT_ID = re.compile(r"agent-[A-Za-z0-9-]{1,80}")
+# A sidecar wants a new agent list when it has none, when its list is older
+# than this, or when a page asked for one since (AgentAsks).
+AGENTS_FRESH_SECONDS = 900
 # Requests that came through the tunnel carry these; the executor's never do.
 TUNNEL_HEADERS = ("cf-access-jwt-assertion", "cf-connecting-ip", "cf-ray")
 NO_STORE = {"cache-control": "no-store"}
@@ -122,3 +126,32 @@ async def read_agents(request: Request) -> list[tuple[str, str]]:
             continue
         seen[aid] = one_line(name, MAX_AGENT_NAME) or aid
     return list(seen.items())
+
+
+@dataclass(frozen=True)
+class AgentAsks:
+    """When a sidecar wants the executor to send a new agent list; each side keeps
+    it in its own storage. Each method returns the new state.
+
+    A page that lists agents asks for a list with the ones made since the last
+    (`ask`). The executor reads the status (`read`), then runs `letta agents list`
+    and sends it (`listed`). That list answers only the asks made before the read:
+    one made while the executor builds it may name an agent the list predates.
+    """
+
+    asks: int = 0  # asks so far
+    seen: int = 0  # asks made before the executor last read the status
+    answered: int = 0  # asks the last list answers
+    listed_at: float | None = None  # when the last list arrived
+
+    def ask(self) -> AgentAsks:
+        return replace(self, asks=self.asks + 1)
+
+    def read(self) -> AgentAsks:
+        return replace(self, seen=self.asks)
+
+    def listed(self, now: float) -> AgentAsks:
+        return replace(self, answered=self.seen, listed_at=now)
+
+    def wanted(self, now: float) -> bool:
+        return self.listed_at is None or now - self.listed_at > AGENTS_FRESH_SECONDS or self.asks > self.answered

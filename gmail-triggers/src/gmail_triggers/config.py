@@ -17,9 +17,6 @@ DEFAULT_POLL_SECONDS = 120
 HEARTBEAT_STALE_SECONDS = 180
 # A claimed request with no result after this long was lost.
 LOST_AFTER_SECONDS = 600
-# The executor sends a fresh agent list when asked: when there is none, when
-# it is older than this, or when the trigger form was shown since it arrived.
-AGENTS_FRESH_SECONDS = 900
 # Requests handed to the executor per call.
 MAX_CLAIM = 20
 # Google unusable for longer than this: start again from now instead of

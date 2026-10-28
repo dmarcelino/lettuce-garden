@@ -15,6 +15,17 @@ docs/code-server-plan.md); not yet run on a real stack. Where the build differs 
 - **Shared code moved into garden-common:** the executor API's guard and agent-list validation
   (`executor.py`), `text.py` and the icons (`icons.py`).
 - **`list` shows the garden URL.**
+- **Lettuce's host keeps the old garden paths until the move is done.** While `GARDEN_MOVE_PENDING`
+  is set (from the start of `ensure_garden_host` until the stack's next successful `up`), the tunnel
+  also routes the old `/garden/<profile>` paths and `/garden/` on Lettuce's host to the running
+  sidecars, so the garden pages work at every step; `up` drops them after `compose up`, then clears
+  the marker.
+- **The garden name follows Lettuce's.** It is `<first label of LETTUCE_HOSTNAME>-garden.<DOMAIN>`, so
+  a stack on its `HOSTNAME_FALLBACK` name gets `lettuce-alfred-garden`; when that is taken,
+  `<label>-garden-2` to `-9`, the first free one. A name taken between its pick and its DNS record is
+  replaced the same way (Access application, routes, then the record), with no hand edit.
+- **The landing page's assets are under `/assets/`,** so the tunnel routes `^/(assets/[^/]+)?$` to
+  `garden` and a new asset needs no route change.
 
 ## Goal
 
@@ -59,7 +70,7 @@ would turn them into a browser rule, at the cost of one more name for users.
 
 | Question | Decision | Why |
 |---|---|---|
-| Name | `<name>-garden.<DOMAIN>` | One DNS label, so Cloudflare's free certificate (`*.<DOMAIN>`) covers it; typing the stack's name in the address bar offers both hosts |
+| Name | `<label>-garden.<DOMAIN>`, `<label>` being Lettuce's host's first label | One DNS label, so Cloudflare's free certificate (`*.<DOMAIN>`) covers it; typing the stack's name in the address bar offers both hosts |
 | Access | A second application per stack, `lettuce-<name>-garden`, with the stack's existing policy attached | Its own audience closes the token gap; one policy keeps `lettucectl users` updating one list |
 | When | Every stack gets the garden host, whatever its profiles | Profile changes then never create or delete Access applications or DNS records; with no garden page on, the host answers 404 |
 | Migration | `profiles` and `up` create a missing garden host for a complete stack | No manual step; `up` stays offline once the host exists |
@@ -70,8 +81,9 @@ would turn them into a browser rule, at the cost of one more name for users.
 
 - `validate_name` refuses stack names ending in `-garden`, so no stack's hostname is another stack's
   garden host.
-- `pick_hostname` also checks the garden name; when it is taken, it tries
-  `<HOSTNAME_FALLBACK name>-garden`, then fails with a clear message.
+- The garden name is derived from Lettuce's chosen hostname (`pick_garden_hostname`):
+  `<label>-garden`, then `<label>-garden-2` to `-9`, the first that exists neither in DNS nor in the
+  zone; otherwise it fails with a clear message.
 - New `stack.env` keys: `GARDEN_HOSTNAME`, `GARDEN_ORIGIN`, `CF_GARDEN_APP_ID`, `CF_GARDEN_AUD`,
   `CF_GARDEN_DNS_RECORD_ID`.
 - The garden application: `cf_app_body` with the garden host (same IdP and session length,
@@ -170,9 +182,13 @@ would turn them into a browser rule, at the cost of one more name for users.
 1. **A second login prompt.** Cloudflare Access is expected to reuse the login across applications
    of the same team, which is unverified. Check it on one stack before building the rest: if it
    prompts, "seamless" fails.
-2. **Half-done migration.** Cloudflare, `stack.env` and containers change in separate steps. The
-   order above (Cloudflare first, then containers) keeps a stack usable at every step, and re-runs
-   resume.
+2. **Half-done migration.** Cloudflare, `stack.env` and containers change in separate steps, and
+   `profiles` gives every stack its garden host before any check or build, so a later failure can
+   leave a stack moved on Cloudflare while its old sidecars (old prefixes, Lettuce's audience) still
+   run. Lettuce's host therefore keeps routing the old `/garden/...` paths to them while
+   `GARDEN_MOVE_PENDING` is set, and only the `up` that recreated them drops those paths, then the
+   marker; a failed route update there keeps the marker for the next `up` or `profiles`. The garden
+   pages, vault approvals included, stay reachable at every step, and re-runs resume.
 3. **The vault locks once.** Its audience and origin change, so it is recreated on every stack.
 4. **Same site, different origin.** Lettuce's SameSite=Lax cookie still goes with blind requests
    from the garden tab to Lettuce. `/ws` checks the exact origin; Lettuce's HTTP endpoints were not

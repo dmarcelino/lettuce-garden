@@ -47,7 +47,7 @@ first_body_of() { grep "^curl $1 $2 " "$T/calls.log" | head -1 | cut -d' ' -f4-;
 ingress() { jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)"; }
 # The ingress rules every stack ends with: alfred's garden host answers 404 to
 # what no garden rule routes, and Lettuce's host goes to the app-server only.
-LANDING='{"hostname":"alfred-garden.example.org","path":"^/(garden\\.css|icon-192\\.png)?$","service":"http://garden:8000"}'
+LANDING='{"hostname":"alfred-garden.example.org","path":"^/(assets/[^/]+)?$","service":"http://garden:8000"}'
 GARDEN_404='{"hostname":"alfred-garden.example.org","service":"http_status:404"}'
 LETTUCE_TAIL='{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}'
 
@@ -379,35 +379,67 @@ test_profiles_leave_garden_profiles_alone_for_other_profiles() {
   eq "$(senv alfred GARDEN_PROFILES)" ""
 }
 
+# The garden host is named after Lettuce's, whichever name Lettuce got.
 test_add_falls_back_when_name_resolves() {
   echo "alfred.example.org A 1.2.3.4" >"$T/dns.txt"
   ctl add alfred alfred@example.com
   ok_rc
   eq "$(senv alfred PUBLIC_ORIGIN)" https://lettuce-alfred.example.org
-  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden.example.org
+  eq "$(senv alfred GARDEN_ORIGIN)" https://lettuce-alfred-garden.example.org
 }
 
-test_add_falls_back_when_the_garden_name_is_taken() {
+# taken_gardens LABEL -> every garden name pick_garden_hostname tries for LABEL
+taken_gardens() {
+  local i
+  printf '%s-garden.example.org' "$1"
+  for i in 2 3 4 5 6 7 8 9; do printf ' %s-garden-%s.example.org' "$1" "$i"; done
+}
+
+test_add_numbers_the_garden_name_when_taken() {
   echo "alfred-garden.example.org CNAME elsewhere.example.net." >"$T/dns.txt"
+  stub STUB_CF_TAKEN=alfred-garden-2.example.org
   ctl add alfred alfred@example.com
   ok_rc
   eq "$(senv alfred PUBLIC_ORIGIN)" https://alfred.example.org
-  eq "$(senv alfred GARDEN_HOSTNAME)" lettuce-alfred-garden.example.org
-  eq "$(senv alfred GARDEN_ORIGIN)" https://lettuce-alfred-garden.example.org
-  stub STUB_CF_TAKEN=alfred-garden.example.org
+  eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden-3.example.org
+  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden-3.example.org
   rm "$T/dns.txt"
   ctl add hal hal@example.com
   ok_rc
   eq "$(senv hal GARDEN_HOSTNAME)" hal-garden.example.org
 }
 
-test_add_fails_when_both_garden_names_taken() {
-  stub 'STUB_CF_TAKEN="alfred-garden.example.org lettuce-alfred-garden.example.org"'
+test_add_fails_when_every_garden_name_is_taken() {
+  stub "STUB_CF_TAKEN=\"$(taken_gardens alfred)\""
   ctl add alfred alfred@example.com
   bad_rc
-  out_has "both alfred-garden.example.org and lettuce-alfred-garden.example.org are taken"
+  out_has "every garden name from alfred-garden.example.org to alfred-garden-9.example.org is taken"
   [[ ! -e $H/stacks/alfred ]] || fail "stack dir left behind"
   log_lacks "curl POST"
+}
+
+# A garden name taken between its pick and its DNS record: the stack takes the
+# next free name, in its Access application and tunnel routes too.
+test_add_renames_a_garden_host_taken_before_its_dns_record() {
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/cfd_tunnel"'
+  ctl add alfred alfred@example.com
+  bad_rc
+  eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden.example.org
+  : >"$T/stub.env"
+  : >"$T/calls.log"
+  stub STUB_CF_TAKEN=alfred-garden.example.org
+  ctl add alfred alfred@example.com
+  ok_rc
+  eq "$(calls | tr '\n' ';')" "POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;GET /zones/zone1/dns_records;GET /zones/zone1/dns_records;PUT /accounts/acc1/access/apps/app2;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
+  out_has "alfred: alfred-garden.example.org was taken before its DNS record was created; its garden host is now alfred-garden-2.example.org"
+  eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden-2.example.org
+  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden-2.example.org
+  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
+  eq "$(jq -c '[.name, .domain, .destinations[0].uri, .policies]' <<<"$(body_of PUT /accounts/acc1/access/apps/app2)")" \
+    '["lettuce-alfred-garden","alfred-garden-2.example.org","alfred-garden-2.example.org",[{"id":"pol1","precedence":1}]]'
+  eq "$(ingress)" '[{"hostname":"alfred-garden-2.example.org","service":"http_status:404"},'"$LETTUCE_TAIL]"
+  eq "$(grep '^curl POST /zones/zone1/dns_records ' "$T/calls.log" | cut -d' ' -f4- | jq -r .name | paste -sd' ')" \
+    "alfred-garden.example.org alfred-garden-2.example.org alfred.example.org"
 }
 
 # <name>-garden.<domain> is the garden host of <name>, so no new stack may take it.
@@ -4173,11 +4205,11 @@ test_up_creates_the_garden_host_of_an_older_stack_before_its_containers() {
 
 test_up_resumes_a_garden_host_that_stopped_part_way() {
   local step rest
-  # STEP|what the re-run calls
+  # STEP|what the re-run calls (the last PUT drops Lettuce's old garden paths)
   for step in \
-    "POST /accounts/acc1/access/apps|POST /accounts/acc1/access/apps;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;" \
-    "PUT /accounts/acc1/cfd_tunnel/tun1/configurations|PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;" \
-    "POST /zones/zone1/dns_records|PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;"; do
+    "POST /accounts/acc1/access/apps|POST /accounts/acc1/access/apps;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;" \
+    "PUT /accounts/acc1/cfd_tunnel/tun1/configurations|PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;" \
+    "POST /zones/zone1/dns_records|PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;"; do
     teardown; setup
     # With a garden page, the stack can't start without its garden host.
     sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
@@ -4201,12 +4233,45 @@ test_up_resumes_a_garden_host_that_stopped_part_way() {
   done
 }
 
-test_up_gives_an_older_stack_the_fallback_garden_name_when_taken() {
+test_up_gives_an_older_stack_the_next_garden_name_when_taken() {
   pre_garden
   stub STUB_CF_TAKEN=alfred-garden.example.org
   ctl up alfred
   ok_rc
-  eq "$(senv alfred GARDEN_ORIGIN)" https://lettuce-alfred-garden.example.org
+  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden-2.example.org
+}
+
+test_up_names_an_older_stacks_garden_after_its_lettuce_host() {
+  echo "alfred.example.org A 1.2.3.4" >"$T/dns.txt"
+  pre_garden
+  eq "$(senv alfred LETTUCE_HOSTNAME)" lettuce-alfred.example.org
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred GARDEN_HOSTNAME)" lettuce-alfred-garden.example.org
+}
+
+# Only a name taken since it was picked gives the stack another one; any other
+# failure keeps the name, and a later re-run renames once it is taken.
+test_up_renames_a_garden_host_taken_before_its_dns_record() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  pre_garden
+  stub 'STUB_CF_FAIL="POST /zones/zone1/dns_records"'
+  ctl up alfred
+  bad_rc
+  eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden.example.org
+  log_lacks "curl PUT /accounts/acc1/access/apps/app2"
+  out_lacks "was taken before its DNS record"
+  : >"$T/stub.env"
+  : >"$T/calls.log"
+  stub STUB_CF_TAKEN=alfred-garden.example.org
+  ctl up alfred
+  ok_rc
+  eq "$(calls | tr '\n' ';')" "PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;GET /zones/zone1/dns_records;GET /zones/zone1/dns_records;PUT /accounts/acc1/access/apps/app2;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;"
+  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden-2.example.org
+  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
+  eq "$(jq -r .domain <<<"$(body_of PUT /accounts/acc1/access/apps/app2)")" alfred-garden-2.example.org
+  eq "$(ingress)" '[{"hostname":"alfred-garden-2.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred-garden-2.example.org","path":"^/(assets/[^/]+)?$","service":"http://garden:8000"},{"hostname":"alfred-garden-2.example.org","service":"http_status:404"},'"$LETTUCE_TAIL]"
 }
 
 test_up_leaves_an_unfinished_stack_to_add() {
@@ -4243,8 +4308,10 @@ test_profiles_with_the_same_list_moves_an_older_stack_to_its_garden_host() {
   ok_rc
   out_has "nothing to change"
   out_has "alfred: the garden pages are now at https://alfred-garden.example.org/"
-  # The routes the move put are this list's: they are not put again.
-  eq "$(calls | tr '\n' ';')" "${MIGRATION}PUT /accounts/acc1/access/apps/app1;PUT /accounts/acc1/access/apps/app2;"
+  # The routes the move put are this list's: they are not put again until the
+  # garden services moved, which drops Lettuce's old garden paths.
+  eq "$(calls | tr '\n' ';')" "${MIGRATION}PUT /accounts/acc1/access/apps/app1;PUT /accounts/acc1/access/apps/app2;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;"
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
   # Its garden services take the new audience and origin.
   log_has "up -d --build"
   # A stack already moved is not restarted.
@@ -4285,7 +4352,7 @@ test_profiles_rerun_finishes_a_stack_a_failed_run_moved() {
   containers alfred app-server secret-broker
   containers hal app-server secret-broker
   : >"$T/calls.log"
-  stub 'STUB_CF_TAKEN="hal-garden.example.org lettuce-hal-garden.example.org"'
+  stub "STUB_CF_TAKEN=\"$(taken_gardens hal)\""
   ctl profiles cloudflared,secrets
   bad_rc
   eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
@@ -4319,7 +4386,8 @@ test_profiles_leaves_a_stopped_older_stack_to_its_next_up() {
   : >"$T/calls.log"
   ctl up alfred
   ok_rc
-  log_lacks "curl "
+  # Only to drop Lettuce's old garden paths, once the garden services moved.
+  eq "$(calls | tr '\n' ';')" "PUT /accounts/acc1/cfd_tunnel/tun1/configurations;"
   eq "$(up_lines alfred)" 1
   # Moved: a running stack is not restarted again.
   containers alfred app-server secret-broker
@@ -4327,6 +4395,70 @@ test_profiles_leaves_a_stopped_older_stack_to_its_next_up() {
   ctl profiles cloudflared,secrets
   ok_rc
   log_lacks "up -d"
+}
+
+# The rules Lettuce's host kept for the garden pages before they had their own
+# host, which a stack keeps until its garden services have moved.
+OLD_SECRETS='{"hostname":"alfred.example.org","path":"^/garden/secrets(/|$)","service":"http://secret-broker:8000"}'
+OLD_CODE='{"hostname":"alfred.example.org","path":"^/garden/code-server(/|$)","service":"http://code-server:8000"}'
+OLD_LANDING='{"hostname":"alfred.example.org","path":"^/garden/?$","service":"http://secret-broker:8000"}'
+NEW_SECRETS='{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"}'
+NEW_CODE='{"hostname":"alfred-garden.example.org","path":"^/code-server(/|$)","service":"http://code-server:8000"}'
+
+# pending_move -> alfred, with the vault and the code editor, has its garden
+# host but its garden services still run on Lettuce's host (it was stopped
+# when `profiles` gave it the host)
+pending_move() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets,code-server/' "$H/config.env"
+  broker_config
+  code_config
+  pre_garden
+  ctl profiles cloudflared,secrets,code-server
+  ok_rc
+  eq "$(senv alfred GARDEN_MOVE_PENDING)" 1
+}
+
+# Until its garden services move, Lettuce's host keeps routing the old paths
+# to them, so the garden pages keep working at every step of the move.
+test_a_pending_move_keeps_the_old_garden_paths_on_lettuces_host() {
+  pending_move
+  eq "$(ingress)" "[$NEW_SECRETS,$NEW_CODE,$LANDING,$GARDEN_404,$OLD_SECRETS,$OLD_CODE,$OLD_LANDING,$LETTUCE_TAIL]"
+  # Put once, by the move: route_stack has nothing new to put.
+  eq "$(grep -c '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log")" 1
+}
+
+test_up_drops_the_old_garden_paths_once_the_garden_services_moved() {
+  pending_move
+  : >"$T/calls.log"
+  ctl up alfred
+  ok_rc
+  eq "$(calls | tr '\n' ';')" "PUT /accounts/acc1/cfd_tunnel/tun1/configurations;"
+  eq "$(ingress)" "[$NEW_SECRETS,$NEW_CODE,$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  (($(line_of "up -d --build") < $(line_of "curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations"))) ||
+    fail "the old paths were dropped before the garden services moved"
+  eq "$(senv alfred GARDEN_MOVE_PENDING)" ""
+  # Done: the next up is offline again.
+  : >"$T/calls.log"
+  ctl up alfred
+  ok_rc
+  log_lacks "curl "
+}
+
+test_a_failed_route_update_after_the_move_keeps_it_pending() {
+  pending_move
+  stub 'STUB_CF_FAIL="PUT /accounts/acc1/cfd_tunnel/tun1/configurations"'
+  ctl up alfred
+  ok_rc
+  log_has "up -d --build"
+  out_has "alfred: could not remove the old /garden/ paths from Lettuce's host; the next up or profiles tries again"
+  eq "$(senv alfred GARDEN_MOVE_PENDING)" 1
+  : >"$T/stub.env"
+  : >"$T/calls.log"
+  containers alfred app-server secret-broker
+  ctl profiles cloudflared,secrets,code-server
+  ok_rc
+  eq "$(ingress)" "[$NEW_SECRETS,$NEW_CODE,$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(senv alfred GARDEN_MOVE_PENDING)" ""
 }
 
 test_the_executor_is_never_installed_without_a_token() {
@@ -4379,6 +4511,19 @@ test_check_points_an_unfinished_older_stack_at_add() {
   ctl up alfred
   bad_rc
   out_has "lettucectl add alfred"
+}
+
+# The garden service's root and assets go to it, whatever the asset; its
+# executor API and health check never reach the tunnel.
+test_garden_landing_path_routes_only_the_root_and_its_assets() {
+  local path p
+  path=$(. "$ROOT/lib/cloudflare.sh" && printf '%s' "$GARDEN_LANDING_PATH")
+  for p in / /assets/garden.css /assets/icon-192.png /assets/new-icon.svg; do
+    grep -qE -- "$path" <<<"$p" || fail "$p is not routed to the garden service"
+  done
+  for p in /executor/v1/ /executor/v1/agents /healthz /assets/ /assets/a/b /garden.css /secrets/; do
+    ! grep -qE -- "$path" <<<"$p" || fail "$p is routed to the garden service"
+  done
 }
 
 # Possible only while a stack has no garden host: Lettuce's host alone.

@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .config import AGENTS_FRESH_SECONDS, MAX_CLAIM
+from .config import MAX_CLAIM
 from .store import Agent, Store
 
 MAX_ERROR = 500
@@ -54,8 +54,8 @@ def executor_routes(store: Store, token: str) -> list[Route]:
         body = {
             "v": 1,
             "requests": store.claim(MAX_CLAIM),
-            # The executor runs `letta agents list` only when asked.
-            "agents_wanted": store.agents_wanted(AGENTS_FRESH_SECONDS),
+            # The executor runs `letta agents list` only when asked (AgentAsks).
+            "agents_wanted": store.agents_wanted(),
         }
         return JSONResponse(body, headers=NO_STORE)
 

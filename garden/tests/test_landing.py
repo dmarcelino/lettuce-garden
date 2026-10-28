@@ -27,7 +27,7 @@ def test_every_route_needs_a_valid_access_jwt(garden, signing_key, other_key, to
         value = make_jwt(signing_key, **token)
     else:
         value = token
-    for path in ("/", "/garden.css", "/icon-192.png"):
+    for path in ("/", "/assets/garden.css", "/assets/icon-192.png"):
         r = garden.browser.get(path, headers={"cf-access-jwt-assertion": value})
         assert r.status_code == 403, path
         assert EMAIL not in r.text, path
@@ -67,10 +67,10 @@ def test_the_page_opens_from_another_site_after_an_access_login(garden):
 
 def test_assets_load_as_subresources(garden):
     style = {"sec-fetch-mode": "no-cors", "sec-fetch-dest": "style", "sec-fetch-site": "same-origin"}
-    css = garden.browser.get("/garden.css", headers=style)
+    css = garden.browser.get("/assets/garden.css", headers=style)
     assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
     assert "--accent: #0b1020" in css.text
-    icon = garden.browser.get("/icon-192.png", headers={**style, "sec-fetch-dest": "image"})
+    icon = garden.browser.get("/assets/icon-192.png", headers={**style, "sec-fetch-dest": "image"})
     assert icon.status_code == 200 and icon.headers["content-type"] == "image/png"
     assert icon.content.startswith(b"\x89PNG")
     for r in (css, icon):
@@ -79,9 +79,20 @@ def test_assets_load_as_subresources(garden):
 
 
 def test_only_the_landing_page_and_its_assets_are_served(garden):
-    for path in ("/index.html", "/secrets/", "/gmail-triggers/", "/code-server/", "/garden/", "/app.css"):
+    paths = ("/index.html", "/secrets/", "/gmail-triggers/", "/code-server/", "/garden/", "/app.css")
+    for path in (*paths, "/garden.css", "/icon-192.png", "/assets/", "/assets/app.css"):
         assert garden.browser.get(path).status_code == 404, path
     assert garden.browser.get("/healthz", headers={"cf-access-jwt-assertion": ""}).text == "ok"
+
+
+def test_every_page_route_is_the_root_or_under_assets(garden):
+    # The tunnel routes only these to garden (GARDEN_LANDING_PATH in lib/cloudflare.sh):
+    # an asset anywhere else would not load.
+    paths = [r.path for r in garden.app.routes]
+    pages = [p for p in paths if p != "/healthz" and not p.startswith("/executor/v1/")]
+    assert "/" in pages and len(pages) > 1
+    for path in pages:
+        assert path == "/" or re.fullmatch(r"/assets/[^/]+", path), path
 
 
 # -- what it shows ----------------------------------------------------------------
@@ -113,7 +124,8 @@ def test_the_page_links_to_the_garden_and_back_to_lettuce(garden):
     page = garden.page().text
     assert 'href="/">Lettuce Garden</a>' in page
     assert f'href="{LETTUCE}/">Back to Lettuce</a>' in page
-    assert 'href="/garden.css"' in page and 'href="/icon-192.png"' in page
+    assert 'href="/assets/garden.css"' in page and 'href="/assets/icon-192.png"' in page
+    assert 'src="/assets/icon-192.png"' in page
     assert "/garden/" not in page
 
 

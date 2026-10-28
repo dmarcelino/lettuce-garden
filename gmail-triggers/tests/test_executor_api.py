@@ -1,10 +1,11 @@
 import json
 
 import pytest
+from garden_common.executor import AGENTS_FRESH_SECONDS
 from starlette.testclient import TestClient
 
 from gmail_triggers.app import create_app
-from gmail_triggers.config import AGENTS_FRESH_SECONDS, LOST_AFTER_SECONDS, MAX_CLAIM, PREFIX, ConfigError, Settings
+from gmail_triggers.config import LOST_AFTER_SECONDS, MAX_CLAIM, PREFIX, ConfigError, Settings
 from gmail_triggers.store import Rule
 from gmail_triggers.triggers import send_test
 
@@ -328,6 +329,22 @@ def test_agents_are_wanted_after_the_form_is_shown(api, env, signing_key, form):
     assert page.status_code == 200
     assert wanted(api) is True
     # Asking doesn't clear it; only a new list does.
+    assert wanted(api) is True
+    put_agents(api)
+    assert wanted(api) is False
+
+
+def test_a_form_shown_while_the_executor_lists_asks_again(api, env, signing_key):
+    def form():
+        headers = {**NAVIGATE, "cf-access-jwt-assertion": make_jwt(signing_key)}
+        assert api.get(f"{PREFIX}/new", headers=headers).status_code == 200
+
+    put_agents(api)
+    form()
+    assert wanted(api) is True
+    # Shown after the executor read the status, so the list it sends may predate the agent.
+    form()
+    put_agents(api)
     assert wanted(api) is True
     put_agents(api)
     assert wanted(api) is False

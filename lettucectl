@@ -58,19 +58,14 @@ dns_wildcard() {
   warn "$domain has a wildcard DNS record, so public DNS cannot tell which names are taken; checking the Cloudflare zone only"
 }
 
-# pick_hostname NAME SUFFIX WILDCARD -> <name><suffix>.<domain>, or the fallback
-# (HOSTNAME_FALLBACK, then SUFFIX) when that name exists in DNS. SUFFIX is empty
-# for Lettuce's host and -garden for the garden's; a non-empty WILDCARD
+# free_hostname WILDCARD HOST... -> the first HOST that exists neither in DNS
+# nor in the Cloudflare zone; fails when every one does. A non-empty WILDCARD
 # (dns_wildcard) checks the Cloudflare zone only.
-pick_hostname() {
-  local name=$1 suffix=$2 wildcard=$3 domain zone host rc fallback first
-  domain=$(cfg DOMAIN)
+free_hostname() {
+  local wildcard=$1 zone host rc
+  shift
   zone=$(cfg CF_ZONE_ID)
-  fallback=$(cfg HOSTNAME_FALLBACK)
-  [[ $fallback == *%s* ]] || die "HOSTNAME_FALLBACK must contain %s"
-  first=$name$suffix.$domain
-  # shellcheck disable=SC2059 # the pattern is the format string by design
-  for host in "$first" "$(printf "$fallback" "$name")$suffix.$domain"; do
+  for host in "$@"; do
     if [[ -z $wildcard ]] && name_resolves "$host"; then
       info "$host already exists in DNS"
       continue
@@ -86,7 +81,35 @@ pick_hostname() {
       *) die "could not check $host in the Cloudflare zone" ;;
     esac
   done
-  die "both $first and $host are taken; choose another stack name"
+  return 1
+}
+
+# pick_hostname NAME WILDCARD -> Lettuce's host: <name>.<domain>, or the
+# HOSTNAME_FALLBACK name when that one is taken
+pick_hostname() {
+  local domain fallback first second
+  domain=$(cfg DOMAIN)
+  fallback=$(cfg HOSTNAME_FALLBACK)
+  [[ $fallback == *%s* ]] || die "HOSTNAME_FALLBACK must contain %s"
+  first=$1.$domain
+  # shellcheck disable=SC2059 # the pattern is the format string by design
+  second=$(printf "$fallback" "$1").$domain
+  free_hostname "$2" "$first" "$second" || die "both $first and $second are taken; choose another stack name"
+}
+
+# pick_garden_hostname LETTUCE_HOST WILDCARD -> the garden host, named after
+# Lettuce's so the two read as one stack: <label>-garden.<domain>, where <label>
+# is LETTUCE_HOST's first label, or, when that is taken, the first free of
+# <label>-garden-2 ... <label>-garden-9
+pick_garden_hostname() {
+  local base i names=()
+  base=${1%%.*}-garden
+  names=("$base.$(cfg DOMAIN)")
+  for i in 2 3 4 5 6 7 8 9; do
+    names+=("$base-$i.$(cfg DOMAIN)")
+  done
+  free_hostname "$2" "${names[@]}" ||
+    die "every garden name from ${names[0]} to ${names[-1]} is taken; free one of them in DNS, or, for a new stack, choose another stack name"
 }
 
 name_resolves() {
@@ -131,16 +154,18 @@ google_reminder() {
 # The routes configure_tunnel put in this run, by stack.
 declare -A TUNNEL_ROUTED=()
 
-# configure_tunnel NAME -> puts the stack's tunnel routes (cf_tunnel_configure)
-# for its hosts and current profiles, unless this run already put the same ones
+# configure_tunnel NAME [OLD] -> puts the stack's tunnel routes (cf_tunnel_configure)
+# for its hosts and current profiles, unless this run already put the same ones.
+# OLD (default: GARDEN_MOVE_PENDING) keeps Lettuce's host's old garden paths.
 configure_tunnel() {
-  local f routes
+  local f routes old
   f=$(stack_env "$1")
-  # What the routes depend on: the two hosts and the garden pages that are on.
-  routes="$(env_get "$f" LETTUCE_HOSTNAME) $(env_get "$f" GARDEN_HOSTNAME) $(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)")"
+  old=${2-$(env_get "$f" GARDEN_MOVE_PENDING)}
+  # What the routes depend on: the two hosts, the garden pages that are on and the old paths.
+  routes="$(env_get "$f" LETTUCE_HOSTNAME) $(env_get "$f" GARDEN_HOSTNAME) $(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)") ${old:+old}"
   [[ ${TUNNEL_ROUTED[$1]:-} != "$routes" ]] || return 0
   cf_tunnel_configure "$(cfg CF_ACCOUNT_ID)" "$(env_get "$f" CF_TUNNEL_ID)" "$(env_get "$f" LETTUCE_HOSTNAME)" \
-    "$(env_get "$f" GARDEN_HOSTNAME)" "$(env_get "$f" COMPOSE_PROFILES)" || return 1
+    "$(env_get "$f" GARDEN_HOSTNAME)" "$(env_get "$f" COMPOSE_PROFILES)" "$old" || return 1
   TUNNEL_ROUTED[$1]=$routes
 }
 
@@ -151,12 +176,13 @@ configure_tunnel() {
 # nothing on Lettuce's origin can script the garden. It exists whatever the
 # profiles; with no garden page on, the tunnel answers it with 404.
 
-# set_garden_hostname NAME -> picks the stack's garden host and stores it
+# set_garden_hostname NAME -> picks the stack's garden host (pick_garden_hostname)
+# and stores it
 set_garden_hostname() {
   local f garden wildcard=""
   f=$(stack_env "$1")
   dns_wildcard && wildcard=1
-  garden=$(pick_hostname "$1" -garden "$wildcard") || return 1
+  garden=$(pick_garden_hostname "$(env_get "$f" LETTUCE_HOSTNAME)" "$wildcard") || return 1
   env_set "$f" GARDEN_HOSTNAME "$garden"
   env_set "$f" GARDEN_ORIGIN "https://$garden"
 }
@@ -172,14 +198,35 @@ create_garden_app() {
   env_set "$f" CF_GARDEN_AUD "${pair#* }"
 }
 
-# create_garden_dns NAME -> the garden host's DNS record, unless it exists
+# create_garden_dns NAME -> the garden host's DNS record, unless it exists. When
+# the name was taken after it was picked (the record fails, and picking again
+# gives another name), the stack takes the new name: stored, put in the
+# garden's Access application and the tunnel routes, then given the record.
 create_garden_dns() {
-  local f id
+  local f id old
   f=$(stack_env "$1")
   [[ -z $(env_get "$f" CF_GARDEN_DNS_RECORD_ID) ]] || return 0
-  id=$(cf_dns_cname_create "$(cfg CF_ZONE_ID)" "$(env_get "$f" GARDEN_HOSTNAME)" "$(env_get "$f" CF_TUNNEL_ID)" \
-    "lettucectl stack $1 (garden)") || return 1
+  if ! id=$(garden_dns_create "$1"); then
+    old=$(env_get "$f" GARDEN_HOSTNAME)
+    set_garden_hostname "$1" || return 1
+    [[ $(env_get "$f" GARDEN_HOSTNAME) != "$old" ]] || return 1
+    warn "$1: $old was taken before its DNS record was created; its garden host is now $(env_get "$f" GARDEN_HOSTNAME)"
+    if [[ -n $(env_get "$f" CF_GARDEN_APP_ID) ]]; then
+      cf_app_update "$(cfg CF_ACCOUNT_ID)" "$(env_get "$f" CF_GARDEN_APP_ID)" "lettuce-$1-garden" "$(env_get "$f" GARDEN_HOSTNAME)" \
+        "$(cfg CF_GOOGLE_IDP_ID)" "$(cfg ACCESS_SESSION_DURATION)" "$(env_get "$f" CF_ACCESS_POLICY_ID)" || return 1
+    fi
+    configure_tunnel "$1" || return 1
+    id=$(garden_dns_create "$1") || return 1
+  fi
   env_set "$f" CF_GARDEN_DNS_RECORD_ID "$id"
+}
+
+# garden_dns_create NAME -> the garden host's DNS record id
+garden_dns_create() {
+  local f
+  f=$(stack_env "$1")
+  cf_dns_cname_create "$(cfg CF_ZONE_ID)" "$(env_get "$f" GARDEN_HOSTNAME)" "$(env_get "$f" CF_TUNNEL_ID)" \
+    "lettucectl stack $1 (garden)"
 }
 
 # needs_garden_host NAME -> success for a complete stack made before the garden
@@ -200,15 +247,19 @@ ensure_garden_host() {
   needs_garden_host "$1" || return 0
   f=$(stack_env "$1")
   info "$1: creating its garden host (the garden pages move off Lettuce's host)"
+  if [[ -n $(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)") ]]; then
+    # Its garden containers serve Lettuce's host, with its audience, until an
+    # `up` (up_stack) moves them; until then the tunnel keeps their old paths
+    # there (configure_tunnel), and profiles restarts them.
+    env_set "$f" GARDEN_MOVE_PENDING 1
+  fi
   if [[ -z $(env_get "$f" GARDEN_HOSTNAME) ]]; then
     set_garden_hostname "$1" || return 1
   fi
   create_garden_app "$1" || return 1
   configure_tunnel "$1" || return 1
   create_garden_dns "$1" || return 1
-  if [[ -n $(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)") ]]; then
-    # Its garden containers still have Lettuce's audience until an `up`; profiles reads this.
-    env_set "$f" GARDEN_MOVE_PENDING 1
+  if [[ -n $(env_get "$f" GARDEN_MOVE_PENDING) ]]; then
     info "$1: the garden pages are now at https://$(env_get "$f" GARDEN_HOSTNAME)/"
   else
     info "$1: its garden host https://$(env_get "$f" GARDEN_HOSTNAME)/ is ready for when a garden profile is on"
@@ -464,7 +515,22 @@ up_stack() {
   fi
   info "starting $1"
   compose "$1" up -d --build --remove-orphans || return 1
-  env_unset "$(stack_env "$1")" GARDEN_MOVE_PENDING
+  finish_garden_move "$1"
+}
+
+# finish_garden_move NAME -> once a moving stack's garden services run on its
+# garden host, drops their old paths from Lettuce's host, then the marker. A
+# failed route update keeps the marker, so the next up or profiles tries again;
+# the stack is up either way.
+finish_garden_move() {
+  local f
+  f=$(stack_env "$1")
+  [[ -n $(env_get "$f" GARDEN_MOVE_PENDING) ]] || return 0
+  if configure_tunnel "$1" ""; then
+    env_unset "$f" GARDEN_MOVE_PENDING
+  else
+    warn "$1: could not remove the old /garden/ paths from Lettuce's host; the next up or profiles tries again"
+  fi
 }
 
 # ── document tools ───────────────────────────────────────────────────────────
@@ -854,8 +920,8 @@ cmd_add() {
     # <name>-garden.<domain> is the garden host of the stack <name>.
     [[ $name != *-garden ]] || die "invalid stack name '$name': it may not end in -garden, which names each stack's garden host"
     dns_wildcard && wildcard=1
-    host=$(pick_hostname "$name" "" "$wildcard")
-    garden=$(pick_hostname "$name" -garden "$wildcard")
+    host=$(pick_hostname "$name" "$wildcard")
+    garden=$(pick_garden_hostname "$host" "$wildcard")
     write_new_stack_env "$name" "$host" "$garden" "$emails"
   fi
   emails=$(env_get "$f" ALLOWED_USERS)

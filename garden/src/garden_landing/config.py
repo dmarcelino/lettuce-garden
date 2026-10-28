@@ -12,9 +12,6 @@ from garden_common.executor import EXECUTOR_TOKEN
 PROFILE = re.compile(r"[a-z][a-z0-9-]*")
 # The code editor's profile: with it on, the page lists the agents.
 EDITOR = "code-server"
-# The executor sends a fresh agent list when asked: when there is none, when it
-# is older than this, or when the page was opened since it arrived.
-AGENTS_FRESH_SECONDS = 900
 
 
 class ConfigError(Exception):

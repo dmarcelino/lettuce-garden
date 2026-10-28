@@ -32,7 +32,7 @@ from starlette.routing import Route
 
 from . import icons
 from .agents import AgentList
-from .config import AGENTS_FRESH_SECONDS, EDITOR, Settings
+from .config import EDITOR, Settings
 
 log = logging.getLogger("garden_landing")
 
@@ -135,7 +135,7 @@ def create_app(settings: Settings, authenticator: Authenticator, agents: AgentLi
 
     async def status(request: Request) -> Response:
         # The executor runs `letta agents list` only when someone wants it.
-        wanted = settings.lists_agents and agents.wanted(AGENTS_FRESH_SECONDS)
+        wanted = settings.lists_agents and agents.wanted()
         return JSONResponse({"v": 1, "agents_wanted": wanted}, headers=NO_STORE)
 
     async def put_agents(request: Request) -> Response:
@@ -151,7 +151,8 @@ def create_app(settings: Settings, authenticator: Authenticator, agents: AgentLi
             Route(f"{EXECUTOR_PREFIX}/status", guarded(status), methods=["GET"]),
             Route(f"{EXECUTOR_PREFIX}/agents", guarded(put_agents), methods=["PUT"]),
             Route("/", page(landing)),
-            Route("/garden.css", page(css, asset=True)),
-            Route("/icon-192.png", page(icon, asset=True)),
+            # Assets only under /assets/: the tunnel routes nothing else here but / (GARDEN_LANDING_PATH).
+            Route("/assets/garden.css", page(css, asset=True)),
+            Route("/assets/icon-192.png", page(icon, asset=True)),
         ],
     )
