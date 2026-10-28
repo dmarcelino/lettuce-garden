@@ -11,6 +11,10 @@
 #   the UI; a restart puts them back, with nothing added inside them.
 # - A socket left by the last run is removed: code-server listens only on
 #   /run/code-server/editor.sock, which only the gate mounts besides it.
+# - SHELL is the terminal profile, like root's login shell (Dockerfile): VS Code
+#   opens it when no setting names a profile (a new Settings Profile has none).
+#   VSCODE_CLI=1 keeps code-server from running it to read its environment, which
+#   would open a session in the shell container on every extension host start.
 # The keys and settings are written with umask 077; code-server runs with 022,
 # so what the person creates in the workspaces is readable like agents' files.
 set -euo pipefail
@@ -51,5 +55,6 @@ fi
 rm -f /run/code-server/editor.sock
 
 export HOME=$DATA/home XDG_CONFIG_HOME=$DATA/home/.config XDG_DATA_HOME=$DATA/home/.local/share
+export SHELL=$HERE/bin/exec-shell VSCODE_CLI=1
 umask 022
 exec /opt/code-server/bin/code-server "$@"

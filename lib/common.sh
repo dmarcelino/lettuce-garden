@@ -683,8 +683,8 @@ check_code_server() {
       and (index($f) as $i | $v == null or .[$i + 1] == $v);
     (.command // []) | once("--socket"; "/run/code-server/editor.sock") and once("--auth"; "none")
     and once("--disable-proxy"; null) and once("--extensions-dir"; "/opt/lettuce-editor/no-extensions")
-    and once("--user-data-dir"; "/data/user")' <<<"$editor" >/dev/null ||
-    die "$name: code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lettuce-editor/no-extensions and --user-data-dir /data/user, each once (compose/code-server.yml)"
+    and once("--user-data-dir"; "/data/user") and once("--config"; "/opt/lettuce-editor/config.yaml")' <<<"$editor" >/dev/null ||
+    die "$name: code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lettuce-editor/no-extensions, --user-data-dir /data/user and --config /opt/lettuce-editor/config.yaml, each once (compose/code-server.yml)"
   k=$(jq -r '[(.command // [])[] | select(test("^--(bind-addr|socket-fd|disable-workspace-trust|link|proxy-domain|trusted-origins|enable-proposed-api|install-extension|github-auth|builtin-extensions-dir|abs-proxy-base-path)(=|$)"))]
     | join(", ")' <<<"$editor")
   [[ -z $k ]] || die "$name: code-server-editor must not run with $k (compose/code-server.yml)"

@@ -76,6 +76,10 @@ services:
       - /opt/lettuce-editor/no-extensions
       - --user-data-dir
       - /data/user
+      # The image's own, read-only: code-server would otherwise read (and write)
+      # one on code-server-data, where a key could set what check refuses here.
+      - --config
+      - /opt/lettuce-editor/config.yaml
     environment:
       # An empty gallery: no marketplace, so nothing can be searched or installed.
       EXTENSIONS_GALLERY: "{}"

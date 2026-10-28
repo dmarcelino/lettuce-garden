@@ -3411,7 +3411,7 @@ code_config() {
     | .services["code-server-editor"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
       "command":["--socket","/run/code-server/editor.sock","--socket-mode","666","--auth","none","--disable-proxy",
         "--disable-telemetry","--disable-update-check","--disable-getting-started-override","--extensions-dir",
-        "/opt/lettuce-editor/no-extensions","--user-data-dir","/data/user"],
+        "/opt/lettuce-editor/no-extensions","--user-data-dir","/data/user","--config","/opt/lettuce-editor/config.yaml"],
       "environment":{"EXTENSIONS_GALLERY":"{}","TZ":"UTC"},
       "networks":{"code-exec":null},
       "volumes":[{"type":"bind","source":"'"$st"'/workspaces","target":"/work","bind":{"create_host_path":true}},
@@ -3504,7 +3504,7 @@ test_check_refuses_an_editor_on_the_stack_network() {
 }
 
 test_check_refuses_an_editor_that_runs_workspace_code_or_trusts_more() {
-  local flag m="code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lettuce-editor/no-extensions and --user-data-dir /data/user, each once"
+  local flag m="code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lettuce-editor/no-extensions, --user-data-dir /data/user and --config /opt/lettuce-editor/config.yaml, each once"
   code_refused "$CE.command -= [\"--disable-proxy\"]" "$m"
   teardown; setup
   code_refused "$CE.command |= map(if . == \"none\" then \"password\" else . end)" "$m"
@@ -3512,9 +3512,13 @@ test_check_refuses_an_editor_that_runs_workspace_code_or_trusts_more() {
   code_refused "$CE.command |= map(if . == \"/opt/lettuce-editor/no-extensions\" then \"/data/extensions\" else . end)" "$m"
   teardown; setup
   code_refused "$CE.command |= map(if . == \"/run/code-server/editor.sock\" then \"/tmp/editor.sock\" else . end)" "$m"
+  # Without --config, code-server reads and writes its config file on /data.
+  teardown; setup
+  code_refused "$CE.command -= [\"--config\", \"/opt/lettuce-editor/config.yaml\"]" "$m"
   # code-server takes the last of a repeated flag, in either form.
   for flag in '"--auth","password"' '"--auth=password"' '"--extensions-dir","/work/x"' '"--extensions-dir=/work/x"' \
-    '"--user-data-dir","/work/x"' '"--user-data-dir=/work/x"' '"--socket=/tmp/x"' '"--disable-proxy=false"'; do
+    '"--user-data-dir","/work/x"' '"--user-data-dir=/work/x"' '"--socket=/tmp/x"' '"--disable-proxy=false"' \
+    '"--config","/data/config.yaml"' '"--config=/data/config.yaml"'; do
     teardown; setup
     code_refused "$CE.command += [$flag]" "$m"
   done

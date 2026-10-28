@@ -2,8 +2,9 @@
 # SHA-256 per architecture, with its built-in extensions pruned to
 # extensions-kept, and nothing to run workspace code with: no node on PATH (code-server's
 # own sits under /opt/code-server/lib), no npm, no compilers, no shell profiles to
-# detect (/etc/shells is empty). openssh-client carries the terminal to the
-# shell container. Built by lettucectl via compose/code-server.yml;
+# detect (/etc/shells is empty), and root's login shell is the terminal profile, so
+# VS Code's fallback shell leads to the shell container too. openssh-client carries
+# the terminal to the shell container. Built by lettucectl via compose/code-server.yml;
 # tests/run-sidecar.sh code-server builds the `test` stage and runs it.
 FROM debian:12-slim AS fetch
 ARG CODE_SERVER_VERSION=4.143.1
@@ -54,8 +55,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-client 
   && rm -rf /var/lib/apt/lists/* \
   && : >/etc/shells
 COPY --from=fetch /opt/code-server /opt/code-server
-COPY settings.json ssh_config extensions-kept entrypoint.sh /opt/lettuce-editor/
+COPY settings.json config.yaml ssh_config extensions-kept entrypoint.sh /opt/lettuce-editor/
 COPY bin /opt/lettuce-editor/bin
+RUN usermod -s /opt/lettuce-editor/bin/exec-shell root
 # Points --extensions-dir somewhere nothing can be installed (the root is read-only);
 # the empty list keeps code-server from logging its absence on every scan.
 RUN mkdir /opt/lettuce-editor/no-extensions && echo '[]' >/opt/lettuce-editor/no-extensions/extensions.json

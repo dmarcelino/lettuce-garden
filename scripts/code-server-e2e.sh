@@ -138,7 +138,8 @@ docker create --name "$P-editor" --network "$P-exec" --network-alias code-server
   -v "$TMP/workspaces:/work" -v "$P-data:/data" -v "$P-keys:/keys" -v "$P-sock:/run/code-server" \
   "$P-editor:e2e" --socket /run/code-server/editor.sock --socket-mode 666 --auth none --disable-proxy \
   --disable-telemetry --disable-update-check --disable-getting-started-override \
-  --extensions-dir /opt/lettuce-editor/no-extensions --user-data-dir /data/user >/dev/null
+  --extensions-dir /opt/lettuce-editor/no-extensions --user-data-dir /data/user \
+  --config /opt/lettuce-editor/config.yaml >/dev/null
 docker start "$P-editor" >/dev/null
 # listening -> success once the editor serves (its log is read whole: grep -q
 # would end the pipe early and fail it under pipefail)
@@ -194,6 +195,8 @@ refuse "it has no way to the internet" docker exec "$P-editor" bash -c 'exec 3<>
 # network has at 127.0.0.11 (0B00007F)
 listeners() { docker exec "$1" awk 'NR > 1 && $4 == "0A" && $2 !~ /^0B00007F:/' /proc/net/tcp /proc/net/tcp6; }
 expect "it listens on no port, only on its socket" test -z "$(listeners "$P-editor")"
+refuse "it keeps no config file of its own on its volume" docker exec "$P-editor" test -e /data/home/.config/code-server
+expect "its fallback shell is the terminal profile" bash -c "docker exec $P-editor getent passwd root | grep -q ':/opt/lettuce-editor/bin/exec-shell\$'"
 refuse "the shell can't reach the editor" docker exec "$P-exec" bash -c 'exec 3<>/dev/tcp/code-server-editor/8080'
 docker run -d --name "$P-probe" --network "$P-default" "$DEBIAN" sleep 300 >/dev/null
 refuse "the stack network can't reach the editor" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/code-server-editor/8080'

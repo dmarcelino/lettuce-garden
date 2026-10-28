@@ -210,7 +210,8 @@ say so, as they do for pipelock.
        |   pruned to the allow-list, ssh client)
        |   --auth none --disable-proxy --disable-telemetry --disable-update-check
        |   --disable-getting-started-override --extensions-dir <empty, read-only>
-       |   --user-data-dir /data/user; EXTENSIONS_GALLERY={}
+       |   --user-data-dir /data/user --config <the image's, read-only>;
+       |   EXTENSIONS_GALLERY={}
        |   /work  <- state/workspaces (rw; the editor writes files, runs none)
        |   /data  <- volume code-server-data (settings, state, the SSH client key)
        |   /keys  <- volume code-exec-keys (rw: writes the shell's host key and authorized_keys)
