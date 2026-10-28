@@ -21,7 +21,7 @@ STREET = "Rua Falsa 123"
 CARD = "4111111111114242"
 PASSPHRASE = "correct horse battery staple"
 EMAIL = "alfred@gmail.com"
-ORIGIN = "https://alfred.example.com"
+ORIGIN = "https://alfred-garden.example.com"
 
 # What a browser sends when a person opens a page or posts its form (Fetch
 # Metadata), and when a page's own script calls fetch(); see garden_common.auth.check_fetch.

@@ -12,7 +12,7 @@ import sys
 
 from playwright.sync_api import sync_playwright
 
-URL = "http://localhost:8000/garden/code-server/?folder=/work/agent-1"
+URL = "http://localhost:8000/code-server/?folder=/work/agent-1"
 
 
 def main() -> None:

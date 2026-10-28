@@ -1,5 +1,7 @@
 # Code editor (code-server): implementation plan
 
+Note (2026-10-28): the editor has since moved to `https://<name>-garden.<domain>/code-server/`, off Lettuce's origin, and the landing page's agent list is server-rendered by the `garden` service (docs/garden-host-plan.md). The record below is unchanged.
+
 Status: implemented on branch `vscode` (2026-10-27), steps 0-5; step 6, a real stack, is still to
 do. The source review below was checked at runtime (step 0, results at the end), which changed two
 things: the git extension is out (Source Control asks to trust each repository's folder), and

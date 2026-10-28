@@ -1,7 +1,7 @@
 """The ASGI app: MCP at /mcp and vault-run's /redeem (internal only; the tunnel
-forwards /garden/secrets/ and /garden/ alone), the vault UI at /garden/secrets/ (every route needs a
-verified Access JWT, and all but setup/unlock/notifications an unlocked vault) and the garden landing
-page at /garden/ (Access JWT only)."""
+forwards /secrets/ on the garden's host alone) and the vault UI at /secrets/
+(every route needs a verified Access JWT, and all but setup/unlock/notifications
+an unlocked vault)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from typing import Any
 
 import anyio
 from garden_common.auth import COOP, FETCH, FORM, PAGE, Authenticator, AuthError, admit
-from garden_common.garden import landing_routes, stylesheet
+from garden_common.garden import stylesheet
 from jinja2 import Environment, PackageLoader, select_autoescape
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
@@ -81,9 +81,7 @@ def _safe_next(path: Any) -> str:
     return path if isinstance(path, str) and path.startswith(PREFIX + "/") and "//" not in path else PREFIX + "/"
 
 
-def create_app(
-    broker: Broker, authenticator: Authenticator, vapid_public_key: str, garden_profiles: str = ""
-) -> Starlette:
+def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: str) -> Starlette:
     env = Environment(loader=PackageLoader("secret_broker", "templates"), autoescape=select_autoescape(default=True))
     env.filters["time"] = _fmt_time
     env.globals["base"] = PREFIX
@@ -460,7 +458,6 @@ def create_app(
         routes=[
             Route("/healthz", healthz),
             Route("/redeem", redeem, methods=["POST"]),
-            *landing_routes(authenticator, garden_profiles, PREFIX, SECURITY_HEADERS, error),
             Route(PREFIX, secrets_root),
             Mount(PREFIX, routes=ui),
             Mount("/", app=mcp_app),

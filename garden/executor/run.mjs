@@ -1,26 +1,34 @@
-// gmail-triggers executor: runs as root in the Lettuce app-server, from system cron every
-// minute. It claims the requests the gmail-triggers sidecar has queued (over HTTP on the
-// stack network, with a bearer token), turns each into a one-off letta-code task
-// (`letta cron add --once`), posts the outcome back, then sends the agent list and a
-// heartbeat for the sidecar's page.
+// The garden executor: runs as root in the Lettuce app-server, from system cron every
+// minute, whenever any garden profile is on. Over HTTP on the stack network, with one
+// bearer token for both sidecars, it:
+// - asks the garden service whether it wants the agent list (for the landing page);
+// - with --gmail-triggers (the stack has that profile), claims the requests the
+//   gmail-triggers sidecar has queued, turns each into a one-off letta-code task
+//   (`letta cron add --once`) and posts the outcome back;
+// - when either wants it, runs `letta agents list` once and sends the list to both;
+// - with --gmail-triggers, sends gmail-triggers a heartbeat for its page.
+// Without --gmail-triggers it never calls gmail-triggers. One sidecar being unreachable
+// never stops what the run does for the other.
 //
 // Every response is untrusted: agents are root in this container and can read the token,
-// so they can answer in the sidecar's place. So `letta` runs from an argument array (never
+// so they can answer in a sidecar's place. So `letta` runs from an argument array (never
 // a shell) and every field is validated. Values are passed as `--flag=value`, because
 // letta's argument parser refuses a separate value that starts with a dash.
 //
 // Cron starts it through upstream's agent-env, so its environment (and letta's) is PID 1's.
 //
-// Overrides (tests only): GT_URL, GT_TOKEN_FILE, GT_LOCK, GT_LOG.
+// Overrides (tests only): GARDEN_URL, GT_URL, GT_TOKEN_FILE, GT_LOCK, GT_LOG.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const HOME = "/root/.letta/garden/gmail-triggers";
-const URL_BASE = (process.env.GT_URL || "http://gmail-triggers:8000").replace(/\/+$/, "");
-const TOKEN_FILE = process.env.GT_TOKEN_FILE || "/etc/lettuce-garden/gmail-triggers-token";
+const HOME = "/root/.letta/garden/executor";
+const base = (url) => url.replace(/\/+$/, "");
+const GARDEN = { name: "garden", url: base(process.env.GARDEN_URL || "http://garden:8000") };
+const GMAIL = { name: "gmail-triggers", url: base(process.env.GT_URL || "http://gmail-triggers:8000") };
+const TOKEN_FILE = process.env.GT_TOKEN_FILE || "/etc/lettuce-garden/executor-token";
 const LOCK = process.env.GT_LOCK || `${HOME}/.executor.lock`;
 const LOG = process.env.GT_LOG || `${HOME}/executor.log`;
 
@@ -182,7 +190,7 @@ function readCapped(file, max) {
 // pipes: letta exits before flushing a pipe past 64 KiB. Throws on file errors.
 async function runLetta(ctx, args) {
   touch(LOCK);
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gmail-triggers-"));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "garden-executor-"));
   try {
     const outPath = path.join(tmp, "stdout");
     const errPath = path.join(tmp, "stderr");
@@ -244,7 +252,7 @@ function failure(what, run) {
   return `${what}: exited with code ${run.code}`;
 }
 
-// --- sidecar API -----------------------------------------------------------------
+// --- sidecar APIs ----------------------------------------------------------------
 
 async function readBody(res, max) {
   if (!res.body) return "";
@@ -265,12 +273,12 @@ async function readBody(res, max) {
 }
 
 // Returns { status, body } or throws with a short reason (never the token).
-async function api(ctx, method, route, payload) {
+async function api(ctx, sidecar, method, route, payload) {
   const headers = { authorization: `Bearer ${ctx.token}`, accept: "application/json" };
   if (payload !== undefined) headers["content-type"] = "application/json";
   let res;
   try {
-    res = await fetch(`${URL_BASE}${route}`, {
+    res = await fetch(`${sidecar.url}${route}`, {
       method,
       headers,
       body: payload === undefined ? undefined : JSON.stringify(payload),
@@ -285,42 +293,64 @@ async function api(ctx, method, route, payload) {
 }
 
 // For the POST and PUT calls: logs instead of throwing, so one failure doesn't stop the run.
-async function send(ctx, method, route, payload, what) {
+async function send(ctx, sidecar, method, route, payload, what) {
   try {
-    const { status } = await api(ctx, method, route, payload);
+    const { status } = await api(ctx, sidecar, method, route, payload);
     if (status < 200 || status > 299) {
-      log(`${what}: sidecar answered HTTP ${status}`);
+      log(`${what}: ${sidecar.name} answered HTTP ${status}`);
       return false;
     }
     return true;
   } catch (err) {
-    log(`${what}: ${err.message}`);
+    log(`${what}: ${sidecar.name}: ${err.message}`);
     return false;
   }
 }
 
-// Returns { requests, agentsWanted }, or null after logging why there are none.
-async function claimRequests(ctx) {
+// A GET answered with a JSON object carrying "v": 1, or null after logging why not.
+async function getJson(ctx, sidecar, route, what) {
   let res;
   try {
-    res = await api(ctx, "GET", "/executor/v1/requests");
+    res = await api(ctx, sidecar, "GET", route);
   } catch (err) {
-    log(`sidecar unreachable: ${err.message}`);
+    log(`${sidecar.name} unreachable: ${err.message}`);
     return null;
   }
   if (res.status !== 200) {
-    log(`requests: sidecar answered HTTP ${res.status}`);
+    log(`${what}: ${sidecar.name} answered HTTP ${res.status}`);
     return null;
   }
   let out;
   try {
     out = JSON.parse(res.body);
   } catch {
-    log("requests: sidecar sent no JSON");
+    log(`${what}: ${sidecar.name} sent no JSON`);
     return null;
   }
-  if (out?.v !== 1 || !Array.isArray(out.requests)) {
-    log("requests: sidecar sent an unexpected answer");
+  if (out?.v !== 1) {
+    log(`${what}: ${sidecar.name} sent an unexpected answer`);
+    return null;
+  }
+  return out;
+}
+
+// Returns { agentsWanted }, or null when the garden service did not answer usably.
+async function gardenStatus(ctx) {
+  const out = await getJson(ctx, GARDEN, "/executor/v1/status", "status");
+  if (out === null) return null;
+  if (typeof out.agents_wanted !== "boolean") {
+    log("status: garden sent an unexpected answer");
+    return null;
+  }
+  return { agentsWanted: out.agents_wanted };
+}
+
+// Returns { requests, agentsWanted }, or null after logging why there are none.
+async function claimRequests(ctx) {
+  const out = await getJson(ctx, GMAIL, "/executor/v1/requests", "requests");
+  if (out === null) return null;
+  if (!Array.isArray(out.requests)) {
+    log("requests: gmail-triggers sent an unexpected answer");
     return null;
   }
   return { requests: out.requests, agentsWanted: out.agents_wanted === true };
@@ -379,7 +409,7 @@ async function handle(ctx, req, seen) {
     result = { ok: false, error: executorError(err) };
     log(`request ${id}: ${result.error}`);
   }
-  await send(ctx, "POST", "/executor/v1/results", { v: 1, id, ...result }, `result ${id}`);
+  await send(ctx, GMAIL, "POST", "/executor/v1/results", { v: 1, id, ...result }, `result ${id}`);
 }
 
 async function addTask(ctx, req) {
@@ -416,8 +446,9 @@ async function addTask(ctx, req) {
 
 // --- agents ----------------------------------------------------------------------
 
-// Returns an error message, or null once the list is sent.
-async function refreshAgents(ctx) {
+// Runs `letta agents list` once and sends the list to each of `sidecars`. Returns an error
+// message, or null once the list is sent.
+async function refreshAgents(ctx, sidecars) {
   const run = await runLetta(ctx, ["agents", "list", "--limit", String(AGENTS_MAX)]);
   if (run.code !== 0) {
     const why = failure("letta agents list", run);
@@ -435,7 +466,9 @@ async function refreshAgents(ctx) {
     .filter((a) => typeof a?.id === "string" && typeof a?.name === "string")
     .slice(0, AGENTS_MAX)
     .map((a) => ({ id: a.id, name: clip(a.name, AGENT_NAME_MAX) }));
-  await send(ctx, "PUT", "/executor/v1/agents", { v: 1, agents }, "agents");
+  for (const sidecar of sidecars) {
+    await send(ctx, sidecar, "PUT", "/executor/v1/agents", { v: 1, agents }, "agents");
+  }
   return null;
 }
 
@@ -445,13 +478,25 @@ async function heartbeat(ctx, lettaOk, errors) {
   for (const e of errors) log(`error: ${e}`);
   const body = { v: 1, letta_ok: lettaOk };
   if (errors.length) body.error = errorText(errors.join("; "));
-  await send(ctx, "POST", "/executor/v1/heartbeat", body, "heartbeat");
+  await send(ctx, GMAIL, "POST", "/executor/v1/heartbeat", body, "heartbeat");
+}
+
+// The one argument cron may pass; anything else stops the run before any call.
+function parseArgs(argv) {
+  if (argv.length === 0) return { gmail: false };
+  if (argv.length === 1 && argv[0] === "--gmail-triggers") return { gmail: true };
+  return null;
 }
 
 async function run() {
   if (!lock(LOCK)) return;
   try {
     truncateLog(LOG);
+    const args = parseArgs(process.argv.slice(2));
+    if (!args) {
+      log("usage: run.mjs [--gmail-triggers]");
+      return;
+    }
     const { token, error } = readToken(TOKEN_FILE);
     if (!token) {
       log(error);
@@ -462,27 +507,34 @@ async function run() {
     // Without letta nothing is claimed, so the requests wait for a run that can do them.
     ctx.letta = findLetta(process.env);
     if (!ctx.letta) {
-      await heartbeat(ctx, false, ["letta not found on the PATH"]);
+      const why = "letta not found on the PATH";
+      if (args.gmail) await heartbeat(ctx, false, [why]);
+      else log(`error: ${why}`);
       return;
     }
     const home = process.env.HOME;
     const homeDir = home && path.isAbsolute(home) && fs.statSync(home, { throwIfNoEntry: false });
     ctx.cwd = homeDir?.isDirectory() ? home : "/";
 
-    const claimed = await claimRequests(ctx);
-    if (claimed === null) return;
-    const seen = new Set();
-    for (const req of claimed.requests) await handle(ctx, req, seen);
+    const garden = await gardenStatus(ctx);
+    const claimed = args.gmail ? await claimRequests(ctx) : null;
+    if (claimed) {
+      const seen = new Set();
+      for (const req of claimed.requests) await handle(ctx, req, seen);
+    }
 
+    // The list goes to each sidecar that answered, whichever of them asked for it.
     let agentsError = null;
-    if (claimed.agentsWanted) {
+    if (garden?.agentsWanted || claimed?.agentsWanted) {
+      const to = [garden && GARDEN, claimed && GMAIL].filter(Boolean);
       try {
-        agentsError = await refreshAgents(ctx);
+        agentsError = await refreshAgents(ctx, to);
       } catch (err) {
         agentsError = `letta agents list: ${executorError(err)}`;
       }
     }
-    await heartbeat(ctx, !agentsError, agentsError ? [agentsError] : []);
+    if (claimed) await heartbeat(ctx, !agentsError, agentsError ? [agentsError] : []);
+    else if (agentsError) log(`error: ${agentsError}`);
   } finally {
     fs.rmSync(LOCK, { recursive: true, force: true });
   }

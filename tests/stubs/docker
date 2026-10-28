@@ -208,12 +208,22 @@ case $args in
     ;;
   *" config --format json "*)
     # The profiles the rendering used, from its --env-file.
-    prev=""
+    env_file="" prev=""
     for a in "$@"; do
-      [[ $prev == --env-file ]] && printf 'docker-env-file %s\n' "$(grep '^COMPOSE_PROFILES=' "$a")" >>"$STUB_LOG"
+      [[ $prev == --env-file ]] && env_file=$a
       prev=$a
     done
-    cat "$STUB_ROOT/compose-config.json" 2>/dev/null
+    printf 'docker-env-file %s\n' "$(grep '^COMPOSE_PROFILES=' "$env_file")" >>"$STUB_LOG"
+    # Like Compose, ${KEY} in the config takes KEY's value from the env file
+    # (empty when it has none), so one config serves every stack.
+    [[ -f $STUB_ROOT/compose-config.json ]] || exit 0
+    awk 'NR == FNR { i = index($0, "="); if (i > 1) v[substr($0, 1, i - 1)] = substr($0, i + 1); next }
+      { out = ""
+        while (match($0, /\$\{[A-Za-z_][A-Za-z0-9_]*\}/)) {
+          out = out substr($0, 1, RSTART - 1) v[substr($0, RSTART + 2, RLENGTH - 3)]
+          $0 = substr($0, RSTART + RLENGTH)
+        }
+        print out $0 }' "$env_file" "$STUB_ROOT/compose-config.json"
     ;;
   *" config --services "*)
     # Like upstream: two services always, the rest per COMPOSE_PROFILES in --env-file.
@@ -224,6 +234,15 @@ case $args in
     done
     printf '%s\n' app-server bff
     IFS=, read -ra ps <<<"$(sed -n 's/^COMPOSE_PROFILES=//p' "$env_file")"
+    # garden: once, with any of its profiles (compose/garden.yml).
+    for p in "${ps[@]}"; do
+      case $p in
+        secrets | gmail-triggers | code-server)
+          echo garden
+          break
+          ;;
+      esac
+    done
     for p in "${ps[@]}"; do
       case $p in
         search) printf '%s\n' searxng ddg-mcp ;;

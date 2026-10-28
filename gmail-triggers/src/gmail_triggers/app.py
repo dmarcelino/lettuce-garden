@@ -1,7 +1,7 @@
-"""The ASGI app: the Gmail triggers pages under /garden/gmail-triggers and the
-garden landing page at /garden/ (every route needs a verified Access JWT, every
-POST this stack's Origin and a CSRF token), the executor's API at /executor/v1/
-(executor_api.py; token, no Access) and /healthz. The pages need no JavaScript."""
+"""The ASGI app: the Gmail triggers pages under /gmail-triggers on the garden's
+host (every route needs a verified Access JWT, every POST the garden's Origin
+and a CSRF token), the executor's API at /executor/v1/ (executor_api.py; token,
+no Access) and /healthz. The pages need no JavaScript."""
 
 from __future__ import annotations
 
@@ -16,7 +16,9 @@ from typing import Any
 
 import anyio
 from garden_common.auth import COOP, FORM, PAGE, Authenticator, AuthError, admit
-from garden_common.garden import landing_routes, stylesheet
+from garden_common.executor import AGENT_ID
+from garden_common.garden import stylesheet
+from garden_common.text import encodable
 from jinja2 import Environment, PackageLoader, select_autoescape
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -38,12 +40,11 @@ from .config import (
     MAX_SENDERS,
     PREFIX,
 )
-from .executor_api import AGENT_ID, executor_routes
+from .executor_api import executor_routes
 from .google import LABEL_ID, Google, GoogleUnavailable, Label, Status
 from .matcher import ADDRESS
 from .poller import Poller
 from .store import GAP_DROPPED, GAP_PAUSED, GAP_SKIPPED, RULE_ID, Agent, Rule, Store
-from .text import encodable
 from .triggers import send_test
 
 log = logging.getLogger("gmail_triggers.ui")
@@ -280,7 +281,6 @@ def create_app(
     authenticator: Authenticator,
     executor_token: str,
     poller: Poller | None = None,
-    garden_profiles: str = "",
 ) -> Starlette:
     env = Environment(loader=PackageLoader("gmail_triggers", "templates"), autoescape=select_autoescape(default=True))
     env.filters["time"] = _fmt_time
@@ -547,7 +547,6 @@ def create_app(
         routes=[
             Route("/healthz", healthz),
             *executor_routes(store, executor_token),
-            *landing_routes(authenticator, garden_profiles, PREFIX, SECURITY_HEADERS, error),
             Route(PREFIX, root),
             Mount(PREFIX, routes=ui),
         ],

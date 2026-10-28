@@ -1,8 +1,9 @@
-// Tests for the gmail-triggers executor. Each test gets a local HTTP server playing the
-// sidecar, a token file and a fake `letta` on the PATH, and runs run.mjs with only the
-// environment it sets (in production, agent-env hands it PID 1's). The server and the fake
+// Tests for the garden executor. Each test gets two local HTTP servers playing the garden
+// service and the gmail-triggers sidecar, a token file and a fake `letta` on the PATH, and
+// runs run.mjs with only the environment it sets (in production, agent-env hands it PID
+// 1's), with --gmail-triggers unless the test says otherwise. The servers and the fake
 // letta append to the same calls log, so tests see the real order of HTTP calls and letta
-// runs.
+// runs; each HTTP call is logged as "<sidecar> <METHOD> <path>".
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -70,10 +71,11 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()();
 });
 
-// The sidecar: `t.sidecar` says how to answer. `requests` is the GET body's list and
-// `agentsWanted` its agents_wanted (left out when undefined); `respond[route]` overrides an
-// answer with { status, body, hang }; `onResult(body)` runs before a result is answered.
-function startSidecar(t) {
+// A sidecar: `t[name]` says how to answer. For gmail-triggers, `requests` is the requests
+// GET's list; for both, `agentsWanted` is the GET's agents_wanted (left out when
+// undefined); `respond[route]` overrides an answer with { status, body, hang };
+// `onResult(body)` runs before a result is answered.
+function startSidecar(t, name) {
   const server = http.createServer((req, res) => {
     const chunks = [];
     req.on("data", (c) => chunks.push(c));
@@ -85,7 +87,7 @@ function startSidecar(t) {
       } catch {
         body = raw;
       }
-      const route = `${req.method} ${req.url}`;
+      const route = `${name} ${req.method} ${req.url}`;
       fs.appendFileSync(t.calls, `${JSON.stringify({
         kind: "http",
         route,
@@ -94,7 +96,8 @@ function startSidecar(t) {
         type: req.headers["content-type"] ?? null,
         body,
       })}\n`);
-      const override = t.sidecar.respond[route];
+      const side = t[name];
+      const override = side.respond[route];
       if (override?.hang) return;
       if (req.headers.authorization !== `Bearer ${TOKEN}`) {
         res.writeHead(401).end("unauthorized");
@@ -107,12 +110,17 @@ function startSidecar(t) {
         res.end(override.body ?? "");
         return;
       }
-      if (route === "GET /executor/v1/requests") {
+      if (route === "gmail-triggers GET /executor/v1/requests") {
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ v: 1, requests: t.sidecar.requests, agents_wanted: t.sidecar.agentsWanted }));
+        res.end(JSON.stringify({ v: 1, requests: side.requests, agents_wanted: side.agentsWanted }));
         return;
       }
-      if (route === "POST /executor/v1/results") t.sidecar.onResult?.(body);
+      if (route === "garden GET /executor/v1/status") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ v: 1, agents_wanted: side.agentsWanted }));
+        return;
+      }
+      if (route === "gmail-triggers POST /executor/v1/results") side.onResult?.(body);
       res.writeHead(204).end();
     });
   });
@@ -141,23 +149,28 @@ async function setup(envExtra = {}) {
     calls: path.join(root, "calls.log"),
     tokenFile: path.join(root, "token"),
     lock: path.join(root, ".executor.lock"),
-    sidecar: { requests: [], respond: {}, agentsWanted: true },
+    "gmail-triggers": { requests: [], respond: {}, agentsWanted: true },
+    garden: { respond: {}, agentsWanted: false },
+    args: ["--gmail-triggers"],
   };
+  t.sidecar = t["gmail-triggers"];
   fs.mkdirSync(t.bin);
   fs.mkdirSync(t.tmp);
   fs.writeFileSync(path.join(t.bin, "letta"), FAKE_LETTA, { mode: 0o755 });
   fs.writeFileSync(t.tokenFile, `${TOKEN}\n`, { mode: 0o600 });
   t.env = { PATH: `${t.bin}:/usr/bin:/bin`, HOME: root, TMPDIR: t.tmp, FAKE_CALLS: t.calls, ...envExtra };
-  t.url = await startSidecar(t);
+  t.url = await startSidecar(t, "gmail-triggers");
+  t.gardenUrl = await startSidecar(t, "garden");
   return t;
 }
 
 // Async, so this process's sidecar can answer while the executor runs.
 function run(t) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [RUN], {
+    const child = spawn(process.execPath, [RUN, ...t.args], {
       env: {
         ...t.env,
+        GARDEN_URL: t.gardenUrl,
         GT_URL: t.url,
         GT_TOKEN_FILE: t.tokenFile,
         GT_LOCK: t.lock,
@@ -201,8 +214,8 @@ const cronCalls = (t) => lettaCalls(t).filter((c) => c.argv[0] === "cron");
 const httpCalls = (t) => calls(t).filter((c) => c.kind === "http");
 const routes = (t) => httpCalls(t).map((c) => c.route);
 const posted = (t, route) => httpCalls(t).filter((c) => c.route === route).map((c) => c.body);
-const results = (t) => posted(t, "POST /executor/v1/results");
-const heartbeats = (t) => posted(t, "POST /executor/v1/heartbeat");
+const results = (t) => posted(t, "gmail-triggers POST /executor/v1/results");
+const heartbeats = (t) => posted(t, "gmail-triggers POST /executor/v1/heartbeat");
 
 // HTTP calls and letta runs in the order they happened.
 function sequence(t) {
@@ -247,20 +260,22 @@ test("calls go in order, with the token, as JSON and without an Origin", async (
   t.sidecar.requests = [request({}, ID1), request({}, ID2)];
   assert.equal((await run(t)).status, 0);
   assert.deepEqual(sequence(t), [
-    "GET /executor/v1/requests",
+    "garden GET /executor/v1/status",
+    "gmail-triggers GET /executor/v1/requests",
     "letta cron add",
-    "POST /executor/v1/results",
+    "gmail-triggers POST /executor/v1/results",
     "letta cron add",
-    "POST /executor/v1/results",
+    "gmail-triggers POST /executor/v1/results",
     "letta agents list",
-    "PUT /executor/v1/agents",
-    "POST /executor/v1/heartbeat",
+    "garden PUT /executor/v1/agents",
+    "gmail-triggers PUT /executor/v1/agents",
+    "gmail-triggers POST /executor/v1/heartbeat",
   ]);
   assert.deepEqual(results(t).map((b) => b.id), [ID1, ID2]);
   for (const c of httpCalls(t)) {
     assert.equal(c.auth, `Bearer ${TOKEN}`);
     assert.equal(c.origin, null);
-    if (!c.route.startsWith("GET")) assert.equal(c.type, "application/json");
+    if (!c.route.includes(" GET ")) assert.equal(c.type, "application/json");
   }
 });
 
@@ -375,12 +390,12 @@ test("JSON stdout without an id is ok:false", async () => {
 test("a result answered with 404 is logged and the run goes on", async () => {
   const t = await setup();
   t.sidecar.requests = [request({}, ID1), request({}, ID2)];
-  t.sidecar.respond["POST /executor/v1/results"] = { status: 404, body: '{"detail":"unknown"}' };
+  t.sidecar.respond["gmail-triggers POST /executor/v1/results"] = { status: 404, body: '{"detail":"unknown"}' };
   const r = await run(t);
   assert.equal(r.status, 0);
   assert.equal(cronCalls(t).length, 2);
   assert.equal(results(t).length, 2);
-  assert.match(r.stdout, new RegExp(`result ${ID1}: sidecar answered HTTP 404`));
+  assert.match(r.stdout, new RegExp(`result ${ID1}: gmail-triggers answered HTTP 404`));
   assert.equal(heartbeats(t).length, 1);
 });
 
@@ -388,7 +403,7 @@ test("the agent list comes from .items[] and the heartbeat says letta is ok", as
   const t = await setup();
   assert.equal((await run(t)).status, 0);
   assert.deepEqual(lettaCalls(t).map((c) => c.argv), [["agents", "list", "--limit", "1000"]]);
-  assert.deepEqual(posted(t, "PUT /executor/v1/agents"), [
+  assert.deepEqual(posted(t, "gmail-triggers PUT /executor/v1/agents"), [
     {
       v: 1,
       agents: [
@@ -403,7 +418,7 @@ test("the agent list comes from .items[] and the heartbeat says letta is ok", as
 test("a large agent list is read whole even though letta exits at once", async () => {
   const t = await setup({ FAKE_AGENTS: "big" });
   await run(t);
-  const [{ agents }] = posted(t, "PUT /executor/v1/agents");
+  const [{ agents }] = posted(t, "gmail-triggers PUT /executor/v1/agents");
   assert.equal(agents.length, 1000);
   assert.equal(agents[999].id, "agent-999");
 });
@@ -411,7 +426,7 @@ test("a large agent list is read whole even though letta exits at once", async (
 test("a failing agents list sends no list and the heartbeat records it", async () => {
   const t = await setup({ FAKE_AGENTS: "fail" });
   assert.equal((await run(t)).status, 0);
-  assert.deepEqual(posted(t, "PUT /executor/v1/agents"), []);
+  assert.deepEqual(posted(t, "gmail-triggers PUT /executor/v1/agents"), []);
   assert.deepEqual(heartbeats(t), [
     { v: 1, letta_ok: false, error: "letta agents list: exited with code 2: Error: backend unreachable" },
   ]);
@@ -428,10 +443,11 @@ for (const [label, wanted] of [
     t.sidecar.requests = [request()];
     assert.equal((await run(t)).status, 0);
     assert.deepEqual(sequence(t), [
-      "GET /executor/v1/requests",
+      "garden GET /executor/v1/status",
+      "gmail-triggers GET /executor/v1/requests",
       "letta cron add",
-      "POST /executor/v1/results",
-      "POST /executor/v1/heartbeat",
+      "gmail-triggers POST /executor/v1/results",
+      "gmail-triggers POST /executor/v1/heartbeat",
     ]);
     assert.deepEqual(heartbeats(t), [{ v: 1, letta_ok: true }]);
   });
@@ -442,10 +458,12 @@ test("agents_wanted true sends the agent list after the requests", async () => {
   t.sidecar.agentsWanted = true;
   assert.equal((await run(t)).status, 0);
   assert.deepEqual(sequence(t), [
-    "GET /executor/v1/requests",
+    "garden GET /executor/v1/status",
+    "gmail-triggers GET /executor/v1/requests",
     "letta agents list",
-    "PUT /executor/v1/agents",
-    "POST /executor/v1/heartbeat",
+    "garden PUT /executor/v1/agents",
+    "gmail-triggers PUT /executor/v1/agents",
+    "gmail-triggers POST /executor/v1/heartbeat",
   ]);
 });
 
@@ -473,7 +491,7 @@ test("a request that throws while starting letta doesn't end the batch", async (
   assert.equal(got[1].error, "executor error (ENOTDIR)");
   assert.match(r.stdout, new RegExp(`request ${ID2}: executor error \\(ENOTDIR\\)`));
   assert.equal(heartbeats(t).length, 1);
-  assert.equal(posted(t, "PUT /executor/v1/agents").length, 1);
+  assert.equal(posted(t, "gmail-triggers PUT /executor/v1/agents").length, 1);
 });
 
 test("a request that throws while reading letta's output doesn't end the batch", async () => {
@@ -505,7 +523,7 @@ test("a run where every letta call throws still answers each request and the hea
     [ID1, false, "executor error (ENOTDIR)"],
     [ID2, false, "executor error (ENOTDIR)"],
   ]);
-  assert.deepEqual(posted(t, "PUT /executor/v1/agents"), []);
+  assert.deepEqual(posted(t, "gmail-triggers PUT /executor/v1/agents"), []);
   assert.deepEqual(heartbeats(t), [{ v: 1, letta_ok: false, error: "letta agents list: executor error (ENOTDIR)" }]);
 });
 
@@ -515,7 +533,7 @@ test("a missing letta claims nothing and says so in the heartbeat", async () => 
   fs.copyFileSync(path.join(t.bin, "letta"), path.join(t.root, "letta"));
   t.sidecar.requests = [request()];
   assert.equal((await run(t)).status, 0);
-  assert.deepEqual(routes(t), ["POST /executor/v1/heartbeat"]);
+  assert.deepEqual(routes(t), ["gmail-triggers POST /executor/v1/heartbeat"]);
   assert.equal(heartbeats(t)[0].letta_ok, false);
   assert.match(heartbeats(t)[0].error, /letta not found/);
 });
@@ -570,59 +588,220 @@ test("a token the sidecar rejects claims nothing", async () => {
   t.sidecar.requests = [request()];
   const r = await run(t);
   assert.equal(r.status, 0);
-  assert.deepEqual(routes(t), ["GET /executor/v1/requests"]);
-  assert.equal(httpCalls(t)[0].auth, `Bearer ${"ab".repeat(32)}`);
+  assert.deepEqual(routes(t), ["garden GET /executor/v1/status", "gmail-triggers GET /executor/v1/requests"]);
+  for (const c of httpCalls(t)) assert.equal(c.auth, `Bearer ${"ab".repeat(32)}`);
   assert.deepEqual(lettaCalls(t), []);
-  assert.match(r.stdout, /requests: sidecar answered HTTP 401/);
+  assert.match(r.stdout, /status: garden answered HTTP 401/);
+  assert.match(r.stdout, /requests: gmail-triggers answered HTTP 401/);
 });
 
-test("an unreachable sidecar is logged and the run exits 0", async () => {
-  const t = await setup();
+async function closedUrl() {
   const closed = http.createServer();
   await new Promise((done) => closed.listen(0, "127.0.0.1", done));
-  t.url = `http://127.0.0.1:${closed.address().port}`;
+  const url = `http://127.0.0.1:${closed.address().port}`;
   await new Promise((done) => closed.close(done));
+  return url;
+}
+
+test("an unreachable gmail-triggers is logged and the run exits 0", async () => {
+  const t = await setup();
+  t.url = await closedUrl();
   const r = await run(t);
   assert.equal(r.status, 0);
-  assert.match(r.stdout, /sidecar unreachable: ECONNREFUSED/);
+  assert.match(r.stdout, /gmail-triggers unreachable: ECONNREFUSED/);
   assert.deepEqual(lettaCalls(t), []);
+  assert.deepEqual(routes(t), ["garden GET /executor/v1/status"]);
   assert.ok(!fs.existsSync(t.lock));
 });
 
-test("a sidecar that never answers times out", { timeout: 60000 }, async () => {
+test("a gmail-triggers that never answers times out", { timeout: 60000 }, async () => {
   const t = await setup();
-  t.sidecar.respond["GET /executor/v1/requests"] = { hang: true };
+  t.sidecar.respond["gmail-triggers GET /executor/v1/requests"] = { hang: true };
   const started = Date.now();
   const r = await run(t);
   assert.equal(r.status, 0);
-  assert.match(r.stdout, /sidecar unreachable: timed out after 15 s/);
+  assert.match(r.stdout, /gmail-triggers unreachable: timed out after 15 s/);
   assert.ok(Date.now() - started < 30000);
   assert.deepEqual(lettaCalls(t), []);
 });
 
 for (const [label, answer, logged] of [
-  ["junk", { body: "<html>nope</html>" }, /requests: sidecar sent no JSON/],
-  ["the wrong version", { body: '{"v":2,"requests":[]}' }, /unexpected answer/],
-  ["no list", { body: '{"v":1,"requests":{}}' }, /unexpected answer/],
-  ["an error status", { status: 500, body: "{}" }, /requests: sidecar answered HTTP 500/],
-  ["a redirect", { status: 307, body: "" }, /sidecar unreachable/],
+  ["junk", { body: "<html>nope</html>" }, /requests: gmail-triggers sent no JSON/],
+  ["the wrong version", { body: '{"v":2,"requests":[]}' }, /requests: gmail-triggers sent an unexpected answer/],
+  ["no list", { body: '{"v":1,"requests":{}}' }, /requests: gmail-triggers sent an unexpected answer/],
+  ["an error status", { status: 500, body: "{}" }, /requests: gmail-triggers answered HTTP 500/],
+  ["a redirect", { status: 307, body: "" }, /gmail-triggers unreachable/],
   [
     "an oversized body",
     { body: JSON.stringify({ v: 1, requests: [], pad: "p".repeat(2 * 1024 * 1024) }) },
-    /sidecar unreachable: response over 2097152 bytes/,
+    /gmail-triggers unreachable: response over 2097152 bytes/,
   ],
 ]) {
   test(`a requests answer with ${label} runs nothing`, async () => {
     const t = await setup();
     t.sidecar.requests = [request()];
-    t.sidecar.respond["GET /executor/v1/requests"] = answer;
+    t.sidecar.respond["gmail-triggers GET /executor/v1/requests"] = answer;
     const r = await run(t);
     assert.equal(r.status, 0);
     assert.match(r.stdout, logged);
-    assert.deepEqual(routes(t), ["GET /executor/v1/requests"]);
+    assert.deepEqual(routes(t), ["garden GET /executor/v1/status", "gmail-triggers GET /executor/v1/requests"]);
     assert.deepEqual(lettaCalls(t), []);
   });
 }
+
+// --- the garden service -----------------------------------------------------------
+
+test("without --gmail-triggers only the garden is called, and its list sent", async () => {
+  const t = await setup();
+  t.args = [];
+  t.garden.agentsWanted = true;
+  t.sidecar.requests = [request()];
+  const r = await run(t);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(sequence(t), ["garden GET /executor/v1/status", "letta agents list", "garden PUT /executor/v1/agents"]);
+  assert.deepEqual(posted(t, "garden PUT /executor/v1/agents"), [
+    {
+      v: 1,
+      agents: [
+        { id: "agent-1", name: "lucius" },
+        { id: "agent-2", name: "y".repeat(200) },
+      ],
+    },
+  ]);
+  for (const c of httpCalls(t)) assert.equal(c.auth, `Bearer ${TOKEN}`);
+});
+
+test("without --gmail-triggers and no list wanted, letta is not run", async () => {
+  const t = await setup();
+  t.args = [];
+  assert.equal((await run(t)).status, 0);
+  assert.deepEqual(sequence(t), ["garden GET /executor/v1/status"]);
+});
+
+test("without --gmail-triggers a failing agents list is logged, with no heartbeat", async () => {
+  const t = await setup({ FAKE_AGENTS: "fail" });
+  t.args = [];
+  t.garden.agentsWanted = true;
+  const r = await run(t);
+  assert.equal(r.status, 0);
+  assert.deepEqual(sequence(t), ["garden GET /executor/v1/status", "letta agents list"]);
+  assert.match(r.stdout, /error: letta agents list: exited with code 2/);
+});
+
+test("without --gmail-triggers a missing letta is logged and nothing is called", async () => {
+  const t = await setup();
+  t.args = [];
+  t.env.PATH = "/nonexistent";
+  const r = await run(t);
+  assert.equal(r.status, 0);
+  assert.deepEqual(calls(t), []);
+  assert.match(r.stdout, /error: letta not found on the PATH/);
+});
+
+for (const args of [["--gmail"], ["--gmail-triggers", "x"], ["--gmail-triggers=1"]]) {
+  test(`an unknown argument (${args.join(" ")}) stops the run before any call`, async () => {
+    const t = await setup();
+    t.args = args;
+    const r = await run(t);
+    assert.equal(r.status, 0);
+    assert.deepEqual(calls(t), []);
+    assert.match(r.stdout, /usage: run.mjs \[--gmail-triggers\]/);
+    assert.ok(!fs.existsSync(t.lock));
+  });
+}
+
+for (const [label, gardenWants, gmailWants] of [
+  ["the garden", true, false],
+  ["gmail-triggers", false, true],
+  ["both", true, true],
+]) {
+  test(`a list wanted by ${label} is made once and sent to both`, async () => {
+    const t = await setup();
+    t.garden.agentsWanted = gardenWants;
+    t.sidecar.agentsWanted = gmailWants;
+    t.sidecar.requests = [request()];
+    assert.equal((await run(t)).status, 0);
+    assert.deepEqual(sequence(t), [
+      "garden GET /executor/v1/status",
+      "gmail-triggers GET /executor/v1/requests",
+      "letta cron add",
+      "gmail-triggers POST /executor/v1/results",
+      "letta agents list",
+      "garden PUT /executor/v1/agents",
+      "gmail-triggers PUT /executor/v1/agents",
+      "gmail-triggers POST /executor/v1/heartbeat",
+    ]);
+    assert.deepEqual(posted(t, "garden PUT /executor/v1/agents"), posted(t, "gmail-triggers PUT /executor/v1/agents"));
+  });
+}
+
+test("an unreachable garden doesn't stop the gmail-triggers run", async () => {
+  const t = await setup();
+  t.gardenUrl = await closedUrl();
+  t.sidecar.requests = [request()];
+  const r = await run(t);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /garden unreachable: ECONNREFUSED/);
+  assert.deepEqual(sequence(t), [
+    "gmail-triggers GET /executor/v1/requests",
+    "letta cron add",
+    "gmail-triggers POST /executor/v1/results",
+    "letta agents list",
+    "gmail-triggers PUT /executor/v1/agents",
+    "gmail-triggers POST /executor/v1/heartbeat",
+  ]);
+  assert.equal(results(t)[0].ok, true);
+  assert.deepEqual(heartbeats(t), [{ v: 1, letta_ok: true }]);
+});
+
+for (const [label, answer, logged] of [
+  ["junk", { body: "<html>nope</html>" }, /status: garden sent no JSON/],
+  ["the wrong version", { body: '{"v":2,"agents_wanted":true}' }, /status: garden sent an unexpected answer/],
+  ["agents_wanted not a boolean", { body: '{"v":1,"agents_wanted":"true"}' }, /status: garden sent an unexpected/],
+  ["an error status", { status: 500, body: "{}" }, /status: garden answered HTTP 500/],
+  ["a redirect", { status: 307, body: "" }, /garden unreachable/],
+]) {
+  test(`a garden status answer with ${label} gets no list and doesn't stop gmail-triggers`, async () => {
+    const t = await setup();
+    t.garden.respond["garden GET /executor/v1/status"] = answer;
+    t.sidecar.agentsWanted = false;
+    t.sidecar.requests = [request()];
+    const r = await run(t);
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, logged);
+    assert.deepEqual(sequence(t), [
+      "garden GET /executor/v1/status",
+      "gmail-triggers GET /executor/v1/requests",
+      "letta cron add",
+      "gmail-triggers POST /executor/v1/results",
+      "gmail-triggers POST /executor/v1/heartbeat",
+    ]);
+  });
+}
+
+test("an unreachable gmail-triggers doesn't stop the garden's list", async () => {
+  const t = await setup();
+  t.url = await closedUrl();
+  t.garden.agentsWanted = true;
+  const r = await run(t);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /gmail-triggers unreachable: ECONNREFUSED/);
+  assert.deepEqual(sequence(t), [
+    "garden GET /executor/v1/status",
+    "letta agents list",
+    "garden PUT /executor/v1/agents",
+  ]);
+});
+
+test("a garden refusing the list doesn't stop gmail-triggers getting it", async () => {
+  const t = await setup();
+  t.garden.respond["garden PUT /executor/v1/agents"] = { status: 400, body: '{"error":"bad request"}' };
+  const r = await run(t);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /agents: garden answered HTTP 400/);
+  assert.equal(posted(t, "gmail-triggers PUT /executor/v1/agents").length, 1);
+  assert.deepEqual(heartbeats(t), [{ v: 1, letta_ok: true }]);
+});
 
 test("a stale lock is removed", async () => {
   const t = await setup();

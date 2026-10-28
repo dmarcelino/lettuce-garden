@@ -9,10 +9,11 @@ import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+from garden_common.text import one_line
+
 from .config import MAX_LISTED_MESSAGES
 from .matcher import Message
 from .store import QUEUED, Held, Rule, Run, Store, new_request_id
-from .text import one_line
 
 MAX_REQUEST_PROMPT = 8000
 # Sender addresses as shown to the agent.

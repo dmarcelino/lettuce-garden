@@ -1,6 +1,3 @@
-import base64
-import hashlib
-import re
 import time
 
 import httpx
@@ -45,7 +42,7 @@ def test_every_route_needs_a_valid_access_jwt(browser, editor, signing_key, othe
         value = make_jwt(signing_key, **token)
     else:
         value = token
-    for path in [f"{P}/", f"{P}/{COMMIT}/static/x.js", f"{P}/garden.css", f"{P}/icon-192.png", "/garden/"]:
+    for path in [f"{P}/", f"{P}/{COMMIT}/static/x.js", f"{P}/garden.css", f"{P}/icon-192.png"]:
         r = browser.get(path, headers={"cf-access-jwt-assertion": value})
         assert r.status_code == 403, path
     r = browser.post(f"{P}/mint-key", headers={"cf-access-jwt-assertion": value})
@@ -96,7 +93,7 @@ def test_only_listed_request_headers_reach_the_editor(browser, editor):
         assert name not in sent, name
     assert sent["accept-language"] == "pt-PT" and sent["if-none-match"] == '"etag-1"'
     # code-server checks WebSocket origins against this host.
-    assert sent["x-forwarded-host"] == "alfred.example.com"
+    assert sent["x-forwarded-host"] == "alfred-garden.example.com"
 
 
 def test_only_listed_response_headers_reach_the_browser(browser, editor):
@@ -243,7 +240,7 @@ def test_only_this_origin_may_send_anything_but_a_read(browser, editor, method, 
     assert r.status_code == 200 and len(editor.requests) == 1
 
 
-@pytest.mark.parametrize("path", ["/garden/code-serv%65r/x", "/garden%2Fcode-server/x", "/garden/code-server%2Fx"])
+@pytest.mark.parametrize("path", ["/code-serv%65r/x", "/%63ode-server/x", "/code-server%2Fx", "/code-server%2fx"])
 def test_a_prefix_that_is_not_spelled_out_is_refused(browser, editor, path):
     r = browser.get(path, headers=SCRIPT)
     assert r.status_code == 404
@@ -267,11 +264,10 @@ def test_an_editor_that_is_down_gets_a_page_not_a_crash(browser, editor):
     assert r.headers["cache-control"] == "no-store"
 
 
-def test_the_gate_serves_the_garden_landing_page_and_its_own_assets(browser, editor):
-    r = browser.get("/garden/")
-    assert r.status_code == 200
-    assert f'href="{P}/"' in r.text and 'href="/garden/secrets/"' in r.text
-    assert r.headers["cross-origin-opener-policy"] == "same-origin"
+def test_the_gate_serves_its_own_assets_and_not_the_garden_landing_page(browser, editor):
+    assert P == "/code-server"
+    for path in ("/", "/garden", "/garden/"):
+        assert browser.get(path).status_code == 404, path
     css = browser.get(f"{P}/garden.css", headers={"sec-fetch-dest": "style"})
     assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
     icon = browser.get(f"{P}/icon-192.png", headers={"sec-fetch-dest": "image"})
@@ -279,20 +275,12 @@ def test_the_gate_serves_the_garden_landing_page_and_its_own_assets(browser, edi
     assert editor.requests == []
 
 
-def test_the_landing_page_lists_agents_with_its_one_script_and_reaches_only_lettuces_socket(browser, editor):
-    r = browser.get("/garden/")
-    csp = dict(d.strip().split(" ", 1) for d in r.headers["content-security-policy"].split(";"))
-    scripts = re.findall(r"<script>(.*?)</script>", r.text, re.S)
-    assert len(scripts) == 1 and "<script " not in r.text
-    digest = base64.b64encode(hashlib.sha256(scripts[0].encode()).digest()).decode()
-    assert csp["script-src"] == f"'sha256-{digest}'"
-    assert csp["connect-src"] == "wss://alfred.example.com/ws"
-    assert csp["default-src"] == "'none'" and csp["frame-ancestors"] == "'none'"
-    assert 'data-editor="/garden/code-server/"' in r.text and 'id="code-agents-list"' in r.text
-    # One entry for the editor, the agent list, titled like the row it replaces.
-    assert "<h2>Code editor</h2>" in r.text and "Your agents&#39; files in VS Code" not in r.text
-    assert r.text.count('href="/garden/code-server/"') == 1 and 'id="code-agents-fallback" hidden' in r.text
-    assert '"agent_list"' in scripts[0] and "innerHTML" not in scripts[0]
+def test_the_gates_own_pages_link_to_the_garden_root(browser, editor):
+    editor.down = True
+    r = browser.get(f"{P}/")
+    assert 'href="/">Lettuce Garden</a>' in r.text and f'href="{P}/garden.css"' in r.text
+    assert "/garden/" not in r.text
+    assert r.headers["cross-origin-opener-policy"] == "same-origin"
 
 
 def test_settings_from_the_environment():
@@ -300,16 +288,15 @@ def test_settings_from_the_environment():
         "CF_ACCESS_TEAM_DOMAIN": "team1",
         "CF_ACCESS_AUD": "aud1",
         "ALLOWED_USERS": "Alfred@Gmail.com, hal@example.com",
-        "PUBLIC_ORIGIN": "https://alfred.example.com/",
-        "GARDEN_PROFILES": "secrets,code-server,Bad!",
+        "PUBLIC_ORIGIN": "https://alfred-garden.example.com/",
     }
     s = Settings.from_env(base)
     assert s.allowed_users == {"alfred@gmail.com", "hal@example.com"}
-    assert s.public_origin == ORIGIN and s.public_host == "alfred.example.com"
-    assert s.garden_profiles == "secrets,code-server"
+    assert s.public_origin == ORIGIN and s.public_host == "alfred-garden.example.com"
+    assert not hasattr(s, "garden_profiles")
     assert s.upstream == "http://code-server-editor"
     for broken in (
-        {"PUBLIC_ORIGIN": "http://alfred.example.com"},
+        {"PUBLIC_ORIGIN": "http://alfred-garden.example.com"},
         {"PUBLIC_ORIGIN": f"{ORIGIN}/x"},
         {"ALLOWED_USERS": ""},
     ):
@@ -343,7 +330,7 @@ def test_a_websocket_is_relayed_both_ways(settings, authenticator, editor, signi
     assert peer.received == [b"\x00\x01binary", "text"]
     sent = dict(peer.headers)
     assert "cookie" not in sent and "cf-access-jwt-assertion" not in sent
-    assert sent["origin"] == ORIGIN and sent["x-forwarded-host"] == "alfred.example.com"
+    assert sent["origin"] == ORIGIN and sent["x-forwarded-host"] == "alfred-garden.example.com"
     assert peer.closed
 
 
@@ -353,7 +340,7 @@ def test_a_websocket_is_relayed_both_ways(settings, authenticator, editor, signi
         {"cf-access-jwt-assertion": None},
         {"cf-access-jwt-assertion": "garbage"},
         {"origin": "https://evil.example.org"},
-        {"origin": "https://alfred.example.com:8443"},
+        {"origin": "https://alfred-garden.example.com:8443"},
         {"origin": None},
     ],
 )
@@ -369,7 +356,7 @@ def test_a_websocket_needs_access_and_this_origin(settings, authenticator, edito
 def test_a_websocket_to_a_prefix_that_is_not_spelled_out_is_refused(settings, authenticator, editor, signing_key):
     with TestClient(gate(settings, authenticator, editor), base_url=ORIGIN) as c:
         with pytest.raises(WebSocketDisconnect) as e:
-            with c.websocket_connect("/garden/code-server%2F", headers=socket_headers(signing_key)):
+            with c.websocket_connect("/code-server%2F", headers=socket_headers(signing_key)):
                 pass
     assert e.value.code == 1008
     assert editor.sockets == []

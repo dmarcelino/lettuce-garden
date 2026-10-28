@@ -65,3 +65,12 @@ class Pusher:
 
     async def send(self, payload: dict[str, str]) -> int:
         return await anyio.to_thread.run_sync(self.send_sync, payload)
+
+    def adopt_origin(self) -> None:
+        """At start: a subscription belongs to the service worker of the origin it
+        was made on, whose notifications open only that origin's pages, so ones made
+        on another origin (the garden's host moved, or they predate it) are dropped.
+        The notifications page then offers to turn them on again."""
+        dropped = self._vault.adopt_push_origin(self._settings.public_origin)
+        if dropped:
+            log.info("push subscriptions dropped: %d made on another origin; turn notifications on again", dropped)

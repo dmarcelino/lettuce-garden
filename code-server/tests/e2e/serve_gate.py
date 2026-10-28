@@ -27,7 +27,6 @@ def main() -> None:
         issuer="https://team1.cloudflareaccess.com",
         allowed_users=frozenset({EMAIL}),
         public_origin="http://localhost:8000",
-        garden_profiles="code-server",
     )
     authenticator = Authenticator(settings, key_resolver=lambda t: key.public_key())
     gate = create_app(settings, authenticator, editor_client(), unix_socket_connect())

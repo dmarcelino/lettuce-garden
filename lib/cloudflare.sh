@@ -77,9 +77,9 @@ cf_policy_update() {
 }
 
 # cf_app_body NAME HOST IDP SESSION_DURATION POLICY_ID -> the stack's Access application as
-# lettucectl defines it. Its cookie is HttpOnly, so no script on the stack's origin (Lettuce's,
-# the garden pages', the code editor's) can read the person's Access token and hand it to an
-# agent, and SameSite=Lax. Cloudflare's docs disagree on the defaults, so both are explicit.
+# lettucectl defines it; each stack has two, Lettuce's and the garden's, with the same policy.
+# Its cookie is HttpOnly, so no script on the host (Lettuce, the garden pages, the code
+# editor) can read the person's Access token and hand it to an agent, and SameSite=Lax. Cloudflare's docs disagree on the defaults, so both are explicit.
 cf_app_body() {
   jq -cn --arg name "$1" --arg host "$2" --arg idp "$3" --arg dur "$4" --arg pol "$5" '{
     type: "self_hosted", name: $name, domain: $host,
@@ -118,14 +118,19 @@ cf_tunnel_token() {
   jq -r '.' <<<"$r"
 }
 
-# Routes that profiles add on the stack's hostname, ahead of the app-server:
-# "<profile> <path regex> <service>". Each service has its own UI and Access check.
-# Each serves /garden/<profile>/, which the garden landing page links to.
+# Routes that profiles add on the stack's garden host (GARDEN_HOSTNAME):
+# "<profile> <path regex> <service>". Each service has its own UI and checks the
+# garden's Access application. Each serves /<profile>/, which the garden landing
+# page links to.
 PROFILE_ROUTES=(
-  'secrets ^/garden/secrets(/|$) http://secret-broker:8000'
-  'gmail-triggers ^/garden/gmail-triggers(/|$) http://gmail-triggers:8000'
-  'code-server ^/garden/code-server(/|$) http://code-server:8000'
+  'secrets ^/secrets(/|$) http://secret-broker:8000'
+  'gmail-triggers ^/gmail-triggers(/|$) http://gmail-triggers:8000'
+  'code-server ^/code-server(/|$) http://code-server:8000'
 )
+# The landing page and its assets, served by the garden service (compose/garden.yml)
+# whenever a garden profile is on. Its /executor/v1/ API never matches.
+GARDEN_LANDING_PATH='^/(garden\.css|icon-192\.png)?$'
+GARDEN_LANDING_SERVICE=http://garden:8000
 
 # garden_profiles PROFILES -> the PROFILE_ROUTES profiles in PROFILES, comma-separated,
 # in PROFILE_ROUTES order
@@ -138,20 +143,25 @@ garden_profiles() {
   printf '%s\n' "$out"
 }
 
-# cf_tunnel_configure ACCOUNT TUNNEL_ID HOST PROFILES -> HOST to the stack's
-# app-server, 404 for anything else; first, the PROFILE_ROUTES of the profiles
-# that are on (same hostname, same Access app), then /garden itself to the
-# first of them, which renders the landing page.
+# cf_tunnel_configure ACCOUNT TUNNEL_ID HOST GARDEN_HOST PROFILES -> on GARDEN_HOST,
+# the PROFILE_ROUTES of the profiles that are on, then the landing page when any
+# of them is, then 404 for anything else; HOST to the stack's app-server, and
+# nothing else. Lettuce's host carries no garden path. An empty GARDEN_HOST (a
+# stack whose garden host does not exist yet) gets no garden rules.
 cf_tunnel_configure() {
   local r p path svc landing='' routes='[]'
-  for r in "${PROFILE_ROUTES[@]}"; do
-    read -r p path svc <<<"$r"
-    has_profile "${4:-}" "$p" || continue
-    routes=$(jq -c --arg h "$3" --arg p "$path" --arg s "$svc" '. + [{hostname: $h, path: $p, service: $s}]' <<<"$routes")
-    landing=${landing:-$svc}
-  done
-  if [[ -n $landing ]]; then
-    routes=$(jq -c --arg h "$3" --arg s "$landing" '. + [{hostname: $h, path: "^/garden/?$", service: $s}]' <<<"$routes")
+  if [[ -n $4 ]]; then
+    for r in "${PROFILE_ROUTES[@]}"; do
+      read -r p path svc <<<"$r"
+      has_profile "${5:-}" "$p" || continue
+      routes=$(jq -c --arg h "$4" --arg p "$path" --arg s "$svc" '. + [{hostname: $h, path: $p, service: $s}]' <<<"$routes")
+      landing=1
+    done
+    if [[ -n $landing ]]; then
+      routes=$(jq -c --arg h "$4" --arg p "$GARDEN_LANDING_PATH" --arg s "$GARDEN_LANDING_SERVICE" \
+        '. + [{hostname: $h, path: $p, service: $s}]' <<<"$routes")
+    fi
+    routes=$(jq -c --arg h "$4" '. + [{hostname: $h, service: "http_status:404"}]' <<<"$routes")
   fi
   cf_api PUT "/accounts/$1/cfd_tunnel/$2/configurations" "$(jq -cn --arg h "$3" --argjson r "$routes" '{config: {ingress: (
     $r + [{hostname: $h, service: "http://app-server:8080"}, {service: "http_status:404"}])}}')" >/dev/null

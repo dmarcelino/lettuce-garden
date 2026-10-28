@@ -2,4 +2,3 @@
 **/.pytest_cache
 *.egg-info
 build
-executor

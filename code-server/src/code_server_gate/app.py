@@ -1,20 +1,19 @@
 """The gate in front of the code editor (docs/code-server.md).
 
-The editor shares an origin with Lettuce and the vault, and has no Access check
-of its own; it listens only on a Unix socket that only this gate mounts.
+The editor shares the garden's origin with the vault and Gmail triggers, and
+has no Access check of its own; it listens only on a Unix socket that only this gate mounts.
 Everything under PREFIX passes this gate, which:
 - needs a verified Access JWT on every request and WebSocket upgrade, this
-  stack's own Origin on every upgrade, and this origin (Sec-Fetch-Site) for
+  garden's own Origin on every upgrade, and this origin (Sec-Fetch-Site) for
   anything but a read; it closes a WebSocket when its JWT expires;
 - strips PREFIX on the way in and puts it back on redirects;
 - passes only listed headers either way: the editor never sees the person's
-  Access token, cookies or Lettuce's session, and never sets a cookie, an opener
+  Access token or cookies, and never sets a cookie, an opener
   policy or a service worker scope wider than PREFIX on the origin;
 - lets only the workbench and code-server's own webview hosts load as documents
   or frames, and serves everything else nosniff with a sandbox CSP, so a file an
   agent wrote can't become a page on the origin; every answer varies with
   Sec-Fetch-Dest, so the browser's cache never hands one to another kind of request.
-/garden/ is the garden landing page, as in the other garden sidecars.
 """
 
 from __future__ import annotations
@@ -31,7 +30,7 @@ import anyio.abc
 import httpx
 import jwt
 from garden_common.auth import COOP, JWT_HEADER, Authenticator, AuthError
-from garden_common.garden import landing_routes, stylesheet
+from garden_common.garden import stylesheet
 from jinja2 import Environment, PackageLoader, select_autoescape
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
@@ -44,7 +43,7 @@ from .config import EDITOR_SOCKET, PREFIX, Settings
 
 log = logging.getLogger("code_server_gate")
 
-# The gate's own pages (errors, the landing page): no script, never framed.
+# The gate's own pages (errors): no script, never framed.
 GATE_HEADERS = {
     "content-security-policy": "default-src 'none'; style-src 'self'; img-src 'self'; "
     "frame-ancestors 'none'; form-action 'none'; base-uri 'none'; object-src 'none'",
@@ -55,8 +54,8 @@ GATE_HEADERS = {
     **COOP,
 }
 
-# What reaches the editor. Never Cookie (the Access cookie, Lettuce's session),
-# the Access JWT, Authorization or any other cf-* header.
+# What reaches the editor. Never Cookie (the Access cookie), the Access JWT,
+# Authorization or any other cf-* header.
 REQUEST_HEADERS = frozenset(
     {
         "accept",
@@ -348,7 +347,6 @@ def create_app(
     return Starlette(
         routes=[
             Route("/healthz", healthz),
-            *landing_routes(authenticator, settings.garden_profiles, PREFIX, GATE_HEADERS, error),
             Route(PREFIX, root),
             Route(PREFIX + "/garden.css", garden_css_file),
             Route(PREFIX + "/icon-192.png", icon),

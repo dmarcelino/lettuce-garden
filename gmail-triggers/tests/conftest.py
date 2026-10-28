@@ -7,8 +7,9 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote
 
+import anyio
 import httpx
 import jwt
 import pytest
@@ -21,7 +22,7 @@ from gmail_triggers.poller import Poller
 from gmail_triggers.store import Agent, Store
 
 EMAIL = "alfred@gmail.com"
-ORIGIN = "https://alfred.example.com"
+ORIGIN = "https://alfred-garden.example.com"
 
 # What a browser sends when a person opens a page or posts its form (Fetch
 # Metadata), and when a page's own script calls fetch(); see garden_common.auth.check_fetch.
@@ -353,6 +354,36 @@ def make_jwt(key: Any, **over: Any) -> str:
     claims.update(over)
     claims = {k: v for k, v in claims.items() if v is not None}
     return jwt.encode(claims, key, algorithm="RS256")
+
+
+def raw_get(app: Any, raw_path: str, headers: dict[str, str]) -> int:
+    """The status of a GET whose path reaches the app exactly as written, dot
+    segments included (httpx, like browsers, would resolve them first)."""
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "https",
+        "server": ("gmail-triggers", 8000),
+        "client": ("192.0.2.1", 1234),
+        "root_path": "",
+        "path": unquote(raw_path),
+        "raw_path": raw_path.encode(),
+        "query_string": b"",
+        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+    }
+    status: list[int] = []
+
+    async def receive() -> dict[str, Any]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            status.append(message["status"])
+
+    anyio.run(app, scope, receive, send)
+    return status[0]
 
 
 @pytest.fixture

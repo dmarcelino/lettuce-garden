@@ -41,6 +41,16 @@ ctl() {
 stub() { printf '%s\n' "$*" >>"$T/stub.env"; }
 calls() { grep "^curl " "$T/calls.log" | cut -d' ' -f2,3 | sed 's/?.*//'; }
 body_of() { grep "^curl $1 $2 " "$T/calls.log" | tail -1 | cut -d' ' -f4-; }
+# first_body_of METHOD PATH -> the body of the first such call
+first_body_of() { grep "^curl $1 $2 " "$T/calls.log" | head -1 | cut -d' ' -f4-; }
+# ingress -> the tunnel routes of the last configuration put
+ingress() { jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)"; }
+# The ingress rules every stack ends with: alfred's garden host answers 404 to
+# what no garden rule routes, and Lettuce's host goes to the app-server only.
+LANDING='{"hostname":"alfred-garden.example.org","path":"^/(garden\\.css|icon-192\\.png)?$","service":"http://garden:8000"}'
+GARDEN_404='{"hostname":"alfred-garden.example.org","service":"http_status:404"}'
+LETTUCE_TAIL='{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}'
+
 senv() { awk -v k="$2" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) } END { printf "%s", v }' "$H/stacks/$1/stack.env"; }
 
 fail() {
@@ -57,12 +67,30 @@ log_has() { grep -qF -- "$1" "$T/calls.log" || fail "call log lacks: $1"; }
 log_lacks() { ! grep -qF -- "$1" "$T/calls.log" || fail "call log unexpectedly has: $1"; }
 eq() { [[ $1 == "$2" ]] || fail "expected [$2], got [$1]"; }
 
+# What every garden service's environment renders to: the garden's own Access
+# application and origin. The docker stub fills ${KEY} from the stack's env file.
+# shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
+GARDEN_ENV='{"CF_ACCESS_AUD":"${CF_GARDEN_AUD}","PUBLIC_ORIGIN":"${GARDEN_ORIGIN}","LETTUCE_ORIGIN":"${PUBLIC_ORIGIN}"}'
+
+# garden_config -> the rendered config also holds the garden service
+# compose/garden.yml renders (on with any garden profile); the repo copy has
+# the garden executor
+garden_config() {
+  config_edit '.services.garden = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"networks":{"default":null},
+    "environment":'"$GARDEN_ENV"'}'
+  mkdir -p "$H/garden/executor/tests"
+  printf '// executor\n' >"$H/garden/executor/run.mjs"
+  printf '// test\n' >"$H/garden/executor/tests/run.test.mjs"
+}
+
 # broker_config [BROKER_JSON] -> the rendered compose config also holds this
-# secret-broker (default: the hardened one compose/secrets.yml renders)
+# secret-broker (default: the hardened one compose/secrets.yml renders) and the
+# garden service
 broker_config() {
-  local broker=${1:-'{"read_only":true,"cap_drop":["ALL"],"volumes":[{"type":"volume","source":"secret-broker-data","target":"/data"}]}'}
+  local broker=${1:-'{"read_only":true,"cap_drop":["ALL"],"environment":'"$GARDEN_ENV"',"volumes":[{"type":"volume","source":"secret-broker-data","target":"/data"}]}'}
   jq -c --argjson b "$broker" '.services["secret-broker"] = $b' "$T/compose-config.json" >"$T/c.json"
   mv "$T/c.json" "$T/compose-config.json"
+  garden_config
 }
 
 # config_edit JQ -> applies the jq filter JQ to the rendered compose config
@@ -72,18 +100,17 @@ config_edit() {
 }
 
 # triggers_config -> the rendered config also holds the gmail-triggers service
-# compose/gmail-triggers.yml renders for alfred, and the services upstream gives
-# google-creds; the repo copy has an executor
+# compose/gmail-triggers.yml renders for alfred, the services upstream gives
+# google-creds and the garden service; the repo copy has the executor
 triggers_config() {
-  config_edit '.services["gmail-triggers"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],"volumes":[
+  config_edit '.services["gmail-triggers"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
+      "environment":'"$GARDEN_ENV"',"volumes":[
       {"type":"bind","source":"'"$H"'/stacks/alfred/state/garden/gmail-triggers","target":"/data"},
       {"type":"volume","source":"google-creds","target":"/creds","read_only":true},
       {"type":"volume","source":"google-policy","target":"/policy","read_only":true}]}
     | .services.bff.volumes = [{"type":"volume","source":"google-creds","target":"/app/google/creds"}]
     | .services["google-mcp"] = {"volumes":[{"type":"volume","source":"google-creds","target":"/creds"}]}'
-  mkdir -p "$H/gmail-triggers/executor/tests"
-  printf '// executor\n' >"$H/gmail-triggers/executor/run.mjs"
-  printf '// test\n' >"$H/gmail-triggers/executor/tests/run.test.mjs"
+  garden_config
 }
 
 run_test() {
@@ -209,7 +236,11 @@ test_init_rejects_old_compose() {
 test_add_creates_everything_in_order() {
   ctl add alfred Alfred@Example.com
   ok_rc
-  eq "$(calls | tr '\n' ';')" "GET /zones/zone1/dns_records;POST /accounts/acc1/access/policies;POST /accounts/acc1/access/apps;POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;"
+  # Lettuce's application, then the garden's; the garden's DNS record, then
+  # Lettuce's, whose id means the stack is complete.
+  eq "$(calls | tr '\n' ';')" "GET /zones/zone1/dns_records;GET /zones/zone1/dns_records;POST /accounts/acc1/access/policies;POST /accounts/acc1/access/apps;POST /accounts/acc1/access/apps;POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
+  eq "$(grep '^curl POST /accounts/acc1/access/apps ' "$T/calls.log" | cut -d' ' -f4- | jq -r .name | paste -sd' ')" "lettuce-alfred lettuce-alfred-garden"
+  eq "$(grep '^curl POST /zones/zone1/dns_records ' "$T/calls.log" | cut -d' ' -f4- | jq -r .name | paste -sd' ')" "alfred-garden.example.org alfred.example.org"
   log_has "compose -p lettuce-alfred"
   log_has "up -d --build"
   out_has "https://alfred.example.org"
@@ -221,15 +252,22 @@ test_add_payloads() {
   local b
   b=$(body_of POST /accounts/acc1/access/policies)
   eq "$(jq -c '[.decision, [.include[].email.email]]' <<<"$b")" '["allow",["alfred@example.com","hal@example.com"]]'
-  b=$(body_of POST /accounts/acc1/access/apps)
+  b=$(first_body_of POST /accounts/acc1/access/apps)
   eq "$(jq -c '[.type, .domain, .destinations[0].uri, .allowed_idps, .auto_redirect_to_identity, .policies]' <<<"$b")" \
     '["self_hosted","alfred.example.org","alfred.example.org",["idp-g"],true,[{"id":"pol1","precedence":1}]]'
   # No script on the stack's origin may read the Access token.
   eq "$(jq -c '[.http_only_cookie_attribute, .same_site_cookie_attribute]' <<<"$b")" '[true,"lax"]'
+  # The garden's application: its own host and audience, the same policy and cookie.
+  local g
+  g=$(body_of POST /accounts/acc1/access/apps)
+  eq "$(jq -c '[.name, .domain, .destinations[0].uri, .policies]' <<<"$g")" \
+    '["lettuce-alfred-garden","alfred-garden.example.org","alfred-garden.example.org",[{"id":"pol1","precedence":1}]]'
+  eq "$(jq -c 'del(.name, .domain, .destinations)' <<<"$g")" "$(jq -c 'del(.name, .domain, .destinations)' <<<"$b")"
   b=$(body_of POST /accounts/acc1/cfd_tunnel)
   eq "$(jq -c '[.name, .config_src]' <<<"$b")" '["lettuce-alfred","cloudflare"]'
-  b=$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)
-  eq "$(jq -c '.config.ingress' <<<"$b")" '[{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+  eq "$(ingress)" "[$GARDEN_404,$LETTUCE_TAIL]"
+  b=$(first_body_of POST /zones/zone1/dns_records)
+  eq "$(jq -c '[.type, .name, .content, .proxied]' <<<"$b")" '["CNAME","alfred-garden.example.org","tun1.cfargotunnel.com",true]'
   b=$(body_of POST /zones/zone1/dns_records)
   eq "$(jq -c '[.type, .name, .content, .proxied]' <<<"$b")" '["CNAME","alfred.example.org","tun1.cfargotunnel.com",true]'
 }
@@ -245,6 +283,12 @@ test_add_writes_private_stack_env() {
   eq "$(senv alfred LETTA_STATE_DIR)" "$H/stacks/alfred/state"
   eq "$(senv alfred CF_ACCESS_TEAM_DOMAIN)" team
   eq "$(senv alfred CF_ACCESS_AUD)" aud1
+  eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden.example.org
+  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden.example.org
+  eq "$(senv alfred CF_GARDEN_APP_ID)" app2
+  eq "$(senv alfred CF_GARDEN_AUD)" aud2
+  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
+  eq "$(senv alfred CF_DNS_RECORD_ID)" rec1
   eq "$(senv alfred CLOUDFLARE_TUNNEL_TOKEN)" tuntok1
   eq "$(senv alfred TZ)" UTC
   local s
@@ -276,8 +320,8 @@ test_add_routes_the_secrets_path_with_the_profile() {
   broker_config
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
-    '[{"hostname":"alfred.example.org","path":"^/garden/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","path":"^/garden/?$","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  out_has "Its garden pages: https://alfred-garden.example.org/"
 }
 
 test_add_routes_gmail_triggers_with_the_profile() {
@@ -286,12 +330,11 @@ test_add_routes_gmail_triggers_with_the_profile() {
   triggers_config
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
-    '[{"hostname":"alfred.example.org","path":"^/garden/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","path":"^/garden/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","path":"^/garden/?$","service":"http://secret-broker:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
 }
 
-# The landing page links each garden profile to /garden/<profile>/, so every
-# PROFILE_ROUTES row must route that path to its sidecar.
+# The landing page links each garden profile to /<profile>/ on the garden host,
+# so every PROFILE_ROUTES row must route that path to its sidecar.
 test_garden_routes_follow_the_profile_names() {
   local r p path svc
   # shellcheck source=/dev/null
@@ -299,7 +342,7 @@ test_garden_routes_follow_the_profile_names() {
   ((${#PROFILE_ROUTES[@]} > 0)) || fail "no PROFILE_ROUTES"
   for r in "${PROFILE_ROUTES[@]}"; do
     read -r p path svc <<<"$r"
-    eq "$path" "^/garden/$p(/|\$)"
+    eq "$path" "^/$p(/|\$)"
   done
 }
 
@@ -340,6 +383,49 @@ test_add_falls_back_when_name_resolves() {
   ctl add alfred alfred@example.com
   ok_rc
   eq "$(senv alfred PUBLIC_ORIGIN)" https://lettuce-alfred.example.org
+  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden.example.org
+}
+
+test_add_falls_back_when_the_garden_name_is_taken() {
+  echo "alfred-garden.example.org CNAME elsewhere.example.net." >"$T/dns.txt"
+  ctl add alfred alfred@example.com
+  ok_rc
+  eq "$(senv alfred PUBLIC_ORIGIN)" https://alfred.example.org
+  eq "$(senv alfred GARDEN_HOSTNAME)" lettuce-alfred-garden.example.org
+  eq "$(senv alfred GARDEN_ORIGIN)" https://lettuce-alfred-garden.example.org
+  stub STUB_CF_TAKEN=alfred-garden.example.org
+  rm "$T/dns.txt"
+  ctl add hal hal@example.com
+  ok_rc
+  eq "$(senv hal GARDEN_HOSTNAME)" hal-garden.example.org
+}
+
+test_add_fails_when_both_garden_names_taken() {
+  stub 'STUB_CF_TAKEN="alfred-garden.example.org lettuce-alfred-garden.example.org"'
+  ctl add alfred alfred@example.com
+  bad_rc
+  out_has "both alfred-garden.example.org and lettuce-alfred-garden.example.org are taken"
+  [[ ! -e $H/stacks/alfred ]] || fail "stack dir left behind"
+  log_lacks "curl POST"
+}
+
+# <name>-garden.<domain> is the garden host of <name>, so no new stack may take it.
+test_add_refuses_a_name_ending_in_garden() {
+  ctl add alfred-garden alfred@example.com
+  bad_rc
+  out_has "invalid stack name 'alfred-garden': it may not end in -garden"
+  log_lacks "curl "
+  [[ ! -e $H/stacks/alfred-garden ]] || fail "stack dir created for a refused name"
+}
+
+test_an_existing_stack_ending_in_garden_keeps_working() {
+  added
+  mv "$H/stacks/alfred" "$H/stacks/hal-garden"
+  ctl up hal-garden
+  ok_rc
+  log_has "-p lettuce-hal-garden"
+  ctl check hal-garden
+  ok_rc
 }
 
 test_add_falls_back_when_name_is_in_the_zone() {
@@ -372,11 +458,54 @@ test_add_resumes_after_a_failure() {
   out_has "stubbed failure"
   out_has "lettucectl add alfred"
   eq "$(senv alfred CF_ACCESS_APP_ID)" app1
+  eq "$(senv alfred CF_GARDEN_APP_ID)" app2
   : >"$T/stub.env"
   : >"$T/calls.log"
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(calls | tr '\n' ';')" "POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;"
+  eq "$(calls | tr '\n' ';')" "POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
+}
+
+test_add_resumes_after_a_failed_garden_application() {
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/access/apps"'
+  ctl add alfred alfred@example.com
+  bad_rc
+  : >"$T/stub.env"
+  : >"$T/calls.log"
+  ctl add alfred alfred@example.com
+  ok_rc
+  eq "$(calls | tr '\n' ';')" "POST /accounts/acc1/access/apps;POST /accounts/acc1/access/apps;POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
+  eq "$(senv alfred CF_GARDEN_AUD)" aud2
+}
+
+test_add_resumes_after_a_failed_garden_dns_record() {
+  # The garden's record comes first, so this fails before Lettuce's.
+  stub 'STUB_CF_FAIL="POST /zones/zone1/dns_records"'
+  ctl add alfred alfred@example.com
+  bad_rc
+  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" ""
+  eq "$(senv alfred CF_DNS_RECORD_ID)" ""
+  log_lacks "up -d"
+  : >"$T/stub.env"
+  : >"$T/calls.log"
+  ctl add alfred alfred@example.com
+  ok_rc
+  eq "$(calls | tr '\n' ';')" "PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
+  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
+  eq "$(senv alfred CF_DNS_RECORD_ID)" rec1
+}
+
+test_add_resumes_a_setup_from_before_the_garden_host() {
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/cfd_tunnel"'
+  ctl add alfred alfred@example.com
+  bad_rc
+  sed -i '/^GARDEN_/d; /^CF_GARDEN_/d' "$H/stacks/alfred/stack.env"
+  : >"$T/stub.env"
+  : >"$T/calls.log"
+  ctl add alfred alfred@example.com
+  ok_rc
+  eq "$(calls | tr '\n' ';')" "GET /zones/zone1/dns_records;POST /accounts/acc1/access/apps;POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
+  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden.example.org
 }
 
 test_add_prints_the_google_redirect_uri() {
@@ -393,7 +522,7 @@ test_add_keeps_the_google_hint_when_the_executor_cannot_be_installed() {
   ctl add alfred alfred@example.com
   bad_rc
   out_has "https://alfred.example.org/api/google/oauth/callback"
-  out_has "the gmail-triggers executor is out of step on: alfred; fix the cause, then run: lettucectl up <name>"
+  out_has "the garden executor is out of step on: alfred; fix the cause, then run: lettucectl up <name>"
   out_lacks "lettucectl add alfred"
 }
 
@@ -632,7 +761,7 @@ test_check_refuses_secrets_profile_without_the_broker() {
 # proxy settings from compose/pipelock-proxy.yml
 pipelock_config() {
   local svc=${1:-'{"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"volumes":[{"type":"volume","source":"pipelock-data","target":"/data"}]}'}
-  local np=localhost,127.0.0.1,::1,pipelock,secret-broker,gmail-triggers,searxng,ddg-mcp,google-mcp,host.docker.internal
+  local np=localhost,127.0.0.1,::1,pipelock,secret-broker,gmail-triggers,garden,searxng,ddg-mcp,google-mcp,host.docker.internal
   config_edit '.services.pipelock = '"$svc"'
     | .services["app-server"].environment += {"HTTPS_PROXY":"http://pipelock:8888","HTTP_PROXY":"http://pipelock:8888",
       "https_proxy":"http://pipelock:8888","http_proxy":"http://pipelock:8888","NO_PROXY":"'"$np"'","no_proxy":"'"$np"'",
@@ -727,7 +856,7 @@ test_check_refuses_a_proxy_that_would_see_the_vault_or_the_executor() {
   added
   local k v
   for k in NO_PROXY no_proxy; do
-    for v in secret-broker gmail-triggers; do
+    for v in secret-broker gmail-triggers garden; do
       with_pipelock
       config_edit '.services["app-server"].environment["'"$k"'"] |= (split(",") - ["'"$v"'"] | join(","))'
       ctl check alfred
@@ -953,24 +1082,52 @@ test_check_accepts_volumes_from_elsewhere() {
 test_check_refuses_a_missing_executor_token() {
   added
   with_triggers
-  sed -i '/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "alfred: GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+  out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
 }
 
 test_check_refuses_a_malformed_executor_token() {
   added
   with_triggers
-  sed -i 's/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=.*/GMAIL_TRIGGERS_EXECUTOR_TOKEN=ABCDEF/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^GARDEN_EXECUTOR_TOKEN=.*/GARDEN_EXECUTOR_TOKEN=ABCDEF/' "$H/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+  out_has "GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+}
+
+test_check_refuses_a_missing_executor_token_with_any_garden_profile() {
+  added
+  with_secrets
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+}
+
+# Stacks from before the garden executor hold their token under its old name.
+test_up_moves_the_gmail_triggers_executor_token_over_once() {
+  added
+  local tok
+  tok=$(senv alfred GARDEN_EXECUTOR_TOKEN)
+  sed -i "s/^GARDEN_EXECUTOR_TOKEN=.*/GMAIL_TRIGGERS_EXECUTOR_TOKEN=$tok/" "$H/stacks/alfred/stack.env"
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred GARDEN_EXECUTOR_TOKEN)" "$tok"
+  ! grep -q '^GMAIL_TRIGGERS_EXECUTOR_TOKEN=' "$H/stacks/alfred/stack.env" || fail "the old key is still there"
+  eq "$(stat -c %a "$H/stacks/alfred/stack.env")" 600
+  # With both, the new one stays and the old one goes.
+  echo "GMAIL_TRIGGERS_EXECUTOR_TOKEN=$(printf 'a%.0s' {1..64})" >>"$H/stacks/alfred/stack.env"
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred GARDEN_EXECUTOR_TOKEN)" "$tok"
+  ! grep -q '^GMAIL_TRIGGERS_EXECUTOR_TOKEN=' "$H/stacks/alfred/stack.env" || fail "the old key is still there"
 }
 
 test_check_needs_no_executor_token_without_the_profile() {
   added
-  sed -i '/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
   ctl check alfred
   ok_rc
 }
@@ -978,23 +1135,23 @@ test_check_needs_no_executor_token_without_the_profile() {
 test_up_creates_the_executor_token_once() {
   added
   local tok
-  tok=$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)
+  tok=$(senv alfred GARDEN_EXECUTOR_TOKEN)
   [[ $tok =~ ^[0-9a-f]{64}$ ]] || fail "bad token [$tok]"
   ctl up alfred
   ok_rc
-  eq "$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)" "$tok"
+  eq "$(senv alfred GARDEN_EXECUTOR_TOKEN)" "$tok"
   eq "$(stat -c %a "$H/stacks/alfred/stack.env")" 600
-  sed -i '/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
   ctl up alfred
   ok_rc
-  [[ $(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "token not recreated"
+  [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "token not recreated"
 }
 
 test_executor_tokens_differ_between_stacks() {
   ctl add alfred alfred@example.com
   ctl add hal hal@example.com
   ok_rc
-  [[ $(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN) != "$(senv hal GMAIL_TRIGGERS_EXECUTOR_TOKEN)" ]] || fail "same token"
+  [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) != "$(senv hal GARDEN_EXECUTOR_TOKEN)" ]] || fail "same token"
 }
 
 test_check_refuses_google_creds_in_other_services_whatever_the_profiles() {
@@ -1016,10 +1173,17 @@ test_check_lets_the_upstream_google_services_mount_google_creds() {
 # exec_args -> the arguments of the last `compose exec ... sh -c SCRIPT`, one per line
 exec_args() { tr '\0' '\n' <"$T/exec-args"; }
 
-GT_CRON_TEXT='# Installed by lettucectl (gmail-triggers profile). Removed with the profile.
-PATH=/usr/local/bin:/usr/bin:/bin
-MAILTO=""
-* * * * * root /usr/local/bin/agent-env node /root/.letta/garden/gmail-triggers/bin/run.mjs >> /root/.letta/garden/gmail-triggers/executor.log 2>&1'
+# executor_cron_text [FLAGS] -> the cron file the executor is installed with
+executor_cron_text() {
+  printf '%s\n' '# Installed by lettucectl (secrets, gmail-triggers or code-server profile). Removed with the last of them.' \
+    'PATH=/usr/local/bin:/usr/bin:/bin' 'MAILTO=""'
+  printf '%s' "* * * * * root /usr/local/bin/agent-env node /root/.letta/garden/executor/bin/run.mjs${1:+ $1} >> /root/.letta/garden/executor/executor.log 2>&1"
+}
+GT_CRON_TEXT=$(executor_cron_text --gmail-triggers)
+EXECUTOR_ARGS="/root/.letta/garden/executor lettuce-garden-executor /root/.letta/system-cron /etc/cron.d /etc/lettuce-garden/executor-token"
+LEGACY_ARGS="/root/.letta/garden/gmail-triggers lettuce-garden-gmail-triggers /root/.letta/system-cron /etc/cron.d /etc/lettuce-garden/gmail-triggers-token"
+# legacy_executor -> alfred's letta-home shows the gmail-triggers executor from before the garden one
+legacy_executor() { mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"; }
 
 test_up_installs_the_gmail_triggers_executor() {
   added
@@ -1029,11 +1193,50 @@ test_up_installs_the_gmail_triggers_executor() {
   log_has "exec -T app-server sh -c"
   # Only the executor and its token ship, not its tests.
   eq "$(shipped)" "run.mjs token"
-  eq "$(exec_args | head -7 | paste -sd' ')" "sh install /root/.letta/garden/gmail-triggers lettuce-garden-gmail-triggers /root/.letta/system-cron /etc/cron.d /etc/lettuce-garden/gmail-triggers-token"
+  eq "$(exec_args | head -7 | paste -sd' ')" "sh install $EXECUTOR_ARGS"
   local a=()
   mapfile -d '' a <"$T/exec-args"
   eq "${a[7]}" "$GT_CRON_TEXT"
   eq "${#a[@]}" 8
+}
+
+# The executor feeds the garden's agent list, so any garden profile installs it;
+# only gmail-triggers turns on its request loop.
+test_up_installs_the_executor_with_any_garden_profile() {
+  local setup
+  for setup in with_secrets with_code; do
+    teardown; setup
+    added
+    "$setup"
+    ctl up alfred
+    ok_rc
+    eq "$(exec_args | head -7 | paste -sd' ')" "sh install $EXECUTOR_ARGS"
+    local a=()
+    mapfile -d '' a <"$T/exec-args"
+    eq "${a[7]}" "$(executor_cron_text)"
+  done
+}
+
+test_up_replaces_the_gmail_triggers_executor_once_installed() {
+  added
+  with_triggers
+  legacy_executor
+  ctl up alfred
+  ok_rc
+  eq "$(grep -c 'exec -T app-server sh -c' "$T/calls.log")" 2
+  (($(line_of " install $EXECUTOR_ARGS") < $(line_of " uninstall $LEGACY_ARGS"))) || fail "the old executor went before the new one was in"
+  eq "$(exec_args | paste -sd' ')" "sh uninstall $LEGACY_ARGS"
+}
+
+test_up_keeps_the_gmail_triggers_executor_when_the_install_fails() {
+  added
+  with_triggers
+  legacy_executor
+  stub STUB_EXEC_RC=1
+  ctl up alfred
+  bad_rc
+  eq "$(grep -c 'exec -T app-server sh -c' "$T/calls.log")" 1
+  log_lacks "sh uninstall"
 }
 
 test_up_passes_the_executor_token_only_on_stdin() {
@@ -1042,7 +1245,7 @@ test_up_passes_the_executor_token_only_on_stdin() {
   ctl up alfred
   ok_rc
   local tok
-  tok=$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)
+  tok=$(senv alfred GARDEN_EXECUTOR_TOKEN)
   eq "$(tar -xOf "$T/exec-stdin.log" token)" "$tok"
   eq "$(tar -tvf "$T/exec-stdin.log" token | cut -c1-10)" "-rw-------"
   ! grep -qF "$tok" "$T/calls.log" || fail "token in docker argv"
@@ -1056,8 +1259,8 @@ test_up_fails_clearly_when_the_executor_cannot_be_installed() {
   stub STUB_EXEC_RC=1
   ctl up alfred
   bad_rc
-  out_has "alfred: could not install the gmail-triggers executor; the stack is up but its Gmail triggers will not run"
-  out_has "the gmail-triggers executor is out of step on: alfred; fix the cause, then run: lettucectl up <name>"
+  out_has "alfred: could not install the garden executor; the stack is up, but its garden gets no agent list and its Gmail triggers will not run"
+  out_has "the garden executor is out of step on: alfred; fix the cause, then run: lettucectl up <name>"
 }
 
 test_up_all_continues_past_a_failed_executor_install() {
@@ -1076,10 +1279,10 @@ test_up_all_continues_past_a_failed_executor_install() {
   bad_rc
   log_has "-p lettuce-alfred"
   grep -q '^docker compose -p lettuce-hal .* up -d --build' "$T/calls.log" || fail "hal not started after alfred's failed install"
-  out_has "the gmail-triggers executor is out of step on: alfred hal; fix the cause, then run: lettucectl up <name>"
+  out_has "the garden executor is out of step on: alfred hal; fix the cause, then run: lettucectl up <name>"
 }
 
-test_up_without_gmail_triggers_runs_no_exec() {
+test_up_without_a_garden_profile_runs_no_exec() {
   added
   ctl up alfred
   ok_rc
@@ -1088,21 +1291,42 @@ test_up_without_gmail_triggers_runs_no_exec() {
 
 test_up_removes_the_executor_when_the_profile_is_off() {
   added
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl up alfred
   ok_rc
   log_has "exec -T app-server sh -c"
-  eq "$(exec_args | paste -sd' ')" "sh uninstall /root/.letta/garden/gmail-triggers lettuce-garden-gmail-triggers /root/.letta/system-cron /etc/cron.d /etc/lettuce-garden/gmail-triggers-token"
-  out_has "alfred: removed the gmail-triggers executor"
+  eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
+  out_has "alfred: removed the garden executor"
+}
+
+test_up_removes_the_gmail_triggers_executor_when_no_garden_profile_is_on() {
+  added
+  legacy_executor
+  ctl up alfred
+  ok_rc
+  eq "$(grep -c 'exec -T app-server sh -c' "$T/calls.log")" 1
+  eq "$(exec_args | paste -sd' ')" "sh uninstall $LEGACY_ARGS"
+  out_has "alfred: removed the garden executor"
+  # Both: each goes.
+  : >"$T/calls.log"
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  ctl up alfred
+  ok_rc
+  log_has " uninstall $EXECUTOR_ARGS"
+  log_has " uninstall $LEGACY_ARGS"
 }
 
 test_up_removes_an_executor_known_by_its_cron_file() {
-  added
-  mkdir -p "$H/stacks/alfred/state/letta-home/system-cron"
-  touch "$H/stacks/alfred/state/letta-home/system-cron/lettuce-garden-gmail-triggers"
-  ctl up alfred
-  ok_rc
-  log_has "sh uninstall /root/.letta/garden/gmail-triggers"
+  local job
+  for job in lettuce-garden-executor lettuce-garden-gmail-triggers; do
+    teardown; setup
+    added
+    mkdir -p "$H/stacks/alfred/state/letta-home/system-cron"
+    touch "$H/stacks/alfred/state/letta-home/system-cron/$job"
+    ctl up alfred
+    ok_rc
+    grep -q "sh uninstall /root/.letta/garden/[a-z-]* $job " "$T/calls.log" || fail "no uninstall of $job"
+  done
 }
 
 test_up_fails_clearly_when_the_executor_cannot_be_removed() {
@@ -1112,7 +1336,7 @@ test_up_fails_clearly_when_the_executor_cannot_be_removed() {
   stub STUB_EXEC_RC=1
   ctl up alfred
   bad_rc
-  out_has "alfred: could not remove the gmail-triggers executor"
+  out_has "alfred: could not remove the garden executor"
 }
 
 test_up_refuses_readable_stack_env() {
@@ -1128,7 +1352,7 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $H/stacks/alfred/stack.env"
   log_lacks "pipelock-proxy.yml"
 }
 
@@ -1137,7 +1361,7 @@ test_compose_adds_the_proxy_overlay_only_with_pipelock() {
   with_pipelock
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/pipelock-proxy.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/pipelock-proxy.yml --env-file $H/stacks/alfred/stack.env"
 }
 
 test_up_all_starts_every_stack() {
@@ -1174,9 +1398,28 @@ test_remove_deletes_cloudflare_resources_and_keeps_data() {
   ctl remove alfred <<<"alfred"
   ok_rc
   log_has "down -v"
-  eq "$(calls | tr '\n' ';')" "DELETE /zones/zone1/dns_records/rec1;DELETE /accounts/acc1/cfd_tunnel/tun1/connections;DELETE /accounts/acc1/cfd_tunnel/tun1;DELETE /accounts/acc1/access/apps/app1;DELETE /accounts/acc1/access/policies/pol1;"
+  eq "$(calls | tr '\n' ';')" "DELETE /zones/zone1/dns_records/rec1;DELETE /zones/zone1/dns_records/rec2;DELETE /accounts/acc1/cfd_tunnel/tun1/connections;DELETE /accounts/acc1/cfd_tunnel/tun1;DELETE /accounts/acc1/access/apps/app2;DELETE /accounts/acc1/access/apps/app1;DELETE /accounts/acc1/access/policies/pol1;"
   [[ -d $H/stacks/alfred/state ]] || fail "state deleted without --purge"
-  eq "$(senv alfred CF_TUNNEL_ID)" ""
+  local k
+  for k in CF_TUNNEL_ID CF_DNS_RECORD_ID CF_GARDEN_DNS_RECORD_ID CF_GARDEN_APP_ID CF_GARDEN_AUD CF_ACCESS_APP_ID CF_ACCESS_POLICY_ID; do
+    eq "$(senv alfred "$k")" ""
+  done
+}
+
+test_remove_keeps_the_ids_it_could_not_delete_and_retries_them() {
+  added
+  stub 'STUB_CF_FAIL="DELETE /accounts/acc1/access/apps/app2"'
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  out_has "Access application app2"
+  eq "$(senv alfred CF_GARDEN_APP_ID)" app2
+  eq "$(senv alfred CF_ACCESS_APP_ID)" ""
+  : >"$T/stub.env"
+  : >"$T/calls.log"
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  eq "$(calls | tr '\n' ';')" "DELETE /accounts/acc1/access/apps/app2;"
+  eq "$(senv alfred CF_GARDEN_AUD)" ""
 }
 
 test_remove_purge_deletes_the_stack_directory() {
@@ -1434,8 +1677,8 @@ test_profiles_routes_secrets_for_every_stack() {
   ctl profiles cloudflared,search,secrets
   ok_rc
   eq "$(grep -c '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log")" 2
-  grep '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log" | grep -qF '"hostname":"hal.example.org","path":"^/garden/secrets(/|$)"' ||
-    fail "hal has no /garden/secrets route"
+  grep '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log" | grep -qF '"hostname":"hal-garden.example.org","path":"^/secrets(/|$)"' ||
+    fail "hal's garden host has no /secrets route"
   # The route is in place before the stacks start.
   [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stacks started before their route"
@@ -1446,7 +1689,7 @@ test_profiles_reapplies_every_stacks_access_application() {
   ctl add alfred alfred@example.com
   ctl add hal hal@example.com
   local created
-  created=$(body_of POST /accounts/acc1/access/apps)
+  created=$(first_body_of POST /accounts/acc1/access/apps)
   : >"$T/calls.log"
   ctl profiles cloudflared,search,secrets
   ok_rc
@@ -1456,17 +1699,27 @@ test_profiles_reapplies_every_stacks_access_application() {
     "$(jq -c 'del(.name, .domain, .destinations)' <<<"$created")"
   grep '^curl PUT /accounts/acc1/access/apps/app1 ' "$T/calls.log" | grep -qF '"name":"lettuce-hal","domain":"hal.example.org"' ||
     fail "hal's application was not re-applied with its own name and host"
+  # And the garden's application, with its own name and host.
+  eq "$(grep -c '^curl PUT /accounts/acc1/access/apps/app2 ' "$T/calls.log")" 2
+  eq "$(body_of PUT /accounts/acc1/access/apps/app2 | jq -c 'del(.name, .domain, .destinations)')" \
+    "$(jq -c 'del(.name, .domain, .destinations)' <<<"$created")"
+  grep '^curl PUT /accounts/acc1/access/apps/app2 ' "$T/calls.log" | grep -qF '"name":"lettuce-hal-garden","domain":"hal-garden.example.org"' ||
+    fail "hal's garden application was not re-applied with its own name and host"
   [[ $(grep -n '^curl PUT /accounts/acc1/access/apps' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stacks started before their Access application was updated"
 }
 
 test_profiles_reports_a_failed_access_application_update() {
-  added
-  stub 'STUB_CF_FAIL="PUT /accounts/acc1/access/apps/app1"'
-  ctl profiles cloudflared,search
-  bad_rc
-  out_has "could not update the tunnel routes or Access application of: alfred"
-  out_has "run the same command again"
+  local app
+  for app in app1 app2; do
+    teardown; setup
+    added
+    stub "STUB_CF_FAIL=\"PUT /accounts/acc1/access/apps/$app\""
+    ctl profiles cloudflared,search
+    bad_rc
+    out_has "could not update the tunnel routes or Access application of: alfred"
+    out_has "run the same command again"
+  done
 }
 
 test_profiles_dropping_secrets_removes_the_route() {
@@ -1492,13 +1745,12 @@ test_profiles_routes_gmail_triggers_and_installs_the_executor() {
   triggers_config
   added
   containers alfred app-server
-  sed -i '/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
   ctl profiles cloudflared,search,google,gmail-triggers
   ok_rc
-  [[ $(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "profiles gave no executor token"
-  eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
-    '[{"hostname":"alfred.example.org","path":"^/garden/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","path":"^/garden/?$","service":"http://gmail-triggers:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
-  log_has "sh install /root/.letta/garden/gmail-triggers"
+  [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "profiles gave no executor token"
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  log_has "sh install $EXECUTOR_ARGS"
   [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stack started before its route"
 }
@@ -1507,25 +1759,44 @@ test_profiles_dropping_gmail_triggers_removes_route_container_and_executor() {
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
   triggers_config
   added
-  containers alfred app-server bff cloudflared google-mcp gmail-triggers
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  containers alfred app-server bff cloudflared google-mcp gmail-triggers garden
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl profiles cloudflared,google
   ok_rc
   log_has "curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations"
   log_lacks "gmail-triggers:8000"
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf gmail-triggers$' "$T/calls.log" || fail "gmail-triggers container not removed"
-  log_has "sh uninstall /root/.letta/garden/gmail-triggers"
-  out_has "alfred: removed the gmail-triggers executor"
+  log_lacks "garden:8000"
+  # The last garden profile is off, so the garden goes too.
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden gmail-triggers$' "$T/calls.log" || fail "gmail-triggers and garden containers not removed"
+  log_has "sh uninstall $EXECUTOR_ARGS"
+  out_has "alfred: removed the garden executor"
+}
+
+test_profiles_dropping_gmail_triggers_keeps_the_garden_and_its_executor_for_the_vault() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets/' "$H/config.env"
+  triggers_config
+  broker_config
+  added
+  containers alfred app-server bff cloudflared google-mcp gmail-triggers secret-broker garden
+  : >"$T/calls.log"
+  ctl profiles cloudflared,google,secrets
+  ok_rc
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf gmail-triggers$' "$T/calls.log" || fail "only gmail-triggers should go"
+  eq "$(exec_args | head -7 | paste -sd' ')" "sh install $EXECUTOR_ARGS"
+  local a=()
+  mapfile -d '' a <"$T/exec-args"
+  eq "${a[7]}" "$(executor_cron_text)"
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
 }
 
 test_profiles_rerun_removes_a_leftover_executor() {
   added
   containers alfred app-server
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  legacy_executor
   ctl profiles cloudflared,search
   ok_rc
   out_has "nothing to change"
-  log_has "sh uninstall /root/.letta/garden/gmail-triggers"
+  log_has "sh uninstall $LEGACY_ARGS"
 }
 
 test_profiles_reports_an_executor_it_could_not_remove() {
@@ -1535,8 +1806,8 @@ test_profiles_reports_an_executor_it_could_not_remove() {
   stub STUB_EXEC_RC=1
   ctl profiles cloudflared,search
   bad_rc
-  out_has "alfred: could not remove the gmail-triggers executor"
-  out_has "could not sync the gmail-triggers executor of: alfred"
+  out_has "alfred: could not remove the garden executor"
+  out_has "could not sync the garden executor of: alfred"
   out_has "run the same command again"
 }
 
@@ -1557,7 +1828,7 @@ test_profiles_rerun_repairs_a_failed_executor_install() {
   ctl profiles cloudflared,google,gmail-triggers
   ok_rc
   out_has "nothing to change"
-  log_has "sh install /root/.letta/garden/gmail-triggers"
+  log_has "sh install $EXECUTOR_ARGS"
 }
 
 test_profiles_continues_past_a_failed_executor_install() {
@@ -1575,9 +1846,9 @@ test_profiles_continues_past_a_failed_executor_install() {
   ctl profiles cloudflared,search,google,gmail-triggers
   bad_rc
   grep -q '^docker compose -p lettuce-hal .* up -d --build' "$T/calls.log" || fail "hal not started"
-  out_has "alfred: could not install the gmail-triggers executor"
-  out_has "hal: could not install the gmail-triggers executor"
-  out_has "could not sync the gmail-triggers executor of: alfred hal"
+  out_has "alfred: could not install the garden executor"
+  out_has "hal: could not install the garden executor"
+  out_has "could not sync the garden executor of: alfred hal"
   out_has "run the same command again"
   eq "$(senv hal COMPOSE_PROFILES)" cloudflared,search,google,gmail-triggers
 }
@@ -1596,10 +1867,10 @@ test_profiles_checks_gmail_triggers_under_the_new_list_before_writing() {
 test_profiles_checks_the_executor_token_before_writing() {
   triggers_config
   added
-  sed -i 's/^GMAIL_TRIGGERS_EXECUTOR_TOKEN=.*/GMAIL_TRIGGERS_EXECUTOR_TOKEN=not-hex/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^GARDEN_EXECUTOR_TOKEN=.*/GARDEN_EXECUTOR_TOKEN=not-hex/' "$H/stacks/alfred/stack.env"
   ctl profiles cloudflared,search,google,gmail-triggers
   bad_rc
-  out_has "alfred: GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+  out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
   log_lacks "up -d"
 }
@@ -1673,6 +1944,7 @@ test_list_shows_stacks_and_hosts() {
   ok_rc
   out_has "alfred"
   out_has "https://hal.example.org"
+  out_has "https://hal-garden.example.org/"
 }
 
 # ── shell ────────────────────────────────────────────────────────────────────
@@ -2185,7 +2457,7 @@ test_skills_script_keeps_skills_on_a_broken_stream() {
   eq "$(cd "$d" && find . | LC_ALL=C sort | paste -sd' ')" ". ./.lettucectl-skills ./alpha ./alpha/SKILL.md"
 }
 
-# ── gmail-triggers executor ──────────────────────────────────────────────────
+# ── garden executor ──────────────────────────────────────────────────────────
 # run_exec_script ROOT [STDIN] -> runs the last exec's script with its arguments
 # as lettucectl passed them, but with the container's /root/.letta and /etc
 # under ROOT; stdin is the streamed tar unless STDIN is given
@@ -2201,7 +2473,7 @@ run_exec_script() {
   sh -c "$(cat "$T/exec-script")" "${args[@]}" <"$in"
 }
 files_in() { (cd "$1" && find . | LC_ALL=C sort | paste -sd' '); }
-INSTALLED=". ./etc ./etc/cron.d ./etc/cron.d/lettuce-garden-gmail-triggers ./etc/lettuce-garden ./etc/lettuce-garden/gmail-triggers-token ./letta ./letta/garden ./letta/garden/gmail-triggers ./letta/garden/gmail-triggers/bin ./letta/garden/gmail-triggers/bin/run.mjs ./letta/system-cron ./letta/system-cron/lettuce-garden-gmail-triggers"
+INSTALLED=". ./etc ./etc/cron.d ./etc/cron.d/lettuce-garden-executor ./etc/lettuce-garden ./etc/lettuce-garden/executor-token ./letta ./letta/garden ./letta/garden/executor ./letta/garden/executor/bin ./letta/garden/executor/bin/run.mjs ./letta/system-cron ./letta/system-cron/lettuce-garden-executor"
 
 # installed_up -> alfred with the profile, after an `up` whose install script can be replayed
 installed_up() {
@@ -2214,32 +2486,32 @@ installed_up() {
 test_executor_script_installs_files_token_and_cron() {
   installed_up
   local r=$T/root g
-  g=$r/letta/garden/gmail-triggers
+  g=$r/letta/garden/executor
   run_exec_script "$r"
   eq "$(files_in "$r")" "$INSTALLED"
   eq "$(cat "$g/bin/run.mjs")" "// executor"
   # The token is in the container layer, not under the state directory.
-  eq "$(cat "$r/etc/lettuce-garden/gmail-triggers-token")" "$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)"
-  eq "$(stat -c %a "$r/etc/lettuce-garden/gmail-triggers-token")" 600
+  eq "$(cat "$r/etc/lettuce-garden/executor-token")" "$(senv alfred GARDEN_EXECUTOR_TOKEN)"
+  eq "$(stat -c %a "$r/etc/lettuce-garden/executor-token")" 600
   eq "$(stat -c %a "$r/etc/lettuce-garden")" 700
-  eq "$(cat "$r/letta/system-cron/lettuce-garden-gmail-triggers")" "$GT_CRON_TEXT"
-  cmp -s "$r/letta/system-cron/lettuce-garden-gmail-triggers" "$r/etc/cron.d/lettuce-garden-gmail-triggers" || fail "cron copies differ"
-  eq "$(stat -c %a "$r/etc/cron.d/lettuce-garden-gmail-triggers")" 644
-  eq "$(stat -c %a "$r/letta/system-cron/lettuce-garden-gmail-triggers")" 644
+  eq "$(cat "$r/letta/system-cron/lettuce-garden-executor")" "$GT_CRON_TEXT"
+  cmp -s "$r/letta/system-cron/lettuce-garden-executor" "$r/etc/cron.d/lettuce-garden-executor" || fail "cron copies differ"
+  eq "$(stat -c %a "$r/etc/cron.d/lettuce-garden-executor")" 644
+  eq "$(stat -c %a "$r/letta/system-cron/lettuce-garden-executor")" 644
 }
 
 test_executor_script_replaces_its_files() {
   installed_up
   local r=$T/root g
-  g=$r/letta/garden/gmail-triggers
+  g=$r/letta/garden/executor
   mkdir -p "$g/bin" "$r/etc/lettuce-garden"
   touch "$g/bin/notes.txt" "$g/executor.log"
   printf 'stale\n' >"$g/bin/run.mjs"
-  printf 'old-token\n' >"$r/etc/lettuce-garden/gmail-triggers-token"
+  printf 'old-token\n' >"$r/etc/lettuce-garden/executor-token"
   run_exec_script "$r"
   eq "$(files_in "$g")" ". ./bin ./bin/notes.txt ./bin/run.mjs ./executor.log"
   eq "$(cat "$g/bin/run.mjs")" "// executor"
-  eq "$(cat "$r/etc/lettuce-garden/gmail-triggers-token")" "$(senv alfred GMAIL_TRIGGERS_EXECUTOR_TOKEN)"
+  eq "$(cat "$r/etc/lettuce-garden/executor-token")" "$(senv alfred GARDEN_EXECUTOR_TOKEN)"
   run_exec_script "$r"
   eq "$(files_in "$g")" ". ./bin ./bin/notes.txt ./bin/run.mjs ./executor.log"
 }
@@ -2252,7 +2524,7 @@ test_executor_script_keeps_the_install_on_a_broken_stream() {
   printf 'not a tar' >"$T/broken"
   ! run_exec_script "$r" "$T/broken" 2>/dev/null || fail "script accepted a broken stream"
   eq "$(files_in "$r")" "$before"
-  eq "$(cat "$r/letta/garden/gmail-triggers/bin/run.mjs")" "// executor"
+  eq "$(cat "$r/letta/garden/executor/bin/run.mjs")" "// executor"
 }
 
 # partial_stream FILE -> a tar holding only FILE
@@ -2278,16 +2550,33 @@ test_executor_script_uninstall_removes_executor_token_and_both_cron_files() {
   installed_up
   local r=$T/root
   run_exec_script "$r"
-  touch "$r/letta/garden/gmail-triggers/executor.log"
+  touch "$r/letta/garden/executor/executor.log"
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
   sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$H/stacks/alfred/stack.env"
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl up alfred
   ok_rc
   run_exec_script "$r" /dev/null
-  eq "$(files_in "$r")" ". ./etc ./etc/cron.d ./letta ./letta/garden ./letta/garden/gmail-triggers ./letta/garden/gmail-triggers/executor.log ./letta/system-cron"
+  eq "$(files_in "$r")" ". ./etc ./etc/cron.d ./letta ./letta/garden ./letta/garden/executor ./letta/garden/executor/executor.log ./letta/system-cron"
   # Again, on what is left: nothing to do, no error.
   run_exec_script "$r" /dev/null
+}
+
+# The install's clean-up of the gmail-triggers executor removes only that one.
+test_executor_script_removes_the_gmail_triggers_executor_and_keeps_the_new_one() {
+  installed_up
+  local r=$T/root
+  run_exec_script "$r"
+  mkdir -p "$r/letta/garden/gmail-triggers/bin"
+  touch "$r/letta/garden/gmail-triggers/bin/run.mjs" "$r/letta/system-cron/lettuce-garden-gmail-triggers" \
+    "$r/etc/cron.d/lettuce-garden-gmail-triggers" "$r/etc/lettuce-garden/gmail-triggers-token"
+  legacy_executor
+  ctl up alfred
+  ok_rc
+  eq "$(exec_args | paste -sd' ')" "sh uninstall $LEGACY_ARGS"
+  run_exec_script "$r" /dev/null
+  # Its directory stays, like the new one's, for its log.
+  eq "$(files_in "$r")" "${INSTALLED/.\/letta\/system-cron /./letta/garden/gmail-triggers ./letta/system-cron }"
 }
 
 test_executor_script_uninstall_keeps_a_token_dir_in_use() {
@@ -2297,7 +2586,7 @@ test_executor_script_uninstall_keeps_a_token_dir_in_use() {
   touch "$r/etc/lettuce-garden/other"
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
   sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$H/stacks/alfred/stack.env"
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/gmail-triggers/bin"
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl up alfred
   ok_rc
   run_exec_script "$r" /dev/null
@@ -2798,7 +3087,7 @@ test_compose_adds_the_doc_tools_overlay_and_its_values_only_with_the_profile() {
   with_docs
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env"
   log_has "docker-env DOC_TOOLS_NETWORK=lettuce-doc-tools-alfred DOC_TOOLS_VOLUME=lettuce-doc-tools-$(docs_tag)"
   grep -q '^DOC_TOOLS' "$H/stacks/alfred/stack.env" && fail "doc-tools values written to stack.env"
   true
@@ -2814,7 +3103,7 @@ test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
   log_has "docker network create --internal --label lettuce.doc-tools.stack=alfred lettuce-doc-tools-alfred"
   log_has "docker network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
   # The network exists before the app-server joins it, and Gotenberg joins after.
-  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
+  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
     fail "the network was created after compose up"
   (($(line_of "-p lettuce_shared") > $(line_of "up -d --build --remove-orphans"))) || fail "gotenberg started before the stack"
 }
@@ -3402,11 +3691,12 @@ test_shared_project_is_not_a_stack_named_shared() {
 
 # ── code editor (code-server) ────────────────────────────────────────────────
 # code_config -> the rendered config also holds the three services and networks
-# compose/code-server.yml renders for alfred (taken from a real render)
+# compose/code-server.yml renders for alfred (taken from a real render), and
+# the garden service
 code_config() {
   local st=$H/stacks/alfred/state
   config_edit '.services["code-server"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
-      "networks":{"default":null},
+      "environment":'"$GARDEN_ENV"',"networks":{"default":null},
       "volumes":[{"type":"volume","source":"code-server-sock","target":"/run/code-server","read_only":true,"volume":{}}]}
     | .services["code-server-editor"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
       "command":["--socket","/run/code-server/editor.sock","--socket-mode","666","--auth","none","--disable-proxy",
@@ -3425,6 +3715,7 @@ code_config() {
         {"type":"bind","source":"'"$st"'/tools","target":"/opt/agent-tools","bind":{"create_host_path":true}},
         {"type":"volume","source":"code-exec-keys","target":"/keys","read_only":true,"volume":{}}]}
     | .networks = {"code-exec":{"internal":true},"code-egress":{},"default":{}}'
+  garden_config
 }
 
 # with_code -> alfred runs the code-server profile, with the services it renders
@@ -3614,7 +3905,7 @@ test_compose_always_merges_the_code_editor_overlay() {
   added
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml --env-file"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file"
 }
 
 test_profiles_routes_the_code_editor_and_lists_it_on_the_landing_page() {
@@ -3622,8 +3913,7 @@ test_profiles_routes_the_code_editor_and_lists_it_on_the_landing_page() {
   code_config
   ctl profiles cloudflared,search,code-server
   ok_rc
-  eq "$(jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" \
-    '[{"hostname":"alfred.example.org","path":"^/garden/code-server(/|$)","service":"http://code-server:8000"},{"hostname":"alfred.example.org","path":"^/garden/?$","service":"http://code-server:8000"},{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}]'
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/code-server(/|$)","service":"http://code-server:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
   eq "$(senv alfred GARDEN_PROFILES)" code-server
 }
 
@@ -3637,6 +3927,396 @@ test_profiles_dropping_the_code_editor_removes_its_containers() {
   log_lacks "code-server:8000"
   grep -q '^docker compose -p lettuce-alfred .* rm -sf code-server code-server-editor code-server-exec$' "$T/calls.log" ||
     fail "the code editor's containers were not removed"
+}
+
+# ── garden host ──────────────────────────────────────────────────────────────
+# pre_garden -> alfred is a complete stack from before the garden host
+pre_garden() {
+  added
+  sed -i '/^GARDEN_HOSTNAME=/d; /^GARDEN_ORIGIN=/d; /^CF_GARDEN_/d' "$H/stacks/alfred/stack.env"
+}
+MIGRATION="GET /zones/zone1/dns_records;POST /accounts/acc1/access/apps;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;"
+
+test_up_makes_no_cloudflare_call_once_the_garden_host_exists() {
+  added
+  ctl up alfred
+  ok_rc
+  log_lacks "curl "
+  log_has "up -d --build"
+}
+
+test_up_creates_the_garden_host_of_an_older_stack_before_its_containers() {
+  pre_garden
+  ctl up alfred
+  ok_rc
+  eq "$(calls | tr '\n' ';')" "$MIGRATION"
+  eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden.example.org
+  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden.example.org
+  eq "$(senv alfred CF_GARDEN_APP_ID)" app2
+  eq "$(senv alfred CF_GARDEN_AUD)" aud2
+  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
+  eq "$(stat -c %a "$H/stacks/alfred/stack.env")" 600
+  eq "$(jq -c '[.name, .domain, .policies]' <<<"$(body_of POST /accounts/acc1/access/apps)")" \
+    '["lettuce-alfred-garden","alfred-garden.example.org",[{"id":"pol1","precedence":1}]]'
+  eq "$(jq -r .name <<<"$(body_of POST /zones/zone1/dns_records)")" alfred-garden.example.org
+  # The tunnel routes the garden host before its name resolves.
+  eq "$(ingress)" "[$GARDEN_404,$LETTUCE_TAIL]"
+  (($(grep -n '^curl ' "$T/calls.log" | tail -1 | cut -d: -f1) < $(line_of "config --format json"))) ||
+    fail "the stack was checked before its garden host existed"
+  out_has "alfred: the garden pages are now at https://alfred-garden.example.org/"
+  # Done: a re-run makes no Cloudflare call.
+  : >"$T/calls.log"
+  ctl up alfred
+  ok_rc
+  log_lacks "curl "
+}
+
+test_up_resumes_a_garden_host_that_stopped_part_way() {
+  local step rest
+  # STEP|what the re-run calls
+  for step in \
+    "POST /accounts/acc1/access/apps|POST /accounts/acc1/access/apps;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;" \
+    "PUT /accounts/acc1/cfd_tunnel/tun1/configurations|PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;" \
+    "POST /zones/zone1/dns_records|PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;"; do
+    teardown; setup
+    # With a garden page, the stack can't start without its garden host.
+    sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+    broker_config
+    pre_garden
+    stub "STUB_CF_FAIL=\"${step%%|*}\""
+    ctl up alfred
+    bad_rc
+    out_has "alfred: could not create its garden host on Cloudflare, so nothing was started"
+    out_has "run the same command again"
+    log_lacks "docker compose"
+    eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" ""
+    eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden.example.org
+    rest=${step#*|}
+    : >"$T/stub.env"
+    : >"$T/calls.log"
+    ctl up alfred
+    ok_rc
+    eq "$(calls | tr '\n' ';')" "$rest"
+    eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
+  done
+}
+
+test_up_gives_an_older_stack_the_fallback_garden_name_when_taken() {
+  pre_garden
+  stub STUB_CF_TAKEN=alfred-garden.example.org
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred GARDEN_ORIGIN)" https://lettuce-alfred-garden.example.org
+}
+
+test_up_leaves_an_unfinished_stack_to_add() {
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/cfd_tunnel"'
+  ctl add alfred alfred@example.com
+  : >"$T/stub.env"
+  : >"$T/calls.log"
+  ctl up alfred
+  bad_rc
+  log_lacks "curl "
+}
+
+test_profiles_creates_the_garden_host_before_checking_the_new_list() {
+  pre_garden
+  broker_config
+  ctl profiles cloudflared,search,secrets
+  ok_rc
+  eq "$(senv alfred CF_GARDEN_AUD)" aud2
+  (($(line_of "curl POST /zones/zone1/dns_records") < $(line_of "docker-env-file"))) ||
+    fail "the new list was checked before the garden host existed"
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  log_has "curl PUT /accounts/acc1/access/apps/app2"
+}
+
+test_profiles_with_the_same_list_moves_an_older_stack_to_its_garden_host() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  pre_garden
+  containers alfred app-server secret-broker
+  ctl profiles cloudflared,secrets
+  ok_rc
+  out_has "nothing to change"
+  log_has "curl POST /zones/zone1/dns_records"
+  # Its garden services take the new audience and origin.
+  log_has "up -d --build"
+  # A stack already moved is not restarted.
+  : >"$T/calls.log"
+  ctl profiles cloudflared,secrets
+  ok_rc
+  log_lacks "up -d"
+  log_lacks "curl POST"
+}
+
+test_profiles_stops_before_writing_when_the_garden_host_fails() {
+  pre_garden
+  broker_config
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/access/apps"'
+  ctl profiles cloudflared,search,secrets
+  bad_rc
+  out_has "alfred: could not create its garden host on Cloudflare, so no profile was changed"
+  eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search
+  eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
+  log_lacks "up -d"
+}
+
+# up_lines NAME -> the `compose up` calls made for stack NAME
+up_lines() { grep "up -d --build" "$T/calls.log" | grep -c "stacks/$1/stack.env" || true; }
+
+# A failed `profiles` can stop after moving one stack's Cloudflare side; the
+# re-run must still move that stack's containers and give it its token.
+test_profiles_rerun_finishes_a_stack_a_failed_run_moved() {
+  local tok
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  pre_garden
+  ctl add hal hal@example.com
+  sed -i '/^GARDEN_HOSTNAME=/d; /^GARDEN_ORIGIN=/d; /^CF_GARDEN_/d' "$H/stacks/hal/stack.env"
+  # alfred predates the token's rename.
+  tok=$(senv alfred GARDEN_EXECUTOR_TOKEN)
+  sed -i "s/^GARDEN_EXECUTOR_TOKEN=.*/GMAIL_TRIGGERS_EXECUTOR_TOKEN=$tok/" "$H/stacks/alfred/stack.env"
+  containers alfred app-server secret-broker
+  containers hal app-server secret-broker
+  : >"$T/calls.log"
+  stub 'STUB_CF_TAKEN="hal-garden.example.org lettuce-hal-garden.example.org"'
+  ctl profiles cloudflared,secrets
+  bad_rc
+  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
+  log_lacks "up -d"
+  sed -i '/STUB_CF_TAKEN/d' "$T/stub.env"
+  : >"$T/calls.log"
+  : >"$T/exec-stdin.log"
+  ctl profiles cloudflared,secrets
+  ok_rc
+  # alfred's garden services take the garden's audience, though this run moved only hal.
+  eq "$(up_lines alfred)" 1
+  eq "$(up_lines hal)" 1
+  eq "$(senv alfred GARDEN_EXECUTOR_TOKEN)" "$tok"
+  ! grep -q '^GMAIL_TRIGGERS_EXECUTOR_TOKEN=' "$H/stacks/alfred/stack.env" || fail "the old key is still there"
+  # A third run restarts nothing.
+  : >"$T/calls.log"
+  ctl profiles cloudflared,secrets
+  ok_rc
+  log_lacks "up -d"
+}
+
+# An unchanged `profiles` starts no stack the operator stopped; its next `up` moves it.
+test_profiles_leaves_a_stopped_older_stack_to_its_next_up() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  pre_garden
+  ctl profiles cloudflared,secrets
+  ok_rc
+  log_has "curl POST /zones/zone1/dns_records"
+  log_lacks "up -d"
+  : >"$T/calls.log"
+  ctl up alfred
+  ok_rc
+  log_lacks "curl "
+  eq "$(up_lines alfred)" 1
+  # Moved: a running stack is not restarted again.
+  containers alfred app-server secret-broker
+  : >"$T/calls.log"
+  ctl profiles cloudflared,secrets
+  ok_rc
+  log_lacks "up -d"
+}
+
+test_the_executor_is_never_installed_without_a_token() {
+  added
+  with_triggers
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  containers alfred app-server gmail-triggers
+  # profiles syncs the executor on a running stack even when the list is unchanged.
+  sed -i "s/^PROFILES=.*/PROFILES=$(senv alfred COMPOSE_PROFILES)/" "$H/config.env"
+  : >"$T/exec-stdin.log"
+  ctl profiles "$(senv alfred COMPOSE_PROFILES)"
+  if [[ -s $T/exec-stdin.log ]] && tar -tf "$T/exec-stdin.log" token >/dev/null 2>&1; then
+    [[ $(tar -xOf "$T/exec-stdin.log" token) =~ ^[0-9a-f]{64}$ ]] || fail "an executor was installed without a token"
+  fi
+}
+
+# restart stops the stack only once its garden host exists.
+test_restart_stops_nothing_when_the_garden_host_fails() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  pre_garden
+  containers alfred app-server secret-broker
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/access/apps"'
+  ctl restart alfred
+  bad_rc
+  out_has "could not create its garden host on Cloudflare"
+  log_lacks " down"
+  log_lacks "up -d"
+}
+
+# Without a garden page, a stack does not need its garden host to start.
+test_up_starts_a_stack_without_garden_pages_when_cloudflare_fails() {
+  pre_garden
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/access/apps"'
+  ctl up alfred
+  ok_rc
+  out_has "could not create its garden host on Cloudflare"
+  log_has "up -d --build"
+  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" ""
+}
+
+test_check_points_an_unfinished_older_stack_at_add() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  # Stopped at its DNS records: everything else exists.
+  stub 'STUB_CF_FAIL="POST /zones/zone1/dns_records"'
+  ctl add alfred alfred@example.com
+  sed -i '/^GARDEN_HOSTNAME=/d; /^GARDEN_ORIGIN=/d; /^CF_GARDEN_/d' "$H/stacks/alfred/stack.env"
+  : >"$T/stub.env"
+  ctl up alfred
+  bad_rc
+  out_has "lettucectl add alfred"
+}
+
+# Possible only while a stack has no garden host: Lettuce's host alone.
+test_tunnel_routes_without_a_garden_host() {
+  (
+    LETTUCE_HOME=$H
+    . "$H/lib/common.sh"
+    . "$H/lib/cloudflare.sh"
+    PATH="$T/bin:$PATH" cf_tunnel_configure acc1 tun1 alfred.example.org "" cloudflared,secrets,code-server
+  ) >"$OUT" 2>&1 || fail "cf_tunnel_configure failed"
+  eq "$(ingress)" "[$LETTUCE_TAIL]"
+}
+
+test_tunnel_routes_every_garden_page_on_the_garden_host_only() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets,code-server/' "$H/config.env"
+  broker_config
+  triggers_config
+  code_config
+  ctl add alfred alfred@example.com
+  ok_rc
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred-garden.example.org","path":"^/code-server(/|$)","service":"http://code-server:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(senv alfred GARDEN_PROFILES)" secrets,gmail-triggers,code-server
+}
+
+# Only the garden service gets GARDEN_PROFILES: a recreate would relock the vault.
+test_only_the_garden_overlay_passes_the_garden_profiles() {
+  eq "$(grep -l 'GARDEN_PROFILES' "$ROOT"/compose/*.yml | xargs -n1 basename | paste -sd' ')" garden.yml
+}
+
+# with_all_gardens -> alfred runs every garden profile, with every garden service rendered
+with_all_gardens() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets,code-server/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,gmail-triggers,secrets,code-server/' "$H/stacks/alfred/stack.env"
+  broker_config
+  triggers_config
+  code_config
+}
+
+# garden_refused JQ EXPECTED -> with alfred's garden services edited by the jq
+# filter JQ, `check` fails and says EXPECTED (on a fresh fixture, so a test may
+# call it more than once)
+garden_refused() {
+  teardown
+  setup
+  added
+  with_all_gardens
+  config_edit "$1"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: $2"
+}
+GS='.services.garden'
+
+test_check_accepts_every_garden_service_as_rendered() {
+  added
+  with_all_gardens
+  ctl check alfred
+  ok_rc
+}
+
+test_check_refuses_a_garden_profile_without_the_garden() {
+  added
+  with_secrets
+  config_edit "del($GS)"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: the secrets profile is on but garden is not in the rendered config (compose/garden.yml)"
+}
+
+test_check_refuses_a_garden_that_is_not_hardened() {
+  garden_refused "del($GS.read_only)" "garden must have read_only: true"
+  garden_refused "$GS.cap_drop = [\"NET_RAW\"]" "garden must drop all capabilities"
+  garden_refused "$GS.network_mode = \"service:app-server\"" "garden must not set network_mode"
+  garden_refused "$GS.privileged = true" "garden must not set privileged"
+}
+
+test_check_refuses_a_garden_on_another_network_or_with_mounts() {
+  garden_refused "$GS.networks.other = null" "garden must be on the default network only"
+  garden_refused "$GS.networks = {\"backend\": null}" "garden must be on the default network only"
+  garden_refused "$GS.volumes = [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden must not mount host paths"
+  garden_refused "$GS.volumes = [{\"type\":\"volume\",\"source\":\"bff-auth\",\"target\":\"/x\"}]" "garden must not mount anything"
+}
+
+test_check_refuses_a_garden_profile_without_its_host_or_audience() {
+  local k
+  for k in GARDEN_ORIGIN CF_GARDEN_AUD; do
+    teardown; setup
+    added
+    with_secrets
+    sed -i "/^$k=/d" "$H/stacks/alfred/stack.env"
+    ctl check alfred
+    bad_rc
+    out_has "alfred: $k is empty; the garden pages need their own host and Access application (run: lettucectl up alfred"
+  done
+}
+
+test_check_refuses_a_garden_service_that_accepts_lettuces_token() {
+  local s
+  for s in secret-broker gmail-triggers code-server garden; do
+    garden_refused ".services[\"$s\"].environment.CF_ACCESS_AUD = \"\${CF_ACCESS_AUD}\"" \
+      "$s must accept only the garden's Access application (CF_ACCESS_AUD = CF_GARDEN_AUD), never Lettuce's"
+    garden_refused "del(.services[\"$s\"].environment.CF_ACCESS_AUD)" "$s must accept only the garden's Access application"
+    garden_refused ".services[\"$s\"].environment.PUBLIC_ORIGIN = \"\${PUBLIC_ORIGIN}\"" \
+      "$s must have PUBLIC_ORIGIN = GARDEN_ORIGIN, the garden's own host"
+  done
+}
+
+test_check_refuses_a_garden_audience_that_is_lettuces() {
+  added
+  with_all_gardens
+  sed -i 's/^CF_GARDEN_AUD=.*/CF_GARDEN_AUD=aud1/' "$H/stacks/alfred/stack.env"
+  ctl check alfred
+  bad_rc
+  out_has "must accept only the garden's Access application"
+}
+
+test_check_refuses_a_garden_service_with_lettuces_token_whatever_the_profiles() {
+  added
+  broker_config
+  # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
+  config_edit '.services["secret-broker"].environment.CF_ACCESS_AUD = "${CF_ACCESS_AUD}"'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: secret-broker must accept only the garden's Access application"
+}
+
+test_profiles_dropping_every_garden_profile_removes_the_garden() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets,code-server/' "$H/config.env"
+  broker_config
+  code_config
+  added
+  containers alfred app-server bff cloudflared secret-broker garden code-server code-server-editor code-server-exec
+  ctl profiles cloudflared,secrets
+  ok_rc
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf code-server code-server-editor code-server-exec$' "$T/calls.log" ||
+    fail "the code editor's containers were not removed, or the garden went with them"
+  : >"$T/calls.log"
+  # (The stub still lists the code editor's containers.)
+  sed -i '/ code-server/d' "$T/containers.txt"
+  ctl profiles cloudflared
+  ok_rc
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden secret-broker$' "$T/calls.log" || fail "the garden was not removed"
+  eq "$(ingress)" "[$GARDEN_404,$LETTUCE_TAIL]"
 }
 
 for t in $(declare -F | awk '$3 ~ /^test_/ { print $3 }'); do

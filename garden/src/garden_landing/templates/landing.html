@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Lettuce Garden</h1>
+<p class="muted">Extras that run next to your Lettuce, each with its own page.</p>
+{% if any_feature %}
+{% if features %}
+<ul class="menu-list">
+  {% for f in features %}
+  <li>
+    <a class="menu-row" href="{{ f.path }}">
+      <span class="menu-row-text">
+        <span class="menu-row-title">{{ f.label }}</span>
+        <span class="menu-row-desc">{{ f.blurb }}</span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% if lists_agents %}
+<section>
+  <h2>{{ editor_label }}</h2>
+  {% if agents %}
+  <ul class="menu-list">
+    {% for a in agents %}
+    <li>
+      <a class="menu-row" href="{{ a.href }}">
+        <span class="menu-row-text">
+          <span class="menu-row-title">{{ a.title }}</span>
+          <span class="menu-row-desc">{{ a.folder }}</span>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {% if agents is none %}
+  <p class="muted">The list of your agents is on its way from Lettuce; reload in a minute.</p>
+  {% else %}
+  <p class="muted">Lettuce has no agents yet.</p>
+  {% endif %}
+  <p><a href="{{ editor }}">Open the code editor</a> and choose File -&gt; Open Folder.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% else %}
+<div class="empty"><p class="muted">No garden features are on for this stack.</p></div>
+{% endif %}
+{% endblock %}

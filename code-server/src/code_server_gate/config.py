@@ -6,10 +6,9 @@ import os
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-from garden_common.garden import profiles_from_env
-
-# The editor lives under this path, behind the tunnel route of the same name.
-PREFIX = "/garden/code-server"
+# The editor lives under this path on the garden's host, behind the tunnel route
+# of the same name.
+PREFIX = "/code-server"
 # code-server-editor listens only on this Unix socket, on a volume only this gate
 # and the editor mount (compose/code-server.yml); the URL names it for Host.
 EDITOR_SOCKET = "/run/code-server/editor.sock"
@@ -28,8 +27,6 @@ class Settings:
     allowed_users: frozenset[str]
     public_origin: str
     upstream: str = DEFAULT_UPSTREAM
-    # The garden pages that are on, for the /garden/ landing page's links.
-    garden_profiles: str = ""
 
     @property
     def public_host(self) -> str:
@@ -56,5 +53,4 @@ class Settings:
             issuer=env.get("CF_ACCESS_ISSUER", "").strip() or f"https://{team}.cloudflareaccess.com",
             allowed_users=users,
             public_origin=origin,
-            garden_profiles=profiles_from_env(env),
         )

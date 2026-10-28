@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import os
-import re
 from dataclasses import dataclass, field
 
-from garden_common.garden import profiles_from_env
+from garden_common.executor import EXECUTOR_TOKEN
 
-# The pages live under this path, behind the tunnel route of the same name.
-PREFIX = "/garden/gmail-triggers"
-# The executor's API: deliberately outside PREFIX, so the tunnel never routes it.
-EXECUTOR_PREFIX = "/executor/v1"
-EXECUTOR_TOKEN = re.compile(r"[0-9a-f]{64}")
+# The pages live under this path on the garden's host, behind the tunnel route
+# of the same name. The executor's API (garden_common.executor) is outside it,
+# so the tunnel never routes it.
+PREFIX = "/gmail-triggers"
 
 DEFAULT_POLL_SECONDS = 120
 # The executor runs every minute; three missed runs mean it is not running.
@@ -61,14 +59,12 @@ class Settings:
     issuer: str
     allowed_users: frozenset[str]
     public_origin: str
-    # The executor's bearer token (compose passes it from stack.env).
+    # The executor's bearer token, GARDEN_EXECUTOR_TOKEN (compose passes it from stack.env).
     executor_token: str = field(repr=False)
     data_dir: str = "/data"
     creds_dir: str = "/creds"
     policy_dir: str = "/policy"
     poll_seconds: int = DEFAULT_POLL_SECONDS
-    # The garden pages that are on, for the /garden/ landing page's links.
-    garden_profiles: str = ""
 
     @property
     def db_path(self) -> str:
@@ -95,9 +91,9 @@ class Settings:
             raise ConfigError("POLL_SECONDS must be a number of seconds") from e
         if not 30 <= poll <= 3600:
             raise ConfigError("POLL_SECONDS must be between 30 and 3600")
-        token = env.get("GMAIL_TRIGGERS_EXECUTOR_TOKEN", "").strip()
+        token = env.get("GARDEN_EXECUTOR_TOKEN", "").strip()
         if not EXECUTOR_TOKEN.fullmatch(token):
-            raise ConfigError("GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters")
+            raise ConfigError("GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters")
         return cls(
             team_domain=team,
             audience=required("CF_ACCESS_AUD"),
@@ -109,5 +105,4 @@ class Settings:
             creds_dir=env.get("GOOGLE_CREDS_DIR", "").strip() or "/creds",
             policy_dir=env.get("GOOGLE_POLICY_DIR", "").strip() or "/policy",
             poll_seconds=poll,
-            garden_profiles=profiles_from_env(env),
         )

@@ -2,10 +2,11 @@
 (bff/src/auth/cf-access.ts), CSRF tokens for every form, and Fetch Metadata
 checks (check_fetch).
 
-Shared by the garden sidecars (the vault, gmail-triggers). Agents reach them
-over the Docker network without passing Access, so they can send any header
-they like. Only a JWT signed by the team's Access
-keys, for this stack's application, carrying an allowed email, counts.
+Shared by the garden sidecars (garden, the vault, gmail-triggers, the code
+editor's gate). Agents reach them over the Docker network without passing
+Access, so they can send any header they like. Only a JWT signed by the team's
+Access keys, for the stack's garden application, carrying an allowed email,
+counts.
 The unsigned Cf-Access-Authenticated-User-Email header is never read.
 """
 
@@ -81,11 +82,6 @@ class Authenticator:
         # restart invalidates open forms (the page says to reload).
         self._csrf_key = secrets.token_bytes(32)
 
-    @property
-    def origin(self) -> str:
-        """The stack's public origin (PUBLIC_ORIGIN)."""
-        return self._settings.public_origin
-
     async def email(self, headers: Any) -> str:
         token = headers.get(JWT_HEADER)
         if not token:
@@ -124,7 +120,7 @@ class Authenticator:
             raise AuthError("this form has expired; reload the page and try again")
 
     def check_origin(self, headers: Any) -> None:
-        """Browsers send Origin on every POST; it must be this stack's own."""
+        """Browsers send Origin on every POST; it must be the garden's own."""
         if headers.get("origin") != self._settings.public_origin:
             raise AuthError("cross-site request refused")
 
