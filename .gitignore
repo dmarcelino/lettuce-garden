@@ -4,6 +4,9 @@
 /.secrets/
 /stacks/
 
+# Local git worktrees (git worktree add .worktrees/<branch>)
+/.worktrees/
+
 # Build and test output of broker/
 __pycache__/
 *.egg-info/
