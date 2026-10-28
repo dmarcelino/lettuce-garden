@@ -3543,6 +3543,49 @@ test_add_with_doc_tools_registers_the_mcp_servers() {
   out_has "office and pdf are in https://alfred.example.org Settings -> MCP"
 }
 
+test_add_with_secrets_and_doc_tools_registers_both() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets,doc-tools/' "$H/config.env"
+  docs_config
+  broker_config
+  mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}' doc-tools
+  mcp_answer '{"added":["vault"],"present":[],"conflicts":[],"removed":[],"attempts":1}' vault
+  ctl add alfred alfred@example.com
+  ok_rc
+  log_has "$MCP_ADD"
+  log_has "$VAULT_ADD"
+  eq "$(bff_restarts)" 1
+  (($(line_of "restart --no-deps bff") > $(line_of "$VAULT_ADD"))) || fail "the BFF was not restarted after registering"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" 1
+  out_has "office and pdf are in https://alfred.example.org Settings -> MCP"
+  out_has "Vault: vault is in https://alfred.example.org Settings -> MCP (docs/secret-broker.md)"
+}
+
+test_add_still_succeeds_when_registering_the_vault_fails() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  stub STUB_EXEC_RC=3
+  ctl add alfred alfred@example.com
+  ok_rc
+  log_has "$VAULT_ADD"
+  log_lacks "$MCP_ADD"
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
+  out_has "Vault: in https://alfred.example.org Settings -> MCP, add an HTTP server:"
+  out_has "vault -> http://secret-broker:8000/mcp (docs/secret-broker.md)"
+  out_has "or run: lettucectl mcp alfred"
+}
+
+test_profiles_adding_secrets_prints_the_vault_entry_and_registers_nothing() {
+  added
+  broker_config
+  ctl profiles cloudflared,secrets
+  ok_rc
+  out_has "vault -> http://secret-broker:8000/mcp"
+  out_has "or run: lettucectl mcp alfred"
+  out_lacks "Documents:"
+  log_lacks "node --input-type=module"
+}
+
 test_add_still_succeeds_when_registering_the_mcp_servers_fails() {
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
   docs_config
@@ -3553,12 +3596,26 @@ test_add_still_succeeds_when_registering_the_mcp_servers_fails() {
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
 }
 
-# The `node -` call that adds or removes the document tools in Settings -> MCP.
-MCP_ADD="exec -T app-server node --input-type=module - add /root/.letta/mcp-home/.letta/settings.json"
-MCP_REMOVE="exec -T app-server node --input-type=module - remove /root/.letta/mcp-home/.letta/settings.json"
+# The `node -` calls that add or remove the document tools, and the vault, in Settings -> MCP.
+MCP_ADD="exec -T app-server node --input-type=module - add /root/.letta/mcp-home/.letta/settings.json doc-tools"
+MCP_REMOVE="exec -T app-server node --input-type=module - remove /root/.letta/mcp-home/.letta/settings.json doc-tools"
+VAULT_ADD="exec -T app-server node --input-type=module - add /root/.letta/mcp-home/.letta/settings.json vault"
+VAULT_REMOVE="exec -T app-server node --input-type=module - remove /root/.letta/mcp-home/.letta/settings.json vault"
 
-# mcp_answer JSON -> what lib/mcp-servers.mjs prints in the stack (the exec's output)
-mcp_answer() { printf '%s\n' "$1" >"$T/exec-stdout"; }
+# mcp_answer JSON [GROUP] -> what lib/mcp-servers.mjs prints in the stack (the
+# exec's output), for every group or only for GROUP
+mcp_answer() { printf '%s\n' "$1" >"$T/exec-stdout${2:+-$2}"; }
+
+# with_docs_and_secrets -> alfred runs the doc-tools and secrets profiles
+with_docs_and_secrets() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets,doc-tools/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,secrets,doc-tools/' "$H/stacks/alfred/stack.env"
+  docs_config
+  broker_config
+}
+
+# bff_restarts -> how many times the BFF was restarted alone
+bff_restarts() { grep -c "restart --no-deps bff" "$T/calls.log" || true; }
 
 test_mcp_adds_the_document_tools_to_settings() {
   added
@@ -3606,7 +3663,7 @@ test_mcp_runs_once_per_stack_unless_forced() {
   ok_rc
   log_lacks "node --input-type=module"
   log_lacks "restart --no-deps bff"
-  out_has "alfred: registered before; a server the person removed stays removed (--force adds it again)"
+  out_has "alfred: registered the document tools before; a server the person removed stays removed (--force adds it again)"
   mcp_answer '{"added":["pdf"],"present":["office"],"conflicts":[],"removed":[],"attempts":1}'
   ctl mcp alfred --force
   ok_rc
@@ -3624,12 +3681,143 @@ test_mcp_leaves_a_persons_server_of_the_same_name() {
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
 }
 
-test_mcp_needs_the_doc_tools_profile() {
+test_mcp_needs_the_doc_tools_or_the_secrets_profile() {
   added
   ctl mcp alfred
   bad_rc
-  out_has "the doc-tools profile is off"
+  out_has "the doc-tools and secrets profiles are both off"
   log_lacks "node --input-type=module"
+}
+
+test_mcp_registers_the_vault_with_the_secrets_profile() {
+  added
+  with_secrets
+  mcp_answer '{"added":["vault"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
+  ctl mcp alfred
+  ok_rc
+  log_has "$VAULT_ADD"
+  log_lacks "$MCP_ADD"
+  grep -q 'secret-broker:8000/mcp' "$T/exec-stdin.log" || fail "the script was not streamed"
+  out_has "alfred: added vault to Settings -> MCP"
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" 1
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
+  (($(line_of "restart --no-deps bff") > $(line_of "$VAULT_ADD"))) || fail "the BFF restarted before the change"
+}
+
+test_mcp_registers_both_and_restarts_the_bff_once() {
+  added
+  with_docs_and_secrets
+  mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}' doc-tools
+  mcp_answer '{"added":["vault"],"present":[],"conflicts":[],"removed":[],"attempts":1}' vault
+  ctl mcp alfred
+  ok_rc
+  out_has "alfred: added office, pdf to Settings -> MCP"
+  out_has "alfred: added vault to Settings -> MCP"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" 1
+  eq "$(bff_restarts)" 1
+  (($(line_of "restart --no-deps bff") > $(line_of "$MCP_ADD"))) || fail "the BFF restarted before the document tools"
+  (($(line_of "restart --no-deps bff") > $(line_of "$VAULT_ADD"))) || fail "the BFF restarted before the vault"
+}
+
+test_mcp_runs_once_per_group_unless_forced() {
+  added
+  with_docs_and_secrets
+  echo "VAULT_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  mcp_answer '{"added":[],"present":["office","pdf"],"conflicts":[],"removed":[],"attempts":1}' doc-tools
+  ctl mcp alfred
+  ok_rc
+  log_has "$MCP_ADD"
+  log_lacks "$VAULT_ADD"
+  log_lacks "restart --no-deps bff"
+  out_has "alfred: registered the vault before; a server the person removed stays removed (--force adds it again)"
+  mcp_answer '{"added":["vault"],"present":[],"conflicts":[],"removed":[],"attempts":1}' vault
+  ctl mcp alfred --force
+  ok_rc
+  log_has "$VAULT_ADD"
+  out_has "alfred: added vault to Settings -> MCP"
+}
+
+test_mcp_leaves_a_persons_vault_server() {
+  added
+  with_secrets
+  mcp_answer '{"added":[],"present":[],"conflicts":["vault"],"removed":[],"attempts":1}'
+  ctl mcp alfred
+  ok_rc
+  out_has "alfred: Settings -> MCP already has a vault server with another URL; it was left as it is"
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" 1
+  log_lacks "restart --no-deps bff"
+}
+
+test_mcp_says_where_a_vault_added_by_hand_is() {
+  added
+  with_secrets
+  mcp_answer '{"added":[],"present":["secrets"],"conflicts":[],"removed":[],"attempts":1}'
+  ctl mcp alfred
+  ok_rc
+  out_has "alfred: secrets already in Settings -> MCP"
+  log_lacks "restart --no-deps bff"
+}
+
+test_mcp_a_failed_group_fails_at_the_end_and_the_other_is_kept() {
+  added
+  with_docs_and_secrets
+  stub STUB_EXEC_FAIL_GROUP=vault
+  mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}' doc-tools
+  ctl mcp alfred
+  bad_rc
+  out_has "alfred: could not add the vault to Settings -> MCP"
+  out_has "could not register the MCP servers in: alfred"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
+  eq "$(bff_restarts)" 1
+}
+
+test_profiles_dropping_secrets_removes_the_registered_vault() {
+  added
+  with_docs_and_secrets
+  ctl up alfred
+  ok_rc
+  printf '%s\n' DOC_TOOLS_MCP_REGISTERED=1 VAULT_MCP_REGISTERED=1 >>"$H/stacks/alfred/stack.env"
+  : >"$T/calls.log"
+  mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["vault"],"attempts":1}' vault
+  ctl profiles cloudflared,doc-tools
+  ok_rc
+  log_has "$VAULT_REMOVE"
+  log_lacks "$MCP_REMOVE"
+  out_has "alfred: removed vault from Settings -> MCP (the secrets profile is off)"
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
+  (($(line_of "restart --no-deps bff") > $(line_of "$VAULT_REMOVE"))) || fail "the BFF was not restarted after the removal"
+}
+
+test_up_removes_both_groups_with_one_bff_restart() {
+  added
+  printf '%s\n' DOC_TOOLS_MCP_REGISTERED=1 VAULT_MCP_REGISTERED=1 >>"$H/stacks/alfred/stack.env"
+  mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["office","pdf"],"attempts":1}' doc-tools
+  mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["vault"],"attempts":1}' vault
+  ctl up alfred
+  ok_rc
+  log_has "$MCP_REMOVE"
+  log_has "$VAULT_REMOVE"
+  eq "$(bff_restarts)" 1
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
+}
+
+test_up_retries_a_vault_removal_that_failed() {
+  added
+  echo "VAULT_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  stub STUB_EXEC_FAIL_GROUP=vault
+  ctl up alfred
+  bad_rc
+  out_has "alfred: could not remove the vault from Settings -> MCP"
+  out_has "could not remove servers whose profile is off from Settings -> MCP in: alfred"
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" 1
+  sed -i '/^STUB_EXEC_FAIL_GROUP=/d' "$T/stub.env"
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
 }
 
 test_mcp_failures_fail_at_the_end_without_a_mark() {
@@ -3638,7 +3826,8 @@ test_mcp_failures_fail_at_the_end_without_a_mark() {
   stub STUB_EXEC_RC=3
   ctl mcp alfred
   bad_rc
-  out_has "could not register the document tools in: alfred"
+  out_has "alfred: could not add the document tools to Settings -> MCP"
+  out_has "could not register the MCP servers in: alfred"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
 }
 
@@ -3675,7 +3864,7 @@ test_up_retries_a_removal_that_failed_and_skips_unregistered_stacks() {
   ctl up alfred
   bad_rc
   log_has "$MCP_REMOVE"
-  out_has "could not remove the document tools from Settings -> MCP in: alfred"
+  out_has "could not remove servers whose profile is off from Settings -> MCP in: alfred"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
   # Once removed, the stack is left alone.
   sed -i '/^STUB_EXEC_RC=/d' "$T/stub.env"

@@ -202,6 +202,18 @@ case $args in
       fi
       prev=$a
     done
+    # lib/mcp-servers.mjs's group is the argument after the settings file: it
+    # may have its own answer (exec-stdout-<group>) and fail on its own.
+    group="" prev=""
+    for a in "$@"; do
+      [[ $prev == */settings.json ]] && group=$a
+      prev=$a
+    done
+    [[ -z $group || $group != "${STUB_EXEC_FAIL_GROUP:-}" ]] || exit 3
+    if [[ -n $group && -f $STUB_ROOT/exec-stdout-$group ]]; then
+      cat "$STUB_ROOT/exec-stdout-$group"
+      exit "${STUB_EXEC_RC:-0}"
+    fi
     # What the command prints, if the test gave it anything.
     [[ -f $STUB_ROOT/exec-stdout ]] && cat "$STUB_ROOT/exec-stdout"
     exit "${STUB_EXEC_RC:-0}"

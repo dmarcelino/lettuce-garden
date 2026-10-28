@@ -30,8 +30,9 @@ Operation (<target> is a stack name or "all")
   restart <target>              down + up (app-server and bff share a namespace; never restart one alone)
   check <target>                refuse unsafe or inconsistent configuration
   skills <target>               install agent-skills/ into running stacks (every agent of the stack)
-  mcp <target> [--force]        add the document tools (office, pdf) to Settings -> MCP, once per stack
-                                (doc-tools profile; --force: again, also where the person removed them)
+  mcp <target> [--force]        add the document tools (office, pdf; doc-tools profile) and the vault
+                                (secrets profile) to Settings -> MCP, once per stack
+                                (--force: again, also where the person removed them)
   backup <target> <dir> [opts]  copy agents, memory, workspaces, tools, vault and receipts to a snapshot in <dir>/<name>/
                                 (--compress: a tar.gz instead; --no-tools; --pause|--live; --keep N)
   status                        containers and health of every stack
@@ -640,34 +641,67 @@ sync_doc_tools() {
   return "$rc"
 }
 
-# doc_tools_reminder NAME -> whether the stack's Settings -> MCP has the document
-# tools, as far as lettucectl knows (it registers them once: `mcp`, `add`)
-doc_tools_reminder() {
-  local f
-  f=$(stack_env "$1")
-  if [[ -n $(env_get "$f" DOC_TOOLS_MCP_REGISTERED) ]]; then
-    info "Documents: office and pdf are in https://$(env_get "$f" LETTUCE_HOSTNAME) Settings -> MCP (docs/doc-tools.md)"
-    return 0
-  fi
-  info "Documents: in https://$(env_get "$f" LETTUCE_HOSTNAME) Settings -> MCP, add two stdio servers:"
-  info "  office -> /opt/lettuce-doc-tools/bin/officeagent   pdf -> /opt/lettuce-doc-tools/bin/pdf-mcp (docs/doc-tools.md)"
-  info "  or run: lettucectl mcp $1"
-}
-
-# ── document tools in Settings -> MCP ────────────────────────────────────────
+# ── lettucectl's servers in Settings -> MCP ──────────────────────────────────
 # Lettuce's shared MCP list belongs to its BFF. lib/mcp-servers.mjs adds or
-# removes only the entries that run a document tool, and refuses a file of any
-# other shape; see it for why that is safe next to the BFF's own writes.
-# Registering is once per stack (DOC_TOOLS_MCP_REGISTERED in stack.env), so a
-# server the person removed stays removed; with the profile off, the servers
-# are taken out again, since a stdio server that cannot start makes every
+# removes only one group's own entries (the document tools: those that run one;
+# the vault: its exact HTTP entry), and refuses a file of any other shape; see
+# it for why that is safe next to the BFF's own writes. Registering is once per
+# stack and group (the group's marker in stack.env), so a server the person
+# removed stays removed; with the group's profile off, its servers are taken
+# out again, since a server that cannot start or answer makes every
 # `letta mcp tools` call fail, the other servers' included.
 MCP_SETTINGS=/root/.letta/mcp-home/.letta/settings.json
+MCP_GROUPS=(doc-tools vault)
+declare -A MCP_PROFILE=([doc-tools]=doc-tools [vault]=secrets)
+declare -A MCP_MARKER=([doc-tools]=DOC_TOOLS_MCP_REGISTERED [vault]=VAULT_MCP_REGISTERED)
+declare -A MCP_LABEL=([doc-tools]="the document tools" [vault]="the vault")
+# What a same-named server of the person's differs in.
+declare -A MCP_KIND=([doc-tools]=command [vault]=URL)
+# Set by register_mcp_group and drop_mcp_group when they changed the list.
+MCP_CHANGED=0
 
-# mcp_servers NAME add|remove -> runs lib/mcp-servers.mjs in the stack's
+# mcp_groups PROFILES -> the groups whose profile is in PROFILES, one per line
+mcp_groups() {
+  local g
+  for g in "${MCP_GROUPS[@]}"; do
+    ! has_profile "$1" "${MCP_PROFILE[$g]}" || echo "$g"
+  done
+}
+
+# mcp_reminder NAME PROFILES -> whether the stack's Settings -> MCP has the
+# servers of each group whose profile is on, as far as lettucectl knows (it
+# registers them once: `mcp`, `add`), or the entries to add by hand
+mcp_reminder() {
+  local f url g missing=""
+  f=$(stack_env "$1")
+  url=https://$(env_get "$f" LETTUCE_HOSTNAME)
+  for g in $(mcp_groups "$2"); do
+    if [[ -n $(env_get "$f" "${MCP_MARKER[$g]}") ]]; then
+      case $g in
+        doc-tools) info "Documents: office and pdf are in $url Settings -> MCP (docs/doc-tools.md)" ;;
+        vault) info "Vault: vault is in $url Settings -> MCP (docs/secret-broker.md)" ;;
+      esac
+      continue
+    fi
+    missing=1
+    case $g in
+      doc-tools)
+        info "Documents: in $url Settings -> MCP, add two stdio servers:"
+        info "  office -> /opt/lettuce-doc-tools/bin/officeagent   pdf -> /opt/lettuce-doc-tools/bin/pdf-mcp (docs/doc-tools.md)"
+        ;;
+      vault)
+        info "Vault: in $url Settings -> MCP, add an HTTP server:"
+        info "  vault -> http://secret-broker:8000/mcp (docs/secret-broker.md)"
+        ;;
+    esac
+  done
+  [[ -z $missing ]] || info "  or run: lettucectl mcp $1"
+}
+
+# mcp_servers NAME add|remove GROUP -> runs lib/mcp-servers.mjs in the stack's
 # app-server (streamed on stdin, nothing copied in); prints its JSON summary
 mcp_servers() {
-  compose "$1" exec -T app-server node --input-type=module - "$2" "$MCP_SETTINGS" <"$LETTUCE_HOME/lib/mcp-servers.mjs"
+  compose "$1" exec -T app-server node --input-type=module - "$2" "$MCP_SETTINGS" "$3" <"$LETTUCE_HOME/lib/mcp-servers.mjs"
 }
 
 # refresh_mcp_skill NAME -> after a change to the list, restarts the stack's BFF
@@ -682,38 +716,76 @@ refresh_mcp_skill() {
     warn "$1: could not restart its BFF; agents see the change after: lettucectl restart $1"
 }
 
-# register_mcp_servers NAME -> adds office and pdf to the stack's Settings -> MCP
-# and marks the stack; fails, unmarked, when it could not
-register_mcp_servers() {
+# register_mcp_group NAME GROUP -> adds GROUP's servers to the stack's
+# Settings -> MCP and marks the stack; fails, unmarked, when it could not
+register_mcp_group() {
   local out added present c
-  out=$(mcp_servers "$1" add) || return 1
-  env_set "$(stack_env "$1")" DOC_TOOLS_MCP_REGISTERED 1
+  out=$(mcp_servers "$1" add "$2") || {
+    warn "$1: could not add ${MCP_LABEL[$2]} to Settings -> MCP"
+    return 1
+  }
+  env_set "$(stack_env "$1")" "${MCP_MARKER[$2]}" 1
   added=$(jq -r '.added // [] | join(", ")' <<<"$out" 2>/dev/null)
   present=$(jq -r '.present // [] | join(", ")' <<<"$out" 2>/dev/null)
   if [[ -n $added ]]; then
     info "$1: added $added to Settings -> MCP${present:+ (already there: $present)}"
+    MCP_CHANGED=1
   elif [[ -n $present ]]; then
     info "$1: $present already in Settings -> MCP"
   fi
   for c in $(jq -r '.conflicts // [] | .[]' <<<"$out" 2>/dev/null); do
-    info "$1: Settings -> MCP already has a $c server with another command; it was left as it is"
+    info "$1: Settings -> MCP already has a $c server with another ${MCP_KIND[$2]}; it was left as it is"
   done
-  [[ -z $added ]] || refresh_mcp_skill "$1"
 }
 
-# drop_mcp_servers NAME -> with the doc-tools profile off, removes the servers
+# register_mcp NAME FORCE GROUP... -> registers each GROUP in the stack's
+# Settings -> MCP, skipping a group registered before unless FORCE is
+# --force, and restarts its BFF once when that changed the list; fails when a
+# group could not be added
+register_mcp() {
+  local name=$1 force=$2 f g rc=0
+  shift 2
+  f=$(stack_env "$name")
+  MCP_CHANGED=0
+  for g in "$@"; do
+    if [[ -n $(env_get "$f" "${MCP_MARKER[$g]}") && $force != --force ]]; then
+      info "$name: registered ${MCP_LABEL[$g]} before; a server the person removed stays removed (--force adds it again)"
+      continue
+    fi
+    register_mcp_group "$name" "$g" || rc=1
+  done
+  ((MCP_CHANGED == 0)) || refresh_mcp_skill "$name"
+  return "$rc"
+}
+
+# drop_mcp_group NAME GROUP -> with GROUP's profile off, removes the servers
 # registered in the stack's Settings -> MCP; fails, still marked, when it could not
-drop_mcp_servers() {
+drop_mcp_group() {
   local f out removed
   f=$(stack_env "$1")
-  [[ -n $(env_get "$f" DOC_TOOLS_MCP_REGISTERED) ]] || return 0
-  ! has_profile "$(env_get "$f" COMPOSE_PROFILES)" doc-tools || return 0
-  out=$(mcp_servers "$1" remove) || return 1
-  env_unset "$f" DOC_TOOLS_MCP_REGISTERED
+  [[ -n $(env_get "$f" "${MCP_MARKER[$2]}") ]] || return 0
+  ! has_profile "$(env_get "$f" COMPOSE_PROFILES)" "${MCP_PROFILE[$2]}" || return 0
+  out=$(mcp_servers "$1" remove "$2") || {
+    warn "$1: could not remove ${MCP_LABEL[$2]} from Settings -> MCP"
+    return 1
+  }
+  env_unset "$f" "${MCP_MARKER[$2]}"
   removed=$(jq -r '.removed // [] | join(", ")' <<<"$out" 2>/dev/null)
   [[ -n $removed ]] || return 0
-  info "$1: removed $removed from Settings -> MCP (the doc-tools profile is off)"
-  refresh_mcp_skill "$1"
+  info "$1: removed $removed from Settings -> MCP (the ${MCP_PROFILE[$2]} profile is off)"
+  MCP_CHANGED=1
+}
+
+# drop_mcp_servers NAME -> drops every group whose profile is off
+# (drop_mcp_group), and restarts the stack's BFF once when that changed the list
+drop_mcp_servers() {
+  local g rc=0
+  MCP_CHANGED=0
+  for g in "${MCP_GROUPS[@]}"; do
+    drop_mcp_group "$1" "$g" || rc=1
+  done
+  ((MCP_CHANGED == 0)) || refresh_mcp_skill "$1"
+  return "$rc"
 }
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -765,7 +837,7 @@ cmd_init() {
 
 cmd_add() {
   (($# == 2)) || die "usage: lettucectl add <name> <email>[,<email>]"
-  local name=$1 emails f host garden wildcard="" acc id pair synced=1 docs=1
+  local name=$1 emails f host garden wildcard="" acc id pair synced=1 docs=1 g groups=()
   validate_name "$name"
   emails=$(normalise_emails "$2")
   require_initialised
@@ -824,10 +896,15 @@ cmd_add() {
   up_stack "$name"
   sync_executor "$name" || synced=0
   sync_doc_tools || docs=0
-  # A new stack: nobody has chosen its MCP servers yet.
-  if has_profile "$(cfg PROFILES)" doc-tools && ((docs)); then
-    register_mcp_servers "$name" ||
-      warn "$name: could not add office and pdf to Settings -> MCP; run: lettucectl mcp $name"
+  # A new stack: nobody has chosen its MCP servers yet. The document tools
+  # need Gotenberg and their network first.
+  for g in $(mcp_groups "$(cfg PROFILES)"); do
+    if [[ $g == doc-tools ]] && ! ((docs)); then continue; fi
+    groups+=("$g")
+  done
+  if ((${#groups[@]})); then
+    register_mcp "$name" "" "${groups[@]}" ||
+      warn "$name: Settings -> MCP lacks some of lettucectl's servers; run: lettucectl mcp $name"
   fi
   info ""
   info "'$name' is up: https://$host (sign in with Google as $emails)"
@@ -838,9 +915,7 @@ cmd_add() {
   if has_profile "$(cfg PROFILES)" google; then
     google_reminder "$name"
   fi
-  if has_profile "$(cfg PROFILES)" doc-tools; then
-    doc_tools_reminder "$name"
-  fi
+  mcp_reminder "$name" "$(cfg PROFILES)"
   ((synced)) || executor_out_of_step "$name"
   ((docs)) || die "the document tools (shared Gotenberg, networks) are out of step; fix the cause, then run: lettucectl up $name"
 }
@@ -1106,9 +1181,9 @@ cmd_profiles() {
       google_reminder "$n"
     done
   fi
-  if [[ -n $changed ]] && has_profile "$new" doc-tools; then
+  if [[ -n $changed ]]; then
     for n in "${stacks[@]}"; do
-      doc_tools_reminder "$n"
+      mcp_reminder "$n" "$new"
     done
   fi
   ((${#unrouted[@]} == 0)) || warn "could not update the tunnel routes or Access application of: ${unrouted[*]}"
@@ -1116,7 +1191,7 @@ cmd_profiles() {
   ((${#failed[@]} == 0)) || warn "could not remove the containers of dropped profiles in: ${failed[*]}"
   ((${#executors[@]} == 0)) || warn "could not sync the garden executor of: ${executors[*]}"
   ((docs)) || warn "could not sync the document tools (shared Gotenberg, networks)"
-  ((${#undropped[@]} == 0)) || warn "could not remove the document tools from Settings -> MCP in: ${undropped[*]}"
+  ((${#undropped[@]} == 0)) || warn "could not remove servers whose profile is off from Settings -> MCP in: ${undropped[*]}"
   ((${#unrouted[@]} + ${#unmoved[@]} + ${#failed[@]} + ${#executors[@]} + ${#undropped[@]} == 0 && docs)) || die "run the same command again"
 }
 
@@ -1145,9 +1220,9 @@ cmd_up() {
   done
   sync_doc_tools || docs=0
   ((${#unsynced[@]} == 0)) || executor_out_of_step "${unsynced[@]}"
-  ((${#undropped[@]} == 0)) || warn "could not remove the document tools from Settings -> MCP in: ${undropped[*]}; run: lettucectl up $1"
+  ((${#undropped[@]} == 0)) || warn "could not remove servers whose profile is off from Settings -> MCP in: ${undropped[*]}; run: lettucectl up $1"
   ((docs)) || die "the document tools (shared Gotenberg, networks) are out of step; fix the cause, then run: lettucectl up $1"
-  ((${#undropped[@]} == 0)) || die "the document tools are still in Settings -> MCP with the doc-tools profile off"
+  ((${#undropped[@]} == 0)) || die "servers whose profile is off are still in Settings -> MCP"
 }
 
 cmd_down() {
@@ -1806,20 +1881,17 @@ cmd_skills() {
 
 cmd_mcp() {
   (($# == 1)) || [[ $# == 2 && $2 == --force ]] || die "usage: lettucectl mcp <name|all> [--force]"
-  local n targets failed=()
+  local n targets groups failed=()
   require_initialised
-  has_profile "$(cfg PROFILES)" doc-tools ||
-    die "the doc-tools profile is off; turn it on first: lettucectl profiles $(cfg PROFILES),doc-tools"
+  mapfile -t groups < <(mcp_groups "$(cfg PROFILES)")
+  ((${#groups[@]})) ||
+    die "the doc-tools and secrets profiles are both off; turn one on first, e.g.: lettucectl profiles $(cfg PROFILES),doc-tools"
   targets=$(expand_targets "$1")
   for n in $targets; do
-    if [[ -n $(env_get "$(stack_env "$n")" DOC_TOOLS_MCP_REGISTERED) && ${2:-} != --force ]]; then
-      info "$n: registered before; a server the person removed stays removed (--force adds it again)"
-      continue
-    fi
-    register_mcp_servers "$n" || failed+=("$n")
+    register_mcp "$n" "${2:-}" "${groups[@]}" || failed+=("$n")
   done
   ((${#failed[@]} == 0)) ||
-    die "could not register the document tools in: ${failed[*]}; see the messages above (is the stack up?), then run: lettucectl mcp <name>"
+    die "could not register the MCP servers in: ${failed[*]}; see the messages above (is the stack up?), then run: lettucectl mcp <name>"
 }
 
 main() {

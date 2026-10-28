@@ -49,11 +49,13 @@ there. The entries survive restarts and upgrades (they live in the stack's `lett
 `mcp` runs once per stack: it remembers that it did (`DOC_TOOLS_MCP_REGISTERED` in `stack.env`),
 so a person who removes a server keeps it removed; `mcp <name> --force` adds it again. It adds
 only what is missing, and leaves alone every other server and a server of the same name with
-another command (it says so). `add` registers a new stack's servers itself.
+another command (it says so). `add` registers a new stack's servers itself. With the `secrets`
+profile on, `mcp` registers the vault too, the same way and with its own marker
+([secret-broker.md](secret-broker.md#for-the-operator)); it needs one of the two profiles.
 
 The list belongs to Lettuce's BFF, which reads it from disk before every change, so an entry
 added from outside stays. `mcp` writes only the entries whose command is under
-`/opt/lettuce-doc-tools/`, and refuses, changing nothing, when the file is not the shape it
+`/opt/lettuce-doc-tools/` (and the vault's exact HTTP entry), and refuses, changing nothing, when the file is not the shape it
 knows (after a Lettuce upgrade, say): then add the servers by hand. Two things can still undo
 it: a Settings -> MCP page that was open before `mcp` ran and is saved afterwards writes back
 the list it loaded, without the servers; run `mcp <name> --force` again.
