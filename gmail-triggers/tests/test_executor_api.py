@@ -231,7 +231,9 @@ def test_agents_are_validated_and_replaced(api, env):
     body = json.dumps({"v": 1, "agents": agents}).encode()
     r = api.put(f"{API}/agents", content=body, headers={**AUTH, "content-type": "application/json"})
     assert r.status_code == 204
+    # A nameless agent is listed by its id.
     assert [(a.id, a.name) for a in env.store.agents()] == [
+        ("agent-c", "agent-c"),
         ("agent-a", "lucius <b>x</b>"),
         ("agent-b", "zed"),
         ("agent-e", "\ufffd"),

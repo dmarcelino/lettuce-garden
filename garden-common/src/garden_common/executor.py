@@ -102,8 +102,9 @@ def guard(token: str) -> Callable[[Handler], Handler]:
 
 async def read_agents(request: Request) -> list[tuple[str, str]]:
     """The agent list of a PUT /executor/v1/agents body, as (id, name) pairs:
-    entries without a well-formed id or a usable name are dropped, a repeated id
-    counts once, names become one line, and at most MAX_AGENTS are kept."""
+    entries without a well-formed id or with an overlong name are dropped, a
+    repeated id counts once, names become one line (the id when nothing is left
+    of one), and at most MAX_AGENTS are kept."""
     obj = await read_json(request, MAX_AGENTS_BODY)
     items = obj.get("agents")
     if not isinstance(items, list):
@@ -117,9 +118,7 @@ async def read_agents(request: Request) -> list[tuple[str, str]]:
         aid, name = item.get("id"), item.get("name")
         if not isinstance(aid, str) or not AGENT_ID.fullmatch(aid) or aid in seen:
             continue
-        if not isinstance(name, str) or not 1 <= len(name) <= MAX_AGENT_NAME:
+        if isinstance(name, str) and len(name) > MAX_AGENT_NAME:
             continue
-        clean = one_line(name, MAX_AGENT_NAME)
-        if clean:
-            seen[aid] = clean
+        seen[aid] = one_line(name, MAX_AGENT_NAME) or aid
     return list(seen.items())

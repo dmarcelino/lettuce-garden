@@ -70,14 +70,15 @@ eq() { [[ $1 == "$2" ]] || fail "expected [$2], got [$1]"; }
 # What every garden service's environment renders to: the garden's own Access
 # application and origin. The docker stub fills ${KEY} from the stack's env file.
 # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
-GARDEN_ENV='{"CF_ACCESS_AUD":"${CF_GARDEN_AUD}","PUBLIC_ORIGIN":"${GARDEN_ORIGIN}","LETTUCE_ORIGIN":"${PUBLIC_ORIGIN}"}'
+GARDEN_ENV='{"CF_ACCESS_AUD":"${CF_GARDEN_AUD}","PUBLIC_ORIGIN":"${GARDEN_ORIGIN}"}'
 
 # garden_config -> the rendered config also holds the garden service
 # compose/garden.yml renders (on with any garden profile); the repo copy has
 # the garden executor
 garden_config() {
+  # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
   config_edit '.services.garden = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"networks":{"default":null},
-    "environment":'"$GARDEN_ENV"'}'
+    "environment":('"$GARDEN_ENV"' + {"LETTUCE_ORIGIN":"${PUBLIC_ORIGIN}"})}'
   mkdir -p "$H/garden/executor/tests"
   printf '// executor\n' >"$H/garden/executor/run.mjs"
   printf '// test\n' >"$H/garden/executor/tests/run.test.mjs"
@@ -1175,7 +1176,7 @@ exec_args() { tr '\0' '\n' <"$T/exec-args"; }
 
 # executor_cron_text [FLAGS] -> the cron file the executor is installed with
 executor_cron_text() {
-  printf '%s\n' '# Installed by lettucectl (secrets, gmail-triggers or code-server profile). Removed with the last of them.' \
+  printf '%s\n' '# Installed by lettucectl (gmail-triggers or code-server profile). Removed with the last of them.' \
     'PATH=/usr/local/bin:/usr/bin:/bin' 'MAILTO=""'
   printf '%s' "* * * * * root /usr/local/bin/agent-env node /root/.letta/garden/executor/bin/run.mjs${1:+ $1} >> /root/.letta/garden/executor/executor.log 2>&1"
 }
@@ -1200,21 +1201,32 @@ test_up_installs_the_gmail_triggers_executor() {
   eq "${#a[@]}" 8
 }
 
-# The executor feeds the garden's agent list, so any garden profile installs it;
-# only gmail-triggers turns on its request loop.
-test_up_installs_the_executor_with_any_garden_profile() {
-  local setup
-  for setup in with_secrets with_code; do
-    teardown; setup
-    added
-    "$setup"
-    ctl up alfred
-    ok_rc
-    eq "$(exec_args | head -7 | paste -sd' ')" "sh install $EXECUTOR_ARGS"
-    local a=()
-    mapfile -d '' a <"$T/exec-args"
-    eq "${a[7]}" "$(executor_cron_text)"
-  done
+# The executor feeds the garden's agent list, which only the code editor uses,
+# so the code editor installs it too; only gmail-triggers turns on its request loop.
+test_up_installs_the_executor_with_the_code_editor() {
+  added
+  with_code
+  ctl up alfred
+  ok_rc
+  eq "$(exec_args | head -7 | paste -sd' ')" "sh install $EXECUTOR_ARGS"
+  local a=()
+  mapfile -d '' a <"$T/exec-args"
+  eq "${a[7]}" "$(executor_cron_text)"
+}
+
+# The vault alone has no use for the executor: none is installed, and one left
+# from before goes.
+test_up_with_only_the_vault_has_no_executor() {
+  added
+  with_secrets
+  ctl up alfred
+  ok_rc
+  log_lacks " exec "
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  ctl up alfred
+  ok_rc
+  eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
+  out_has "alfred: removed the garden executor (neither gmail-triggers nor code-server is on)"
 }
 
 test_up_replaces_the_gmail_triggers_executor_once_installed() {
@@ -1772,20 +1784,19 @@ test_profiles_dropping_gmail_triggers_removes_route_container_and_executor() {
   out_has "alfred: removed the garden executor"
 }
 
-test_profiles_dropping_gmail_triggers_keeps_the_garden_and_its_executor_for_the_vault() {
+test_profiles_dropping_gmail_triggers_keeps_the_garden_for_the_vault_but_not_the_executor() {
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets/' "$H/config.env"
   triggers_config
   broker_config
   added
   containers alfred app-server bff cloudflared google-mcp gmail-triggers secret-broker garden
+  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
   : >"$T/calls.log"
   ctl profiles cloudflared,google,secrets
   ok_rc
   grep -q '^docker compose -p lettuce-alfred .* rm -sf gmail-triggers$' "$T/calls.log" || fail "only gmail-triggers should go"
-  eq "$(exec_args | head -7 | paste -sd' ')" "sh install $EXECUTOR_ARGS"
-  local a=()
-  mapfile -d '' a <"$T/exec-args"
-  eq "${a[7]}" "$(executor_cron_text)"
+  log_lacks "sh install"
+  eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
   eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
 }
 
@@ -3963,7 +3974,7 @@ test_up_creates_the_garden_host_of_an_older_stack_before_its_containers() {
   eq "$(ingress)" "[$GARDEN_404,$LETTUCE_TAIL]"
   (($(grep -n '^curl ' "$T/calls.log" | tail -1 | cut -d: -f1) < $(line_of "config --format json"))) ||
     fail "the stack was checked before its garden host existed"
-  out_has "alfred: the garden pages are now at https://alfred-garden.example.org/"
+  out_has "alfred: its garden host https://alfred-garden.example.org/ is ready for when a garden profile is on"
   # Done: a re-run makes no Cloudflare call.
   : >"$T/calls.log"
   ctl up alfred
@@ -4025,6 +4036,9 @@ test_profiles_creates_the_garden_host_before_checking_the_new_list() {
   ctl profiles cloudflared,search,secrets
   ok_rc
   eq "$(senv alfred CF_GARDEN_AUD)" aud2
+  # The move routes the old list; the new list is routed once it is written.
+  eq "$(calls | tr '\n' ';')" "${MIGRATION}PUT /accounts/acc1/cfd_tunnel/tun1/configurations;PUT /accounts/acc1/access/apps/app1;PUT /accounts/acc1/access/apps/app2;"
+  eq "$(jq -c .config.ingress <<<"$(first_body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)")" "[$GARDEN_404,$LETTUCE_TAIL]"
   (($(line_of "curl POST /zones/zone1/dns_records") < $(line_of "docker-env-file"))) ||
     fail "the new list was checked before the garden host existed"
   eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
@@ -4039,7 +4053,9 @@ test_profiles_with_the_same_list_moves_an_older_stack_to_its_garden_host() {
   ctl profiles cloudflared,secrets
   ok_rc
   out_has "nothing to change"
-  log_has "curl POST /zones/zone1/dns_records"
+  out_has "alfred: the garden pages are now at https://alfred-garden.example.org/"
+  # The routes the move put are this list's: they are not put again.
+  eq "$(calls | tr '\n' ';')" "${MIGRATION}PUT /accounts/acc1/access/apps/app1;PUT /accounts/acc1/access/apps/app2;"
   # Its garden services take the new audience and origin.
   log_has "up -d --build"
   # A stack already moved is not restarted.
@@ -4317,6 +4333,110 @@ test_profiles_dropping_every_garden_profile_removes_the_garden() {
   ok_rc
   grep -q '^docker compose -p lettuce-alfred .* rm -sf garden secret-broker$' "$T/calls.log" || fail "the garden was not removed"
   eq "$(ingress)" "[$GARDEN_404,$LETTUCE_TAIL]"
+}
+
+# A stack with no garden page in its list now or in the new one goes on without
+# its garden host, as `up` does, and Cloudflare is asked only once.
+test_profiles_goes_on_when_the_garden_host_fails_for_a_stack_without_garden_pages() {
+  pre_garden
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/access/apps"'
+  ctl profiles cloudflared,search,google
+  ok_rc
+  out_has "alfred: could not create its garden host on Cloudflare; it has no garden page, so it goes on without"
+  eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search,google
+  eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search,google
+  log_has "up -d --build"
+  eq "$(grep -c 'curl POST /accounts/acc1/access/apps' "$T/calls.log")" 1
+  # Lettuce's routes and application are still put back; the garden has no application yet.
+  log_has "curl PUT /accounts/acc1/access/apps/app1"
+  log_lacks "curl PUT /accounts/acc1/access/apps/ "
+}
+
+# A stack whose current list has a garden page stops the command, even when the new one drops it.
+test_profiles_stops_when_the_garden_host_fails_for_a_stack_with_garden_pages() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  pre_garden
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/access/apps"'
+  ctl profiles cloudflared
+  bad_rc
+  out_has "alfred: could not create its garden host on Cloudflare, so no profile was changed"
+  eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,secrets
+  log_lacks "up -d"
+}
+
+# Without a garden page, there is nothing to move: no restart, and no claim that pages moved.
+test_a_garden_host_for_a_stack_without_garden_pages_moves_nothing() {
+  pre_garden
+  containers alfred app-server
+  ctl profiles cloudflared,search
+  ok_rc
+  out_has "alfred: its garden host https://alfred-garden.example.org/ is ready for when a garden profile is on"
+  out_lacks "the garden pages are now at"
+  eq "$(senv alfred GARDEN_MOVE_PENDING)" ""
+  log_lacks "up -d"
+}
+
+test_restart_asks_cloudflare_for_the_garden_host_once() {
+  pre_garden
+  containers alfred app-server
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/access/apps"'
+  ctl restart alfred
+  ok_rc
+  eq "$(grep -c 'curl POST /accounts/acc1/access/apps' "$T/calls.log")" 1
+  eq "$(grep -c 'could not create its garden host' "$OUT")" 1
+  log_has "up -d --build"
+}
+
+# One stack whose move fails must not stop the others, nor the rest of the run.
+test_profiles_same_list_continues_past_a_stack_that_cannot_move() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
+  broker_config
+  pre_garden
+  ctl add hal hal@example.com
+  sed -i '/^GARDEN_HOSTNAME=/d; /^GARDEN_ORIGIN=/d; /^CF_GARDEN_/d' "$H/stacks/hal/stack.env"
+  containers alfred app-server secret-broker
+  containers hal app-server secret-broker google-mcp
+  echo "DEV_BYPASS_EMAIL=x@y.com" >>"$H/stacks/alfred/stack.env"
+  : >"$T/calls.log"
+  ctl profiles cloudflared,secrets
+  bad_rc
+  out_has "DEV_BYPASS"
+  eq "$(up_lines alfred)" 0
+  eq "$(up_lines hal)" 1
+  grep -q '^docker compose -p lettuce-hal .* rm -sf google-mcp$' "$T/calls.log" || fail "hal's stale services were not removed"
+  out_has "could not move the garden services of: alfred"
+  out_has "run the same command again"
+  eq "$(senv alfred GARDEN_MOVE_PENDING)" 1
+  eq "$(senv hal GARDEN_MOVE_PENDING)" ""
+}
+
+# Every garden sidecar of PROFILE_ROUTES is held to the garden's audience,
+# including one added later.
+test_check_holds_every_routed_garden_sidecar_to_the_garden_audience() {
+  added
+  with_secrets
+  sed -i "s#^  'code-server .*#&\n  'notes ^/notes(/|\$) http://notes:8000'#" "$H/lib/cloudflare.sh"
+  grep -q "^  'notes " "$H/lib/cloudflare.sh" || fail "fixture: no notes route"
+  # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
+  config_edit '.services.notes = {"environment":{"CF_ACCESS_AUD":"${CF_ACCESS_AUD}","PUBLIC_ORIGIN":"${GARDEN_ORIGIN}"}}'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: notes must accept only the garden's Access application"
+}
+
+# Compose starts the garden with any of its profiles; they must be the garden pages'.
+test_the_garden_overlay_has_exactly_the_garden_profiles() {
+  local routes yml
+  routes=$(. "$ROOT/lib/cloudflare.sh" && for r in "${PROFILE_ROUTES[@]}"; do echo "${r%% *}"; done | sort | paste -sd,)
+  yml=$(sed -n 's/^ *profiles: *\[\(.*\)\]/\1/p' "$ROOT/compose/garden.yml" | tr -d '" ' | tr , '\n' | sort | paste -sd,)
+  [[ -n $routes ]] || fail "no PROFILE_ROUTES"
+  eq "$yml" "$routes"
+}
+
+# Only the garden service links back to Lettuce; the vault would relock on a change.
+test_only_the_garden_overlay_passes_lettuces_origin() {
+  eq "$(grep -l 'LETTUCE_ORIGIN' "$ROOT"/compose/*.yml | xargs -n1 basename | paste -sd' ')" garden.yml
 }
 
 for t in $(declare -F | awk '$3 ~ /^test_/ { print $3 }'); do

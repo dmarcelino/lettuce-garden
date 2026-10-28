@@ -38,8 +38,6 @@ services:
       CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
       ALLOWED_USERS: ${ALLOWED_USERS:-}
       PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
-      # For the links back to Lettuce, on its own host.
-      LETTUCE_ORIGIN: ${PUBLIC_ORIGIN:-}
       TZ: ${TZ:-UTC}
     volumes:
       # The editor's socket (code_server_gate.config.EDITOR_SOCKET).

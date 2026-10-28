@@ -638,13 +638,14 @@ check_garden() {
 }
 
 # check_garden_audience NAME RENDERED ENV_FILE -> every garden service in the
-# rendered config accepts only the garden's Access application and origin:
+# rendered config (garden_services, so a new garden page is held to it too)
+# accepts only the garden's Access application and origin:
 # CF_ACCESS_AUD is the env file's CF_GARDEN_AUD, never Lettuce's CF_ACCESS_AUD,
 # and PUBLIC_ORIGIN is its GARDEN_ORIGIN. Lettuce's token reaches the BFF in
 # plain HTTP inside the namespace agents share; the garden must refuse it.
 check_garden_audience() {
   local name=$1 rendered=$2 f=$3 s aud origin
-  for s in secret-broker gmail-triggers code-server garden; do
+  for s in $(garden_services); do
     jq -e --arg s "$s" '.services | has($s)' <<<"$rendered" >/dev/null || continue
     aud=$(jq -r --arg s "$s" '.services[$s].environment.CF_ACCESS_AUD // ""' <<<"$rendered")
     origin=$(jq -r --arg s "$s" '.services[$s].environment.PUBLIC_ORIGIN // ""' <<<"$rendered")

@@ -87,7 +87,7 @@ would turn them into a browser rule, at the cost of one more name for users.
   profile is on. `PROFILE_ROUTES` loses the `/garden` prefix.
 - Migration (`ensure_garden_host NAME`): for a complete stack without `CF_GARDEN_DNS_RECORD_ID`,
   create whatever of the garden application and DNS record is missing, storing each id as it
-  exists, then re-apply the routes. `route_stack` calls it on every `profiles` run; `up` calls it
+  exists, then re-apply the routes. `profiles` calls it before its checks; `up` calls it
   before `check_stack` and before any container is recreated, and stops there on a Cloudflare
   failure ("run the same command again"), so a stack never has sidecars waiting for an audience
   that doesn't exist yet. Once the host exists, `up` makes no Cloudflare call.
@@ -121,7 +121,8 @@ would turn them into a browser rule, at the cost of one more name for users.
   minutes, and, with `gmail-triggers` on, runs the request loop it runs today.
 - Gmail triggers reads agent names from `garden` over the stack network instead of keeping its own
   copy.
-- `sync_executor` installs it when any garden profile is on and uninstalls it when none is. The cron
+- `sync_executor` installs it when it has work, with `gmail-triggers` or `code-server` on (the vault
+  alone gives it none), and uninstalls it otherwise. The cron
   file becomes `lettuce-garden-executor`; uninstall also removes the old
   `lettuce-garden-gmail-triggers` files.
 - `GMAIL_TRIGGERS_EXECUTOR_TOKEN` becomes `GARDEN_EXECUTOR_TOKEN`: `ensure_executor_token` moves an
@@ -153,7 +154,7 @@ would turn them into a browser rule, at the cost of one more name for users.
 - CLI (`tests/run.sh`): `add` and `remove` order; migration from `profiles` and `up` (resume after a
   failure at each step, a re-run doing nothing, `up` stopping before containers on a Cloudflare
   failure, `up` offline once migrated); tunnel routes for each profile combination; the new checks;
-  the token rename; the executor installed with any garden profile.
+  the token rename; the executor installed with `gmail-triggers` or `code-server`.
 - `garden` (new `tests/run-sidecar.sh garden`): the landing page and the untrusted agent list.
 - Sidecar and gate tests: the new prefixes, audience and origin.
 - Executor tests: the agent list without Gmail triggers.

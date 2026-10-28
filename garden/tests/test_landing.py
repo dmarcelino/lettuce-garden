@@ -188,6 +188,18 @@ def test_opening_the_page_asks_for_a_new_list(garden):
     assert not garden.wanted()
 
 
+def test_a_page_opened_while_the_executor_lists_asks_again(garden):
+    garden.agents.set([(AGENT_1, "lucius")])
+    garden.page()
+    assert garden.wanted()
+    # Opened after the executor read the status, so the list it sends may predate the agent.
+    garden.page()
+    garden.agents.set([(AGENT_1, "lucius")])
+    assert garden.wanted()
+    garden.agents.set([(AGENT_1, "lucius")])
+    assert not garden.wanted()
+
+
 def test_without_the_editor_no_list_is_asked_for_or_shown(garden_for):
     garden = garden_for("secrets,gmail-triggers")
     assert not garden.wanted()

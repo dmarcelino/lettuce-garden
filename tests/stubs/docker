@@ -234,14 +234,13 @@ case $args in
     done
     printf '%s\n' app-server bff
     IFS=, read -ra ps <<<"$(sed -n 's/^COMPOSE_PROFILES=//p' "$env_file")"
-    # garden: once, with any of its profiles (compose/garden.yml).
+    # garden: once, with any of the profiles compose/garden.yml gives it.
+    garden=",$(sed -n 's/^ *profiles: *\[\(.*\)\]/\1/p' "$STUB_ROOT/home/compose/garden.yml" | tr -d '" '),"
     for p in "${ps[@]}"; do
-      case $p in
-        secrets | gmail-triggers | code-server)
-          echo garden
-          break
-          ;;
-      esac
+      if [[ $garden == *",$p,"* ]]; then
+        echo garden
+        break
+      fi
     done
     for p in "${ps[@]}"; do
       case $p in

@@ -105,18 +105,21 @@ def test_the_list_is_cleaned_and_replaces_the_last_one(garden):
         {"id": AGENT_1, "name": "  lucius\n\tthe\x1b[31m  second  "},
         {"id": AGENT_1, "name": "duplicate id"},
         {"id": AGENT_2, "name": "n" * 201},
-        {"id": AGENT_2, "name": ""},
-        {"id": AGENT_2, "name": "\x00\x01"},
         {"id": "agent-x;rm", "name": "bad id"},
         {"id": "--help", "name": "bad id"},
         {"id": 5, "name": "number"},
-        {"id": AGENT_2},
         "text",
         None,
         {"id": AGENT_2, "name": "hal", "system": "ignored"},
     ]
     assert garden.put_agents(agents).status_code == 204
     assert garden.agents.agents() == [(AGENT_2, "hal"), (AGENT_1, "lucius the [31m second")]
+
+
+def test_agents_without_a_usable_name_are_listed_by_id(garden):
+    agents = [{"id": "agent-1", "name": ""}, {"id": "agent-2", "name": "\x00\x01 "}, {"id": "agent-3"}]
+    assert garden.put_agents(agents).status_code == 204
+    assert garden.agents.agents() == [("agent-1", "agent-1"), ("agent-2", "agent-2"), ("agent-3", "agent-3")]
 
 
 def test_the_list_is_capped(garden):

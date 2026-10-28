@@ -143,6 +143,19 @@ garden_profiles() {
   printf '%s\n' "$out"
 }
 
+# garden_services -> the services the garden host routes to, one per line: each
+# PROFILE_ROUTES service, then the landing page's
+garden_services() {
+  local r p path svc
+  for r in "${PROFILE_ROUTES[@]}"; do
+    read -r p path svc <<<"$r"
+    svc=${svc#http://}
+    printf '%s\n' "${svc%%:*}"
+  done
+  svc=${GARDEN_LANDING_SERVICE#http://}
+  printf '%s\n' "${svc%%:*}"
+}
+
 # cf_tunnel_configure ACCOUNT TUNNEL_ID HOST GARDEN_HOST PROFILES -> on GARDEN_HOST,
 # the PROFILE_ROUTES of the profiles that are on, then the landing page when any
 # of them is, then 404 for anything else; HOST to the stack's app-server, and

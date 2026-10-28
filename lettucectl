@@ -127,13 +127,20 @@ google_reminder() {
   info "  then connect in that stack's Settings -> Google (docs/google-setup.md)"
 }
 
+# The routes configure_tunnel put in this run, by stack.
+declare -A TUNNEL_ROUTED=()
+
 # configure_tunnel NAME -> puts the stack's tunnel routes (cf_tunnel_configure)
-# for its hosts and current profiles
+# for its hosts and current profiles, unless this run already put the same ones
 configure_tunnel() {
-  local f
+  local f routes
   f=$(stack_env "$1")
+  # What the routes depend on: the two hosts and the garden pages that are on.
+  routes="$(env_get "$f" LETTUCE_HOSTNAME) $(env_get "$f" GARDEN_HOSTNAME) $(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)")"
+  [[ ${TUNNEL_ROUTED[$1]:-} != "$routes" ]] || return 0
   cf_tunnel_configure "$(cfg CF_ACCOUNT_ID)" "$(env_get "$f" CF_TUNNEL_ID)" "$(env_get "$f" LETTUCE_HOSTNAME)" \
-    "$(env_get "$f" GARDEN_HOSTNAME)" "$(env_get "$f" COMPOSE_PROFILES)"
+    "$(env_get "$f" GARDEN_HOSTNAME)" "$(env_get "$f" COMPOSE_PROFILES)" || return 1
+  TUNNEL_ROUTED[$1]=$routes
 }
 
 # ── the garden host ──────────────────────────────────────────────────────────
@@ -198,36 +205,46 @@ ensure_garden_host() {
   create_garden_app "$1" || return 1
   configure_tunnel "$1" || return 1
   create_garden_dns "$1" || return 1
-  # Its containers still have Lettuce's audience until an `up`; profiles reads this.
-  env_set "$f" GARDEN_MOVE_PENDING 1
-  info "$1: the garden pages are now at https://$(env_get "$f" GARDEN_HOSTNAME)/"
+  if [[ -n $(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)") ]]; then
+    # Its garden containers still have Lettuce's audience until an `up`; profiles reads this.
+    env_set "$f" GARDEN_MOVE_PENDING 1
+    info "$1: the garden pages are now at https://$(env_get "$f" GARDEN_HOSTNAME)/"
+  else
+    info "$1: its garden host https://$(env_get "$f" GARDEN_HOSTNAME)/ is ready for when a garden profile is on"
+  fi
 }
 
-# garden_host_ready NAME WHAT -> ensure_garden_host, before a command touches
-# NAME's containers. A stack with a garden page can't start without its garden
-# host (its services take the garden's audience), so a failure stops WHAT; a
-# stack without one only warns, and its next up tries again.
+# The stacks garden_host_ready has seen in this run.
+declare -A GARDEN_HOST_SEEN=()
+
+# garden_host_ready NAME WHAT [PROFILES] -> ensure_garden_host, once per run,
+# before a command touches NAME's containers. A stack with a garden page in its
+# list, or in PROFILES (the list `profiles` is about to apply), can't start
+# without its garden host (its services take the garden's audience), so a
+# failure stops WHAT; a stack without one only warns, and its next up tries again.
 garden_host_ready() {
+  [[ -z ${GARDEN_HOST_SEEN[$1]:-} ]] || return 0
+  GARDEN_HOST_SEEN[$1]=1
   ensure_garden_host "$1" && return 0
-  if [[ -n $(garden_profiles "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)") ]]; then
+  if [[ -n $(garden_profiles "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)")$(garden_profiles "${3:-}") ]]; then
     die "$1: could not create its garden host on Cloudflare, so $2; fix the cause, then run the same command again"
   fi
   warn "$1: could not create its garden host on Cloudflare; it has no garden page, so it goes on without, and its next up tries again"
 }
 
 # route_stack NAME -> re-applies the stack's tunnel routes for its current
-# profiles, and its two Access applications as cf_app_body defines them,
-# creating its garden host first if it has none (ensure_garden_host); a stack
-# whose setup never finished is skipped
+# profiles, and its two Access applications as cf_app_body defines them; a
+# stack whose setup never finished is skipped, and so is the garden's
+# application while a stack without garden pages has none (garden_host_ready)
 route_stack() {
   local f acc
   f=$(stack_env "$1")
   [[ -n $(env_get "$f" CF_TUNNEL_ID) && -n $(env_get "$f" CF_DNS_RECORD_ID) ]] || return 0
-  ensure_garden_host "$1" || return 1
   acc=$(cfg CF_ACCOUNT_ID)
   configure_tunnel "$1" || return 1
   cf_app_update "$acc" "$(env_get "$f" CF_ACCESS_APP_ID)" "lettuce-$1" "$(env_get "$f" LETTUCE_HOSTNAME)" \
     "$(cfg CF_GOOGLE_IDP_ID)" "$(cfg ACCESS_SESSION_DURATION)" "$(env_get "$f" CF_ACCESS_POLICY_ID)" || return 1
+  [[ -n $(env_get "$f" CF_GARDEN_APP_ID) ]] || return 0
   cf_app_update "$acc" "$(env_get "$f" CF_GARDEN_APP_ID)" "lettuce-$1-garden" "$(env_get "$f" GARDEN_HOSTNAME)" \
     "$(cfg CF_GOOGLE_IDP_ID)" "$(cfg ACCESS_SESSION_DURATION)" "$(env_get "$f" CF_ACCESS_POLICY_ID)"
 }
@@ -285,7 +302,8 @@ sync_skills() {
 # start. Its token stays in the container layer, out of the state directory and
 # its backups; every recreate goes through `up`, which installs it again.
 # Agents can read the token: it keeps the stack's other containers out, not
-# them. Installed while any garden profile is on.
+# them. Installed only when it has work (executor_wanted): the vault alone gives
+# it none.
 EXECUTOR_DIR=/root/.letta/garden/executor
 EXECUTOR_JOB=lettuce-garden-executor
 EXECUTOR_TOKEN_FILE=/etc/lettuce-garden/executor-token
@@ -293,13 +311,20 @@ EXECUTOR_TOKEN_FILE=/etc/lettuce-garden/executor-token
 # TOKEN); removed wherever it is found.
 LEGACY_EXECUTOR=(/root/.letta/garden/gmail-triggers lettuce-garden-gmail-triggers /etc/lettuce-garden/gmail-triggers-token)
 
+# executor_wanted PROFILES -> success when the executor has work under PROFILES:
+# Gmail triggers' requests, or the agent list, which garden asks for only with
+# the code editor on (its links to the agents' workspaces)
+executor_wanted() {
+  has_profile "$1" gmail-triggers || has_profile "$1" code-server
+}
+
 # executor_cron NAME -> the stack's cron file for the executor
 executor_cron() {
   local flag=""
   if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" gmail-triggers; then
     flag=" --gmail-triggers"
   fi
-  printf '%s\n' "# Installed by lettucectl (secrets, gmail-triggers or code-server profile). Removed with the last of them." \
+  printf '%s\n' "# Installed by lettucectl (gmail-triggers or code-server profile). Removed with the last of them." \
     "PATH=/usr/local/bin:/usr/bin:/bin" 'MAILTO=""'
   printf '%s' "* * * * * root /usr/local/bin/agent-env node $EXECUTOR_DIR/bin/run.mjs$flag >> $EXECUTOR_DIR/executor.log 2>&1"
 }
@@ -399,13 +424,13 @@ uninstall_executor() {
   if executor_present "$1" "${LEGACY_EXECUTOR[0]}" "${LEGACY_EXECUTOR[1]}"; then
     remove_executor "$1" "${LEGACY_EXECUTOR[@]}" || return 1
   fi
-  info "$1: removed the garden executor (no garden profile is on)"
+  info "$1: removed the garden executor (neither gmail-triggers nor code-server is on)"
 }
 
 # sync_executor NAME -> the running stack has the executor exactly when it has
-# a garden profile; warns and fails when it cannot make it so
+# work there (executor_wanted); warns and fails when it cannot make it so
 sync_executor() {
-  if [[ -n $(garden_profiles "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)") ]]; then
+  if executor_wanted "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)"; then
     install_executor "$1" && return 0
     warn "$1: could not install the garden executor; the stack is up, but its garden gets no agent list and its Gmail triggers will not run"
     return 1
@@ -963,8 +988,8 @@ cmd_remove() {
 
 cmd_profiles() {
   (($# <= 1)) || die "usage: lettucectl profiles [<profile>,<profile>...]"
-  local new n changed="" stale running docs=1
-  local -a stacks gone failed=() unrouted=() executors=() undropped=()
+  local new n changed="" stale running docs=1 rc
+  local -a stacks gone failed=() unrouted=() unmoved=() executors=() undropped=()
   mapfile -t stacks < <(list_stacks)
   if (($# == 0)); then
     require_config
@@ -981,13 +1006,12 @@ cmd_profiles() {
     [[ $(env_get "$(stack_env "$n")" COMPOSE_PROFILES) == "$new" ]] || changed=1
   done
 
-  # A stack without its garden host gets it first (ensure_garden_host): the
+  # A stack without its garden host gets it first (garden_host_ready, which
+  # stops here for a stack with a garden page now or under the new list): the
   # check needs its garden audience, and nothing is written before the check.
   for n in "${stacks[@]}"; do
     ensure_executor_token "$n"
-    needs_garden_host "$n" || continue
-    ensure_garden_host "$n" ||
-      die "$n: could not create its garden host on Cloudflare, so no profile was changed; fix the cause, then run the same command again"
+    garden_host_ready "$n" "no profile was changed" "$new"
   done
 
   if [[ -n $changed ]]; then
@@ -995,7 +1019,6 @@ cmd_profiles() {
     # anything, so one broken stack cannot leave the others half-switched.
     for n in "${stacks[@]}"; do
       ensure_push_keys "$n"
-      ensure_executor_token "$n"
       check_stack "$n" --profiles "$new"
     done
     for n in "${stacks[@]}"; do
@@ -1020,11 +1043,20 @@ cmd_profiles() {
     info "profiles are already $new everywhere; nothing to change"
     # A stack given its garden host, by this run or an earlier one that stopped,
     # moves its garden services to the garden's audience and origin. One that is
-    # not running moves at its next up.
+    # not running moves at its next up. One that fails keeps its marker for the
+    # next run and costs the others nothing; errexit is off inside a subshell
+    # that is part of `||` or `if`, so the status is read after.
     for n in "${stacks[@]}"; do
       [[ -n $(env_get "$(stack_env "$n")" GARDEN_MOVE_PENDING) ]] || continue
       if compose "$n" ps --status running --services 2>/dev/null | grep -qx app-server; then
-        up_stack "$n"
+        set +e
+        (
+          set -e
+          up_stack "$n"
+        )
+        rc=$?
+        set -e
+        ((rc == 0)) || unmoved+=("$n")
       else
         info "$n: not running; its garden pages move at its next up"
       fi
@@ -1045,7 +1077,7 @@ cmd_profiles() {
   # re-run repairs a failed install or removal; a stopped stack gets it right
   # at its next `up`.
   for n in "${stacks[@]}"; do
-    if [[ -z $(garden_profiles "$new") ]] && ! executor_installed "$n"; then
+    if ! executor_wanted "$new" && ! executor_installed "$n"; then
       continue
     fi
     running=$(compose "$n" ps --status running --services) || {
@@ -1053,7 +1085,7 @@ cmd_profiles() {
       continue
     }
     if ! grep -qx app-server <<<"$running"; then
-      if [[ -n $(garden_profiles "$new") ]]; then
+      if executor_wanted "$new"; then
         info "$n: not running; its executor is installed at its next up"
       else
         info "$n: not running; its executor is removed at its next up"
@@ -1080,11 +1112,12 @@ cmd_profiles() {
     done
   fi
   ((${#unrouted[@]} == 0)) || warn "could not update the tunnel routes or Access application of: ${unrouted[*]}"
+  ((${#unmoved[@]} == 0)) || warn "could not move the garden services of: ${unmoved[*]}"
   ((${#failed[@]} == 0)) || warn "could not remove the containers of dropped profiles in: ${failed[*]}"
   ((${#executors[@]} == 0)) || warn "could not sync the garden executor of: ${executors[*]}"
   ((docs)) || warn "could not sync the document tools (shared Gotenberg, networks)"
   ((${#undropped[@]} == 0)) || warn "could not remove the document tools from Settings -> MCP in: ${undropped[*]}"
-  ((${#unrouted[@]} + ${#failed[@]} + ${#executors[@]} + ${#undropped[@]} == 0 && docs)) || die "run the same command again"
+  ((${#unrouted[@]} + ${#unmoved[@]} + ${#failed[@]} + ${#executors[@]} + ${#undropped[@]} == 0 && docs)) || die "run the same command again"
 }
 
 cmd_upgrade() {
@@ -1130,7 +1163,8 @@ cmd_restart() {
   (($# == 1)) || die "usage: lettucectl restart <name|all>"
   local n
   require_initialised
-  # Before anything stops: a stack that can't get its garden host must keep running.
+  # Before anything stops: a stack that can't get its garden host must keep
+  # running. up_stack does not ask Cloudflare again (garden_host_ready).
   for n in $(expand_targets "$1"); do
     garden_host_ready "$n" "nothing was stopped"
   done

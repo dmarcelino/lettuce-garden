@@ -409,6 +409,7 @@ test("the agent list comes from .items[] and the heartbeat says letta is ok", as
       agents: [
         { id: "agent-1", name: "lucius" },
         { id: "agent-2", name: "y".repeat(200) },
+        { id: "agent-3", name: "" },
       ],
     },
   ]);
@@ -665,6 +666,7 @@ test("without --gmail-triggers only the garden is called, and its list sent", as
       agents: [
         { id: "agent-1", name: "lucius" },
         { id: "agent-2", name: "y".repeat(200) },
+        { id: "agent-3", name: "" },
       ],
     },
   ]);

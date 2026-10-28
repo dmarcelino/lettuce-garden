@@ -463,9 +463,9 @@ async function refreshAgents(ctx, sidecars) {
   }
   if (!Array.isArray(out?.items)) return "letta agents list printed no items";
   const agents = out.items
-    .filter((a) => typeof a?.id === "string" && typeof a?.name === "string")
+    .filter((a) => typeof a?.id === "string")
     .slice(0, AGENTS_MAX)
-    .map((a) => ({ id: a.id, name: clip(a.name, AGENT_NAME_MAX) }));
+    .map((a) => ({ id: a.id, name: typeof a.name === "string" ? clip(a.name, AGENT_NAME_MAX) : "" }));
   for (const sidecar of sidecars) {
     await send(ctx, sidecar, "PUT", "/executor/v1/agents", { v: 1, agents }, "agents");
   }

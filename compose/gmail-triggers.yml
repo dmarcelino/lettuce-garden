@@ -37,8 +37,6 @@ services:
       CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
       ALLOWED_USERS: ${ALLOWED_USERS:-}
       PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
-      # For the links back to Lettuce, on its own host.
-      LETTUCE_ORIGIN: ${PUBLIC_ORIGIN:-}
       GARDEN_EXECUTOR_TOKEN: ${GARDEN_EXECUTOR_TOKEN:-}
       TZ: ${TZ:-UTC}
     # Root (with no capabilities) so it owns the state directory Docker creates.
