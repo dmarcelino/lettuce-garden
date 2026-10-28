@@ -8,14 +8,52 @@ STUB_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STUB_LOG=$STUB_ROOT/calls.log
 printf 'docker %s\n' "$*" >>"$STUB_LOG"
 printf 'docker-env PUBLIC_ORIGIN=%s\n' "${PUBLIC_ORIGIN:-}" >>"$STUB_LOG"
-[[ -z ${DOC_TOOLS_TAG:-} ]] || printf 'docker-env DOC_TOOLS_TAG=%s DOC_TOOLS_NETWORK=%s\n' "$DOC_TOOLS_TAG" "${DOC_TOOLS_NETWORK:-}" >>"$STUB_LOG"
+[[ -z ${DOC_TOOLS_VOLUME:-} ]] || printf 'docker-env DOC_TOOLS_NETWORK=%s DOC_TOOLS_VOLUME=%s\n' "${DOC_TOOLS_NETWORK:-}" "$DOC_TOOLS_VOLUME" >>"$STUB_LOG"
 args=" $* "
 NETS=$STUB_ROOT/networks
+# The document tools' volumes, lines of "<name> <tag label or -> <complete true|false> <in use true|false>
+# [<driver> [<option count>]]" (local and 0 when left out).
+VOLS=$STUB_ROOT/volumes
 # The last argument (a network or container name).
 last=${*: -1}
 case $args in
-  " version "*) echo "${STUB_DOCKER_VERSION:-29.1.3}" ;;
   " build "*) exit "${STUB_BUILD_RC:-0}" ;;
+  # Filling a tools volume: a container of the image, never started, copied out.
+  " create "*)
+    [[ ${STUB_CREATE_RC:-0} == 0 ]] || exit "$STUB_CREATE_RC"
+    echo doc-tools-cid
+    ;;
+  " cp "*)
+    [[ ${STUB_CP_RC:-0} == 0 ]] || exit "$STUB_CP_RC"
+    printf 'TOOLS-TAR'
+    ;;
+  " rm "*) ;;
+  " volume ls "*) awk '$2 != "-" { print $1 }' "$VOLS" 2>/dev/null ;;
+  " volume create "*)
+    [[ ${STUB_VOLUME_CREATE_RC:-0} == 0 ]] || exit "$STUB_VOLUME_CREATE_RC"
+    label=- prev=""
+    for a in "$@"; do
+      [[ $prev == --label ]] && label=${a#*=}
+      prev=$a
+    done
+    echo "$last $label false false" >>"$VOLS"
+    ;;
+  " volume rm "*)
+    awk -v n="$last" '$1 == n && $4 == "true" { busy = 1 } END { exit busy }' "$VOLS" 2>/dev/null || exit 1
+    awk -v n="$last" '$1 != n' "$VOLS" >"$VOLS.tmp" 2>/dev/null && mv "$VOLS.tmp" "$VOLS"
+    ;;
+  " volume inspect "*"lettuce-doc-tools-"*)
+    vol=${args##* volume inspect }
+    vol=${vol%% *}
+    [[ $vol == --format ]] && vol=$last
+    line=$(awk -v n="$vol" '$1 == n' "$VOLS" 2>/dev/null)
+    [[ -n $line ]] || exit 1
+    read -r _ label _ _ driver opts <<<"$line"
+    [[ $args != *"--format"* ]] || echo "${driver:-local} $([[ $label == - ]] || echo "$label")|${opts:-0}"
+    exit 0
+    ;;
+  # Containers left by an interrupted fill: ids in $STUB_ROOT/fill-containers.
+  " ps -aq --filter label=lettucectl.doc-tools=fill "*) cat "$STUB_ROOT/fill-containers" 2>/dev/null ;;
   # Networks live in $STUB_ROOT/networks, lines of
   # "<name> <stack label or -> <internal true|false> <attached ids, comma-separated or ->".
   " network ls "*)
@@ -79,11 +117,12 @@ case $args in
   " run "*)
     # Values passed by name (`-e NAME`) go to run-env.log, so tests can tell them
     # from argv, which is all calls.log sees.
-    prev="" dst="" out=""
+    prev="" dst="" out="" vol=""
     for a in "$@"; do
       [[ $prev == -e && $a != *=* ]] && printf '%s=%s\n' "$a" "${!a-}" >>"$STUB_ROOT/run-env.log"
       [[ $prev == -c ]] && printf '%s' "$a" >"$STUB_ROOT/run-script"
       [[ $prev == -v && $a == *:/dst ]] && dst=${a%:/dst}
+      [[ $prev == -v && $a == lettuce-doc-tools-*:/dst* ]] && vol=${a%%:*}
       [[ $a == .partial-* ]] && out=$a
       prev=$a
     done
@@ -94,6 +133,17 @@ case $args in
       n=$(($(cat "$STUB_ROOT/run-fails" 2>/dev/null || echo 0) + 1))
       echo "$n" >"$STUB_ROOT/run-fails"
       [[ -n ${STUB_RUN_FAIL_TIMES:-} && $n -gt $STUB_RUN_FAIL_TIMES ]] || exit 1
+    fi
+    # A tools volume: the marker check answers from $VOLS; the fill keeps what it
+    # was streamed in fill-stdin and marks the volume complete.
+    if [[ -n $vol ]]; then
+      if [[ $args == *" test -f "* ]]; then
+        awk -v n="$vol" '$1 == n && $3 == "true" { ok = 1 } END { exit !ok }' "$VOLS" 2>/dev/null
+        exit
+      fi
+      cat >"$STUB_ROOT/fill-stdin"
+      awk -v n="$vol" '$1 == n { $3 = "true" } { print }' "$VOLS" >"$VOLS.tmp" && mv "$VOLS.tmp" "$VOLS"
+      exit 0
     fi
     # What the container prints, if the test gave it any.
     [[ -f $STUB_ROOT/run-stdout ]] && cat "$STUB_ROOT/run-stdout"
@@ -109,6 +159,7 @@ case $args in
     exit "${STUB_VOLUME_RC:-0}"
     ;;
   *" pause ") exit "${STUB_PAUSE_RC:-0}" ;;
+  *" restart --no-deps bff ") exit "${STUB_RESTART_RC:-0}" ;;
   *" ps --status running --services "*)
     # Every container in $STUB_ROOT/containers.txt counts as running.
     project=${args#* -p }

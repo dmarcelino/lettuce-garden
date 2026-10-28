@@ -2150,8 +2150,6 @@ test_skills_ships_the_repo_skills() {
   cp -r "$ROOT/agent-skills" "$H/"
   ctl skills alfred
   ok_rc
-  tar -tf "$T/exec-stdin.log" | grep -qx "scheduling-scripts/SKILL.md" || fail "scheduling-scripts not shipped"
-  grep -qx "name: scheduling-scripts" "$ROOT/agent-skills/scheduling-scripts/SKILL.md" || fail "SKILL.md name mismatch"
   for f in using-vault-secrets/SKILL.md using-vault-secrets/vault-run; do
     tar -tf "$T/exec-stdin.log" | grep -qx "$f" || fail "$f not shipped"
   done
@@ -2711,13 +2709,13 @@ test_backup_script_copies_what_matters() {
   ctl backup alfred "$B" --no-tools
   ok_rc
   local src=$T/src dst=$T/dst args got
-  mkdir -p "$src/state/letta-home/"{mod-cache,skills/serving-web-apps,skills/scheduling-scripts,skills/from-settings} \
+  mkdir -p "$src/state/letta-home/"{mod-cache,skills/serving-web-apps,skills/fetching-web-pages,skills/from-settings} \
     "$src/state/letta-home/claude/projects" "$src/state/workspaces/agent-1" "$src/state/tools/bin" "$src/vault" "$dst"
   touch "$src/stack.env" "$src/state/letta-home/mod-cache/x" "$src/state/letta-home/claude/projects/t.jsonl" \
-    "$src/state/letta-home/skills/serving-web-apps/SKILL.md" "$src/state/letta-home/skills/scheduling-scripts/SKILL.md" \
+    "$src/state/letta-home/skills/serving-web-apps/SKILL.md" "$src/state/letta-home/skills/fetching-web-pages/SKILL.md" \
     "$src/state/letta-home/skills/from-settings/SKILL.md" "$src/state/workspaces/agent-1/notes.md" \
     "$src/state/tools/bin/uv" "$src/vault/vault.db"
-  printf 'scheduling-scripts\n' >"$src/state/letta-home/skills/.lettucectl-skills"
+  printf 'fetching-web-pages\n' >"$src/state/letta-home/skills/.lettucectl-skills"
   # The same excludes lettucectl passed, after MODE SRC DST OWNER PREV OUT.
   args=$(grep -o ' \.partial-[^ ]* .*' "$T/calls.log" | head -1 | cut -d' ' -f3-)
   # shellcheck disable=SC2086 # the excludes are single words
@@ -2749,8 +2747,9 @@ docs_tag() { (LETTUCE_HOME=$H && . "$H/lib/common.sh" && doc_tools_tag); }
 docs_config() {
   local name=${1:-alfred}
   docs_tree
-  config_edit '.services["app-server"].volumes = [{"type":"image","source":"lettuce-doc-tools:'"$(docs_tag)"'",
-      "target":"/opt/lettuce-doc-tools","read_only":true}]
+  config_edit '.services["app-server"].volumes = [{"type":"volume","source":"doc-tools",
+      "target":"/opt/lettuce-doc-tools","read_only":true,"volume":{"nocopy":true}}]
+    | .volumes = {"doc-tools":{"name":"lettuce-doc-tools-'"$(docs_tag)"'","external":true}}
     | .services["app-server"].networks = {"default":null,"doc-tools":null}
     | .networks = {"default":{"name":"lettuce-'"$name"'_default"},"doc-tools":{"name":"lettuce-doc-tools-'"$name"'","external":true}}'
   sed -n 's/^      - \(--.*\)$/\1/p' "$ROOT/compose/shared/gotenberg.yml" |
@@ -2773,6 +2772,13 @@ docs_refused() {
   out_has "$2"
 }
 
+# tools_volume NAME COMPLETE [IN_USE] -> a tools volume lettucectl made exists
+tools_volume() { echo "$1 ${1#lettuce-doc-tools-} $2 ${3:-false}" >>"$T/volumes"; }
+
+# The tools volume's fill and marker check, as calls.log shows them.
+CHECK_RUN="run --rm --init --network none --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER"
+FILL_RUN="$CHECK_RUN -i"
+
 # line_of TEXT -> the number of the first calls.log line containing TEXT
 line_of() { grep -nF -- "$1" "$T/calls.log" | head -1 | cut -d: -f1; }
 
@@ -2787,24 +2793,13 @@ test_doc_tools_tag_follows_what_goes_into_the_image() {
   [[ $(docs_tag) != "$a" ]] || fail "the tag did not change with the Dockerfile"
 }
 
-test_doc_tools_image_reference_fits_dockers_image_mount_name() {
-  # Docker 29 with the containerd snapshotter names an image mount's directory
-  # after hex(<container id>,src=<ref>,dst=<target>): past 53 characters of
-  # reference plus target, the name passes 255 bytes and the mount fails.
-  docs_tree
-  local got
-  got=$( (LETTUCE_HOME=$H && . "$H/lib/common.sh" && printf '%s %s' "$(doc_tools_image)" "$DOC_TOOLS_TARGET"))
-  ((${#got} - 1 <= 53)) || fail "${got% *} at ${got#* } is too long for an image mount"
-  grep -qF "target: ${got#* }" "$ROOT/compose/doc-tools.yml" || fail "compose/doc-tools.yml mounts elsewhere"
-}
-
 test_compose_adds_the_doc_tools_overlay_and_its_values_only_with_the_profile() {
   added
   with_docs
   ctl up alfred
   ok_rc
   log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env"
-  log_has "docker-env DOC_TOOLS_TAG=$(docs_tag) DOC_TOOLS_NETWORK=lettuce-doc-tools-alfred"
+  log_has "docker-env DOC_TOOLS_NETWORK=lettuce-doc-tools-alfred DOC_TOOLS_VOLUME=lettuce-doc-tools-$(docs_tag)"
   grep -q '^DOC_TOOLS' "$H/stacks/alfred/stack.env" && fail "doc-tools values written to stack.env"
   true
 }
@@ -2824,6 +2819,150 @@ test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
   (($(line_of "-p lettuce_shared") > $(line_of "up -d --build --remove-orphans"))) || fail "gotenberg started before the stack"
 }
 
+test_up_with_doc_tools_fills_the_tools_volume_before_starting() {
+  added
+  with_docs
+  stub STUB_IMAGES_MISSING=lettuce-doc-tools
+  local tag vol
+  tag=$(docs_tag)
+  vol=lettuce-doc-tools-$tag
+  ctl up alfred
+  ok_rc
+  log_has "docker volume create --label lettuce.doc-tools.tag=$tag $vol"
+  log_has "docker create --label lettucectl.doc-tools=fill lettuce-doc-tools:$tag /none"
+  log_has "docker cp doc-tools-cid:/opt/lettuce-doc-tools/. -"
+  log_has "docker $FILL_RUN --label lettucectl.doc-tools=fill -v $vol:/dst lettuce-backup:local sh -c"
+  log_has "docker rm -f doc-tools-cid"
+  eq "$(cat "$T/fill-stdin")" "TOOLS-TAR"
+  grep -q 'tar -x' "$T/run-script" || fail "the fill does not unpack"
+  grep -q '/dst/.lettuce-doc-tools-complete' "$T/run-script" || fail "the fill writes no marker"
+  # image -> volume -> fill -> compose up, and the volume is complete.
+  (($(line_of "docker build -q -t lettuce-doc-tools") < $(line_of "volume create"))) || fail "volume made before the image"
+  (($(line_of "docker rm -f doc-tools-cid") < $(line_of "up -d --build --remove-orphans"))) || fail "the stack started before the fill"
+  grep -qx "$vol $tag true false" "$T/volumes" || fail "the volume is not complete: $(cat "$T/volumes")"
+}
+
+test_up_keeps_a_complete_tools_volume() {
+  added
+  with_docs
+  tools_volume "lettuce-doc-tools-$(docs_tag)" true
+  ctl up alfred
+  ok_rc
+  log_has "docker $CHECK_RUN -v lettuce-doc-tools-$(docs_tag):/dst:ro lettuce-backup:local test -f /dst/.lettuce-doc-tools-complete"
+  log_lacks "volume create"
+  log_lacks "docker create"
+  log_lacks "volume rm"
+}
+
+test_up_refills_a_tools_volume_without_its_marker() {
+  added
+  with_docs
+  local vol
+  vol=lettuce-doc-tools-$(docs_tag)
+  tools_volume "$vol" false
+  ctl up alfred
+  ok_rc
+  log_has "volume rm $vol"
+  log_has "volume create --label lettuce.doc-tools.tag=$(docs_tag) $vol"
+  grep -qx "$vol $(docs_tag) true false" "$T/volumes" || fail "not refilled: $(cat "$T/volumes")"
+}
+
+test_up_stops_when_the_tools_volume_cannot_be_filled() {
+  added
+  with_docs
+  stub STUB_RUN_FAIL=tar
+  ctl up alfred
+  bad_rc
+  out_has "could not fill the volume lettuce-doc-tools-$(docs_tag)"
+  log_has "docker rm -f doc-tools-cid"
+  log_lacks "up -d --build"
+  # An incomplete volume in use is not removed under a running app-server.
+  sed -i '/^STUB_RUN_FAIL=/d' "$T/stub.env"
+  : >"$T/volumes"
+  tools_volume "lettuce-doc-tools-$(docs_tag)" false true
+  ctl up alfred
+  bad_rc
+  out_has "lettuce-doc-tools-$(docs_tag) is incomplete and in use; stop every stack with doc-tools (lettucectl down all), then run: lettucectl up all"
+  log_lacks "up -d --build"
+}
+
+test_up_refuses_a_tools_volume_lettucectl_did_not_make() {
+  added
+  with_docs
+  local vol
+  vol=lettuce-doc-tools-$(docs_tag)
+  # Made by hand: no label, though it has the marker.
+  echo "$vol - true false" >>"$T/volumes"
+  ctl up alfred
+  bad_rc
+  out_has "$vol was not made by lettucectl"
+  log_lacks "up -d --build"
+  log_lacks "volume rm $vol"
+  # Labelled, but a bind to a host directory (driver options).
+  : >"$T/volumes"
+  echo "$vol $(docs_tag) true false local 3" >>"$T/volumes"
+  ctl up alfred
+  bad_rc
+  out_has "$vol was not made by lettucectl"
+  : >"$T/volumes"
+  echo "$vol $(docs_tag) true false nfs 0" >>"$T/volumes"
+  ctl up alfred
+  bad_rc
+  out_has "$vol was not made by lettucectl"
+}
+
+test_up_builds_no_image_for_a_complete_tools_volume() {
+  added
+  with_docs
+  tools_volume "lettuce-doc-tools-$(docs_tag)" true
+  stub STUB_IMAGES_MISSING=lettuce-doc-tools
+  ctl up alfred
+  ok_rc
+  log_lacks "docker build -q -t lettuce-doc-tools"
+}
+
+test_up_removes_containers_an_interrupted_fill_left() {
+  added
+  with_docs
+  printf 'old-cid\n' >"$T/fill-containers"
+  ctl up alfred
+  ok_rc
+  log_has "docker rm -f old-cid"
+  (($(line_of "docker rm -f old-cid") < $(line_of "docker create --label lettucectl.doc-tools=fill"))) ||
+    fail "the leftover was not removed before the fill"
+}
+
+test_up_fills_the_tools_volume_under_a_lock() {
+  added
+  with_docs
+  mkdir -p "$H/stacks"
+  # Another lettucectl holds the lock for a moment: this one waits, then fills.
+  flock "$H/stacks/.doc-tools.lock" sleep 2 &
+  sleep 0.3
+  local t0=$SECONDS
+  ctl up alfred
+  ok_rc
+  wait
+  ((SECONDS - t0 >= 1)) || fail "up did not wait for the lock"
+  out_has "waiting for another lettucectl to finish with the volume"
+  log_has "volume create --label lettuce.doc-tools.tag=$(docs_tag)"
+}
+
+test_up_removes_old_tools_volumes_and_leaves_one_in_use() {
+  added
+  with_docs
+  tools_volume lettuce-doc-tools-0000000001 true
+  tools_volume lettuce-doc-tools-0000000002 true true
+  ctl up alfred
+  ok_rc
+  log_has "volume rm lettuce-doc-tools-0000000001"
+  log_has "volume rm lettuce-doc-tools-0000000002"
+  out_lacks "0000000002"
+  grep -q '^lettuce-doc-tools-0000000001 ' "$T/volumes" && fail "the old volume stayed"
+  grep -q '^lettuce-doc-tools-0000000002 ' "$T/volumes" || fail "the volume in use was removed"
+  grep -q "^lettuce-doc-tools-$(docs_tag) " "$T/volumes" || fail "the current volume was removed"
+}
+
 test_up_again_connects_nothing_twice() {
   added
   with_docs
@@ -2835,6 +2974,7 @@ test_up_again_connects_nothing_twice() {
   log_lacks "network create"
   log_lacks "network connect"
   log_lacks "docker build"
+  log_lacks "volume create"
 }
 
 test_up_without_doc_tools_makes_no_network_or_gotenberg() {
@@ -2853,12 +2993,17 @@ test_check_accepts_the_doc_tools_overlay() {
   ok_rc
 }
 
-test_check_refuses_a_doc_tools_mount_that_is_not_this_image_read_only() {
+test_check_refuses_a_doc_tools_mount_that_is_not_the_tools_volume_read_only() {
   added
   with_docs
+  local ok
+  ok=$(jq -c '.services["app-server"].volumes[0]' "$T/compose-config.json")
   docs_refused '.services["app-server"].volumes[0].read_only = false' "read-only at /opt/lettuce-doc-tools"
-  docs_refused '.services["app-server"].volumes[0].read_only = true | .services["app-server"].volumes[0].source = "lettuce-doc-tools:old"' "read-only at /opt/lettuce-doc-tools"
-  docs_refused '.services["app-server"].volumes[0] = {"type":"bind","source":"/tmp/x","target":"/opt/lettuce-doc-tools"}' "read-only at /opt/lettuce-doc-tools"
+  docs_refused '.services["app-server"].volumes[0] = {"type":"image","source":"lettuce-doc-tools:'"$(docs_tag)"'","target":"/opt/lettuce-doc-tools","read_only":true}' "read-only at /opt/lettuce-doc-tools"
+  docs_refused '.services["app-server"].volumes[0] = {"type":"bind","source":"/tmp/x","target":"/opt/lettuce-doc-tools","read_only":true}' "read-only at /opt/lettuce-doc-tools"
+  docs_refused '.services["app-server"].volumes = ['"$ok"', {"type":"bind","source":"/tmp/x","target":"/opt/lettuce-doc-tools"}]' "read-only at /opt/lettuce-doc-tools"
+  docs_refused '.services["app-server"].volumes = ['"$ok"'] | .volumes["doc-tools"].external = false' "must be the external lettuce-doc-tools-$(docs_tag)"
+  docs_refused '.volumes["doc-tools"] = {"name":"lettuce-doc-tools-0000000001","external":true}' "must be the external lettuce-doc-tools-$(docs_tag)"
 }
 
 test_check_refuses_an_app_server_without_its_default_network() {
@@ -2890,20 +3035,15 @@ test_check_refuses_another_service_mounting_the_tools_whatever_the_profiles() {
   ctl check alfred
   bad_rc
   out_has "bff mount(s) an image or the document tools"
-}
-
-test_check_refuses_doc_tools_on_an_old_docker() {
-  added
-  with_docs
-  stub STUB_DOCKER_VERSION=27.5.1
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"tools","target":"/x","read_only":true}]
+    | .volumes = {"tools":{"name":"lettuce-doc-tools-0000000001","external":true}}'
   ctl check alfred
   bad_rc
-  out_has "needs Docker >= 28"
-  stub STUB_DOCKER_VERSION=29.1.3
-  stub STUB_COMPOSE_VERSION=2.34.0
+  out_has "bff mount(s) an image or the document tools"
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"lettuce-doc-tools-0000000001","target":"/x"}] | .volumes = {}'
   ctl check alfred
   bad_rc
-  out_has "needs Docker Compose >= 2.35"
+  out_has "bff mount(s) an image or the document tools"
 }
 
 test_up_refuses_a_gotenberg_without_its_deny_flags() {
@@ -3065,12 +3205,15 @@ test_profiles_dropping_doc_tools_stops_gotenberg_and_removes_the_networks() {
   log_has "-p lettuce_shared --project-directory $H/compose/shared -f $H/compose/shared/gotenberg.yml --env-file /dev/null down"
   log_has "network rm lettuce-doc-tools-alfred"
   [[ ! -s $T/networks ]] || fail "networks left: $(cat "$T/networks")"
+  log_has "volume rm lettuce-doc-tools-$(docs_tag)"
+  [[ ! -s $T/volumes ]] || fail "volumes left: $(cat "$T/volumes")"
   # A re-run has nothing left to do.
   : >"$T/calls.log"
   ctl profiles cloudflared
   ok_rc
   log_lacks "down"
   log_lacks "network rm"
+  log_lacks "volume rm"
 }
 
 test_profiles_adding_doc_tools_prints_the_mcp_entries_and_registers_nothing() {
@@ -3095,6 +3238,7 @@ test_add_with_doc_tools_registers_the_mcp_servers() {
   log_has "$MCP_ADD"
   # After the stack and Gotenberg are up.
   (($(line_of "$MCP_ADD") > $(line_of "network connect --alias gotenberg"))) || fail "registered before Gotenberg"
+  (($(line_of "restart --no-deps bff") > $(line_of "$MCP_ADD"))) || fail "the BFF was not restarted after registering"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
   out_has "office and pdf are in https://alfred.example.org Settings -> MCP"
 }
@@ -3127,6 +3271,31 @@ test_mcp_adds_the_document_tools_to_settings() {
   grep -q 'agent-local-mcp-global' "$T/exec-stdin.log" || fail "the script was not streamed"
   out_has "alfred: added office, pdf to Settings -> MCP"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
+  # The BFF re-renders the mcp-servers skill, the agents' list of servers, when it reconnects.
+  log_has "--env-file $H/stacks/alfred/stack.env restart --no-deps bff"
+  (($(line_of "restart --no-deps bff") > $(line_of "$MCP_ADD"))) || fail "the BFF restarted before the change"
+  out_has "alfred: restarting its BFF so agents see the change"
+}
+
+test_mcp_restarts_no_bff_when_nothing_changed() {
+  added
+  with_docs
+  mcp_answer '{"added":[],"present":["office","pdf"],"conflicts":[],"removed":[],"attempts":1}'
+  ctl mcp alfred
+  ok_rc
+  log_has "$MCP_ADD"
+  log_lacks "restart --no-deps bff"
+}
+
+test_mcp_still_succeeds_when_the_bff_cannot_restart() {
+  added
+  with_docs
+  stub STUB_RESTART_RC=1
+  mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
+  ctl mcp alfred
+  ok_rc
+  out_has "alfred: could not restart its BFF; agents see the change after: lettucectl restart alfred"
+  eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
 }
 
 test_mcp_runs_once_per_stack_unless_forced() {
@@ -3136,6 +3305,7 @@ test_mcp_runs_once_per_stack_unless_forced() {
   ctl mcp alfred
   ok_rc
   log_lacks "node --input-type=module"
+  log_lacks "restart --no-deps bff"
   out_has "alfred: registered before; a server the person removed stays removed (--force adds it again)"
   mcp_answer '{"added":["pdf"],"present":["office"],"conflicts":[],"removed":[],"attempts":1}'
   ctl mcp alfred --force
@@ -3185,6 +3355,17 @@ test_profiles_dropping_doc_tools_removes_the_registered_servers() {
   log_has "$MCP_REMOVE"
   out_has "alfred: removed office, pdf from Settings -> MCP (the doc-tools profile is off)"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
+  (($(line_of "restart --no-deps bff") > $(line_of "$MCP_REMOVE"))) || fail "the BFF was not restarted after the removal"
+}
+
+test_up_restarts_no_bff_when_a_removal_finds_nothing() {
+  added
+  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":[],"attempts":1}'
+  ctl up alfred
+  ok_rc
+  log_has "$MCP_REMOVE"
+  log_lacks "restart --no-deps bff"
 }
 
 test_up_retries_a_removal_that_failed_and_skips_unregistered_stacks() {

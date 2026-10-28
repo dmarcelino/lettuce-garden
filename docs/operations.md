@@ -10,7 +10,7 @@
 ./lettucectl compose alfred ps    # any docker compose command for one stack
 ```
 
-- Use `restart`, never `compose <name> restart app-server`. The BFF shares the app-server's network namespace and dies when the app-server is recreated on its own. `up` and `restart` always act on the whole stack.
+- Use `restart`, never `compose <name> restart app-server`. The BFF shares the app-server's network namespace and dies when the app-server is recreated on its own. `up` and `restart` always act on the whole stack. (`mcp` restarts the BFF alone, which is safe: the app-server keeps its namespace.)
 - After a host reboot, Docker brings the stacks back by itself (`restart: unless-stopped`).
 
 ## People
@@ -75,11 +75,11 @@ Three limits:
 - `--tools` goes further: every agent of the stack writes those tools, and npm's global config (`/opt/agent-tools/etc/npmrc`) and cargo's (`/opt/agent-tools/cargo/config.toml`) are read on every call, so with it the agents' code runs with your credentials whenever you use them. With `rw`, whatever you write there is every agent's to read: never `cargo login` (its token goes to `CARGO_HOME`, on that mount) or `npm config set --location=global` with a token.
 
 ### Agent skills
-`agent-skills/` holds skills this repo gives every agent, for example `scheduling-scripts` (cron jobs that survive restarts, instead of `crontab`). After adding or changing one, push them to the running stacks:
+`agent-skills/` holds skills this repo gives every agent, for example `using-vault-secrets` (the vault's `vault-run` helper). Scheduled jobs that survive restarts are upstream's, in its `installing-tools` skill. After adding or changing one, push them to the running stacks:
 ```bash
 ./lettucectl skills all           # or one stack: skills alfred
 ```
-They go into each stack's global skills (`/root/.letta/skills`), which every agent of that stack loads. `skills` replaces or removes only what it installed before (listed in `.lettucectl-skills` there), so upstream's skills and the ones enabled in Settings stay. A name upstream Lettuce also ships is refused, because its BFF would overwrite ours. `up` does not install skills; run `skills` after setting up a new stack. Skill text reaches every operator's stacks, so keep it generic.
+They go into each stack's global skills (`/root/.letta/skills`), which every agent of that stack loads. `skills` replaces or removes only what it installed before (listed in `.lettucectl-skills` there; a skill deleted from `agent-skills/` is removed from the stack on the next run), so upstream's skills and the ones enabled in Settings stay. A name upstream Lettuce also ships is refused, because its BFF would overwrite ours. `up` does not install skills; run `skills` after setting up a new stack. Skill text reaches every operator's stacks, so keep it generic.
 
 ## Optional features
 Optional features are compose profiles, the same list for **all** stacks (upstream `docs/CONFIGURATION.md` lists them):
@@ -89,7 +89,7 @@ Optional features are compose profiles, the same list for **all** stacks (upstre
 - `telegram`: Telegram channel gateway.
 - `secrets`: a personal vault per stack (address, cards, ID documents, logins...), encrypted with the person's own passphrase and shared with agents only when they agree. Each person uses it at `https://<stack>/garden/secrets/`: see **[secret-broker.md](secret-broker.md)**.
 - `gmail-triggers`: rules like "when mail arrives in this label, ask this agent to do that", which each person sets up at `https://<stack>/garden/gmail-triggers/`. Needs `google` (`profiles` and `check` refuse it otherwise) and each person's Google account connected in Lettuce. `up` installs a small executor in the app-server; dropping the profile removes it and keeps the rules. See **[gmail-triggers.md](gmail-triggers.md)**.
-- `doc-tools`: Office and PDF tools for the agents (create, edit and convert .docx, .pptx, .xlsx and PDFs), as two stdio MCP servers mounted read-only into every app-server from one image, plus one shared Gotenberg per host for conversions. After turning it on, `./lettucectl mcp all` adds the two servers to each stack's Settings -> MCP (once per stack; `add` does it for new stacks). See **[doc-tools.md](doc-tools.md)**.
+- `doc-tools`: Office and PDF tools for the agents (create, edit and convert .docx, .pptx, .xlsx and PDFs), as two stdio MCP servers mounted read-only into every app-server from one shared volume, plus one shared Gotenberg per host for conversions. After turning it on, `./lettucectl mcp all` adds the two servers to each stack's Settings -> MCP (once per stack; `add` does it for new stacks) and restarts the BFF of each stack it changed, so agents see them. See **[doc-tools.md](doc-tools.md)**.
 - `code-server`: VS Code in the browser at `https://<stack>/garden/code-server/`, on that stack's agent workspaces, with a terminal that has the agents' tools. The editor itself runs nothing from the workspaces (Restricted Mode, no extensions to install, no debugger); terminals run in a separate container built on the app-server image. Turning it on also makes each stack's Access cookie HttpOnly (`profiles` re-applies every stack's Access application). See **[code-server.md](code-server.md)**.
 - `pipelock`: an egress proxy per stack that the agents' shell tools, subagents, SearXNG and the DuckDuckGo reader go through. It checks each destination, blocks a few known exfiltration sites and private addresses, and signs a receipt for every request (`lettucectl receipts`). Advisory for now: letta-code itself and anything that ignores `HTTPS_PROXY` go around it. See **[egress-firewall.md](egress-firewall.md)**.
 
