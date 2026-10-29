@@ -1,0 +1,5 @@
+# code-server's config file, fixed in the image (compose passes --config here).
+# Without it code-server reads and writes $XDG_CONFIG_HOME/code-server/config.yaml
+# on the editor's volume, where a key could set what lettucectl check refuses on
+# the command line. Every setting that matters is on the command line.
+auth: none

@@ -1,0 +1,78 @@
+# The code-server built-in extensions the editor keeps (docs/code-server.md); every
+# other directory under lib/vscode/extensions is deleted when the image is built, so
+# a built-in that a later release adds stays out until it is reviewed and listed
+# here. Left out on purpose: those that start processes or provide tasks (npm,
+# grunt, gulp, jake, php-language-features, terminal-suggest, tunnel-forwarding),
+# debugging (ms-vscode.js-debug, ms-vscode.js-debug-companion, debug-auto-launch,
+# debug-server-ready), those that render workspace content in same-origin webviews
+# (markdown-math, mermaid-markdown-features, ipynb, notebook-renderers,
+# ms-vscode.vscode-js-profile-table, simple-browser; markdown-language-features
+# stays, with its preview pinned to its Strict policy and its Markdown Editor
+# removed by the Dockerfile) and logins
+# or outside services (copilot, prompt-basics, github, github-authentication,
+# microsoft-authentication, extension-editing), and git: VS Code 1.143's git
+# extension asks to trust each repository's folder before opening it, and a
+# trusted folder runs its tasks and terminal settings in the editor; git runs
+# from the terminal instead, in the shell container.
+# One name per line; theme-* keeps every colour and icon theme.
+node_modules
+theme-*
+configuration-editing
+css-language-features
+emmet
+git-base
+html-language-features
+json-language-features
+markdown-language-features
+media-preview
+merge-conflict
+references-view
+search-result
+typescript-language-features
+bat
+clojure
+coffeescript
+cpp
+csharp
+css
+dart
+diff
+docker
+dotenv
+fsharp
+go
+groovy
+handlebars
+hlsl
+html
+ini
+java
+javascript
+json
+julia
+latex
+less
+log
+lua
+make
+markdown-basics
+objective-c
+perl
+php
+powershell
+pug
+python
+r
+razor
+restructuredtext
+ruby
+rust
+scss
+shaderlab
+shellscript
+sql
+swift
+typescript-basics
+vb
+xml
+yaml

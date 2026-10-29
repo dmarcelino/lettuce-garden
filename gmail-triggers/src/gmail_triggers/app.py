@@ -1,7 +1,7 @@
-"""The ASGI app: the Gmail triggers pages under /garden/gmail-triggers and the
-garden landing page at /garden/ (every route needs a verified Access JWT, every
-POST this stack's Origin and a CSRF token), the executor's API at /executor/v1/
-(executor_api.py; token, no Access) and /healthz. The pages need no JavaScript."""
+"""The ASGI app: the Gmail triggers pages under /gmail-triggers on the garden's
+host (every route needs a verified Access JWT, every POST the garden's Origin
+and a CSRF token), the executor's API at /executor/v1/ (executor_api.py; token,
+no Access) and /healthz. The pages need no JavaScript."""
 
 from __future__ import annotations
 
@@ -15,8 +15,10 @@ from importlib import resources
 from typing import Any
 
 import anyio
-from garden_common.auth import Authenticator, AuthError
-from garden_common.garden import landing_routes, stylesheet
+from garden_common.auth import COOP, FORM, PAGE, Authenticator, AuthError, admit
+from garden_common.executor import AGENT_ID
+from garden_common.garden import stylesheet
+from garden_common.text import encodable
 from jinja2 import Environment, PackageLoader, select_autoescape
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -38,12 +40,11 @@ from .config import (
     MAX_SENDERS,
     PREFIX,
 )
-from .executor_api import AGENT_ID, executor_routes
+from .executor_api import executor_routes
 from .google import LABEL_ID, Google, GoogleUnavailable, Label, Status
 from .matcher import ADDRESS
 from .poller import Poller
 from .store import GAP_DROPPED, GAP_PAUSED, GAP_SKIPPED, RULE_ID, Agent, Rule, Store
-from .text import encodable
 from .triggers import send_test
 
 log = logging.getLogger("gmail_triggers.ui")
@@ -57,6 +58,7 @@ SECURITY_HEADERS = {
     "referrer-policy": "same-origin",
     "cache-control": "no-store",
     "x-frame-options": "DENY",
+    **COOP,
 }
 
 Handler = Callable[[Request, str], Awaitable[Response]]
@@ -279,7 +281,6 @@ def create_app(
     authenticator: Authenticator,
     executor_token: str,
     poller: Poller | None = None,
-    garden_profiles: str = "",
 ) -> Starlette:
     env = Environment(loader=PackageLoader("gmail_triggers", "templates"), autoescape=select_autoescape(default=True))
     env.filters["time"] = _fmt_time
@@ -297,12 +298,14 @@ def create_app(
     def back(path: str) -> RedirectResponse:
         return RedirectResponse(PREFIX + path, status_code=303, headers=SECURITY_HEADERS)
 
-    def page(handler: Handler, post: bool = False) -> Callable[[Request], Awaitable[Response]]:
+    def page(handler: Handler, post: bool = False, asset: bool = False) -> Callable[[Request], Awaitable[Response]]:
+        """`asset`: a stylesheet or icon, loaded by pages as a subresource; it holds nothing to protect."""
+
         async def endpoint(request: Request) -> Response:
             try:
-                email = await authenticator.email(request.headers)
+                email = await admit(authenticator, request.headers, None if asset else FORM if post else PAGE)
             except AuthError as e:
-                log.info("refused %s %s reason=auth", request.method, request.url.path)
+                log.info("refused %s %s reason=%s", request.method, request.url.path, e.reason)
                 return error(str(e), e.status)
             if post:
                 try:
@@ -522,10 +525,10 @@ def create_app(
         Route("/r/{rid}/delete", page(delete, post=True), methods=["POST"]),
         Route("/r/{rid}/history", page(history)),
         Route("/r/{rid}/test", page(test, post=True), methods=["POST"]),
-        Route("/garden.css", page(static(garden_css, "text/css"))),
-        Route("/app.css", page(static(app_css, "text/css"))),
-        Route("/icon-192.png", page(icon(192))),
-        Route("/icon-512.png", page(icon(512))),
+        Route("/garden.css", page(static(garden_css, "text/css"), asset=True)),
+        Route("/app.css", page(static(app_css, "text/css"), asset=True)),
+        Route("/icon-192.png", page(icon(192), asset=True)),
+        Route("/icon-512.png", page(icon(512), asset=True)),
     ]
 
     @asynccontextmanager
@@ -544,7 +547,6 @@ def create_app(
         routes=[
             Route("/healthz", healthz),
             *executor_routes(store, executor_token),
-            *landing_routes(authenticator, garden_profiles, PREFIX, SECURITY_HEADERS, error),
             Route(PREFIX, root),
             Mount(PREFIX, routes=ui),
         ],

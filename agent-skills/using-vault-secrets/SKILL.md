@@ -1,7 +1,28 @@
 ---
 name: using-vault-secrets
-description: Load this BEFORE using a password, card number, security code or document number from the user's vault (the `vault` MCP server) in a script or shell command, such as filling a web form with Playwright or logging in with curl. It shows how to get the values into the command without them entering the conversation.
+description: Load this BEFORE asking the user's vault (the `vault` MCP server) for anything. It shows how to wait for the user's approval so you don't miss it, and how to use a password, card number, security code or document number in a script or shell command (filling a web form with Playwright, logging in with curl) without the values entering the conversation.
 ---
+
+# Waiting for the user's approval
+
+When `request_secret` answers `pending`, the user has to approve the request first. Nothing
+starts a new turn for you when they do: if your turn ends with nothing waiting, you never
+collect what they approved.
+
+1. Post the `approve_url` to the user in your reply (they may not get a notification).
+2. Call `get_result` with the request's `id` and `wait_seconds` 50, as its own background
+   command, so you are told when it finishes:
+
+```bash
+sh /root/.letta/skills/mcp-servers/scripts/mcp.sh call mcp__vault__get_result --args '{"request_id":"<id>","wait_seconds":50}'
+```
+
+3. While it answers `pending`, start the same command again, one call per command (a loop in
+   one command runs into the command's time limit). Stop at `done`, `denied` or `expired`; a
+   request expires after 10 minutes.
+
+If you can't run commands in the background, make the same calls in the foreground before you
+end your turn.
 
 # Using vault secrets without reading them
 
@@ -24,8 +45,8 @@ only where the approved purpose needs them.
    its environment, for example `process.env.VAULT_NUMBER` in Node or
    `os.environ["VAULT_PASSWORD"]` in Python.
 2. **Request the secret** with `delivery: "env"` and a clear purpose. If the answer is pending,
-   post its `approve_url` to the user in your reply (they may not get a notification). Once the
-   user approves, `get_result` answers with a `handle`, the variable names in `env` (one
+   wait for the user's approval as above. Once the user approves, `get_result` answers with a
+   `handle`, the variable names in `env` (one
    `VAULT_<FIELD>` per field, e.g. `VAULT_NUMBER`, `VAULT_SECURITY_CODE`, `VAULT_PASSWORD`) and a
    `run` example.
 3. **Run it within 5 minutes.** The handle works once:

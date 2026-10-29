@@ -21,7 +21,12 @@ STREET = "Rua Falsa 123"
 CARD = "4111111111114242"
 PASSPHRASE = "correct horse battery staple"
 EMAIL = "alfred@gmail.com"
-ORIGIN = "https://alfred.example.com"
+ORIGIN = "https://alfred-garden.example.com"
+
+# What a browser sends when a person opens a page or posts its form (Fetch
+# Metadata), and when a page's own script calls fetch(); see garden_common.auth.check_fetch.
+NAVIGATE = {"sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-site": "same-origin"}
+SCRIPT_FETCH = {"sec-fetch-mode": "cors", "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin"}
 FAST_KDF = KdfParams(n=2**10, r=8, p=1)
 
 

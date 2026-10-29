@@ -1,7 +1,7 @@
 """The ASGI app: MCP at /mcp and vault-run's /redeem (internal only; the tunnel
-forwards /garden/secrets/ and /garden/ alone), the vault UI at /garden/secrets/ (every route needs a
-verified Access JWT, and all but setup/unlock/notifications an unlocked vault) and the garden landing
-page at /garden/ (Access JWT only)."""
+forwards /secrets/ on the garden's host alone) and the vault UI at /secrets/
+(every route needs a verified Access JWT, and all but setup/unlock/notifications
+an unlocked vault)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from importlib import resources
 from typing import Any
 
 import anyio
-from garden_common.auth import Authenticator, AuthError
-from garden_common.garden import landing_routes, stylesheet
+from garden_common.auth import COOP, FETCH, FORM, PAGE, Authenticator, AuthError, admit
+from garden_common.garden import stylesheet
 from jinja2 import Environment, PackageLoader, select_autoescape
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
@@ -44,6 +44,7 @@ SECURITY_HEADERS = {
     "referrer-policy": "same-origin",
     "cache-control": "no-store",
     "x-frame-options": "DENY",
+    **COOP,
 }
 
 Handler = Callable[[HttpRequest, str], Awaitable[Response]]
@@ -80,9 +81,7 @@ def _safe_next(path: Any) -> str:
     return path if isinstance(path, str) and path.startswith(PREFIX + "/") and "//" not in path else PREFIX + "/"
 
 
-def create_app(
-    broker: Broker, authenticator: Authenticator, vapid_public_key: str, garden_profiles: str = ""
-) -> Starlette:
+def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: str) -> Starlette:
     env = Environment(loader=PackageLoader("secret_broker", "templates"), autoescape=select_autoescape(default=True))
     env.filters["time"] = _fmt_time
     env.globals["base"] = PREFIX
@@ -109,18 +108,23 @@ def create_app(
         return RedirectResponse(PREFIX + path, status_code=303, headers=SECURITY_HEADERS)
 
     def page(
-        handler: Handler, post: bool = False, unlocked: bool = True
+        handler: Handler, post: bool = False, unlocked: bool = True, asset: bool = False
     ) -> Callable[[HttpRequest], Awaitable[Response]]:
+        """`asset`: a script, stylesheet, icon or manifest, loaded by pages as a subresource (or as the
+        service worker); it holds nothing to protect."""
+
         async def endpoint(request: HttpRequest) -> Response:
+            is_json = request.headers.get("content-type", "").startswith("application/json")
             try:
-                email = await authenticator.email(request.headers)
+                use = None if asset else (FETCH if is_json else FORM) if post else PAGE
+                email = await admit(authenticator, request.headers, use)
             except AuthError as e:
-                log.info("refused %s %s reason=auth", request.method, request.url.path)
+                log.info("refused %s %s reason=%s", request.method, request.url.path, e.reason)
                 return error(str(e), e.status)
             if post:
                 try:
                     authenticator.check_origin(request.headers)
-                    if request.headers.get("content-type", "").startswith("application/json"):
+                    if is_json:
                         token = request.headers.get("x-csrf-token")
                     else:
                         token = (await request.form()).get("csrf")
@@ -404,15 +408,16 @@ def create_app(
         Route("/push/unsubscribe", page(push_unsubscribe, post=True, **open_page), methods=["POST"]),
         Route("/push/test", page(push_test, post=True, **open_page), methods=["POST"]),
         Route("/audit", page(audit_page)),
-        Route("/sw.js", page(static_file("sw.js", "text/javascript"), **open_page)),
-        Route("/app.js", page(static_file("app.js", "text/javascript"), **open_page)),
-        Route("/garden.css", page(static_bytes(stylesheet(), "text/css"), **open_page)),
-        Route("/app.css", page(static_file("app.css", "text/css"), **open_page)),
+        Route("/sw.js", page(static_file("sw.js", "text/javascript"), **open_page, asset=True)),
+        Route("/app.js", page(static_file("app.js", "text/javascript"), **open_page, asset=True)),
+        Route("/garden.css", page(static_bytes(stylesheet(), "text/css"), **open_page, asset=True)),
+        Route("/app.css", page(static_file("app.css", "text/css"), **open_page, asset=True)),
         Route(
-            "/manifest.webmanifest", page(static_file("manifest.webmanifest", "application/manifest+json"), **open_page)
+            "/manifest.webmanifest",
+            page(static_file("manifest.webmanifest", "application/manifest+json"), **open_page, asset=True),
         ),
-        Route("/icon-192.png", page(icon(192), **open_page)),
-        Route("/icon-512.png", page(icon(512), **open_page)),
+        Route("/icon-192.png", page(icon(192), **open_page, asset=True)),
+        Route("/icon-512.png", page(icon(512), **open_page, asset=True)),
     ]
 
     mcp_server = build_server(broker)
@@ -453,7 +458,6 @@ def create_app(
         routes=[
             Route("/healthz", healthz),
             Route("/redeem", redeem, methods=["POST"]),
-            *landing_routes(authenticator, garden_profiles, PREFIX, SECURITY_HEADERS, error),
             Route(PREFIX, secrets_root),
             Mount(PREFIX, routes=ui),
             Mount("/", app=mcp_app),

@@ -1,0 +1,150 @@
+# Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
+# The code editor (code-server/, docs/code-server.md): VS Code in the browser at
+# https://<name>-garden.<domain>/code-server/, on the agents' workspaces. Opt-in
+# behind the `code-server` profile; without it this file adds nothing.
+#
+# Three services, because the editor shares the garden's origin with the vault
+# and must never run what agents wrote:
+# - code-server, the gate: the tunnel forwards /code-server/ on the garden host
+#   to it. It checks the garden's Access JWT on every request and WebSocket,
+#   strips the prefix and lets only listed headers and pages through. It is the
+#   only one on `default` and the only way in: it reaches the editor through
+#   the editor's Unix socket, on code-server-sock.
+# - code-server-editor: code-server itself, listening on that socket and on no
+#   port, so nothing on a network reaches it, the shell included. Its one
+#   network, code-exec, takes its SSH sessions to the shell. It edits the
+#   workspaces and runs no workspace code: Restricted Mode for good, a pruned
+#   set of built-in extensions, nothing installable, terminals in the shell.
+# - code-server-exec, the shell: the app-server's own image plus an SSH server,
+#   with the workspaces and the agents' tools mounted as in the app-server. It
+#   is as strong as an agent and holds nothing an agent can't get: no Access
+#   token, no Google token, no credentials. Its only way out is code-egress.
+# `lettucectl check` refuses a stack where any of them loses its networks,
+# mounts or hardening, or another service joins their networks, network
+# namespaces or volumes.
+# Relative paths resolve against --project-directory (upstream/docker).
+services:
+  code-server:
+    profiles: ["code-server"]
+    build:
+      context: ../../code-server
+      additional_contexts:
+        garden-common: ../../garden-common
+    image: lettuce-code-server:local
+    environment:
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      # The garden's own Access application and host, never Lettuce's.
+      CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}
+      CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
+      ALLOWED_USERS: ${ALLOWED_USERS:-}
+      PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
+      TZ: ${TZ:-UTC}
+    volumes:
+      # The editor's socket (code_server_gate.config.EDITOR_SOCKET).
+      - code-server-sock:/run/code-server:ro
+    networks:
+      - default
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 64
+    restart: unless-stopped
+
+  code-server-editor:
+    profiles: ["code-server"]
+    build:
+      context: ../../code-server/editor
+    image: lettuce-code-server-editor:local
+    command:
+      # A Unix socket, not a port: code-server has no Access check of its own.
+      # Mode 666 because the gate runs as nobody; only the two of them mount it.
+      - --socket
+      - /run/code-server/editor.sock
+      - --socket-mode
+      - "666"
+      - --auth
+      - none
+      - --disable-proxy
+      - --disable-telemetry
+      - --disable-update-check
+      - --disable-getting-started-override
+      - --extensions-dir
+      - /opt/lettuce-editor/no-extensions
+      - --user-data-dir
+      - /data/user
+      # The image's own, read-only: code-server would otherwise read (and write)
+      # one on code-server-data, where a key could set what check refuses here.
+      - --config
+      - /opt/lettuce-editor/config.yaml
+    environment:
+      # An empty gallery: no marketplace, so nothing can be searched or installed.
+      EXTENSIONS_GALLERY: "{}"
+      TZ: ${TZ:-UTC}
+    # Root (with no capabilities) because agents write the workspaces as root.
+    user: "0"
+    volumes:
+      - ${LETTA_STATE_DIR:?LETTA_STATE_DIR is not set}/workspaces:/work
+      - code-server-data:/data
+      - code-exec-keys:/keys
+      - code-server-sock:/run/code-server
+    networks:
+      - code-exec
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 2g
+    pids_limit: 512
+    # Ready once code-server listens and the shell's keys are written.
+    healthcheck:
+      test: ["CMD", "sh", "-c", "test -S /run/code-server/editor.sock && test -s /keys/authorized_keys"]
+      interval: 30s
+      timeout: 5s
+      start_period: 2m
+      start_interval: 1s
+    restart: unless-stopped
+
+  code-server-exec:
+    profiles: ["code-server"]
+    build:
+      context: ../../code-server/exec
+      additional_contexts:
+        # The app-server's image, whatever upstream builds it as.
+        base: service:app-server
+    image: lettuce-code-server-exec:local
+    # PID 1 keeps the container's environment for agent-env.
+    init: true
+    working_dir: /work
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${LETTA_STATE_DIR:?LETTA_STATE_DIR is not set}/workspaces:/work
+      - ${LETTA_STATE_DIR:?LETTA_STATE_DIR is not set}/tools:/opt/agent-tools
+      - code-exec-keys:/keys:ro
+    networks:
+      - code-exec
+      - code-egress
+    # Docker's default capabilities, so apt and pip work until the next recreate.
+    cap_drop: [NET_RAW]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 8g
+    pids_limit: 4096
+    # sshd needs the host key and authorized_keys the editor writes on its first start.
+    depends_on:
+      code-server-editor:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  code-exec:
+    internal: true
+  code-egress: {}
+
+volumes:
+  code-server-data: {}
+  code-exec-keys: {}
+  code-server-sock: {}

@@ -1,0 +1,48 @@
+# Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
+# The garden (garden/): the landing page at the root of the stack's garden host,
+# https://<name>-garden.<domain>/, linking to the garden pages that are on and,
+# with the code editor, to each agent's workspace by name. On whenever any
+# garden profile is (Compose starts a service when any of its profiles is on);
+# without one this file adds nothing.
+#
+# The tunnel forwards / and the landing page's assets on the garden host to it
+# (cf_tunnel_configure); every page there needs a Cloudflare Access JWT of the
+# garden's own Access application (CF_GARDEN_AUD), never Lettuce's. The garden
+# executor lettucectl installs in the app-server sends it the agent list over
+# /executor/v1/ with GARDEN_EXECUTOR_TOKEN; the tunnel never routes that prefix.
+#
+# It keeps the agent list in memory: no volume, no host path, only the default
+# network. `lettucectl check` refuses a stack where it loses its hardening,
+# mounts anything or joins another network.
+# Relative paths resolve against --project-directory (upstream/docker).
+services:
+  garden:
+    profiles: ["secrets", "gmail-triggers", "code-server"]
+    build:
+      context: ../../garden
+      additional_contexts:
+        garden-common: ../../garden-common
+    image: lettuce-garden:local
+    environment:
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}
+      CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
+      ALLOWED_USERS: ${ALLOWED_USERS:-}
+      PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
+      # For the links back to Lettuce, on its own host.
+      LETTUCE_ORIGIN: ${PUBLIC_ORIGIN:-}
+      # The landing page links only to the garden pages that are on (lettucectl
+      # derives the list from COMPOSE_PROFILES).
+      GARDEN_PROFILES: ${GARDEN_PROFILES:-}
+      GARDEN_EXECUTOR_TOKEN: ${GARDEN_EXECUTOR_TOKEN:-}
+      TZ: ${TZ:-UTC}
+    networks:
+      - default
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    pids_limit: 64
+    restart: unless-stopped

@@ -18,7 +18,7 @@ Usage: lettucectl <command> [args]
 
 Setup
   init                          check dependencies, clone upstream Lettuce, look up Cloudflare ids
-  add <name> <email>[,<email>]  create a stack: hostname, Access policy + app, tunnel, DNS; start it
+  add <name> <email>[,<email>]  create a stack: hostnames, Access policy + apps, tunnel, DNS; start it
   users <name> <email>[,...]    replace who may sign in (Access policy and ALLOWED_USERS together)
   remove <name> [--purge]       stop a stack and delete its Cloudflare resources (--purge: its data too)
   profiles [<p>,<p>...]         show, or set for every stack, the compose profiles (optional features)
@@ -30,12 +30,13 @@ Operation (<target> is a stack name or "all")
   restart <target>              down + up (app-server and bff share a namespace; never restart one alone)
   check <target>                refuse unsafe or inconsistent configuration
   skills <target>               install agent-skills/ into running stacks (every agent of the stack)
-  mcp <target> [--force]        add the document tools (office, pdf) to Settings -> MCP, once per stack
-                                (doc-tools profile; --force: again, also where the person removed them)
+  mcp <target> [--force]        add the document tools (office, pdf; doc-tools profile) and the vault
+                                (secrets profile) to Settings -> MCP, once per stack
+                                (--force: again, also where the person removed them)
   backup <target> <dir> [opts]  copy agents, memory, workspaces, tools, vault and receipts to a snapshot in <dir>/<name>/
                                 (--compress: a tar.gz instead; --no-tools; --pause|--live; --keep N)
   status                        containers and health of every stack
-  list                          stacks, hostnames and allowed users
+  list                          stacks, hostnames (Lettuce's and the garden's) and allowed users
   logs <name> [service]         follow logs
   compose <name> <args...>      any other docker compose command for one stack
   shell <name> [agent]          bash in the app-server, in /work or in an agent's workspace (name or id)
@@ -47,20 +48,24 @@ EOF
 }
 
 # ── helpers ──────────────────────────────────────────────────────────────────
-# pick_hostname NAME -> <name>.<domain>, or the fallback when that name exists in DNS
-pick_hostname() {
-  local name=$1 domain zone probe wildcard="" host rc fallback
+# dns_wildcard -> success, with a warning, when the domain has a wildcard DNS
+# record: public DNS then cannot tell which names are taken
+dns_wildcard() {
+  local domain probe
   domain=$(cfg DOMAIN)
-  zone=$(cfg CF_ZONE_ID)
   probe="lettucectl-probe-$(openssl rand -hex 4).$domain"
-  if [[ -n $(dig +short A "$probe") ]]; then
-    wildcard=1
-    warn "$domain has a wildcard DNS record, so public DNS cannot tell which names are taken; checking the Cloudflare zone only"
-  fi
-  fallback=$(cfg HOSTNAME_FALLBACK)
-  [[ $fallback == *%s* ]] || die "HOSTNAME_FALLBACK must contain %s"
-  # shellcheck disable=SC2059 # the pattern is the format string by design
-  for host in "$name.$domain" "$(printf "$fallback" "$name").$domain"; do
+  [[ -n $(dig +short A "$probe") ]] || return 1
+  warn "$domain has a wildcard DNS record, so public DNS cannot tell which names are taken; checking the Cloudflare zone only"
+}
+
+# free_hostname WILDCARD HOST... -> the first HOST that exists neither in DNS
+# nor in the Cloudflare zone; fails when every one does. A non-empty WILDCARD
+# (dns_wildcard) checks the Cloudflare zone only.
+free_hostname() {
+  local wildcard=$1 zone host rc
+  shift
+  zone=$(cfg CF_ZONE_ID)
+  for host in "$@"; do
     if [[ -z $wildcard ]] && name_resolves "$host"; then
       info "$host already exists in DNS"
       continue
@@ -76,7 +81,35 @@ pick_hostname() {
       *) die "could not check $host in the Cloudflare zone" ;;
     esac
   done
-  die "both $name.$domain and $host are taken; choose another stack name"
+  return 1
+}
+
+# pick_hostname NAME WILDCARD -> Lettuce's host: <name>.<domain>, or the
+# HOSTNAME_FALLBACK name when that one is taken
+pick_hostname() {
+  local domain fallback first second
+  domain=$(cfg DOMAIN)
+  fallback=$(cfg HOSTNAME_FALLBACK)
+  [[ $fallback == *%s* ]] || die "HOSTNAME_FALLBACK must contain %s"
+  first=$1.$domain
+  # shellcheck disable=SC2059 # the pattern is the format string by design
+  second=$(printf "$fallback" "$1").$domain
+  free_hostname "$2" "$first" "$second" || die "both $first and $second are taken; choose another stack name"
+}
+
+# pick_garden_hostname LETTUCE_HOST WILDCARD -> the garden host, named after
+# Lettuce's so the two read as one stack: <label>-garden.<domain>, where <label>
+# is LETTUCE_HOST's first label, or, when that is taken, the first free of
+# <label>-garden-2 ... <label>-garden-9
+pick_garden_hostname() {
+  local base i names=()
+  base=${1%%.*}-garden
+  names=("$base.$(cfg DOMAIN)")
+  for i in 2 3 4 5 6 7 8 9; do
+    names+=("$base-$i.$(cfg DOMAIN)")
+  done
+  free_hostname "$2" "${names[@]}" ||
+    die "every garden name from ${names[0]} to ${names[-1]} is taken; free one of them in DNS, or, for a new stack, choose another stack name"
 }
 
 name_resolves() {
@@ -88,7 +121,7 @@ name_resolves() {
 }
 
 write_new_stack_env() {
-  local name=$1 host=$2 emails=$3 f
+  local name=$1 host=$2 garden=$3 emails=$4 f
   f=$(stack_env "$name")
   (umask 077 && mkdir -p "$(stack_dir "$name")/state")
   chmod 700 "$(stack_dir "$name")"
@@ -99,6 +132,8 @@ write_new_stack_env() {
 # Secrets: keep this file mode 600 and out of version control.
 LETTUCE_HOSTNAME=$host
 PUBLIC_ORIGIN=https://$host
+GARDEN_HOSTNAME=$garden
+GARDEN_ORIGIN=https://$garden
 ALLOWED_USERS=$emails
 COMPOSE_PROFILES=$(cfg PROFILES)
 LETTA_STATE_DIR=$(stack_dir "$name")/state
@@ -116,14 +151,154 @@ google_reminder() {
   info "  then connect in that stack's Settings -> Google (docs/google-setup.md)"
 }
 
-# route_stack NAME -> re-applies the stack's tunnel routes for its current
-# profiles; a stack whose setup never got a tunnel is skipped
-route_stack() {
-  local f tun
+# The routes configure_tunnel put in this run, by stack.
+declare -A TUNNEL_ROUTED=()
+
+# configure_tunnel NAME [OLD] -> puts the stack's tunnel routes (cf_tunnel_configure)
+# for its hosts and current profiles, unless this run already put the same ones.
+# OLD (default: GARDEN_MOVE_PENDING) keeps Lettuce's host's old garden paths.
+configure_tunnel() {
+  local f routes old
   f=$(stack_env "$1")
-  tun=$(env_get "$f" CF_TUNNEL_ID)
-  [[ -n $tun && -n $(env_get "$f" CF_DNS_RECORD_ID) ]] || return 0
-  cf_tunnel_configure "$(cfg CF_ACCOUNT_ID)" "$tun" "$(env_get "$f" LETTUCE_HOSTNAME)" "$(env_get "$f" COMPOSE_PROFILES)"
+  old=${2-$(env_get "$f" GARDEN_MOVE_PENDING)}
+  # What the routes depend on: the two hosts, the garden pages that are on and the old paths.
+  routes="$(env_get "$f" LETTUCE_HOSTNAME) $(env_get "$f" GARDEN_HOSTNAME) $(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)") ${old:+old}"
+  [[ ${TUNNEL_ROUTED[$1]:-} != "$routes" ]] || return 0
+  cf_tunnel_configure "$(cfg CF_ACCOUNT_ID)" "$(env_get "$f" CF_TUNNEL_ID)" "$(env_get "$f" LETTUCE_HOSTNAME)" \
+    "$(env_get "$f" GARDEN_HOSTNAME)" "$(env_get "$f" COMPOSE_PROFILES)" "$old" || return 1
+  TUNNEL_ROUTED[$1]=$routes
+}
+
+# ── the garden host ──────────────────────────────────────────────────────────
+# Every stack has a second hostname, <name>-garden.<domain>, for the garden
+# pages, with its own Access application (the stack's one policy attached), so
+# the garden accepts only its own audience and never Lettuce's token, and
+# nothing on Lettuce's origin can script the garden. It exists whatever the
+# profiles; with no garden page on, the tunnel answers it with 404.
+
+# set_garden_hostname NAME -> picks the stack's garden host (pick_garden_hostname)
+# and stores it
+set_garden_hostname() {
+  local f garden wildcard=""
+  f=$(stack_env "$1")
+  dns_wildcard && wildcard=1
+  garden=$(pick_garden_hostname "$(env_get "$f" LETTUCE_HOSTNAME)" "$wildcard") || return 1
+  env_set "$f" GARDEN_HOSTNAME "$garden"
+  env_set "$f" GARDEN_ORIGIN "https://$garden"
+}
+
+# create_garden_app NAME -> the garden's Access application, unless it exists
+create_garden_app() {
+  local f pair
+  f=$(stack_env "$1")
+  [[ -z $(env_get "$f" CF_GARDEN_APP_ID) ]] || return 0
+  pair=$(cf_app_create "$(cfg CF_ACCOUNT_ID)" "lettuce-$1-garden" "$(env_get "$f" GARDEN_HOSTNAME)" "$(cfg CF_GOOGLE_IDP_ID)" \
+    "$(cfg ACCESS_SESSION_DURATION)" "$(env_get "$f" CF_ACCESS_POLICY_ID)") || return 1
+  env_set "$f" CF_GARDEN_APP_ID "${pair%% *}"
+  env_set "$f" CF_GARDEN_AUD "${pair#* }"
+}
+
+# create_garden_dns NAME -> the garden host's DNS record, unless it exists. When
+# the name was taken after it was picked (the record fails, and picking again
+# gives another name), the stack takes the new name: stored, put in the
+# garden's Access application and the tunnel routes, then given the record.
+create_garden_dns() {
+  local f id old
+  f=$(stack_env "$1")
+  [[ -z $(env_get "$f" CF_GARDEN_DNS_RECORD_ID) ]] || return 0
+  if ! id=$(garden_dns_create "$1"); then
+    old=$(env_get "$f" GARDEN_HOSTNAME)
+    set_garden_hostname "$1" || return 1
+    [[ $(env_get "$f" GARDEN_HOSTNAME) != "$old" ]] || return 1
+    warn "$1: $old was taken before its DNS record was created; its garden host is now $(env_get "$f" GARDEN_HOSTNAME)"
+    if [[ -n $(env_get "$f" CF_GARDEN_APP_ID) ]]; then
+      cf_app_update "$(cfg CF_ACCOUNT_ID)" "$(env_get "$f" CF_GARDEN_APP_ID)" "lettuce-$1-garden" "$(env_get "$f" GARDEN_HOSTNAME)" \
+        "$(cfg CF_GOOGLE_IDP_ID)" "$(cfg ACCESS_SESSION_DURATION)" "$(env_get "$f" CF_ACCESS_POLICY_ID)" || return 1
+    fi
+    configure_tunnel "$1" || return 1
+    id=$(garden_dns_create "$1") || return 1
+  fi
+  env_set "$f" CF_GARDEN_DNS_RECORD_ID "$id"
+}
+
+# garden_dns_create NAME -> the garden host's DNS record id
+garden_dns_create() {
+  local f
+  f=$(stack_env "$1")
+  cf_dns_cname_create "$(cfg CF_ZONE_ID)" "$(env_get "$f" GARDEN_HOSTNAME)" "$(env_get "$f" CF_TUNNEL_ID)" \
+    "lettucectl stack $1 (garden)"
+}
+
+# needs_garden_host NAME -> success for a complete stack made before the garden
+# host existed (or whose migration stopped part-way)
+needs_garden_host() {
+  local f
+  f=$(stack_env "$1")
+  [[ -n $(env_get "$f" CF_DNS_RECORD_ID) && -z $(env_get "$f" CF_GARDEN_DNS_RECORD_ID) ]]
+}
+
+# ensure_garden_host NAME -> gives such a stack its garden host: the hostname,
+# the Access application, the tunnel routes, then the DNS record, so the name
+# resolves only once the tunnel routes it. Each step is stored as soon as it
+# exists, so a re-run resumes; the DNS record's id comes last and means done,
+# after which this makes no Cloudflare call. Fails when Cloudflare does.
+ensure_garden_host() {
+  local f
+  needs_garden_host "$1" || return 0
+  f=$(stack_env "$1")
+  info "$1: creating its garden host (the garden pages move off Lettuce's host)"
+  if [[ -n $(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)") ]]; then
+    # Its garden containers serve Lettuce's host, with its audience, until an
+    # `up` (up_stack) moves them; until then the tunnel keeps their old paths
+    # there (configure_tunnel), and profiles restarts them.
+    env_set "$f" GARDEN_MOVE_PENDING 1
+  fi
+  if [[ -z $(env_get "$f" GARDEN_HOSTNAME) ]]; then
+    set_garden_hostname "$1" || return 1
+  fi
+  create_garden_app "$1" || return 1
+  configure_tunnel "$1" || return 1
+  create_garden_dns "$1" || return 1
+  if [[ -n $(env_get "$f" GARDEN_MOVE_PENDING) ]]; then
+    info "$1: the garden pages are now at https://$(env_get "$f" GARDEN_HOSTNAME)/"
+  else
+    info "$1: its garden host https://$(env_get "$f" GARDEN_HOSTNAME)/ is ready for when a garden profile is on"
+  fi
+}
+
+# The stacks garden_host_ready has seen in this run.
+declare -A GARDEN_HOST_SEEN=()
+
+# garden_host_ready NAME WHAT [PROFILES] -> ensure_garden_host, once per run,
+# before a command touches NAME's containers. A stack with a garden page in its
+# list, or in PROFILES (the list `profiles` is about to apply), can't start
+# without its garden host (its services take the garden's audience), so a
+# failure stops WHAT; a stack without one only warns, and its next up tries again.
+garden_host_ready() {
+  [[ -z ${GARDEN_HOST_SEEN[$1]:-} ]] || return 0
+  GARDEN_HOST_SEEN[$1]=1
+  ensure_garden_host "$1" && return 0
+  if [[ -n $(garden_profiles "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)")$(garden_profiles "${3:-}") ]]; then
+    die "$1: could not create its garden host on Cloudflare, so $2; fix the cause, then run the same command again"
+  fi
+  warn "$1: could not create its garden host on Cloudflare; it has no garden page, so it goes on without, and its next up tries again"
+}
+
+# route_stack NAME -> re-applies the stack's tunnel routes for its current
+# profiles, and its two Access applications as cf_app_body defines them; a
+# stack whose setup never finished is skipped, and so is the garden's
+# application while a stack without garden pages has none (garden_host_ready)
+route_stack() {
+  local f acc
+  f=$(stack_env "$1")
+  [[ -n $(env_get "$f" CF_TUNNEL_ID) && -n $(env_get "$f" CF_DNS_RECORD_ID) ]] || return 0
+  acc=$(cfg CF_ACCOUNT_ID)
+  configure_tunnel "$1" || return 1
+  cf_app_update "$acc" "$(env_get "$f" CF_ACCESS_APP_ID)" "lettuce-$1" "$(env_get "$f" LETTUCE_HOSTNAME)" \
+    "$(cfg CF_GOOGLE_IDP_ID)" "$(cfg ACCESS_SESSION_DURATION)" "$(env_get "$f" CF_ACCESS_POLICY_ID)" || return 1
+  [[ -n $(env_get "$f" CF_GARDEN_APP_ID) ]] || return 0
+  cf_app_update "$acc" "$(env_get "$f" CF_GARDEN_APP_ID)" "lettuce-$1-garden" "$(env_get "$f" GARDEN_HOSTNAME)" \
+    "$(cfg CF_GOOGLE_IDP_ID)" "$(cfg ACCESS_SESSION_DURATION)" "$(env_get "$f" CF_ACCESS_POLICY_ID)"
 }
 
 # Run by sh in the app-server as: sh -c "$SKILLS_INSTALL" sh DIR SKILL... with a tar
@@ -169,22 +344,42 @@ sync_skills() {
   printf '%s' "${#skills[@]}"
 }
 
-# The gmail-triggers executor (gmail-triggers/executor/run.mjs): the app-server's
-# cron runs it every minute, through upstream's agent-env (PID 1's environment),
-# to fetch the sidecar's queued requests over /executor/v1/ and turn each into
-# `letta cron add --once`. It lives in a namespace we own under letta-home, so a
-# restart keeps it; the cron file goes to system-cron, which the entrypoint
-# copies to /etc/cron.d at every start. Its token stays in the container layer,
-# out of the state directory and its backups; every recreate goes through `up`,
-# which installs it again. Agents can read the token: it keeps the stack's other
-# containers out, not them.
-GT_DIR=/root/.letta/garden/gmail-triggers
-GT_JOB=lettuce-garden-gmail-triggers
-GT_TOKEN=/etc/lettuce-garden/gmail-triggers-token
-GT_CRON="# Installed by lettucectl (gmail-triggers profile). Removed with the profile.
-PATH=/usr/local/bin:/usr/bin:/bin
-MAILTO=\"\"
-* * * * * root /usr/local/bin/agent-env node $GT_DIR/bin/run.mjs >> $GT_DIR/executor.log 2>&1"
+# The garden executor (garden/executor/run.mjs): the app-server's cron runs it
+# every minute, through upstream's agent-env (PID 1's environment). It sends
+# `letta agents list` to the garden service when that asks for one and, with
+# the gmail-triggers profile (--gmail-triggers), fetches that sidecar's queued
+# requests over /executor/v1/ and turns each into `letta cron add --once`. It
+# lives in a namespace we own under letta-home, so a restart keeps it; the cron
+# file goes to system-cron, which the entrypoint copies to /etc/cron.d at every
+# start. Its token stays in the container layer, out of the state directory and
+# its backups; every recreate goes through `up`, which installs it again.
+# Agents can read the token: it keeps the stack's other containers out, not
+# them. Installed only when it has work (executor_wanted): the vault alone gives
+# it none.
+EXECUTOR_DIR=/root/.letta/garden/executor
+EXECUTOR_JOB=lettuce-garden-executor
+EXECUTOR_TOKEN_FILE=/etc/lettuce-garden/executor-token
+# What the gmail-triggers profile installed before the garden executor (DIR JOB
+# TOKEN); removed wherever it is found.
+LEGACY_EXECUTOR=(/root/.letta/garden/gmail-triggers lettuce-garden-gmail-triggers /etc/lettuce-garden/gmail-triggers-token)
+
+# executor_wanted PROFILES -> success when the executor has work under PROFILES:
+# Gmail triggers' requests, or the agent list, which garden asks for only with
+# the code editor on (its links to the agents' workspaces)
+executor_wanted() {
+  has_profile "$1" gmail-triggers || has_profile "$1" code-server
+}
+
+# executor_cron NAME -> the stack's cron file for the executor
+executor_cron() {
+  local flag=""
+  if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" gmail-triggers; then
+    flag=" --gmail-triggers"
+  fi
+  printf '%s\n' "# Installed by lettucectl (gmail-triggers or code-server profile). Removed with the last of them." \
+    "PATH=/usr/local/bin:/usr/bin:/bin" 'MAILTO=""'
+  printf '%s' "* * * * * root /usr/local/bin/agent-env node $EXECUTOR_DIR/bin/run.mjs$flag >> $EXECUTOR_DIR/executor.log 2>&1"
+}
 
 # Run by sh in the app-server as
 #   sh -c "$GARDEN_INSTALL" sh install DIR JOB CRONDIR ETCDIR TOKEN CRON  (a tar of run.mjs and token on stdin)
@@ -220,53 +415,80 @@ put "$t/token" 0600 "$tok"
 put "$t/cron" 0644 "$sys/$job"
 put "$t/cron" 0644 "$etc/$job"'
 
-# executor_installed NAME -> success when the stack's letta-home holds the
-# executor or its cron file (seen from the host, so stacks that never had it
-# cost no exec)
-executor_installed() {
+# executor_present NAME DIR JOB -> success when the stack's letta-home holds
+# DIR/bin or the cron file JOB (seen from the host, so stacks that never had
+# that executor cost no exec)
+executor_present() {
   local h
   h=$(env_get "$(stack_env "$1")" LETTA_STATE_DIR)/letta-home
-  [[ -e $h/garden/gmail-triggers/bin || -e $h/system-cron/$GT_JOB ]]
+  [[ -e $h/${2#/root/.letta/}/bin || -e $h/system-cron/$3 ]]
+}
+
+# executor_installed NAME -> success when the stack has the garden executor or
+# the gmail-triggers one before it
+executor_installed() {
+  executor_present "$1" "$EXECUTOR_DIR" "$EXECUTOR_JOB" ||
+    executor_present "$1" "${LEGACY_EXECUTOR[0]}" "${LEGACY_EXECUTOR[1]}"
+}
+
+# remove_executor NAME DIR JOB TOKEN -> removes one executor install, its token
+# and its cron files from the running app-server
+remove_executor() {
+  compose "$1" exec -T app-server sh -c "$GARDEN_INSTALL" sh uninstall "$2" "$3" \
+    /root/.letta/system-cron /etc/cron.d "$4" </dev/null
 }
 
 # install_executor NAME -> streams the executor and the stack's executor token
-# into the running app-server. The token file is built in a private temp dir
-# and travels inside the tar.
+# into the running app-server, then removes the gmail-triggers executor it
+# replaces, if any. The token file is built in a private temp dir and travels
+# inside the tar.
 install_executor() {
-  local src=$LETTUCE_HOME/gmail-triggers/executor tmp rc=0
+  local src=$LETTUCE_HOME/garden/executor tmp rc=0
   [[ -f $src/run.mjs ]] || {
     warn "$src/run.mjs is missing"
     return 1
   }
+  [[ $(env_get "$(stack_env "$1")" GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || {
+    warn "$1: GARDEN_EXECUTOR_TOKEN is missing or malformed; not installing the executor"
+    return 1
+  }
   tmp=$(mktemp -d) || return 1
   cp "$src/run.mjs" "$tmp/run.mjs" &&
-    (umask 077 && printf '%s\n' "$(env_get "$(stack_env "$1")" GMAIL_TRIGGERS_EXECUTOR_TOKEN)" >"$tmp/token") || rc=1
+    (umask 077 && printf '%s\n' "$(env_get "$(stack_env "$1")" GARDEN_EXECUTOR_TOKEN)" >"$tmp/token") || rc=1
   if ((rc == 0)); then
     tar -C "$tmp" -cf - run.mjs token |
-      compose "$1" exec -T app-server sh -c "$GARDEN_INSTALL" sh install "$GT_DIR" "$GT_JOB" \
-        /root/.letta/system-cron /etc/cron.d "$GT_TOKEN" "$GT_CRON" || rc=1
+      compose "$1" exec -T app-server sh -c "$GARDEN_INSTALL" sh install "$EXECUTOR_DIR" "$EXECUTOR_JOB" \
+        /root/.letta/system-cron /etc/cron.d "$EXECUTOR_TOKEN_FILE" "$(executor_cron "$1")" || rc=1
   fi
   rm -rf "$tmp"
+  if ((rc == 0)) && executor_present "$1" "${LEGACY_EXECUTOR[0]}" "${LEGACY_EXECUTOR[1]}"; then
+    remove_executor "$1" "${LEGACY_EXECUTOR[@]}" || rc=1
+  fi
   return "$rc"
 }
 
-# uninstall_executor NAME -> removes the executor, its token and its cron file
+# uninstall_executor NAME -> removes the executor (and the gmail-triggers one
+# before it), its token and its cron file
 uninstall_executor() {
-  compose "$1" exec -T app-server sh -c "$GARDEN_INSTALL" sh uninstall "$GT_DIR" "$GT_JOB" \
-    /root/.letta/system-cron /etc/cron.d "$GT_TOKEN" </dev/null || return 1
-  info "$1: removed the gmail-triggers executor (its profile is off)"
+  if executor_present "$1" "$EXECUTOR_DIR" "$EXECUTOR_JOB"; then
+    remove_executor "$1" "$EXECUTOR_DIR" "$EXECUTOR_JOB" "$EXECUTOR_TOKEN_FILE" || return 1
+  fi
+  if executor_present "$1" "${LEGACY_EXECUTOR[0]}" "${LEGACY_EXECUTOR[1]}"; then
+    remove_executor "$1" "${LEGACY_EXECUTOR[@]}" || return 1
+  fi
+  info "$1: removed the garden executor (neither gmail-triggers nor code-server is on)"
 }
 
 # sync_executor NAME -> the running stack has the executor exactly when it has
-# the gmail-triggers profile; warns and fails when it cannot make it so
+# work there (executor_wanted); warns and fails when it cannot make it so
 sync_executor() {
-  if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" gmail-triggers; then
+  if executor_wanted "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)"; then
     install_executor "$1" && return 0
-    warn "$1: could not install the gmail-triggers executor; the stack is up but its Gmail triggers will not run"
+    warn "$1: could not install the garden executor; the stack is up, but its garden gets no agent list and its Gmail triggers will not run"
     return 1
   elif executor_installed "$1"; then
     uninstall_executor "$1" && return 0
-    warn "$1: could not remove the gmail-triggers executor, so it may still run"
+    warn "$1: could not remove the garden executor, so it may still run"
     return 1
   fi
 }
@@ -274,11 +496,14 @@ sync_executor() {
 # executor_out_of_step NAME... -> fails, naming the stacks whose executor could
 # not be synced; `up` syncs it again, whatever command stopped
 executor_out_of_step() {
-  die "the gmail-triggers executor is out of step on: $*; fix the cause, then run: lettucectl up <name>"
+  die "the garden executor is out of step on: $*; fix the cause, then run: lettucectl up <name>"
 }
 
-# up_stack NAME -> checks one stack, then builds and starts it
+# up_stack NAME -> checks one stack, then builds and starts it. A stack without
+# its garden host gets it first: its garden services take the garden's
+# audience and host, which must exist before any container is touched.
 up_stack() {
+  garden_host_ready "$1" "nothing was started"
   ensure_push_keys "$1"
   ensure_executor_token "$1"
   sync_garden_profiles "$1"
@@ -289,7 +514,23 @@ up_stack() {
     ensure_doc_tools_network "$1" || die "$1: could not create the network $(doc_tools_network "$1")"
   fi
   info "starting $1"
-  compose "$1" up -d --build --remove-orphans
+  compose "$1" up -d --build --remove-orphans || return 1
+  finish_garden_move "$1"
+}
+
+# finish_garden_move NAME -> once a moving stack's garden services run on its
+# garden host, drops their old paths from Lettuce's host, then the marker. A
+# failed route update keeps the marker, so the next up or profiles tries again;
+# the stack is up either way.
+finish_garden_move() {
+  local f
+  f=$(stack_env "$1")
+  [[ -n $(env_get "$f" GARDEN_MOVE_PENDING) ]] || return 0
+  if configure_tunnel "$1" ""; then
+    env_unset "$f" GARDEN_MOVE_PENDING
+  else
+    warn "$1: could not remove the old /garden/ paths from Lettuce's host; the next up or profiles tries again"
+  fi
 }
 
 # ── document tools ───────────────────────────────────────────────────────────
@@ -466,34 +707,67 @@ sync_doc_tools() {
   return "$rc"
 }
 
-# doc_tools_reminder NAME -> whether the stack's Settings -> MCP has the document
-# tools, as far as lettucectl knows (it registers them once: `mcp`, `add`)
-doc_tools_reminder() {
-  local f
-  f=$(stack_env "$1")
-  if [[ -n $(env_get "$f" DOC_TOOLS_MCP_REGISTERED) ]]; then
-    info "Documents: office and pdf are in https://$(env_get "$f" LETTUCE_HOSTNAME) Settings -> MCP (docs/doc-tools.md)"
-    return 0
-  fi
-  info "Documents: in https://$(env_get "$f" LETTUCE_HOSTNAME) Settings -> MCP, add two stdio servers:"
-  info "  office -> /opt/lettuce-doc-tools/bin/officeagent   pdf -> /opt/lettuce-doc-tools/bin/pdf-mcp (docs/doc-tools.md)"
-  info "  or run: lettucectl mcp $1"
-}
-
-# ── document tools in Settings -> MCP ────────────────────────────────────────
+# ── lettucectl's servers in Settings -> MCP ──────────────────────────────────
 # Lettuce's shared MCP list belongs to its BFF. lib/mcp-servers.mjs adds or
-# removes only the entries that run a document tool, and refuses a file of any
-# other shape; see it for why that is safe next to the BFF's own writes.
-# Registering is once per stack (DOC_TOOLS_MCP_REGISTERED in stack.env), so a
-# server the person removed stays removed; with the profile off, the servers
-# are taken out again, since a stdio server that cannot start makes every
+# removes only one group's own entries (the document tools: those that run one;
+# the vault: its exact HTTP entry), and refuses a file of any other shape; see
+# it for why that is safe next to the BFF's own writes. Registering is once per
+# stack and group (the group's marker in stack.env), so a server the person
+# removed stays removed; with the group's profile off, its servers are taken
+# out again, since a server that cannot start or answer makes every
 # `letta mcp tools` call fail, the other servers' included.
 MCP_SETTINGS=/root/.letta/mcp-home/.letta/settings.json
+MCP_GROUPS=(doc-tools vault)
+declare -A MCP_PROFILE=([doc-tools]=doc-tools [vault]=secrets)
+declare -A MCP_MARKER=([doc-tools]=DOC_TOOLS_MCP_REGISTERED [vault]=VAULT_MCP_REGISTERED)
+declare -A MCP_LABEL=([doc-tools]="the document tools" [vault]="the vault")
+# What a same-named server of the person's differs in.
+declare -A MCP_KIND=([doc-tools]=command [vault]=URL)
+# Set by register_mcp_group and drop_mcp_group when they changed the list.
+MCP_CHANGED=0
 
-# mcp_servers NAME add|remove -> runs lib/mcp-servers.mjs in the stack's
+# mcp_groups PROFILES -> the groups whose profile is in PROFILES, one per line
+mcp_groups() {
+  local g
+  for g in "${MCP_GROUPS[@]}"; do
+    ! has_profile "$1" "${MCP_PROFILE[$g]}" || echo "$g"
+  done
+}
+
+# mcp_reminder NAME PROFILES -> whether the stack's Settings -> MCP has the
+# servers of each group whose profile is on, as far as lettucectl knows (it
+# registers them once: `mcp`, `add`), or the entries to add by hand
+mcp_reminder() {
+  local f url g missing=""
+  f=$(stack_env "$1")
+  url=https://$(env_get "$f" LETTUCE_HOSTNAME)
+  for g in $(mcp_groups "$2"); do
+    if [[ -n $(env_get "$f" "${MCP_MARKER[$g]}") ]]; then
+      case $g in
+        doc-tools) info "Documents: office and pdf are in $url Settings -> MCP (docs/doc-tools.md)" ;;
+        vault) info "Vault: vault is in $url Settings -> MCP (docs/secret-broker.md)" ;;
+      esac
+      continue
+    fi
+    missing=1
+    case $g in
+      doc-tools)
+        info "Documents: in $url Settings -> MCP, add two stdio servers:"
+        info "  office -> /opt/lettuce-doc-tools/bin/officeagent   pdf -> /opt/lettuce-doc-tools/bin/pdf-mcp (docs/doc-tools.md)"
+        ;;
+      vault)
+        info "Vault: in $url Settings -> MCP, add an HTTP server:"
+        info "  vault -> http://secret-broker:8000/mcp (docs/secret-broker.md)"
+        ;;
+    esac
+  done
+  [[ -z $missing ]] || info "  or run: lettucectl mcp $1"
+}
+
+# mcp_servers NAME add|remove GROUP -> runs lib/mcp-servers.mjs in the stack's
 # app-server (streamed on stdin, nothing copied in); prints its JSON summary
 mcp_servers() {
-  compose "$1" exec -T app-server node --input-type=module - "$2" "$MCP_SETTINGS" <"$LETTUCE_HOME/lib/mcp-servers.mjs"
+  compose "$1" exec -T app-server node --input-type=module - "$2" "$MCP_SETTINGS" "$3" <"$LETTUCE_HOME/lib/mcp-servers.mjs"
 }
 
 # refresh_mcp_skill NAME -> after a change to the list, restarts the stack's BFF
@@ -508,38 +782,76 @@ refresh_mcp_skill() {
     warn "$1: could not restart its BFF; agents see the change after: lettucectl restart $1"
 }
 
-# register_mcp_servers NAME -> adds office and pdf to the stack's Settings -> MCP
-# and marks the stack; fails, unmarked, when it could not
-register_mcp_servers() {
+# register_mcp_group NAME GROUP -> adds GROUP's servers to the stack's
+# Settings -> MCP and marks the stack; fails, unmarked, when it could not
+register_mcp_group() {
   local out added present c
-  out=$(mcp_servers "$1" add) || return 1
-  env_set "$(stack_env "$1")" DOC_TOOLS_MCP_REGISTERED 1
+  out=$(mcp_servers "$1" add "$2") || {
+    warn "$1: could not add ${MCP_LABEL[$2]} to Settings -> MCP"
+    return 1
+  }
+  env_set "$(stack_env "$1")" "${MCP_MARKER[$2]}" 1
   added=$(jq -r '.added // [] | join(", ")' <<<"$out" 2>/dev/null)
   present=$(jq -r '.present // [] | join(", ")' <<<"$out" 2>/dev/null)
   if [[ -n $added ]]; then
     info "$1: added $added to Settings -> MCP${present:+ (already there: $present)}"
+    MCP_CHANGED=1
   elif [[ -n $present ]]; then
     info "$1: $present already in Settings -> MCP"
   fi
   for c in $(jq -r '.conflicts // [] | .[]' <<<"$out" 2>/dev/null); do
-    info "$1: Settings -> MCP already has a $c server with another command; it was left as it is"
+    info "$1: Settings -> MCP already has a $c server with another ${MCP_KIND[$2]}; it was left as it is"
   done
-  [[ -z $added ]] || refresh_mcp_skill "$1"
 }
 
-# drop_mcp_servers NAME -> with the doc-tools profile off, removes the servers
+# register_mcp NAME FORCE GROUP... -> registers each GROUP in the stack's
+# Settings -> MCP, skipping a group registered before unless FORCE is
+# --force, and restarts its BFF once when that changed the list; fails when a
+# group could not be added
+register_mcp() {
+  local name=$1 force=$2 f g rc=0
+  shift 2
+  f=$(stack_env "$name")
+  MCP_CHANGED=0
+  for g in "$@"; do
+    if [[ -n $(env_get "$f" "${MCP_MARKER[$g]}") && $force != --force ]]; then
+      info "$name: registered ${MCP_LABEL[$g]} before; a server the person removed stays removed (--force adds it again)"
+      continue
+    fi
+    register_mcp_group "$name" "$g" || rc=1
+  done
+  ((MCP_CHANGED == 0)) || refresh_mcp_skill "$name"
+  return "$rc"
+}
+
+# drop_mcp_group NAME GROUP -> with GROUP's profile off, removes the servers
 # registered in the stack's Settings -> MCP; fails, still marked, when it could not
-drop_mcp_servers() {
+drop_mcp_group() {
   local f out removed
   f=$(stack_env "$1")
-  [[ -n $(env_get "$f" DOC_TOOLS_MCP_REGISTERED) ]] || return 0
-  ! has_profile "$(env_get "$f" COMPOSE_PROFILES)" doc-tools || return 0
-  out=$(mcp_servers "$1" remove) || return 1
-  env_unset "$f" DOC_TOOLS_MCP_REGISTERED
+  [[ -n $(env_get "$f" "${MCP_MARKER[$2]}") ]] || return 0
+  ! has_profile "$(env_get "$f" COMPOSE_PROFILES)" "${MCP_PROFILE[$2]}" || return 0
+  out=$(mcp_servers "$1" remove "$2") || {
+    warn "$1: could not remove ${MCP_LABEL[$2]} from Settings -> MCP"
+    return 1
+  }
+  env_unset "$f" "${MCP_MARKER[$2]}"
   removed=$(jq -r '.removed // [] | join(", ")' <<<"$out" 2>/dev/null)
   [[ -n $removed ]] || return 0
-  info "$1: removed $removed from Settings -> MCP (the doc-tools profile is off)"
-  refresh_mcp_skill "$1"
+  info "$1: removed $removed from Settings -> MCP (the ${MCP_PROFILE[$2]} profile is off)"
+  MCP_CHANGED=1
+}
+
+# drop_mcp_servers NAME -> drops every group whose profile is off
+# (drop_mcp_group), and restarts the stack's BFF once when that changed the list
+drop_mcp_servers() {
+  local g rc=0
+  MCP_CHANGED=0
+  for g in "${MCP_GROUPS[@]}"; do
+    drop_mcp_group "$1" "$g" || rc=1
+  done
+  ((MCP_CHANGED == 0)) || refresh_mcp_skill "$1"
+  return "$rc"
 }
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -591,7 +903,7 @@ cmd_init() {
 
 cmd_add() {
   (($# == 2)) || die "usage: lettucectl add <name> <email>[,<email>]"
-  local name=$1 emails f host acc id pair synced=1 docs=1
+  local name=$1 emails f host garden wildcard="" acc id pair synced=1 docs=1 g groups=()
   validate_name "$name"
   emails=$(normalise_emails "$2")
   require_initialised
@@ -605,11 +917,20 @@ cmd_add() {
     info "resuming the unfinished setup of '$name' ($host)"
     [[ -n $(env_get "$f" CF_ACCESS_POLICY_ID) ]] || env_set "$f" ALLOWED_USERS "$emails"
   else
-    host=$(pick_hostname "$name")
-    write_new_stack_env "$name" "$host" "$emails"
+    # <name>-garden.<domain> is the garden host of the stack <name>.
+    [[ $name != *-garden ]] || die "invalid stack name '$name': it may not end in -garden, which names each stack's garden host"
+    dns_wildcard && wildcard=1
+    host=$(pick_hostname "$name" "$wildcard")
+    garden=$(pick_garden_hostname "$host" "$wildcard")
+    write_new_stack_env "$name" "$host" "$garden" "$emails"
   fi
   emails=$(env_get "$f" ALLOWED_USERS)
   local hint="Cloudflare setup of '$name' stopped part-way; what exists is recorded in stacks/$name/stack.env. Fix the cause, then re-run: lettucectl add $name $emails"
+  # A setup an older lettucectl started has no garden host yet.
+  if [[ -z $(env_get "$f" GARDEN_HOSTNAME) ]]; then
+    set_garden_hostname "$name" || die "$hint"
+  fi
+  garden=$(env_get "$f" GARDEN_HOSTNAME)
 
   if [[ -z $(env_get "$f" CF_ACCESS_POLICY_ID) ]]; then
     id=$(cf_policy_create "$acc" "lettuce-$name" "$emails") || die "$hint"
@@ -621,6 +942,7 @@ cmd_add() {
     env_set "$f" CF_ACCESS_APP_ID "${pair%% *}"
     env_set "$f" CF_ACCESS_AUD "${pair#* }"
   fi
+  create_garden_app "$name" || die "$hint"
   if [[ -z $(env_get "$f" CF_TUNNEL_ID) ]]; then
     id=$(cf_tunnel_create "$acc" "lettuce-$name") || die "$hint"
     env_set "$f" CF_TUNNEL_ID "$id"
@@ -629,7 +951,9 @@ cmd_add() {
     id=$(cf_tunnel_token "$acc" "$(env_get "$f" CF_TUNNEL_ID)") || die "$hint"
     env_set "$f" CLOUDFLARE_TUNNEL_TOKEN "$id"
   fi
-  cf_tunnel_configure "$acc" "$(env_get "$f" CF_TUNNEL_ID)" "$host" "$(env_get "$f" COMPOSE_PROFILES)" || die "$hint"
+  configure_tunnel "$name" || die "$hint"
+  create_garden_dns "$name" || die "$hint"
+  # Last: a stack with CF_DNS_RECORD_ID is complete.
   id=$(cf_dns_cname_create "$(cfg CF_ZONE_ID)" "$host" "$(env_get "$f" CF_TUNNEL_ID)" "lettucectl stack $name") || die "$hint"
   env_set "$f" CF_DNS_RECORD_ID "$id"
 
@@ -638,20 +962,26 @@ cmd_add() {
   up_stack "$name"
   sync_executor "$name" || synced=0
   sync_doc_tools || docs=0
-  # A new stack: nobody has chosen its MCP servers yet.
-  if has_profile "$(cfg PROFILES)" doc-tools && ((docs)); then
-    register_mcp_servers "$name" ||
-      warn "$name: could not add office and pdf to Settings -> MCP; run: lettucectl mcp $name"
+  # A new stack: nobody has chosen its MCP servers yet. The document tools
+  # need Gotenberg and their network first.
+  for g in $(mcp_groups "$(cfg PROFILES)"); do
+    if [[ $g == doc-tools ]] && ! ((docs)); then continue; fi
+    groups+=("$g")
+  done
+  if ((${#groups[@]})); then
+    register_mcp "$name" "" "${groups[@]}" ||
+      warn "$name: Settings -> MCP lacks some of lettucectl's servers; run: lettucectl mcp $name"
   fi
   info ""
   info "'$name' is up: https://$host (sign in with Google as $emails)"
+  if [[ -n $(garden_profiles "$(cfg PROFILES)") ]]; then
+    info "Its garden pages: https://$garden/"
+  fi
   info "First boot builds images and can take a few minutes; the hostname may need a minute to resolve."
   if has_profile "$(cfg PROFILES)" google; then
     google_reminder "$name"
   fi
-  if has_profile "$(cfg PROFILES)" doc-tools; then
-    doc_tools_reminder "$name"
-  fi
+  mcp_reminder "$name" "$(cfg PROFILES)"
   ((synced)) || executor_out_of_step "$name"
   ((docs)) || die "the document tools (shared Gotenberg, networks) are out of step; fix the cause, then run: lettucectl up $name"
 }
@@ -683,7 +1013,7 @@ cmd_remove() {
   acc=$(cfg CF_ACCOUNT_ID)
   zone=$(cfg CF_ZONE_ID)
 
-  info "This stops '$name' and deletes its DNS record, tunnel and Access application."
+  info "This stops '$name' and deletes its DNS records, tunnel and Access applications."
   if has_vault "$name"; then
     info "Its vault (the people's saved personal data) is deleted too: its volume goes with the stack."
   fi
@@ -719,6 +1049,10 @@ cmd_remove() {
   if [[ -n $id ]]; then
     if cf_api DELETE "/zones/$zone/dns_records/$id" >/dev/null; then env_unset "$f" CF_DNS_RECORD_ID; else left+=("DNS record $id"); fi
   fi
+  id=$(env_get "$f" CF_GARDEN_DNS_RECORD_ID)
+  if [[ -n $id ]]; then
+    if cf_api DELETE "/zones/$zone/dns_records/$id" >/dev/null; then env_unset "$f" CF_GARDEN_DNS_RECORD_ID; else left+=("DNS record $id"); fi
+  fi
   id=$(env_get "$f" CF_TUNNEL_ID)
   if [[ -n $id ]]; then
     cf_api DELETE "/accounts/$acc/cfd_tunnel/$id/connections" >/dev/null || true
@@ -727,6 +1061,15 @@ cmd_remove() {
       env_unset "$f" CLOUDFLARE_TUNNEL_TOKEN
     else
       left+=("tunnel $id")
+    fi
+  fi
+  id=$(env_get "$f" CF_GARDEN_APP_ID)
+  if [[ -n $id ]]; then
+    if cf_api DELETE "/accounts/$acc/access/apps/$id" >/dev/null; then
+      env_unset "$f" CF_GARDEN_APP_ID
+      env_unset "$f" CF_GARDEN_AUD
+    else
+      left+=("Access application $id")
     fi
   fi
   id=$(env_get "$f" CF_ACCESS_APP_ID)
@@ -786,8 +1129,8 @@ cmd_remove() {
 
 cmd_profiles() {
   (($# <= 1)) || die "usage: lettucectl profiles [<profile>,<profile>...]"
-  local new n changed="" stale running docs=1
-  local -a stacks gone failed=() unrouted=() executors=() undropped=()
+  local new n changed="" stale running docs=1 rc
+  local -a stacks gone failed=() unrouted=() unmoved=() executors=() undropped=()
   mapfile -t stacks < <(list_stacks)
   if (($# == 0)); then
     require_config
@@ -804,12 +1147,19 @@ cmd_profiles() {
     [[ $(env_get "$(stack_env "$n")" COMPOSE_PROFILES) == "$new" ]] || changed=1
   done
 
+  # A stack without its garden host gets it first (garden_host_ready, which
+  # stops here for a stack with a garden page now or under the new list): the
+  # check needs its garden audience, and nothing is written before the check.
+  for n in "${stacks[@]}"; do
+    ensure_executor_token "$n"
+    garden_host_ready "$n" "no profile was changed" "$new"
+  done
+
   if [[ -n $changed ]]; then
     # Check every stack, as it will be under the new list, before writing
     # anything, so one broken stack cannot leave the others half-switched.
     for n in "${stacks[@]}"; do
       ensure_push_keys "$n"
-      ensure_executor_token "$n"
       check_stack "$n" --profiles "$new"
     done
     for n in "${stacks[@]}"; do
@@ -819,8 +1169,9 @@ cmd_profiles() {
     info "profiles for every stack: $new"
   fi
 
-  # The tunnel routes each garden page only with its profile. Applied on
-  # every run, before the stacks start, so a re-run repairs a failed update.
+  # The tunnel routes each garden page only with its profile, on the garden
+  # host. Applied on every run, before the stacks start, so a re-run repairs a
+  # failed update.
   for n in "${stacks[@]}"; do
     route_stack "$n" || unrouted+=("$n")
   done
@@ -831,6 +1182,26 @@ cmd_profiles() {
     done
   else
     info "profiles are already $new everywhere; nothing to change"
+    # A stack given its garden host, by this run or an earlier one that stopped,
+    # moves its garden services to the garden's audience and origin. One that is
+    # not running moves at its next up. One that fails keeps its marker for the
+    # next run and costs the others nothing; errexit is off inside a subshell
+    # that is part of `||` or `if`, so the status is read after.
+    for n in "${stacks[@]}"; do
+      [[ -n $(env_get "$(stack_env "$n")" GARDEN_MOVE_PENDING) ]] || continue
+      if compose "$n" ps --status running --services 2>/dev/null | grep -qx app-server; then
+        set +e
+        (
+          set -e
+          up_stack "$n"
+        )
+        rc=$?
+        set -e
+        ((rc == 0)) || unmoved+=("$n")
+      else
+        info "$n: not running; its garden pages move at its next up"
+      fi
+    done
   fi
 
   # Compose leaves the containers of a dropped profile running. This looks at
@@ -847,7 +1218,7 @@ cmd_profiles() {
   # re-run repairs a failed install or removal; a stopped stack gets it right
   # at its next `up`.
   for n in "${stacks[@]}"; do
-    if ! has_profile "$new" gmail-triggers && ! executor_installed "$n"; then
+    if ! executor_wanted "$new" && ! executor_installed "$n"; then
       continue
     fi
     running=$(compose "$n" ps --status running --services) || {
@@ -855,7 +1226,7 @@ cmd_profiles() {
       continue
     }
     if ! grep -qx app-server <<<"$running"; then
-      if has_profile "$new" gmail-triggers; then
+      if executor_wanted "$new"; then
         info "$n: not running; its executor is installed at its next up"
       else
         info "$n: not running; its executor is removed at its next up"
@@ -876,17 +1247,18 @@ cmd_profiles() {
       google_reminder "$n"
     done
   fi
-  if [[ -n $changed ]] && has_profile "$new" doc-tools; then
+  if [[ -n $changed ]]; then
     for n in "${stacks[@]}"; do
-      doc_tools_reminder "$n"
+      mcp_reminder "$n" "$new"
     done
   fi
-  ((${#unrouted[@]} == 0)) || warn "could not update the tunnel routes of: ${unrouted[*]}"
+  ((${#unrouted[@]} == 0)) || warn "could not update the tunnel routes or Access application of: ${unrouted[*]}"
+  ((${#unmoved[@]} == 0)) || warn "could not move the garden services of: ${unmoved[*]}"
   ((${#failed[@]} == 0)) || warn "could not remove the containers of dropped profiles in: ${failed[*]}"
-  ((${#executors[@]} == 0)) || warn "could not sync the gmail-triggers executor of: ${executors[*]}"
+  ((${#executors[@]} == 0)) || warn "could not sync the garden executor of: ${executors[*]}"
   ((docs)) || warn "could not sync the document tools (shared Gotenberg, networks)"
-  ((${#undropped[@]} == 0)) || warn "could not remove the document tools from Settings -> MCP in: ${undropped[*]}"
-  ((${#unrouted[@]} + ${#failed[@]} + ${#executors[@]} + ${#undropped[@]} == 0 && docs)) || die "run the same command again"
+  ((${#undropped[@]} == 0)) || warn "could not remove servers whose profile is off from Settings -> MCP in: ${undropped[*]}"
+  ((${#unrouted[@]} + ${#unmoved[@]} + ${#failed[@]} + ${#executors[@]} + ${#undropped[@]} == 0 && docs)) || die "run the same command again"
 }
 
 cmd_upgrade() {
@@ -914,9 +1286,9 @@ cmd_up() {
   done
   sync_doc_tools || docs=0
   ((${#unsynced[@]} == 0)) || executor_out_of_step "${unsynced[@]}"
-  ((${#undropped[@]} == 0)) || warn "could not remove the document tools from Settings -> MCP in: ${undropped[*]}; run: lettucectl up $1"
+  ((${#undropped[@]} == 0)) || warn "could not remove servers whose profile is off from Settings -> MCP in: ${undropped[*]}; run: lettucectl up $1"
   ((docs)) || die "the document tools (shared Gotenberg, networks) are out of step; fix the cause, then run: lettucectl up $1"
-  ((${#undropped[@]} == 0)) || die "the document tools are still in Settings -> MCP with the doc-tools profile off"
+  ((${#undropped[@]} == 0)) || die "servers whose profile is off are still in Settings -> MCP"
 }
 
 cmd_down() {
@@ -930,6 +1302,13 @@ cmd_down() {
 
 cmd_restart() {
   (($# == 1)) || die "usage: lettucectl restart <name|all>"
+  local n
+  require_initialised
+  # Before anything stops: a stack that can't get its garden host must keep
+  # running. up_stack does not ask Cloudflare again (garden_host_ready).
+  for n in $(expand_targets "$1"); do
+    garden_host_ready "$n" "nothing was stopped"
+  done
   cmd_down "$1"
   cmd_up "$1"
 }
@@ -954,10 +1333,12 @@ cmd_status() {
 }
 
 cmd_list() {
-  local n f
+  local n f garden
   while read -r n; do
     f=$(stack_env "$n")
-    printf '%-20s https://%-40s %s\n' "$n" "$(env_get "$f" LETTUCE_HOSTNAME)" "$(env_get "$f" ALLOWED_USERS)"
+    garden=$(env_get "$f" GARDEN_HOSTNAME)
+    printf '%-20s https://%-40s %-48s %s\n' "$n" "$(env_get "$f" LETTUCE_HOSTNAME)" "${garden:+https://$garden/}" \
+      "$(env_get "$f" ALLOWED_USERS)"
   done < <(list_stacks)
 }
 
@@ -1566,20 +1947,17 @@ cmd_skills() {
 
 cmd_mcp() {
   (($# == 1)) || [[ $# == 2 && $2 == --force ]] || die "usage: lettucectl mcp <name|all> [--force]"
-  local n targets failed=()
+  local n targets groups failed=()
   require_initialised
-  has_profile "$(cfg PROFILES)" doc-tools ||
-    die "the doc-tools profile is off; turn it on first: lettucectl profiles $(cfg PROFILES),doc-tools"
+  mapfile -t groups < <(mcp_groups "$(cfg PROFILES)")
+  ((${#groups[@]})) ||
+    die "the doc-tools and secrets profiles are both off; turn one on first, e.g.: lettucectl profiles $(cfg PROFILES),doc-tools"
   targets=$(expand_targets "$1")
   for n in $targets; do
-    if [[ -n $(env_get "$(stack_env "$n")" DOC_TOOLS_MCP_REGISTERED) && ${2:-} != --force ]]; then
-      info "$n: registered before; a server the person removed stays removed (--force adds it again)"
-      continue
-    fi
-    register_mcp_servers "$n" || failed+=("$n")
+    register_mcp "$n" "${2:-}" "${groups[@]}" || failed+=("$n")
   done
   ((${#failed[@]} == 0)) ||
-    die "could not register the document tools in: ${failed[*]}; see the messages above (is the stack up?), then run: lettucectl mcp <name>"
+    die "could not register the MCP servers in: ${failed[*]}; see the messages above (is the stack up?), then run: lettucectl mcp <name>"
 }
 
 main() {

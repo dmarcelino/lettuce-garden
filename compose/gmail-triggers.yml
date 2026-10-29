@@ -5,13 +5,13 @@
 # lettucectl installs in the app-server. Opt-in behind the `gmail-triggers`
 # profile, which needs `google`; without it this file adds nothing.
 #
-# The tunnel forwards https://<host>/garden/gmail-triggers/ to it
-# (cf_tunnel_configure); every page there needs a Cloudflare Access JWT. The
-# executor reaches /executor/v1/ over the stack network with
-# GMAIL_TRIGGERS_EXECUTOR_TOKEN, and turns each request into
-# `letta cron add --once`; the tunnel never routes that prefix. It runs on the
-# stack network, not in the app-server's namespace, so no agent can take over
-# its port.
+# The tunnel forwards https://<name>-garden.<domain>/gmail-triggers/ to it
+# (cf_tunnel_configure); every page there needs a Cloudflare Access JWT of the
+# garden's own Access application. The garden executor reaches /executor/v1/
+# over the stack network with GARDEN_EXECUTOR_TOKEN, and turns each request
+# into `letta cron add --once`; the tunnel never routes that prefix. It runs
+# on the stack network, not in the app-server's namespace, so no agent can take
+# over its port.
 #
 # Its one host path, /data (the rules and the queue), is outside every
 # app-server mount, so agents can't read or change it, nor swap a part of the
@@ -32,14 +32,12 @@ services:
     image: lettuce-gmail-triggers:local
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
-      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      # The garden's own Access application and host, never Lettuce's.
+      CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}
       CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
       ALLOWED_USERS: ${ALLOWED_USERS:-}
-      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
-      # The /garden/ landing page links only to the garden pages that are on
-      # (lettucectl derives the list from COMPOSE_PROFILES).
-      GARDEN_PROFILES: ${GARDEN_PROFILES:-}
-      GMAIL_TRIGGERS_EXECUTOR_TOKEN: ${GMAIL_TRIGGERS_EXECUTOR_TOKEN:-}
+      PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
+      GARDEN_EXECUTOR_TOKEN: ${GARDEN_EXECUTOR_TOKEN:-}
       TZ: ${TZ:-UTC}
     # Root (with no capabilities) so it owns the state directory Docker creates.
     user: "0"

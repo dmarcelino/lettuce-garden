@@ -1,0 +1,27 @@
+#!/bin/bash
+# The editor's terminal profile: an interactive shell in the shell container
+# (code-server-exec), in this directory, with the agents' tools: agent-env
+# (upstream's, in the app-server image) gives it the container's environment,
+# which an SSH session drops (PATH and the package managers pointing at
+# /opt/agent-tools). The notice is printed here, in the editor's image, so
+# nothing in the shell can change or hide it.
+set -euo pipefail
+
+cat <<'NOTICE'
+Shell with your agents' tools and rights (workspace /work/<agent-id>).
+/work and /opt/agent-tools are shared with every agent: never store tokens or passwords here
+(no npm/cargo logins, no credentials in config files). Other installs vanish on the next restart.
+NOTICE
+# The shell has only the workspaces of the editor's files: a folder elsewhere
+# (the editor's home, where Open Folder starts) opens the terminal in /work.
+dir=$PWD
+if [[ $dir != /work && $dir != /work/* ]]; then
+  echo "This folder is not in the shell; starting in /work."
+  dir=/work
+fi
+# The remote side runs this with bash -c; the directory is single-quoted there.
+dir=${dir//\'/\'\\\'\'}
+# TERM comes from SSH's pty request; agent-env would drop it.
+# shellcheck disable=SC2016 # $TERM is expanded by the remote shell
+exec ssh -F /opt/lettuce-editor/ssh_config -tt code-server-exec \
+  "cd -- '$dir' && exec agent-env env \"TERM=\$TERM\" bash -i"

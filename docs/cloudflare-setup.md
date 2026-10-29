@@ -219,7 +219,9 @@ This is a *user* token. An account-owned token (**Manage Account -> Account API 
 ./lettucectl init        # first run creates config.env: set DOMAIN, PROFILES, TZ; then run init again
 ./lettucectl add alfred alfred@gmail.com
 ```
-`add` uses `<name>.example.com`. When that name already exists in DNS, it uses `lettuce-<name>.example.com` instead (`HOSTNAME_FALLBACK`). Stack names are a single DNS label on purpose: Cloudflare's free certificate covers `*.example.com` but not `a.b.example.com`.
+`add` uses `<name>.example.com` for Lettuce and `<name>-garden.example.com` for the garden extras (the vault, Gmail triggers, the code editor), each with its own Access application; both use the stack's one list of people. When Lettuce's name already exists in DNS, it uses `lettuce-<name>.example.com` instead (`HOSTNAME_FALLBACK`); the garden's name always follows Lettuce's (`lettuce-<name>-garden.example.com` then), and when that one is taken, `add` uses the first free of `<...>-garden-2` to `<...>-garden-9`. Stack names are a single DNS label on purpose, and may not end in `-garden`: Cloudflare's free certificate covers `*.example.com` but not `a.b.example.com`.
+
+Stacks made before the garden had its own address get it on their next `./lettucectl up` or `./lettucectl profiles`, with no step of yours; the token above already has the permissions it needs. That run needs the network (Cloudflare's API and public DNS), even for `up`.
 
 Check it works:
 - `curl -sI https://alfred.example.com` answers `302` with a `location:` on `https://<team>.cloudflareaccess.com/...`.
