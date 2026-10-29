@@ -14,6 +14,8 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from garden_common.executor import AgentAsks
+
 from .config import HANDLED_KEEP_SECONDS, MAX_PENDING_PER_RULE, RUNS_KEEP_PER_RULE
 
 RULE_ID = re.compile(r"[0-9a-f]{16}")
@@ -386,15 +388,34 @@ class Store:
                 "INSERT OR IGNORE INTO agents (id, name, pos) VALUES (?, ?, ?)",
                 [(a.id, a.name, i) for i, a in enumerate(agents)],
             )
-            self._set({"agents_at": str(self.now()), "agents_asked": None})
+            self._set_agent_asks(self._agent_asks().listed(self.now()))
 
     def ask_for_agents(self) -> None:
         """The trigger form was shown: the executor should send a fresh list."""
-        self.set(agents_asked="1")
+        with self._db:
+            self._set_agent_asks(self._agent_asks().ask())
 
-    def agents_wanted(self, fresh_for: int) -> bool:
+    def agents_wanted(self) -> bool:
+        """Read by the executor before it lists the agents."""
+        with self._db:
+            asks = self._agent_asks().read()
+            self._set_agent_asks(asks)
+        return asks.wanted(self.now())
+
+    def _agent_asks(self) -> AgentAsks:
         at = self.get("agents_at")
-        return at is None or self.now() - int(at) > fresh_for or self.get("agents_asked") is not None
+        counts = (int(self.get(key) or 0) for key in ("agents_asks", "agents_seen", "agents_answered"))
+        return AgentAsks(*counts, listed_at=None if at is None else int(at))
+
+    def _set_agent_asks(self, asks: AgentAsks) -> None:
+        self._set(
+            {
+                "agents_asks": str(asks.asks),
+                "agents_seen": str(asks.seen),
+                "agents_answered": str(asks.answered),
+                "agents_at": None if asks.listed_at is None else str(int(asks.listed_at)),
+            }
+        )
 
     def agents(self) -> list[Agent] | None:
         """Sorted by name; None until the executor has sent a list."""

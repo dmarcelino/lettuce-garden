@@ -1,14 +1,15 @@
 import json
 
 import pytest
+from garden_common.executor import AGENTS_FRESH_SECONDS
 from starlette.testclient import TestClient
 
 from gmail_triggers.app import create_app
-from gmail_triggers.config import AGENTS_FRESH_SECONDS, LOST_AFTER_SECONDS, MAX_CLAIM, PREFIX, ConfigError, Settings
+from gmail_triggers.config import LOST_AFTER_SECONDS, MAX_CLAIM, PREFIX, ConfigError, Settings
 from gmail_triggers.store import Rule
 from gmail_triggers.triggers import send_test
 
-from .conftest import AGENT, NAVIGATE, ORIGIN, OTHER_AGENT, TOKEN, make_jwt
+from .conftest import AGENT, NAVIGATE, ORIGIN, OTHER_AGENT, TOKEN, make_jwt, raw_get
 
 API = "/executor/v1"
 AUTH = {"authorization": f"Bearer {TOKEN}"}
@@ -80,18 +81,17 @@ def test_browser_and_tunnel_requests_are_refused(api, env, extra):
 def test_the_api_is_not_reachable_under_the_page_prefix(env, authenticator, signing_key):
     send_test(env.store, rule(env), env.store.now())
     app = create_app(env.store, env.google, authenticator, TOKEN)
-    with TestClient(app, base_url=ORIGIN) as c:
-        jwt_headers = {**AUTH, "cf-access-jwt-assertion": make_jwt(signing_key)}
-        for path in [
-            f"{PREFIX}/executor/v1/requests",
-            f"{PREFIX}{API}/requests",
-            f"{PREFIX}/../executor/v1/requests",
-            f"{PREFIX}/%2e%2e/executor/v1/requests",
-            f"{PREFIX}/..%2fexecutor/v1/requests",
-        ]:
-            for headers in (AUTH, jwt_headers):
-                r = c.get(path, headers=headers)
-                assert r.status_code in (400, 404), (path, r.status_code)
+    jwt_headers = {**AUTH, "cf-access-jwt-assertion": make_jwt(signing_key)}
+    for path in [
+        f"{PREFIX}/executor/v1/requests",
+        f"{PREFIX}{API}/requests",
+        f"{PREFIX}/../executor/v1/requests",
+        f"{PREFIX}/%2e%2e/executor/v1/requests",
+        f"{PREFIX}/..%2fexecutor/v1/requests",
+    ]:
+        for headers in (AUTH, jwt_headers):
+            status = raw_get(app, path, headers)
+            assert status in (400, 404), (path, status)
     assert len(env.requests()) == 1
 
 
@@ -104,16 +104,17 @@ def test_settings_refuse_a_missing_or_malformed_token():
         "CF_ACCESS_TEAM_DOMAIN": "team1",
         "CF_ACCESS_AUD": "aud1",
         "ALLOWED_USERS": "alfred@gmail.com",
-        "PUBLIC_ORIGIN": "https://alfred.example.com",
+        "PUBLIC_ORIGIN": "https://alfred-garden.example.com",
     }
     for token in ("", "abc", TOKEN.upper(), TOKEN + "0", "g" * 64):
         with pytest.raises(ConfigError):
-            Settings.from_env({**base, "GMAIL_TRIGGERS_EXECUTOR_TOKEN": token})
-    settings = Settings.from_env({**base, "GMAIL_TRIGGERS_EXECUTOR_TOKEN": TOKEN})
+            Settings.from_env({**base, "GARDEN_EXECUTOR_TOKEN": token})
+    # The old name is gone: lettucectl passes the garden-wide token.
+    with pytest.raises(ConfigError):
+        Settings.from_env({**base, "GMAIL_TRIGGERS_EXECUTOR_TOKEN": TOKEN})
+    settings = Settings.from_env({**base, "GARDEN_EXECUTOR_TOKEN": TOKEN})
     assert settings.executor_token == TOKEN and TOKEN not in repr(settings)
-    assert settings.garden_profiles == ""
-    settings = Settings.from_env({**base, "GMAIL_TRIGGERS_EXECUTOR_TOKEN": TOKEN, "GARDEN_PROFILES": "secrets,a b"})
-    assert settings.garden_profiles == "secrets"
+    assert not hasattr(settings, "garden_profiles")
 
 
 # -- requests and results ---------------------------------------------------------
@@ -231,7 +232,9 @@ def test_agents_are_validated_and_replaced(api, env):
     body = json.dumps({"v": 1, "agents": agents}).encode()
     r = api.put(f"{API}/agents", content=body, headers={**AUTH, "content-type": "application/json"})
     assert r.status_code == 204
+    # A nameless agent is listed by its id.
     assert [(a.id, a.name) for a in env.store.agents()] == [
+        ("agent-c", "agent-c"),
         ("agent-a", "lucius <b>x</b>"),
         ("agent-b", "zed"),
         ("agent-e", "\ufffd"),
@@ -326,6 +329,22 @@ def test_agents_are_wanted_after_the_form_is_shown(api, env, signing_key, form):
     assert page.status_code == 200
     assert wanted(api) is True
     # Asking doesn't clear it; only a new list does.
+    assert wanted(api) is True
+    put_agents(api)
+    assert wanted(api) is False
+
+
+def test_a_form_shown_while_the_executor_lists_asks_again(api, env, signing_key):
+    def form():
+        headers = {**NAVIGATE, "cf-access-jwt-assertion": make_jwt(signing_key)}
+        assert api.get(f"{PREFIX}/new", headers=headers).status_code == 200
+
+    put_agents(api)
+    form()
+    assert wanted(api) is True
+    # Shown after the executor read the status, so the list it sends may predate the agent.
+    form()
+    put_agents(api)
     assert wanted(api) is True
     put_agents(api)
     assert wanted(api) is False

@@ -11,8 +11,9 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from email.utils import parseaddr
 
+from garden_common.text import CONTROL, encodable, one_line
+
 from .config import MAX_SUBJECT
-from .text import CONTROL, encodable, one_line
 
 # Never "arriving mail": the account's own sent mail and drafts (an agent
 # replying must not set off its own trigger again), and mail in Spam or Trash,

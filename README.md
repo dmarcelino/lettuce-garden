@@ -1,11 +1,11 @@
 # Lettuce Garden
 
-An opinionated, batteries-included way to run [Lettuce](https://github.com/dmarchevsky/lettuce) for several people on one host: one isolated stack per person behind Cloudflare Access, plus extras such as a secrets vault, Gmail triggers, a code editor, an egress proxy, MCP servers and agent skills. Each stack sits behind its own Cloudflare Tunnel and Cloudflare Access application, and people sign in with Google.
+An opinionated, batteries-included way to run [Lettuce](https://github.com/dmarchevsky/lettuce) for several people on one host: one isolated stack per person behind Cloudflare Access, plus extras such as a secrets vault, Gmail triggers, a code editor, an egress proxy, MCP servers and agent skills. Each stack sits behind its own Cloudflare Tunnel and Cloudflare Access applications (one for Lettuce, one for the garden extras), and people sign in with Google.
 
 Each person gets:
 - a private Letta agent server with its own memory, conversations, workspaces and secrets;
 - the Lettuce web UI (a PWA) at `https://<name>.<your-domain>`;
-- the garden extras that are on, linked from `https://<name>.<your-domain>/garden/`.
+- the garden extras that are on, at their own address, `https://<name>-garden.<your-domain>/`, behind the same Google sign-in.
 
 Nobody can reach another person's stack. **Cloudflare authenticates the people; Docker separates the assistants.** Upstream Lettuce needs no multi-user code for this.
 
@@ -69,11 +69,12 @@ Day-to-day commands, optional features, upgrades, backups and troubleshooting ar
 | `compose/gmail-triggers.yml`, `gmail-triggers/` | yes | optional Gmail triggers (`gmail-triggers` profile) and their source |
 | `compose/pipelock.yml`, `compose/pipelock-proxy.yml`, `pipelock/` | yes | the optional egress proxy (`pipelock` profile), its proxy settings and its image |
 | `compose/code-server.yml`, `code-server/` | yes | the optional code editor (`code-server` profile): its gate, the editor's image and the shell's image |
+| `compose/garden.yml`, `garden/` | yes | the garden's landing page (on with any garden extra) and the garden executor, which runs Gmail triggers' requests and sends the landing page the agent list |
 | `compose/doc-tools.yml`, `compose/shared/gotenberg.yml`, `doc-tools/` | yes | the optional Office and PDF tools (`doc-tools` profile): the app-server's mount and network, the host's shared Gotenberg, and the tools' image and PDF server |
-| `garden-common/` | yes | code the vault, Gmail triggers and the code editor's gate share (sign-in checks, page styles, the `/garden/` landing page) |
+| `garden-common/` | yes | code the garden services share (sign-in checks, the executor API's checks, page styles, icons) |
 | `config.env.example` | yes | template for `config.env` |
 | `scripts/dns-preflight.sh` | yes | compares two nameservers before and after moving a domain |
-| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) the sidecars' tests (`tests/run-sidecar.sh broker`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
+| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) the sidecars' tests (`tests/run-sidecar.sh broker`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
 | `config.env` | **no** | your settings plus cached Cloudflare ids (mode 600) |
 | `.secrets/cloudflare-api-token` | **no** | Cloudflare API token (mode 600) |
 | `upstream/` | **no** | Lettuce, cloned at `LETTUCE_REF` |

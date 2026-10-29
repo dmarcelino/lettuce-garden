@@ -35,7 +35,6 @@ def main() -> None:
         Authenticator(settings),
         settings.executor_token,
         poller=poller,
-        garden_profiles=settings.garden_profiles,
     )
     uvicorn.run(
         app,

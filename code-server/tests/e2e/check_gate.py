@@ -18,7 +18,7 @@ from starlette.testclient import TestClient
 from code_server_gate.app import create_app, editor_client, unix_socket_connect
 from code_server_gate.config import PREFIX, Settings
 
-ORIGIN = "https://alfred.example.com"
+ORIGIN = "https://alfred-garden.example.com"
 EMAIL = "alfred@example.com"
 DOCUMENT = {"sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-site": "same-origin"}
 FRAME = {**DOCUMENT, "sec-fetch-dest": "iframe"}
@@ -47,7 +47,6 @@ def main() -> None:
         issuer="https://team1.cloudflareaccess.com",
         allowed_users=frozenset({EMAIL}),
         public_origin=ORIGIN,
-        garden_profiles="code-server",
     )
     now = int(time.time())
     token = jwt.encode(
@@ -133,7 +132,7 @@ def main() -> None:
         check("a WebSocket reaches the editor through the gate", websocket)
 
         def websocket_foreign_origin() -> None:
-            headers = {"origin": "https://alfred.example.com:8443", "cf-access-jwt-assertion": token}
+            headers = {"origin": "https://alfred-garden.example.com:8443", "cf-access-jwt-assertion": token}
             try:
                 with browser.websocket_connect(f"{PREFIX}/", headers=headers):
                     raise AssertionError("accepted")

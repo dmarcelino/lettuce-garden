@@ -1,15 +1,15 @@
 # Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
 # The code editor (code-server/, docs/code-server.md): VS Code in the browser at
-# https://<host>/garden/code-server/, on the agents' workspaces. Opt-in behind
-# the `code-server` profile; without it this file adds nothing.
+# https://<name>-garden.<domain>/code-server/, on the agents' workspaces. Opt-in
+# behind the `code-server` profile; without it this file adds nothing.
 #
-# Three services, because the editor shares an origin with Lettuce and the vault
+# Three services, because the editor shares the garden's origin with the vault
 # and must never run what agents wrote:
-# - code-server, the gate: the tunnel forwards /garden/code-server/ (and /garden/
-#   when it is the first garden page) to it. It checks the Access JWT on every
-#   request and WebSocket, strips the prefix and lets only listed headers and
-#   pages through. It is the only one on `default` and the only way in: it
-#   reaches the editor through the editor's Unix socket, on code-server-sock.
+# - code-server, the gate: the tunnel forwards /code-server/ on the garden host
+#   to it. It checks the garden's Access JWT on every request and WebSocket,
+#   strips the prefix and lets only listed headers and pages through. It is the
+#   only one on `default` and the only way in: it reaches the editor through
+#   the editor's Unix socket, on code-server-sock.
 # - code-server-editor: code-server itself, listening on that socket and on no
 #   port, so nothing on a network reaches it, the shell included. Its one
 #   network, code-exec, takes its SSH sessions to the shell. It edits the
@@ -33,12 +33,11 @@ services:
     image: lettuce-code-server:local
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
-      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      # The garden's own Access application and host, never Lettuce's.
+      CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}
       CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
       ALLOWED_USERS: ${ALLOWED_USERS:-}
-      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
-      # The /garden/ landing page links only to the garden pages that are on.
-      GARDEN_PROFILES: ${GARDEN_PROFILES:-}
+      PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
       TZ: ${TZ:-UTC}
     volumes:
       # The editor's socket (code_server_gate.config.EDITOR_SOCKET).

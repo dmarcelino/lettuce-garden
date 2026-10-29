@@ -123,23 +123,10 @@ def test_healthz_is_open_and_root_redirects(client):
     assert r.status_code == 308 and r.headers["location"] == f"{B}/"
 
 
-def test_garden_landing_needs_access_and_lists_the_features_that_are_on(env, authenticator, signing_key):
-    app = create_app(env.store, env.google, authenticator, TOKEN, garden_profiles="gmail-triggers")
-    jwt = {"cf-access-jwt-assertion": make_jwt(signing_key)}
-    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE, follow_redirects=False) as c:
-        for path in ("/garden", "/garden/"):
-            assert c.get(path).status_code == 403, path
-            r = c.get(path, headers=jwt)
-            assert r.status_code == 200, path
-            assert "script-src 'none'" in r.headers["content-security-policy"]
-            assert "connect-src 'none'" in r.headers["content-security-policy"]
-            assert "<script" not in r.text and "code-agents" not in r.text
-            assert f'href="{B}/"' in r.text and f'href="{B}/garden.css"' in r.text
-            assert 'href="/garden/secrets/"' not in r.text
-    app = create_app(env.store, env.google, authenticator, TOKEN, garden_profiles="secrets,gmail-triggers")
-    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE) as c:
-        page = c.get("/garden/", headers=jwt).text
-    assert 'href="/garden/secrets/"' in page and f'href="{B}/"' in page
+def test_the_garden_landing_page_is_not_served_here(client):
+    """The garden service owns / on the garden's host; the tunnel never routes it here."""
+    for path in ("/", "/garden", "/garden/"):
+        assert client.get(path).status_code == 404, path
 
 
 SCRIPT = {"sec-fetch-mode": "cors", "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin"}
@@ -151,7 +138,7 @@ SCRIPT = {"sec-fetch-mode": "cors", "sec-fetch-dest": "empty", "sec-fetch-site":
 )
 def test_pages_load_only_as_top_level_documents(client, fetch):
     token = csrf(client)
-    for path in [f"{B}/", f"{B}/new", "/garden/"]:
+    for path in [f"{B}/", f"{B}/new"]:
         r = client.get(path, headers=fetch)
         assert r.status_code == 403, path
         assert token not in r.text, path
@@ -175,12 +162,15 @@ def test_stylesheets_and_icons_load_as_subresources_and_everything_carries_coop(
         r = client.get(f"{B}{path}", headers=style)
         assert r.status_code == 200, path
         assert r.headers["cross-origin-opener-policy"] == "same-origin", path
-    for r in (client.get(f"{B}/"), client.get("/garden/"), client.get(f"{B}/", headers=SCRIPT)):
+    for r in (client.get(f"{B}/"), client.get(f"{B}/", headers=SCRIPT)):
         assert r.headers["cross-origin-opener-policy"] == "same-origin"
 
 
-def test_pages_link_to_the_garden(client):
-    assert 'href="/garden/">Lettuce Garden</a>' in client.get(f"{B}/").text
+def test_pages_live_under_their_prefix_and_link_to_the_garden_root(client):
+    assert B == "/gmail-triggers"
+    page = client.get(f"{B}/").text
+    assert 'href="/">Lettuce Garden</a>' in page and f'href="{B}/garden.css"' in page
+    assert "/garden/" not in page
 
 
 def test_pages_carry_the_security_headers_and_no_script(client, env):

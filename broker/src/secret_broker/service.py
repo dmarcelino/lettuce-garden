@@ -42,6 +42,16 @@ VAULT_RUN = "python3 /root/.letta/skills/using-vault-secrets/vault-run"
 # Pushes asking to unlock are sent at most this often.
 UNLOCK_NOTICE_SECONDS = 300
 
+# Nothing starts an agent's turn when the user answers: an agent that ends its
+# turn with nothing waiting never collects what the user approved.
+KEEP_WAITING = (
+    f"Wait for the answer before you end your turn: call get_result with this id and wait_seconds "
+    f"{MAX_WAIT_SECONDS}, and call it again until the status is no longer pending (the request expires after "
+    f"{REQUEST_TTL_SECONDS // 60} minutes). If you can run a command in the background, run each call as its own "
+    "background command, so you are told when it finishes. Don't end your turn with nothing waiting: nothing "
+    "tells you when the user answers."
+)
+
 
 def rules(purpose: str) -> str:
     """Sent with every value shared as text, so the agent has them in front of it
@@ -321,8 +331,7 @@ class Broker:
             "status": PENDING,
             "approve_url": approve_url,
             "message": "Waiting for the user's approval. Send them this link in your reply now, since they may "
-            f"not get a notification: {approve_url} Then call get_result with this id (wait_seconds up to "
-            f"{MAX_WAIT_SECONDS} waits for the answer).",
+            f"not get a notification: {approve_url} {KEEP_WAITING}",
         }
 
     async def get_result(self, rid: str, wait_seconds: float = 0) -> dict[str, Any]:
@@ -334,7 +343,8 @@ class Broker:
         if req is None:
             return {"status": "unknown", "error": f"no request '{rid}' (requests are forgotten after a restart)"}
         if req.status == PENDING:
-            return {"id": rid, "status": PENDING, "approve_url": self.url(f"r/{rid}")}
+            message = f"Still waiting for the user's approval. {KEEP_WAITING}"
+            return {"id": rid, "status": PENDING, "approve_url": self.url(f"r/{rid}"), "message": message}
         if req.status in (DENIED, EXPIRED):
             return {"id": rid, "status": req.status}
         if req.lost_to_lock:

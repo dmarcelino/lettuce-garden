@@ -1,7 +1,7 @@
 """The encrypted vault: one SQLite file on the broker-only volume.
 
 On disk in plaintext: secret ids, kinds, sharing modes, timestamps, audit
-actions and push subscriptions. Secret names, usage notes, fields and audit
+actions, push subscriptions and the origin they were made on. Secret names, usage notes, fields and audit
 details are encrypted (crypto.py). The data key lives only in this process,
 from unlock until lock, auto-lock or restart.
 """
@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   email TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
+-- The origin the push subscriptions were made on (key "origin").
+CREATE TABLE IF NOT EXISTS push_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 """
 
 ASK, AUTO = "ask", "auto"
@@ -381,3 +383,25 @@ class Vault:
 
     def subscriptions(self) -> list[Any]:
         return self._q("SELECT * FROM push_subscriptions ORDER BY created_at")
+
+    def push_origin(self) -> str | None:
+        rows = self._q("SELECT v FROM push_meta WHERE k = 'origin'")
+        return rows[0]["v"] if rows else None
+
+    def adopt_push_origin(self, origin: str) -> int | None:
+        """Record `origin` as the one subscriptions are made on. When another one
+        was recorded, or none while subscriptions exist (they predate the record),
+        those subscriptions are dropped: returns how many, or None when `origin`
+        was already recorded."""
+        with self._lock:
+            if self.push_origin() == origin:
+                return None
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                dropped = self._db.execute("DELETE FROM push_subscriptions").rowcount
+                self._db.execute("INSERT OR REPLACE INTO push_meta (k, v) VALUES ('origin', ?)", (origin,))
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+            return dropped

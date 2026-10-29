@@ -4,13 +4,14 @@ import logging
 import anyio
 import pytest
 
-from secret_broker.config import HANDLE_TTL_SECONDS, MAX_HANDLES, MAX_PENDING, REQUEST_TTL_SECONDS
+from secret_broker.config import HANDLE_TTL_SECONDS, MAX_HANDLES, MAX_PENDING, MAX_WAIT_SECONDS, REQUEST_TTL_SECONDS
 from secret_broker.vault import VaultError
 
 from .conftest import (
     ADDRESS_TEXT,
     CARD,
     EMAIL,
+    ORIGIN,
     PASSPHRASE,
     SECRET,
     STREET,
@@ -67,7 +68,7 @@ async def test_approval_flow_shares_only_ticked_fields_once(settings, vault, cap
 
     async def flow():
         sub = await broker.request_secret(card, "Pay for the train")  # no fields: all private ones
-        assert sub["status"] == "pending" and sub["approve_url"].endswith(f"/garden/secrets/r/{sub['id']}")
+        assert sub["status"] == "pending" and sub["approve_url"] == f"{ORIGIN}/secrets/r/{sub['id']}"
         assert sub["approve_url"] in sub["message"] and "notified" not in sub["message"]
         req = broker.request(sub["id"])
         assert req.fields == ("number", "security_code", "notes")
@@ -84,6 +85,23 @@ async def test_approval_flow_shares_only_ticked_fields_once(settings, vault, cap
     assert "Visa" in pushed and CARD not in pushed and "4242" not in pushed
     assert CARD not in caplog.text and SECRET not in caplog.text
     assert any(e.action == "shared on approval" for e in vault.audit_log())
+
+
+async def test_a_pending_answer_tells_the_agent_to_keep_waiting(settings, vault):
+    # Nothing wakes an agent whose turn ended with nothing running: the user's
+    # approval lands, and the agent never collects it.
+    broker = make_broker(settings, vault, FakeSender())
+
+    async def flow():
+        sub = await broker.request_secret(add_card(vault), "Pay for the train")
+        return sub, await broker.get_result(sub["id"])
+
+    sub, still = await with_broker(broker, flow)
+    for answer in (sub, still):
+        message = answer["message"]
+        assert f"wait_seconds {MAX_WAIT_SECONDS}" in message and "background" in message
+        assert "until" in message and "end your turn" in message
+    assert sub["approve_url"] in sub["message"]
 
 
 async def test_public_fields_are_not_requested(settings, vault):

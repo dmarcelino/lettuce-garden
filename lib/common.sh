@@ -200,6 +200,7 @@ compose_env() {
     -f "$LETTUCE_HOME/compose/gmail-triggers.yml" \
     -f "$LETTUCE_HOME/compose/pipelock.yml" \
     -f "$LETTUCE_HOME/compose/code-server.yml" \
+    -f "$LETTUCE_HOME/compose/garden.yml" \
     "${extra[@]}" \
     --env-file "$env_file" \
     "$@"
@@ -329,14 +330,21 @@ ensure_push_keys() {
   done
 }
 
-# ensure_executor_token NAME -> gives the stack, once, the token the gmail-triggers
-# executor presents to the sidecar's /executor/v1/ API. Nothing rotates it; to
-# replace it, delete the line from stack.env and run `lettucectl up`.
+# ensure_executor_token NAME -> gives the stack, once, the token the garden
+# executor presents to the /executor/v1/ APIs of garden and gmail-triggers.
+# Nothing rotates it; to replace it, delete the line from stack.env and run
+# `lettucectl up`. A stack from before the garden executor keeps the token it
+# had as GMAIL_TRIGGERS_EXECUTOR_TOKEN, moved over once.
 ensure_executor_token() {
-  local f
+  local f old
   f=$(stack_env "$1")
-  [[ -n $(env_get "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN) ]] ||
-    env_set "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN "$(openssl rand -hex 32)"
+  old=$(env_get "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN)
+  if [[ -z $(env_get "$f" GARDEN_EXECUTOR_TOKEN) ]]; then
+    env_set "$f" GARDEN_EXECUTOR_TOKEN "${old:-$(openssl rand -hex 32)}"
+  fi
+  if env_has "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN; then
+    env_unset "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN
+  fi
 }
 
 # env_without_profile FILE PROFILE -> the path of a private temp copy of the env
@@ -355,9 +363,9 @@ env_without_profile() {
 }
 
 # sync_garden_profiles NAME -> GARDEN_PROFILES, the garden pages the landing page
-# links to, follows COMPOSE_PROFILES. The sidecars get only this list, so a
-# profile without a garden page changes nothing in their config and Compose
-# does not recreate them (which would relock the vault).
+# links to, follows COMPOSE_PROFILES. Only the garden service gets it (not the
+# vault, which a recreate would relock), and only this list, so a profile
+# without a garden page changes nothing in its config.
 sync_garden_profiles() {
   local f garden
   f=$(stack_env "$1")
@@ -370,7 +378,7 @@ sync_garden_profiles() {
 # LIST, before it writes the lists: the stack.env and config.env lists may differ
 # then, and the config is rendered from a copy of stack.env with LIST in it.
 check_stack() {
-  local name=$1 f k profiles rendered published updating sniffing tmp
+  local name=$1 f k p profiles rendered published updating sniffing tmp
   f=$(stack_env "$name")
   [[ -f $f ]] || die "$name: stack.env missing"
   [[ $(file_mode "$f") == 600 ]] || die "$name: stack.env must be mode 600"
@@ -457,10 +465,22 @@ check_stack() {
     check_code_server "$name" "$rendered" "$(env_get "$f" LETTA_STATE_DIR)"
   fi
   if has_profile "$profiles" gmail-triggers; then
-    [[ $(env_get "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] ||
-      die "$name: GMAIL_TRIGGERS_EXECUTOR_TOKEN must be 64 lowercase hex characters (delete the line and run: lettucectl up $name)"
     check_gmail_triggers "$name" "$rendered" "$(env_get "$f" LETTA_STATE_DIR)"
   fi
+  k=$(garden_profiles "$profiles")
+  if [[ -n $k ]]; then
+    for p in GARDEN_ORIGIN CF_GARDEN_AUD; do
+      [[ -n $(env_get "$f" "$p") ]] || if [[ -z $(env_get "$f" CF_DNS_RECORD_ID) ]]; then
+        die "$name: $p is empty and its setup never finished; run: lettucectl add $name <emails>, which resumes it"
+      else
+        die "$name: $p is empty; the garden pages need their own host and Access application (run: lettucectl up $name, which creates them)"
+      fi
+    done
+    [[ $(env_get "$f" GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] ||
+      die "$name: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters (delete the line and run: lettucectl up $name)"
+    check_garden "$name" "$rendered" "${k%%,*}"
+  fi
+  check_garden_audience "$name" "$rendered" "$f"
   # Whatever the profiles: the tools' volume (by key or by name) and image mounts
   # are the app-server's only.
   k=$(jq -r '[.volumes // {} | to_entries[] | select((.value.name // "") | startswith("lettuce-doc-tools")) | .key] as $tools
@@ -585,7 +605,8 @@ check_sidecar() {
 # check_pipelock NAME RENDERED -> the pipelock service keeps what
 # compose/pipelock.yml gives it (check_sidecar), and the app-server uses it
 # (compose/pipelock-proxy.yml) for everything but stack-internal traffic:
-# pipelock must never see the vault's values or the executor's token.
+# pipelock must never see the vault's values or the executor's token (which
+# goes to gmail-triggers and garden).
 check_pipelock() {
   local name=$1 rendered=$2 k v
   check_sidecar "$name" "$rendered" pipelock pipelock compose/pipelock.yml
@@ -595,10 +616,43 @@ check_pipelock() {
       die "$name: the app-server's $k must be http://pipelock:8888 with the pipelock profile (compose/pipelock-proxy.yml)"
   done
   for k in NO_PROXY no_proxy; do
-    for v in secret-broker gmail-triggers; do
+    for v in secret-broker gmail-triggers garden; do
       jq -e --arg k "$k" --arg v "$v" '.services["app-server"].environment[$k] // "" | split(",") | index($v)' <<<"$rendered" >/dev/null ||
         die "$name: the app-server's $k must list $v; pipelock must not see its traffic (compose/pipelock-proxy.yml)"
     done
+  done
+}
+
+# check_garden NAME RENDERED PROFILE -> the garden service (the landing page and
+# the agent list), on while PROFILE (or any garden profile) is, keeps what
+# compose/garden.yml gives it: a hardened sidecar (check_sidecar) on the default
+# network only, with no mounts at all (the agent list lives in memory).
+check_garden() {
+  local name=$1 rendered=$2 svc
+  check_sidecar "$name" "$rendered" "$3" garden compose/garden.yml
+  svc=$(jq -c '.services.garden' <<<"$rendered")
+  jq -e '(.networks // {"default": null} | keys) == ["default"]' <<<"$svc" >/dev/null ||
+    die "$name: garden must be on the default network only"
+  jq -e '(.volumes // []) | length == 0' <<<"$svc" >/dev/null ||
+    die "$name: garden must not mount anything (compose/garden.yml)"
+}
+
+# check_garden_audience NAME RENDERED ENV_FILE -> every garden service in the
+# rendered config (garden_services, so a new garden page is held to it too)
+# accepts only the garden's Access application and origin:
+# CF_ACCESS_AUD is the env file's CF_GARDEN_AUD, never Lettuce's CF_ACCESS_AUD,
+# and PUBLIC_ORIGIN is its GARDEN_ORIGIN. Lettuce's token reaches the BFF in
+# plain HTTP inside the namespace agents share; the garden must refuse it.
+check_garden_audience() {
+  local name=$1 rendered=$2 f=$3 s aud origin
+  for s in $(garden_services); do
+    jq -e --arg s "$s" '.services | has($s)' <<<"$rendered" >/dev/null || continue
+    aud=$(jq -r --arg s "$s" '.services[$s].environment.CF_ACCESS_AUD // ""' <<<"$rendered")
+    origin=$(jq -r --arg s "$s" '.services[$s].environment.PUBLIC_ORIGIN // ""' <<<"$rendered")
+    [[ -n $aud && $aud == "$(env_get "$f" CF_GARDEN_AUD)" && $aud != "$(env_get "$f" CF_ACCESS_AUD)" ]] ||
+      die "$name: $s must accept only the garden's Access application (CF_ACCESS_AUD = CF_GARDEN_AUD), never Lettuce's, whose token agents could catch"
+    [[ $origin == "$(env_get "$f" GARDEN_ORIGIN)" ]] ||
+      die "$name: $s must have PUBLIC_ORIGIN = GARDEN_ORIGIN, the garden's own host"
   done
 }
 

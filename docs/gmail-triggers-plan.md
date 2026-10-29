@@ -1,6 +1,6 @@
 # Gmail triggers: implementation plan
 
-Note (2026-10-25): since this plan, the project was renamed Lettuce Garden (it was lettuce-multi-user) and the vault moved from `/secrets/` to `/garden/secrets/`, next to a `/garden/` landing page. The record below is unchanged.
+Note (2026-10-25): since this plan, the project was renamed Lettuce Garden (it was lettuce-multi-user) and the vault moved from `/secrets/` to `/garden/secrets/`, next to a `/garden/` landing page. Since 2026-10-28 the garden pages live on each stack's own garden address (`https://<name>-garden.<domain>/gmail-triggers/`, docs/garden-host-plan.md), and the executor is the garden executor (`garden/executor/run.mjs`, with `--gmail-triggers`). The record below is unchanged.
 
 Status: implemented on `feature/gmail-triggers`, with one change from the design below found in review: **the file spool was replaced by an HTTP API** (see "Revision: no shared spool"). Not yet done: the step 0 spike against a running stack and the step 6 end-to-end test. The executor passes letta's flags as `--name=<value>` (not `--name <value>`): letta-code parses them with strict `parseArgs`, which misreads a value starting with `-`.
 

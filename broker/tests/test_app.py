@@ -9,7 +9,7 @@ from garden_common.auth import Authenticator
 from starlette.testclient import TestClient
 
 from secret_broker.app import create_app
-from secret_broker.config import AUTO_LOCK_SECONDS, PREFIX, Settings
+from secret_broker.config import PREFIX
 from secret_broker.vault import Vault
 
 from .conftest import (
@@ -166,7 +166,7 @@ def test_pages_load_only_as_top_level_documents(env, fetch):
     client = env[0]
     setup_vault(client)
     token = csrf_of(client.get(f"{B}/notifications").text)
-    for path in [f"{B}/", f"{B}/vault", f"{B}/settings", f"{B}/notifications", "/garden/"]:
+    for path in [f"{B}/", f"{B}/vault", f"{B}/settings", f"{B}/notifications"]:
         r = client.get(path, headers=fetch)
         assert r.status_code == 403, path
         assert token not in r.text, path
@@ -215,7 +215,6 @@ def test_every_response_isolates_its_window(env):
     client = env[0]
     for r in (
         client.get(f"{B}/"),
-        client.get("/garden/"),
         client.get(f"{B}/", headers=SCRIPT_FETCH),
         client.get(f"{B}/", headers={"cf-access-jwt-assertion": ""}),
         client.get(f"{B}/app.css"),
@@ -226,7 +225,9 @@ def test_every_response_isolates_its_window(env):
 def test_pages_use_the_garden_look_and_link_to_the_garden(env):
     client = env[0]
     page = client.get(f"{B}/").text
-    assert f'href="{B}/garden.css"' in page and 'href="/garden/">Lettuce Garden</a>' in page
+    assert B == "/secrets"
+    assert f'href="{B}/garden.css"' in page and 'href="/">Lettuce Garden</a>' in page
+    assert "/garden/" not in page
     # app.js and the manifest take the prefix from the page and their own URL.
     assert f'<meta name="base" content="{B}">' in page
     assert client.get(f"{B}/manifest.webmanifest").json()["scope"] == "./"
@@ -234,64 +235,27 @@ def test_pages_use_the_garden_look_and_link_to_the_garden(env):
     assert css.status_code == 200 and "--accent: #0b1020" in css.text
 
 
-def test_garden_landing_needs_access_and_lists_the_features_that_are_on(
-    settings, authenticator, signing_key, vault_path, clock
-):
-    vault = Vault(vault_path, clock=clock, kdf=FAST_KDF)
-    app = create_app(make_broker(settings, vault), authenticator, "k", garden_profiles="secrets")
-    jwt_header = {"cf-access-jwt-assertion": make_jwt(signing_key)}
-    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE, follow_redirects=False) as client:
-        for path in ("/garden", "/garden/"):
-            assert client.get(path).status_code == 403, path
-            # Open while the vault is not even set up: it holds no vault data.
-            r = client.get(path, headers=jwt_header)
-            assert r.status_code == 200, path
-            assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
-            assert f'href="{B}/"' in r.text and f'href="{B}/garden.css"' in r.text
-            assert 'href="/garden/gmail-triggers/"' not in r.text
-    app = create_app(make_broker(settings, vault), authenticator, "k", garden_profiles="secrets,gmail-triggers")
-    with TestClient(app, base_url=ORIGIN, headers=NAVIGATE) as client:
-        page = client.get("/garden/", headers=jwt_header).text
-    assert 'href="/garden/gmail-triggers/"' in page and f'href="{B}/"' in page
-
-
-def test_settings_read_the_garden_profiles():
-    base = {
-        "CF_ACCESS_TEAM_DOMAIN": "team1",
-        "CF_ACCESS_AUD": "aud1",
-        "ALLOWED_USERS": EMAIL,
-        "PUBLIC_ORIGIN": ORIGIN,
-        "BROKER_VAPID_PUBLIC_KEY": "pub",
-        "BROKER_VAPID_PRIVATE_KEY": "priv",
-        "PUSH_VAPID_CONTACT_EMAIL": "ops@example.com",
-    }
-    assert Settings.from_env(base).garden_profiles == ""
-    settings = Settings.from_env({**base, "GARDEN_PROFILES": "secrets, gmail-triggers,../x,"})
-    assert settings.garden_profiles == "secrets,gmail-triggers"
+def test_the_garden_landing_page_is_not_served_here(env):
+    """The garden service owns / on the garden's host; here / is only /mcp's
+    mount, which answers nothing on the public name."""
+    client = env[0]
+    for path in ("/", "/garden", "/garden/"):
+        r = client.get(path)
+        assert r.status_code >= 400 and "Lettuce Garden" not in r.text, path
 
 
 def test_garden_refusals_log_why(env, caplog):
     client = env[0]
     caplog.set_level(logging.INFO)
-    assert client.get("/garden/", headers=SCRIPT_FETCH).status_code == 403
+    assert client.get(f"{B}/", headers=SCRIPT_FETCH).status_code == 403
     assert client.get(f"{B}/vault", headers=SCRIPT_FETCH).status_code == 403
-    assert client.get("/garden/", headers={"cf-access-jwt-assertion": ""}).status_code == 403
+    assert client.get(f"{B}/", headers={"cf-access-jwt-assertion": ""}).status_code == 403
     refusals = [r.getMessage() for r in caplog.records if r.getMessage().startswith("refused")]
     assert refusals == [
-        "refused GET /garden/ reason=fetch",
+        f"refused GET {B}/ reason=fetch",
         f"refused GET {B}/vault reason=fetch",
-        "refused GET /garden/ reason=auth",
+        f"refused GET {B}/ reason=auth",
     ]
-
-
-def test_garden_landing_does_not_hold_the_vault_open(env, clock):
-    client, vault = env[0], env[1]
-    setup_vault(client)
-    assert vault.is_unlocked()
-    clock.t += AUTO_LOCK_SECONDS - 60
-    assert client.get("/garden/").status_code == 200
-    clock.t += 120
-    assert not vault.is_unlocked()
 
 
 # ── setup, lock, unlock ──────────────────────────────────────────────────────

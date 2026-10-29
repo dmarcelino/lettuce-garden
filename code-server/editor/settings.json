@@ -34,5 +34,6 @@
   "update.mode": "none",
   "workbench.enableExperiments": false,
   "chat.disableAIFeatures": true,
+  "workbench.secondarySideBar.defaultVisibility": "hidden",
   "markdown.experimental.richLinks.enabled": false
 }
