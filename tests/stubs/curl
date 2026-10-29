@@ -7,8 +7,7 @@
 # -garden), app app2 (aud aud2) and DNS record rec2.
 # stub.env settings:
 #   STUB_CF_FAIL="METHOD /path"   that call returns success:false
-#   STUB_CF_TAKEN="host ..."      DNS names that already exist in the zone (a
-#                                 record for one fails as Cloudflare's would)
+#   STUB_CF_TAKEN="host ..."      DNS names that already exist in the zone
 # Settings come from $STUB_ROOT/stub.env, not the environment: lettucectl runs
 # docker under `env -i`. Tests copy the stubs to $STUB_ROOT/bin.
 STUB_ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -54,9 +53,7 @@ case "$method ${path%%\?*}" in
   "GET /accounts/acc1/cfd_tunnel/tun1/token") ok '"tuntok1"' ;;
   "PUT /accounts/acc1/cfd_tunnel/tun1/configurations") ok '{}' ;;
   "POST /zones/zone1/dns_records")
-    if [[ " ${STUB_CF_TAKEN:-} " == *" $(jq -r .name <<<"$body") "* ]]; then
-      echo '{"success":false,"errors":[{"code":81053,"message":"An A, AAAA, or CNAME record with that host already exists."}],"result":null}'
-    elif [[ $(jq -r .name <<<"$body") == *-garden* ]]; then ok '{"id":"rec2"}'; else ok '{"id":"rec1"}'; fi ;;
+    if [[ $(jq -r .name <<<"$body") == *-garden* ]]; then ok '{"id":"rec2"}'; else ok '{"id":"rec1"}'; fi ;;
   DELETE*) ok '{"id":"deleted"}' ;;
   *) echo '{"success":false,"errors":[{"code":0,"message":"stub: unknown route"}],"result":null}' ;;
 esac

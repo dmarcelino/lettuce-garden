@@ -23,9 +23,7 @@ def main() -> None:
         print(f"secret-broker: {e}", file=sys.stderr)
         sys.exit(2)
     vault = Vault(settings.db_path)
-    pusher = Pusher(settings, vault)
-    pusher.adopt_origin()
-    broker = Broker(vault, pusher, settings.public_origin)
+    broker = Broker(vault, Pusher(settings, vault), settings.public_origin)
     app = create_app(broker, Authenticator(settings), settings.vapid_public_key)
     uvicorn.run(
         app,

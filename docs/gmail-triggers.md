@@ -36,7 +36,7 @@ The agent never gets the email itself from the trigger, only its id, sender and 
 ```
 - The profile needs `google`; `check` refuses it otherwise. It adds no Google redirect URI: it reuses the account each person connected in Settings -> Google.
 - `profiles` routes `https://<garden>/gmail-triggers/` to the sidecar on every stack, on the stack's garden address and its own Access application, and `up` installs the garden executor in the app-server with Gmail triggers' part on. Dropping the profile removes the route and the container and turns that part off (the executor itself stays while the code editor is on, for its agent list); the rules stay in the stack's state.
-- Rules and pending requests live in `stacks/<name>/state/garden/gmail-triggers/` and are included in `backup`. Each stack gets a `GARDEN_EXECUTOR_TOKEN` in `stack.env`, generated once (an older `GMAIL_TRIGGERS_EXECUTOR_TOKEN` is moved over); `up` installs it for the executor.
+- Rules and pending requests live in `stacks/<name>/state/garden/gmail-triggers/` and are included in `backup`. Each stack gets a `GARDEN_EXECUTOR_TOKEN` in `stack.env`, generated once; `up` installs it for the executor.
 - Logs: `./lettucectl logs <name> gmail-triggers`; the executor writes `/root/.letta/garden/executor/executor.log` in the app-server (`./lettucectl shell <name> <agent>` can read it).
 
 ## Security model

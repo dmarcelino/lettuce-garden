@@ -109,9 +109,6 @@ def test_settings_refuse_a_missing_or_malformed_token():
     for token in ("", "abc", TOKEN.upper(), TOKEN + "0", "g" * 64):
         with pytest.raises(ConfigError):
             Settings.from_env({**base, "GARDEN_EXECUTOR_TOKEN": token})
-    # The old name is gone: lettucectl passes the garden-wide token.
-    with pytest.raises(ConfigError):
-        Settings.from_env({**base, "GMAIL_TRIGGERS_EXECUTOR_TOKEN": TOKEN})
     settings = Settings.from_env({**base, "GARDEN_EXECUTOR_TOKEN": TOKEN})
     assert settings.executor_token == TOKEN and TOKEN not in repr(settings)
     assert not hasattr(settings, "garden_profiles")

@@ -1,7 +1,10 @@
 # Garden hostname: implementation plan
 
 Status: implemented on branch `garden-host` (2026-10-28), after the code editor (PR #13,
-docs/code-server-plan.md); not yet run on a real stack. Where the build differs from the plan below:
+docs/code-server-plan.md). The migration ran on every stack (2026-10-29), and its code (moving
+existing stacks to their garden host, the old `/garden/` routes kept during the move, the
+executor's old token and install, and the vault's push origin) was removed afterwards; the plan
+below stays as the design record. Where the build differs from the plan below:
 
 - **The executor sends the agent list to both sidecars.** Rather than Gmail triggers reading names
   from `garden`, the executor asks each (`garden`'s `/executor/v1/status`, Gmail triggers'

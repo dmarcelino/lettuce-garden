@@ -333,18 +333,12 @@ ensure_push_keys() {
 # ensure_executor_token NAME -> gives the stack, once, the token the garden
 # executor presents to the /executor/v1/ APIs of garden and gmail-triggers.
 # Nothing rotates it; to replace it, delete the line from stack.env and run
-# `lettucectl up`. A stack from before the garden executor keeps the token it
-# had as GMAIL_TRIGGERS_EXECUTOR_TOKEN, moved over once.
+# `lettucectl up`.
 ensure_executor_token() {
-  local f old
+  local f
   f=$(stack_env "$1")
-  old=$(env_get "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN)
-  if [[ -z $(env_get "$f" GARDEN_EXECUTOR_TOKEN) ]]; then
-    env_set "$f" GARDEN_EXECUTOR_TOKEN "${old:-$(openssl rand -hex 32)}"
-  fi
-  if env_has "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN; then
-    env_unset "$f" GMAIL_TRIGGERS_EXECUTOR_TOKEN
-  fi
+  [[ -n $(env_get "$f" GARDEN_EXECUTOR_TOKEN) ]] ||
+    env_set "$f" GARDEN_EXECUTOR_TOKEN "$(openssl rand -hex 32)"
 }
 
 # env_without_profile FILE PROFILE -> the path of a private temp copy of the env
@@ -470,11 +464,7 @@ check_stack() {
   k=$(garden_profiles "$profiles")
   if [[ -n $k ]]; then
     for p in GARDEN_ORIGIN CF_GARDEN_AUD; do
-      [[ -n $(env_get "$f" "$p") ]] || if [[ -z $(env_get "$f" CF_DNS_RECORD_ID) ]]; then
-        die "$name: $p is empty and its setup never finished; run: lettucectl add $name <emails>, which resumes it"
-      else
-        die "$name: $p is empty; the garden pages need their own host and Access application (run: lettucectl up $name, which creates them)"
-      fi
+      [[ -n $(env_get "$f" "$p") ]] || die "$name: $p is empty"
     done
     [[ $(env_get "$f" GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] ||
       die "$name: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters (delete the line and run: lettucectl up $name)"

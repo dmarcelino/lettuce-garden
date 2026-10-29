@@ -157,33 +157,23 @@ garden_services() {
   printf '%s\n' "${svc%%:*}"
 }
 
-# cf_tunnel_configure ACCOUNT TUNNEL_ID HOST GARDEN_HOST PROFILES [OLD] -> on
+# cf_tunnel_configure ACCOUNT TUNNEL_ID HOST GARDEN_HOST PROFILES -> on
 # GARDEN_HOST, the PROFILE_ROUTES of the profiles that are on, then the landing
 # page when any of them is, then 404 for anything else; HOST to the stack's
-# app-server, and nothing else. An empty GARDEN_HOST (a stack whose garden host
-# does not exist yet) gets no garden rules. A non-empty OLD (a stack whose
-# garden services still run as they did before the garden host,
-# GARDEN_MOVE_PENDING) also keeps HOST's rules of that time, ahead of its
-# app-server: /garden/<profile> to each of those sidecars, and /garden/ to the
-# first of them, which served the landing page.
+# app-server, and nothing else.
 cf_tunnel_configure() {
-  local r p path svc first='' routes='[]' old='[]'
-  if [[ -n $4 ]]; then
-    for r in "${PROFILE_ROUTES[@]}"; do
-      read -r p path svc <<<"$r"
-      has_profile "${5:-}" "$p" || continue
-      routes=$(jq -c --arg h "$4" --arg p "$path" --arg s "$svc" '. + [{hostname: $h, path: $p, service: $s}]' <<<"$routes")
-      old=$(jq -c --arg h "$3" --arg p "^/garden${path#^}" --arg s "$svc" '. + [{hostname: $h, path: $p, service: $s}]' <<<"$old")
-      first=${first:-$svc}
-    done
-    if [[ -n $first ]]; then
-      routes=$(jq -c --arg h "$4" --arg p "$GARDEN_LANDING_PATH" --arg s "$GARDEN_LANDING_SERVICE" \
-        '. + [{hostname: $h, path: $p, service: $s}]' <<<"$routes")
-      old=$(jq -c --arg h "$3" --arg s "$first" '. + [{hostname: $h, path: "^/garden/?$", service: $s}]' <<<"$old")
-    fi
-    routes=$(jq -c --arg h "$4" '. + [{hostname: $h, service: "http_status:404"}]' <<<"$routes")
-    [[ -z ${6:-} ]] || routes=$(jq -c --argjson o "$old" '. + $o' <<<"$routes")
+  local r p path svc first='' routes='[]'
+  for r in "${PROFILE_ROUTES[@]}"; do
+    read -r p path svc <<<"$r"
+    has_profile "${5:-}" "$p" || continue
+    routes=$(jq -c --arg h "$4" --arg p "$path" --arg s "$svc" '. + [{hostname: $h, path: $p, service: $s}]' <<<"$routes")
+    first=${first:-$svc}
+  done
+  if [[ -n $first ]]; then
+    routes=$(jq -c --arg h "$4" --arg p "$GARDEN_LANDING_PATH" --arg s "$GARDEN_LANDING_SERVICE" \
+      '. + [{hostname: $h, path: $p, service: $s}]' <<<"$routes")
   fi
+  routes=$(jq -c --arg h "$4" '. + [{hostname: $h, service: "http_status:404"}]' <<<"$routes")
   cf_api PUT "/accounts/$1/cfd_tunnel/$2/configurations" "$(jq -cn --arg h "$3" --argjson r "$routes" '{config: {ingress: (
     $r + [{hostname: $h, service: "http://app-server:8080"}, {service: "http_status:404"}])}}')" >/dev/null
 }
