@@ -1011,12 +1011,17 @@ cmd_profiles() {
     [[ $(env_get "$(stack_env "$n")" COMPOSE_PROFILES) == "$new" ]] || changed=1
   done
 
+  # Every run syncs the executor on running stacks, so each needs its token,
+  # also when the list is unchanged (a deleted token is made again).
+  for n in "${stacks[@]}"; do
+    ensure_executor_token "$n"
+  done
+
   if [[ -n $changed ]]; then
     # Check every stack, as it will be under the new list, before writing
     # anything, so one broken stack cannot leave the others half-switched.
     for n in "${stacks[@]}"; do
       ensure_push_keys "$n"
-      ensure_executor_token "$n"
       check_stack "$n" --profiles "$new"
     done
     for n in "${stacks[@]}"; do
@@ -1138,6 +1143,8 @@ cmd_down() {
 
 cmd_restart() {
   (($# == 1)) || die "usage: lettucectl restart <name|all>"
+  # Before anything stops: cmd_down checks nothing, and cmd_up would refuse.
+  require_initialised
   cmd_down "$1"
   cmd_up "$1"
 }

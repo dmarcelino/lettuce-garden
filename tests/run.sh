@@ -3395,6 +3395,16 @@ test_remove_purge_renders_the_stack_without_doc_tools() {
   true
 }
 
+test_restart_stops_nothing_on_an_uninitialised_checkout() {
+  added
+  sed -i 's/^CF_TEAM_DOMAIN=.*/CF_TEAM_DOMAIN=/' "$H/config.env"
+  : >"$T/calls.log"
+  ctl restart alfred
+  bad_rc
+  out_has "CF_TEAM_DOMAIN is empty"
+  log_lacks " down"
+}
+
 test_restart_keeps_gotenberg_attached() {
   added
   with_docs
@@ -4061,6 +4071,16 @@ test_up_leaves_an_unfinished_stack_to_add() {
   log_lacks "curl "
 }
 
+test_profiles_gives_a_stack_back_its_deleted_executor_token() {
+  added
+  with_triggers
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  containers alfred app-server gmail-triggers
+  ctl profiles "$(senv alfred COMPOSE_PROFILES)"
+  ok_rc
+  [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "no new executor token"
+}
+
 test_the_executor_is_never_installed_without_a_token() {
   added
   with_triggers
@@ -4075,7 +4095,6 @@ test_the_executor_is_never_installed_without_a_token() {
   fi
 }
 
-# A garden key missing from a setup that never finished: `add` resumes it.
 # The garden service's root and assets go to it, whatever the asset; its
 # executor API and health check never reach the tunnel.
 test_garden_landing_path_routes_only_the_root_and_its_assets() {
