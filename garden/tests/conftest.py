@@ -40,7 +40,7 @@ def clock() -> Clock:
     return Clock()
 
 
-def make_settings(profiles: str = "secrets,gmail-triggers,code-server") -> Settings:
+def make_settings(profiles: str = "garden-vault,garden-gmail-triggers,garden-code-server") -> Settings:
     return Settings(
         team_domain="team1",
         audience="aud1",
@@ -108,7 +108,7 @@ class Garden:
 
 @pytest.fixture
 def garden_for(signing_key, clock):
-    def make(profiles: str = "secrets,gmail-triggers,code-server") -> Garden:
+    def make(profiles: str = "garden-vault,garden-gmail-triggers,garden-code-server") -> Garden:
         return Garden(profiles, signing_key, clock)
 
     return make

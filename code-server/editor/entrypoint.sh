@@ -27,9 +27,9 @@ USER_SETTINGS=$DATA/user/User/settings.json
 
 mkdir -p "$DATA/ssh" "$DATA/home" "$(dirname "$USER_SETTINGS")"
 [[ -f $DATA/ssh/id_ed25519 ]] ||
-  ssh-keygen -q -t ed25519 -N '' -C code-server-editor -f "$DATA/ssh/id_ed25519"
+  ssh-keygen -q -t ed25519 -N '' -C garden-code-server-editor -f "$DATA/ssh/id_ed25519"
 [[ -f $KEYS/ssh_host_ed25519_key ]] ||
-  ssh-keygen -q -t ed25519 -N '' -C code-server-exec -f "$KEYS/ssh_host_ed25519_key"
+  ssh-keygen -q -t ed25519 -N '' -C garden-code-server-exec -f "$KEYS/ssh_host_ed25519_key"
 
 # write FILE: stdin to FILE through a temp file, so a reader never sees half of it
 write() {
@@ -39,7 +39,7 @@ write() {
   mv -f "$tmp" "$1"
 }
 write "$KEYS/authorized_keys" <"$DATA/ssh/id_ed25519.pub"
-printf 'code-server-exec %s\n' "$(cut -d' ' -f1,2 "$KEYS/ssh_host_ed25519_key.pub")" | write "$DATA/ssh/known_hosts"
+printf 'garden-code-server-exec %s\n' "$(cut -d' ' -f1,2 "$KEYS/ssh_host_ed25519_key.pub")" | write "$DATA/ssh/known_hosts"
 
 if [[ -s $USER_SETTINGS ]] && ! jq -e 'type == "object"' "$USER_SETTINGS" >/dev/null 2>&1; then
   # Comments or trailing commas (VS Code accepts them, jq doesn't): keep the file aside.

@@ -1,5 +1,5 @@
 # Pipelock config for one Lettuce stack (pipelock v3.6.0, Community edition).
-# Agents' tools reach it as HTTPS_PROXY=http://pipelock:8888; the same listener
+# Agents' tools reach it as HTTPS_PROXY=http://garden-pipelock:8888; the same listener
 # serves /fetch?url=... . Unknown keys are refused at load, so check with
 # `pipelock check --config` after editing.
 version: 1

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Secret broker: containers, boundaries and interactions",
-    "output": "docs/diagrams/secret-broker-architecture.html",
+    "title": "Vault: containers, boundaries and interactions",
+    "output": "docs/diagrams/vault-architecture.html",
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
@@ -21,7 +21,7 @@
       "sublabel": "Lettuce UI + /garden/",
       "pos": [40, 300],
       "size": [130, 62],
-      "sources": [{ "path": "docs/secret-broker.md", "line": 18, "end_line": 41, "label": "using the vault" }]
+      "sources": [{ "path": "docs/vault.md", "line": 18, "end_line": 41, "label": "using the vault" }]
     },
     {
       "id": "edge",
@@ -62,7 +62,7 @@
       "size": [150, 62],
       "sources": [
         { "path": "AGENTS.md", "line": 63, "label": "shares app-server netns" },
-        { "path": "broker/src/secret_broker/app.py", "line": 422, "end_line": 423, "label": "bridge calls /mcp" }
+        { "path": "vault/src/garden_vault/app.py", "line": 422, "end_line": 423, "label": "bridge calls /mcp" }
       ]
     },
     {
@@ -91,28 +91,28 @@
       ]
     },
     {
-      "id": "broker",
+      "id": "vault",
       "type": "security",
-      "label": "secret-broker",
-      "sublabel": "/garden/secrets, /mcp, /redeem",
+      "label": "vault",
+      "sublabel": "/vault/, /mcp, /redeem",
       "pos": [450, 470],
       "size": [150, 62],
       "sources": [
-        { "path": "compose/secrets.yml", "line": 18, "end_line": 49, "label": "container hardening" },
-        { "path": "broker/src/secret_broker/app.py", "line": 452, "end_line": 462, "label": "routes" },
-        { "path": "broker/src/secret_broker/app.py", "line": 111, "end_line": 119, "label": "JWT on every page" }
+        { "path": "compose/vault.yml", "line": 18, "end_line": 49, "label": "container hardening" },
+        { "path": "vault/src/garden_vault/app.py", "line": 452, "end_line": 462, "label": "routes" },
+        { "path": "vault/src/garden_vault/app.py", "line": 111, "end_line": 119, "label": "JWT on every page" }
       ]
     },
     {
       "id": "volume",
       "type": "database",
-      "label": "secret-broker-data",
+      "label": "vault-data",
       "sublabel": "vault.db, encrypted",
       "pos": [450, 640],
       "size": [150, 62],
       "sources": [
-        { "path": "compose/secrets.yml", "line": 51, "end_line": 55, "label": "named volume" },
-        { "path": "broker/src/secret_broker/vault.py", "line": 1, "end_line": 7, "label": "what is encrypted" },
+        { "path": "compose/vault.yml", "line": 51, "end_line": 55, "label": "named volume" },
+        { "path": "vault/src/garden_vault/vault.py", "line": 1, "end_line": 7, "label": "what is encrypted" },
         { "path": "lib/common.sh", "line": 364, "end_line": 370, "label": "volume and hardening checks" }
       ]
     },
@@ -123,7 +123,7 @@
       "sublabel": "browser vendor",
       "pos": [40, 640],
       "size": [130, 62],
-      "sources": [{ "path": "broker/src/secret_broker/push.py", "line": 27, "end_line": 55, "label": "VAPID push" }]
+      "sources": [{ "path": "vault/src/garden_vault/push.py", "line": 27, "end_line": 55, "label": "VAPID push" }]
     }
   ],
   "boundaries": [
@@ -131,15 +131,15 @@
     {
       "kind": "region",
       "label": "Compose project lettuce-<name> (one per person)",
-      "wraps": ["cloudflared", "bff", "appserver", "vaultrun", "broker", "volume"],
+      "wraps": ["cloudflared", "bff", "appserver", "vaultrun", "vault", "volume"],
       "pad": 26
     },
     { "kind": "security-group", "label": "shared network namespace", "wraps": ["bff", "appserver", "vaultrun"], "pad": 18 },
     { "kind": "security-group", "label": "app-server container", "wraps": ["appserver", "vaultrun"], "pad": 8 },
     {
       "kind": "security-group",
-      "label": "secret-broker: read-only, no caps",
-      "wraps": ["broker", "volume"],
+      "label": "vault: read-only, no caps",
+      "wraps": ["vault", "volume"],
       "pad": 12
     }
   ],
@@ -147,15 +147,15 @@
     { "from": "browser", "to": "edge", "label": "HTTPS", "variant": "emphasis" },
     { "from": "edge", "to": "cloudflared", "label": "tunnel", "variant": "emphasis" },
     { "from": "cloudflared", "to": "bff", "label": "other paths :8080" },
-    { "from": "cloudflared", "to": "broker", "label": "/garden/secrets, /garden/ + JWT", "variant": "security" },
+    { "from": "cloudflared", "to": "vault", "label": "/vault/, + JWT", "variant": "security" },
     { "from": "bff", "to": "appserver", "label": "WebSocket 127.0.0.1:4500" },
     { "from": "appserver", "to": "bff", "label": "mcp_call (vault tool)", "fromSide": "top", "toSide": "top" },
-    { "from": "bff", "to": "broker", "label": "POST /mcp, Host secret-broker" },
+    { "from": "bff", "to": "vault", "label": "POST /mcp, Host garden-vault" },
     { "from": "appserver", "to": "vaultrun", "label": "agent shell runs" },
-    { "from": "vaultrun", "to": "broker", "label": "POST /redeem (handle)", "variant": "security" },
-    { "from": "broker", "to": "jwks", "label": "JWKS", "variant": "dashed" },
-    { "from": "broker", "to": "volume", "label": "encrypted SQLite" },
-    { "from": "broker", "to": "push", "label": "Web Push (VAPID)", "variant": "dashed" },
+    { "from": "vaultrun", "to": "vault", "label": "POST /redeem (handle)", "variant": "security" },
+    { "from": "vault", "to": "jwks", "label": "JWKS", "variant": "dashed" },
+    { "from": "vault", "to": "volume", "label": "encrypted SQLite" },
+    { "from": "vault", "to": "push", "label": "Web Push (VAPID)", "variant": "dashed" },
     { "from": "push", "to": "browser", "label": "notification", "variant": "dashed" }
   ],
   "cards": [
@@ -163,8 +163,8 @@
       "dot": "emerald",
       "title": "Boundaries that hold",
       "items": [
-        "Every /garden/secrets/ page, the /garden/ landing page and every approval need an Access JWT the vault verifies; only Cloudflare adds it",
-        "The tunnel forwards only /garden/secrets and /garden/ to the vault; /mcp and /redeem answer to Host secret-broker with no Origin",
+        "Every /vault// page, the /garden/ landing page and every approval need an Access JWT the vault verifies; only Cloudflare adds it",
+        "The tunnel forwards only /vault/ and /garden/ to the vault; /mcp and /redeem answer to Host garden-vault with no Origin",
         "lettucectl check refuses a vault without read_only or cap_drop ALL, with a host mount, or whose volume another service mounts",
         "The data key lives only in the vault process while unlocked; a lock drops handles and uncollected values"
       ]

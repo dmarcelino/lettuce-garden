@@ -40,7 +40,7 @@
     {
       "id": "vault",
       "type": "backend",
-      "label": "secret-broker, gmail-triggers",
+      "label": "vault, gmail-triggers",
       "sublabel": "stack-internal services",
       "pos": [
         40,

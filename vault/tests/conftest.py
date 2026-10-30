@@ -9,13 +9,13 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from garden_common.auth import Authenticator
 
-from secret_broker.config import Settings
-from secret_broker.crypto import KdfParams
-from secret_broker.push import Pusher
-from secret_broker.service import Broker
-from secret_broker.vault import Vault, build_fields
+from garden_vault.config import Settings
+from garden_vault.crypto import KdfParams
+from garden_vault.push import Pusher
+from garden_vault.service import Service
+from garden_vault.vault import Vault, build_fields
 
-# Deterministic fakes; tests that can see broker output assert they never leak.
+# Deterministic fakes; tests that can see service output assert they never leak.
 SECRET = "TEST_SECRET_DO_NOT_USE_938742"
 STREET = "Rua Falsa 123"
 CARD = "4111111111114242"
@@ -107,13 +107,13 @@ class FakeSender:
             raise WebPushException("push failed", response=Resp())
 
 
-def make_broker(settings: Settings, vault: Vault, sender: FakeSender | None = None) -> Broker:
-    return Broker(vault, Pusher(settings, vault, sender or FakeSender()), settings.public_origin)
+def make_service(settings: Settings, vault: Vault, sender: FakeSender | None = None) -> Service:
+    return Service(vault, Pusher(settings, vault, sender or FakeSender()), settings.public_origin)
 
 
-async def with_broker(broker: Broker, fn):
+async def with_service(service: Service, fn):
     async with anyio.create_task_group() as tg:
-        broker.bind_task_group(tg)
+        service.bind_task_group(tg)
         try:
             return await fn()
         finally:

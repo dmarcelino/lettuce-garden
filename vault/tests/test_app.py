@@ -8,9 +8,9 @@ import pytest
 from garden_common.auth import Authenticator
 from starlette.testclient import TestClient
 
-from secret_broker.app import create_app
-from secret_broker.config import PREFIX
-from secret_broker.vault import Vault
+from garden_vault.app import create_app
+from garden_vault.config import PREFIX
+from garden_vault.vault import Vault
 
 from .conftest import (
     ADDRESS_TEXT,
@@ -24,11 +24,11 @@ from .conftest import (
     SECRET,
     STREET,
     FakeSender,
-    make_broker,
+    make_service,
     make_jwt,
 )
 
-MCP = "http://secret-broker:8000/mcp"
+MCP = "http://garden-vault:8000/mcp"
 B = PREFIX
 
 
@@ -36,8 +36,8 @@ B = PREFIX
 def env(settings, authenticator, signing_key, vault_path, clock):
     vault = Vault(vault_path, clock=clock, kdf=FAST_KDF)
     sender = FakeSender()
-    broker = make_broker(settings, vault, sender)
-    app = create_app(broker, authenticator, settings.vapid_public_key)
+    service = make_service(settings, vault, sender)
+    app = create_app(service, authenticator, settings.vapid_public_key)
     with TestClient(app, base_url=ORIGIN, headers=NAVIGATE, follow_redirects=False) as client:
         client.headers["cf-access-jwt-assertion"] = make_jwt(signing_key)
         yield client, vault, sender
@@ -71,7 +71,7 @@ CARD_FORM = {
 
 
 def add(client, form) -> str:
-    r = post(client, f"{B}/vault", form)
+    r = post(client, f"{B}/secrets", form)
     assert r.status_code == 303, r.text
     return r.headers["location"].rsplit("/", 1)[1]
 
@@ -120,7 +120,7 @@ def test_ui_requires_valid_access_jwt(env, signing_key, other_key, token):
         value = make_jwt(signing_key, **token)
     else:
         value = token
-    for path in [f"{B}/", f"{B}/vault", f"{B}/audit", f"{B}/sw.js", f"{B}/notifications"]:
+    for path in [f"{B}/", f"{B}/secrets", f"{B}/audit", f"{B}/sw.js", f"{B}/notifications"]:
         assert client.get(path, headers={"cf-access-jwt-assertion": value}).status_code == 403, path
 
 
@@ -134,7 +134,7 @@ def test_jwks_unavailable_fails_closed(settings, signing_key, vault_path, clock)
         raise jwt.PyJWKClientError("unreachable")
 
     vault = Vault(vault_path, clock=clock, kdf=FAST_KDF)
-    app = create_app(make_broker(settings, vault), Authenticator(settings, key_resolver=broken), "k")
+    app = create_app(make_service(settings, vault), Authenticator(settings, key_resolver=broken), "k")
     with TestClient(app, base_url=ORIGIN, headers=NAVIGATE) as client:
         r = client.get(f"{B}/", headers={"cf-access-jwt-assertion": make_jwt(signing_key)})
     assert r.status_code == 503
@@ -166,7 +166,7 @@ def test_pages_load_only_as_top_level_documents(env, fetch):
     client = env[0]
     setup_vault(client)
     token = csrf_of(client.get(f"{B}/notifications").text)
-    for path in [f"{B}/", f"{B}/vault", f"{B}/settings", f"{B}/notifications"]:
+    for path in [f"{B}/", f"{B}/secrets", f"{B}/settings", f"{B}/notifications"]:
         r = client.get(path, headers=fetch)
         assert r.status_code == 403, path
         assert token not in r.text, path
@@ -225,7 +225,7 @@ def test_every_response_isolates_its_window(env):
 def test_pages_use_the_garden_look_and_link_to_the_garden(env):
     client = env[0]
     page = client.get(f"{B}/").text
-    assert B == "/secrets"
+    assert B == "/vault"
     assert f'href="{B}/garden.css"' in page and 'href="/">Lettuce Garden</a>' in page
     assert "/garden/" not in page
     # app.js and the manifest take the prefix from the page and their own URL.
@@ -248,12 +248,12 @@ def test_garden_refusals_log_why(env, caplog):
     client = env[0]
     caplog.set_level(logging.INFO)
     assert client.get(f"{B}/", headers=SCRIPT_FETCH).status_code == 403
-    assert client.get(f"{B}/vault", headers=SCRIPT_FETCH).status_code == 403
+    assert client.get(f"{B}/secrets", headers=SCRIPT_FETCH).status_code == 403
     assert client.get(f"{B}/", headers={"cf-access-jwt-assertion": ""}).status_code == 403
     refusals = [r.getMessage() for r in caplog.records if r.getMessage().startswith("refused")]
     assert refusals == [
         f"refused GET {B}/ reason=fetch",
-        f"refused GET {B}/vault reason=fetch",
+        f"refused GET {B}/secrets reason=fetch",
         f"refused GET {B}/ reason=auth",
     ]
 
@@ -263,14 +263,14 @@ def test_garden_refusals_log_why(env, caplog):
 
 def test_first_visit_asks_to_create_the_vault(env):
     client, vault = env[0], env[1]
-    assert "Create your vault" in client.get(f"{B}/vault").text
+    assert "Create your vault" in client.get(f"{B}/secrets").text
     r = post(client, f"{B}/setup", {"passphrase": PASSPHRASE, "confirm": "something else entirely"})
     assert r.status_code == 400 and not vault.is_setup()
     r = post(client, f"{B}/setup", {"passphrase": "short", "confirm": "short"})
     assert r.status_code == 400 and not vault.is_setup()
     setup_vault(client)
     assert vault.is_unlocked()
-    assert "Add a secret" in client.get(f"{B}/vault").text
+    assert "Add a secret" in client.get(f"{B}/secrets").text
 
 
 def test_locked_pages_ask_to_unlock_and_return(env):
@@ -278,13 +278,13 @@ def test_locked_pages_ask_to_unlock_and_return(env):
     setup_vault(client)
     secret = add(client, ADDRESS)
     post(client, f"{B}/lock", {})
-    page = client.get(f"{B}/vault/{secret}")
+    page = client.get(f"{B}/secrets/{secret}")
     assert "Your vault is locked" in page.text and STREET not in page.text
-    assert f'value="{B}/vault/{secret}"' in page.text
-    r = post(client, f"{B}/unlock", {"passphrase": "wrong passphrase!!", "next": f"{B}/vault/{secret}"})
+    assert f'value="{B}/secrets/{secret}"' in page.text
+    r = post(client, f"{B}/unlock", {"passphrase": "wrong passphrase!!", "next": f"{B}/secrets/{secret}"})
     assert r.status_code == 403 and not vault.is_unlocked()
-    r = post(client, f"{B}/unlock", {"passphrase": PASSPHRASE, "next": f"{B}/vault/{secret}"})
-    assert r.status_code == 303 and r.headers["location"] == f"{B}/vault/{secret}"
+    r = post(client, f"{B}/unlock", {"passphrase": PASSPHRASE, "next": f"{B}/secrets/{secret}"})
+    assert r.status_code == 303 and r.headers["location"] == f"{B}/secrets/{secret}"
     post(client, f"{B}/lock", {})
     r = post(client, f"{B}/unlock", {"passphrase": PASSPHRASE, "next": "https://evil.example/"})
     assert r.headers["location"] == f"{B}/"
@@ -328,13 +328,13 @@ def test_private_fields_hidden_until_show(env):
     client = env[0]
     setup_vault(client)
     secret = add(client, CARD_FORM)
-    page = client.get(f"{B}/vault/{secret}").text
+    page = client.get(f"{B}/secrets/{secret}").text
     assert "Visa" in page and "ending 4242" in page and "12/30" in page
     assert CARD not in page and SECRET not in page
-    shown = post(client, f"{B}/vault/{secret}/show", {})
+    shown = post(client, f"{B}/secrets/{secret}/show", {})
     assert CARD in shown.text and SECRET in shown.text
     assert any(e.action == "viewed private fields" for e in env[1].audit_log())
-    edit = client.get(f"{B}/vault/{secret}/edit").text
+    edit = client.get(f"{B}/secrets/{secret}/edit").text
     assert CARD not in edit and SECRET not in edit
 
 
@@ -354,7 +354,7 @@ def test_editing_keeps_private_values_left_blank(env):
         "f_notes": "",
         "share_mode": "ask",
     }
-    assert post(client, f"{B}/vault/{secret}", form).status_code == 303
+    assert post(client, f"{B}/secrets/{secret}", form).status_code == 303
     saved = vault.secret(secret)
     assert saved.name == "Visa (work)" and saved.field("number").value == CARD
     assert saved.field("expiry").value == "01/31" and saved.field("security_code") is None
@@ -364,7 +364,7 @@ def test_editing_keeps_private_values_left_blank(env):
 def test_card_cannot_be_shared_without_asking(env):
     client, vault = env[0], env[1]
     setup_vault(client)
-    assert post(client, f"{B}/vault", {**CARD_FORM, "share_mode": "auto"}).status_code == 400
+    assert post(client, f"{B}/secrets", {**CARD_FORM, "share_mode": "auto"}).status_code == 400
     assert vault.secrets() == []
 
 
@@ -372,7 +372,7 @@ def test_delete_item(env):
     client, vault = env[0], env[1]
     setup_vault(client)
     secret = add(client, ADDRESS)
-    assert post(client, f"{B}/vault/{secret}/delete", {}).status_code == 303
+    assert post(client, f"{B}/secrets/{secret}/delete", {}).status_code == 303
     assert vault.secrets() == []
 
 
@@ -380,7 +380,7 @@ def test_values_never_in_history_page(env):
     client = env[0]
     setup_vault(client)
     secret = add(client, CARD_FORM)
-    post(client, f"{B}/vault/{secret}/show", {})
+    post(client, f"{B}/secrets/{secret}/show", {})
     page = client.get(f"{B}/audit").text
     assert "viewed private fields" in page and CARD not in page and SECRET not in page
 
@@ -426,7 +426,7 @@ def test_end_to_end_through_mcp_and_ui(env, caplog):
     page = client.get(f"{B}/r/{rid}").text
     assert "Pay for the train" in page and "Card number" in page and "ending 4242" in page and CARD not in page
     assert "Expiry (MM/YY): 12/30" in page
-    assert 'class="badge">1<' in client.get(f"{B}/vault").text
+    assert 'class="badge">1<' in client.get(f"{B}/secrets").text
     assert post(client, f"{B}/r/{rid}/decide", {"action": "share", "fields": ["number"]}).status_code == 303
 
     res, _ = call_tool(client, "get_result", {"request_id": rid, "wait_seconds": 5})
@@ -445,7 +445,7 @@ def test_mcp_cannot_approve(env):
     secret = add(client, ADDRESS)
     sub, _ = call_tool(client, "request_secret", {"secret_id": secret, "purpose": "x"})
     r = client.post(
-        f"http://secret-broker:8000{B}/r/{sub['id']}/decide",
+        f"http://garden-vault:8000{B}/r/{sub['id']}/decide",
         data={"action": "share", "fields": "text", "csrf": "x"},
         headers={"cf-access-jwt-assertion": "", "origin": ORIGIN},
     )
@@ -497,7 +497,7 @@ def test_locked_vault_answers_agents_and_notifies(env):
 
 # ── env delivery and /redeem ─────────────────────────────────────────────────
 
-REDEEM = "http://secret-broker:8000/redeem"
+REDEEM = "http://garden-vault:8000/redeem"
 
 
 def redeem(client, handle, url=REDEEM, **headers):
@@ -539,7 +539,7 @@ def test_redeem_is_internal_only(env):
     for r in (
         redeem(client, handle, url=f"{ORIGIN}/redeem"),
         redeem(client, handle, url="http://evil.example:8000/redeem"),
-        redeem(client, handle, origin="http://secret-broker:8000"),
+        redeem(client, handle, origin="http://garden-vault:8000"),
     ):
         assert r.status_code == 403 and STREET not in r.text
     get = client.get(f"{REDEEM}?handle={handle}", headers={"cf-access-jwt-assertion": ""})

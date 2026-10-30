@@ -5,7 +5,7 @@
 <ul class="menu-list">
   {% for key, kind in kinds.items() %}
   <li>
-    <a class="menu-row" href="{{ base }}/vault/new?kind={{ key }}">
+    <a class="menu-row" href="{{ base }}/secrets/new?kind={{ key }}">
       <span class="menu-row-text">
         <span class="menu-row-title">{{ kind.label }}</span>
         <span class="menu-row-desc">{{ kind.fields|map(attribute="label")|join(", ") }}</span>
@@ -14,5 +14,5 @@
   </li>
   {% endfor %}
 </ul>
-<p><a href="{{ base }}/vault">Cancel</a></p>
+<p><a href="{{ base }}/secrets">Cancel</a></p>
 {% endblock %}

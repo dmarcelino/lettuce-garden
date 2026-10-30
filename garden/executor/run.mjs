@@ -1,5 +1,5 @@
 // The garden executor: runs as root in the Lettuce app-server, from system cron every
-// minute, whenever any garden profile is on. Over HTTP on the stack network, with one
+// minute, whenever any garden page profile is on. Over HTTP on the stack network, with one
 // bearer token for both sidecars, it:
 // - asks the garden service whether it wants the agent list (for the landing page);
 // - with --gmail-triggers (the stack has that profile), claims the requests the
@@ -27,7 +27,7 @@ import path from "node:path";
 const HOME = "/root/.letta/garden/executor";
 const base = (url) => url.replace(/\/+$/, "");
 const GARDEN = { name: "garden", url: base(process.env.GARDEN_URL || "http://garden:8000") };
-const GMAIL = { name: "gmail-triggers", url: base(process.env.GT_URL || "http://gmail-triggers:8000") };
+const GMAIL = { name: "gmail-triggers", url: base(process.env.GT_URL || "http://garden-gmail-triggers:8000") };
 const TOKEN_FILE = process.env.GT_TOKEN_FILE || "/etc/lettuce-garden/executor-token";
 const LOCK = process.env.GT_LOCK || `${HOME}/.executor.lock`;
 const LOG = process.env.GT_LOG || `${HOME}/executor.log`;

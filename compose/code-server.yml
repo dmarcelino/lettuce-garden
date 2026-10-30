@@ -1,7 +1,7 @@
 # Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
 # The code editor (code-server/, docs/code-server.md): VS Code in the browser at
 # https://<name>-garden.<domain>/code-server/, on the agents' workspaces. Opt-in
-# behind the `code-server` profile; without it this file adds nothing.
+# behind the `garden-code-server` profile; without it this file adds nothing.
 #
 # Three services, because the editor shares the garden's origin with the vault
 # and must never run what agents wrote:
@@ -10,12 +10,12 @@
 #   strips the prefix and lets only listed headers and pages through. It is the
 #   only one on `default` and the only way in: it reaches the editor through
 #   the editor's Unix socket, on code-server-sock.
-# - code-server-editor: code-server itself, listening on that socket and on no
+# - garden-code-server-editor: code-server itself, listening on that socket and on no
 #   port, so nothing on a network reaches it, the shell included. Its one
 #   network, code-exec, takes its SSH sessions to the shell. It edits the
 #   workspaces and runs no workspace code: Restricted Mode for good, a pruned
 #   set of built-in extensions, nothing installable, terminals in the shell.
-# - code-server-exec, the shell: the app-server's own image plus an SSH server,
+# - garden-code-server-exec, the shell: the app-server's own image plus an SSH server,
 #   with the workspaces and the agents' tools mounted as in the app-server. It
 #   is as strong as an agent and holds nothing an agent can't get: no Access
 #   token, no Google token, no credentials. Its only way out is code-egress.
@@ -24,8 +24,8 @@
 # namespaces or volumes.
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
-  code-server:
-    profiles: ["code-server"]
+  garden-code-server:
+    profiles: ["garden-code-server"]
     build:
       context: ../../code-server
       additional_contexts:
@@ -53,8 +53,8 @@ services:
     pids_limit: 64
     restart: unless-stopped
 
-  code-server-editor:
-    profiles: ["code-server"]
+  garden-code-server-editor:
+    profiles: ["garden-code-server"]
     build:
       context: ../../code-server/editor
     image: lettuce-code-server-editor:local
@@ -108,8 +108,8 @@ services:
       start_interval: 1s
     restart: unless-stopped
 
-  code-server-exec:
-    profiles: ["code-server"]
+  garden-code-server-exec:
+    profiles: ["garden-code-server"]
     build:
       context: ../../code-server/exec
       additional_contexts:
@@ -135,7 +135,7 @@ services:
     pids_limit: 4096
     # sshd needs the host key and authorized_keys the editor writes on its first start.
     depends_on:
-      code-server-editor:
+      garden-code-server-editor:
         condition: service_healthy
     restart: unless-stopped
 

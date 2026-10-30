@@ -1,5 +1,5 @@
 """The ASGI app: MCP at /mcp and vault-run's /redeem (internal only; the tunnel
-forwards /secrets/ on the garden's host alone) and the vault UI at /secrets/
+forwards /vault/ on the garden's host alone) and the vault UI at /vault/
 (every route needs a verified Access JWT, and all but setup/unlock/notifications
 an unlocked vault)."""
 
@@ -29,10 +29,10 @@ from . import icons
 from .config import PREFIX, UNLOCK_ATTEMPTS_PER_MINUTE
 from .kinds import KINDS, preview
 from .mcp_tools import build_server
-from .service import Broker
+from .service import Service
 from .vault import ASK, AUTO, Field, Locked, Secret, Vault, VaultError, build_fields
 
-log = logging.getLogger("secret_broker.ui")
+log = logging.getLogger("garden_vault.ui")
 
 SECURITY_HEADERS = {
     "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
@@ -48,10 +48,10 @@ SECURITY_HEADERS = {
 }
 
 Handler = Callable[[HttpRequest, str], Awaitable[Response]]
-# How agents address the vault on the stack network (compose/secrets.yml);
+# How agents address the vault on the stack network (compose/vault.yml);
 # through the tunnel the host is the stack's public name. /mcp and /redeem
 # accept this host alone.
-INTERNAL_NAME = "secret-broker"
+INTERNAL_NAME = "garden-vault"
 INTERNAL_HOST = re.compile(rf"{re.escape(INTERNAL_NAME)}(:\d+)?")
 NO_STORE = {"cache-control": "no-store"}
 
@@ -81,12 +81,12 @@ def _safe_next(path: Any) -> str:
     return path if isinstance(path, str) and path.startswith(PREFIX + "/") and "//" not in path else PREFIX + "/"
 
 
-def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: str) -> Starlette:
-    env = Environment(loader=PackageLoader("secret_broker", "templates"), autoescape=select_autoescape(default=True))
+def create_app(service: Service, authenticator: Authenticator, vapid_public_key: str) -> Starlette:
+    env = Environment(loader=PackageLoader("garden_vault", "templates"), autoescape=select_autoescape(default=True))
     env.filters["time"] = _fmt_time
     env.globals["base"] = PREFIX
-    static = resources.files("secret_broker") / "static"
-    vault: Vault = broker.vault
+    static = resources.files("garden_vault") / "static"
+    vault: Vault = service.vault
     unlock_limiter = RateLimiter(UNLOCK_ATTEMPTS_PER_MINUTE)
 
     def render(name: str, email: str, status: int = 200, **ctx: Any) -> HTMLResponse:
@@ -96,7 +96,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             csrf=authenticator.csrf_token(email) if email else "",
             vapid_public_key=vapid_public_key,
             unlocked=unlocked,
-            pending_count=len(broker.pending()) if unlocked else 0,
+            pending_count=len(service.pending()) if unlocked else 0,
             **ctx,
         )
         return HTMLResponse(html, status_code=status, headers=SECURITY_HEADERS)
@@ -158,7 +158,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         except VaultError as e:
             return render("setup.html", email, status=400, problem=str(e))
         vault.audit(email, "created the vault")
-        return back("/vault")
+        return back("/secrets")
 
     async def unlock(request: HttpRequest, email: str) -> Response:
         form = await request.form()
@@ -200,10 +200,10 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
 
     # ── approvals ────────────────────────────────────────────────────────────
     async def approvals(request: HttpRequest, email: str) -> Response:
-        return render("approvals.html", email, pending=broker.pending(), recent=broker.recent())
+        return render("approvals.html", email, pending=service.pending(), recent=service.recent())
 
     async def request_detail(request: HttpRequest, email: str) -> Response:
-        req = broker.request(request.path_params["rid"])
+        req = service.request(request.path_params["rid"])
         if req is None:
             return error(
                 "This request is no longer here: it was answered, expired, or the vault restarted.", 404, email
@@ -216,7 +216,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         action = form.get("action")
         if action not in ("share", "deny"):
             raise VaultError("invalid answer")
-        broker.decide(rid, action == "share", [str(f) for f in form.getlist("fields")], email)
+        service.decide(rid, action == "share", [str(f) for f in form.getlist("fields")], email)
         return back(f"/r/{rid}")
 
     # ── secrets ──────────────────────────────────────────────────────────────
@@ -264,7 +264,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             share_mode_from(form),
         )
         vault.audit(email, "added secret", secret_id, str(form.get("name", "")))
-        return back(f"/vault/{secret_id}")
+        return back(f"/secrets/{secret_id}")
 
     def show(email: str, secret: Secret, revealed: bool) -> Response:
         return render(
@@ -294,13 +294,13 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             share_mode_from(form),
         )
         vault.audit(email, "changed secret", secret.id, str(form.get("name", "")))
-        return back(f"/vault/{secret.id}")
+        return back(f"/secrets/{secret.id}")
 
     async def secret_delete(request: HttpRequest, email: str) -> Response:
         secret = get_secret(request)
         vault.delete_secret(secret.id)
         vault.audit(email, "deleted secret", secret.id, secret.name)
-        return back("/vault")
+        return back("/secrets")
 
     # ── notifications ────────────────────────────────────────────────────────
     async def notifications(request: HttpRequest, email: str) -> Response:
@@ -334,7 +334,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         return JSONResponse({"ok": True}, headers=SECURITY_HEADERS)
 
     async def push_test(request: HttpRequest, email: str) -> Response:
-        sent = await broker.pusher.send(
+        sent = await service.pusher.send(
             {
                 "title": "Test notification",
                 "body": "Vault requests will arrive like this.",
@@ -378,7 +378,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             body = await request.json()
         except ValueError:
             return JSONResponse({"error": "expected JSON"}, status_code=400, headers=NO_STORE)
-        found = broker.redeem(body.get("handle")) if isinstance(body, dict) else None
+        found = service.redeem(body.get("handle")) if isinstance(body, dict) else None
         if found is None:
             error = "unknown or expired handle; request the secret again"
             return JSONResponse({"error": error}, status_code=404, headers=NO_STORE)
@@ -395,14 +395,14 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         Route("/settings/reset", page(reset, post=True), methods=["POST"]),
         Route("/r/{rid}", page(request_detail)),
         Route("/r/{rid}/decide", page(decide, post=True), methods=["POST"]),
-        Route("/vault", page(secrets_page)),
-        Route("/vault", page(secret_create, post=True), methods=["POST"]),
-        Route("/vault/new", page(secret_new)),
-        Route("/vault/{sid}", page(secret_view)),
-        Route("/vault/{sid}", page(secret_update, post=True), methods=["POST"]),
-        Route("/vault/{sid}/edit", page(secret_edit)),
-        Route("/vault/{sid}/show", page(secret_show, post=True), methods=["POST"]),
-        Route("/vault/{sid}/delete", page(secret_delete, post=True), methods=["POST"]),
+        Route("/secrets", page(secrets_page)),
+        Route("/secrets", page(secret_create, post=True), methods=["POST"]),
+        Route("/secrets/new", page(secret_new)),
+        Route("/secrets/{sid}", page(secret_view)),
+        Route("/secrets/{sid}", page(secret_update, post=True), methods=["POST"]),
+        Route("/secrets/{sid}/edit", page(secret_edit)),
+        Route("/secrets/{sid}/show", page(secret_show, post=True), methods=["POST"]),
+        Route("/secrets/{sid}/delete", page(secret_delete, post=True), methods=["POST"]),
         Route("/notifications", page(notifications, **open_page)),
         Route("/push/subscribe", page(push_subscribe, post=True, **open_page), methods=["POST"]),
         Route("/push/unsubscribe", page(push_unsubscribe, post=True, **open_page), methods=["POST"]),
@@ -420,11 +420,11 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
         Route("/icon-512.png", page(icon(512), **open_page, asset=True)),
     ]
 
-    mcp_server = build_server(broker)
+    mcp_server = build_server(service)
     mcp_app = mcp_server.streamable_http_app(
         stateless_http=True,
         json_response=True,
-        # The bridge calls http://secret-broker:8000/mcp from the stack network
+        # The bridge calls http://garden-vault:8000/mcp from the stack network
         # and sends no Origin; anything else is refused.
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
@@ -436,11 +436,11 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         async with mcp_app.router.lifespan_context(mcp_app), anyio.create_task_group() as tg:
-            broker.bind_task_group(tg)
+            service.bind_task_group(tg)
 
             async def housekeeping() -> None:
                 while True:
-                    broker.expire()
+                    service.expire()
                     vault.is_unlocked()  # applies the auto-lock
                     await anyio.sleep(30)
 
@@ -448,7 +448,7 @@ def create_app(broker: Broker, authenticator: Authenticator, vapid_public_key: s
             try:
                 yield
             finally:
-                broker.bind_task_group(None)
+                service.bind_task_group(None)
                 tg.cancel_scope.cancel()
 
     async def secrets_root(request: HttpRequest) -> Response:

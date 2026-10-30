@@ -9,7 +9,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from .config import MAX_WAIT_SECONDS
-from .service import Broker
+from .service import Service
 
 INSTRUCTIONS = (
     "The user's personal vault of secrets: addresses, company details, notes, memberships, ID documents, payment "
@@ -27,7 +27,7 @@ INSTRUCTIONS = (
 )
 
 
-def build_server(broker: Broker) -> MCPServer:
+def build_server(service: Service) -> MCPServer:
     server = MCPServer(name="vault", instructions=INSTRUCTIONS)
 
     @server.tool(
@@ -37,7 +37,7 @@ def build_server(broker: Broker) -> MCPServer:
         annotations=ToolAnnotations(title="List secrets", read_only_hint=True, open_world_hint=False),
     )
     async def list_secrets() -> dict[str, Any]:
-        return broker.list_secrets()
+        return service.list_secrets()
 
     # Not read-only on purpose: Lettuce's bridge then shows its own prompt too.
     # That prompt is a convenience; the vault's approval page is the gate.
@@ -55,7 +55,7 @@ def build_server(broker: Broker) -> MCPServer:
     async def request_secret(
         secret_id: str, purpose: str, fields: list[str] | None = None, delivery: Literal["text", "env"] = "text"
     ) -> dict[str, Any]:
-        return await broker.request_secret(secret_id, purpose, fields, delivery)
+        return await service.request_secret(secret_id, purpose, fields, delivery)
 
     @server.tool(
         description="Get the answer to a request_secret: pending, denied, expired, or done with the values the "
@@ -66,6 +66,6 @@ def build_server(broker: Broker) -> MCPServer:
         annotations=ToolAnnotations(title="Get request result", read_only_hint=True, open_world_hint=False),
     )
     async def get_result(request_id: str, wait_seconds: float = 0) -> dict[str, Any]:
-        return await broker.get_result(request_id, wait_seconds)
+        return await service.get_result(request_id, wait_seconds)
 
     return server

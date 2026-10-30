@@ -30,8 +30,8 @@ Operation (<target> is a stack name or "all")
   restart <target>              down + up (app-server and bff share a namespace; never restart one alone)
   check <target>                refuse unsafe or inconsistent configuration
   skills <target>               install agent-skills/ into running stacks (every agent of the stack)
-  mcp <target> [--force]        add the document tools (office, pdf; doc-tools profile) and the vault
-                                (secrets profile) to Settings -> MCP, once per stack
+  mcp <target> [--force]        add the document tools (office, pdf; garden-doc-tools profile) and the vault
+                                (garden-vault profile) to Settings -> MCP, once per stack
                                 (--force: again, also where the person removed them)
   backup <target> <dir> [opts]  copy agents, memory, workspaces, tools, vault and receipts to a snapshot in <dir>/<name>/
                                 (--compress: a tar.gz instead; --no-tools; --pause|--live; --keep N)
@@ -249,7 +249,7 @@ sync_skills() {
 # The garden executor (garden/executor/run.mjs): the app-server's cron runs it
 # every minute, through upstream's agent-env (PID 1's environment). It sends
 # `letta agents list` to the garden service when that asks for one and, with
-# the gmail-triggers profile (--gmail-triggers), fetches that sidecar's queued
+# the garden-gmail-triggers profile (--gmail-triggers), fetches that sidecar's queued
 # requests over /executor/v1/ and turns each into `letta cron add --once`. It
 # lives in a namespace we own under letta-home, so a restart keeps it; the cron
 # file goes to system-cron, which the entrypoint copies to /etc/cron.d at every
@@ -266,16 +266,16 @@ EXECUTOR_TOKEN_FILE=/etc/lettuce-garden/executor-token
 # Gmail triggers' requests, or the agent list, which garden asks for only with
 # the code editor on (its links to the agents' workspaces)
 executor_wanted() {
-  has_profile "$1" gmail-triggers || has_profile "$1" code-server
+  has_profile "$1" garden-gmail-triggers || has_profile "$1" garden-code-server
 }
 
 # executor_cron NAME -> the stack's cron file for the executor
 executor_cron() {
   local flag=""
-  if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" gmail-triggers; then
+  if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" garden-gmail-triggers; then
     flag=" --gmail-triggers"
   fi
-  printf '%s\n' "# Installed by lettucectl (gmail-triggers or code-server profile). Removed with the last of them." \
+  printf '%s\n' "# Installed by lettucectl (garden-gmail-triggers or garden-code-server profile). Removed with the last of them." \
     "PATH=/usr/local/bin:/usr/bin:/bin" 'MAILTO=""'
   printf '%s' "* * * * * root /usr/local/bin/agent-env node $EXECUTOR_DIR/bin/run.mjs$flag >> $EXECUTOR_DIR/executor.log 2>&1"
 }
@@ -363,7 +363,7 @@ install_executor() {
 # uninstall_executor NAME -> removes the executor, its token and its cron file
 uninstall_executor() {
   remove_executor "$1" "$EXECUTOR_DIR" "$EXECUTOR_JOB" "$EXECUTOR_TOKEN_FILE" || return 1
-  info "$1: removed the garden executor (neither gmail-triggers nor code-server is on)"
+  info "$1: removed the garden executor (neither garden-gmail-triggers nor garden-code-server is on)"
 }
 
 # sync_executor NAME -> the running stack has the executor exactly when it has
@@ -393,7 +393,7 @@ up_stack() {
   sync_garden_profiles "$1"
   check_stack "$1"
   # The app-server mounts the tools' volume and joins the network; both must exist.
-  if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" doc-tools; then
+  if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" garden-doc-tools; then
     ensure_doc_tools_volume || die "could not fill the volume $(doc_tools_volume) (docs/doc-tools.md)"
     ensure_doc_tools_network "$1" || die "$1: could not create the network $(doc_tools_network "$1")"
   fi
@@ -517,9 +517,9 @@ sync_doc_tools() {
   local -a have=() want=() names=()
   listed=$(host_docker network ls --filter "label=$DOC_TOOLS_LABEL" --format '{{.Name}}') || return 1
   mapfile -t have <<<"$listed"
-  if has_profile "$(cfg PROFILES)" doc-tools; then
+  if has_profile "$(cfg PROFILES)" garden-doc-tools; then
     for n in $(list_stacks); do
-      has_profile "$(env_get "$(stack_env "$n")" COMPOSE_PROFILES)" doc-tools || continue
+      has_profile "$(env_get "$(stack_env "$n")" COMPOSE_PROFILES)" garden-doc-tools || continue
       [[ -n $(env_get "$(stack_env "$n")" CF_DNS_RECORD_ID) ]] || continue
       want+=("$(doc_tools_network "$n")")
       names+=("$n")
@@ -555,7 +555,7 @@ sync_doc_tools() {
   else
     id=$(gotenberg_id) || return 1
     if [[ -n $id ]]; then
-      info "stopping the shared Gotenberg (the doc-tools profile is off)"
+      info "stopping the shared Gotenberg (the garden-doc-tools profile is off)"
       compose_shared down || return 1
       id=""
     fi
@@ -568,7 +568,7 @@ sync_doc_tools() {
       rc=1
     }
   done
-  has_profile "$(cfg PROFILES)" doc-tools && current=$(doc_tools_volume)
+  has_profile "$(cfg PROFILES)" garden-doc-tools && current=$(doc_tools_volume)
   for vol in $(host_docker volume ls --filter "label=$DOC_TOOLS_VOLUME_LABEL" --format '{{.Name}}' 2>/dev/null); do
     [[ $vol == "$current" ]] || host_docker volume rm "$vol" >/dev/null 2>&1 || true
   done
@@ -586,7 +586,7 @@ sync_doc_tools() {
 # `letta mcp tools` call fail, the other servers' included.
 MCP_SETTINGS=/root/.letta/mcp-home/.letta/settings.json
 MCP_GROUPS=(doc-tools vault)
-declare -A MCP_PROFILE=([doc-tools]=doc-tools [vault]=secrets)
+declare -A MCP_PROFILE=([doc-tools]=garden-doc-tools [vault]=garden-vault)
 declare -A MCP_MARKER=([doc-tools]=DOC_TOOLS_MCP_REGISTERED [vault]=VAULT_MCP_REGISTERED)
 declare -A MCP_LABEL=([doc-tools]="the document tools" [vault]="the vault")
 # What a same-named server of the person's differs in.
@@ -613,7 +613,7 @@ mcp_reminder() {
     if [[ -n $(env_get "$f" "${MCP_MARKER[$g]}") ]]; then
       case $g in
         doc-tools) info "Documents: office and pdf are in $url Settings -> MCP (docs/doc-tools.md)" ;;
-        vault) info "Vault: vault is in $url Settings -> MCP (docs/secret-broker.md)" ;;
+        vault) info "Vault: vault is in $url Settings -> MCP (docs/vault.md)" ;;
       esac
       continue
     fi
@@ -625,7 +625,7 @@ mcp_reminder() {
         ;;
       vault)
         info "Vault: in $url Settings -> MCP, add an HTTP server:"
-        info "  vault -> http://secret-broker:8000/mcp (docs/secret-broker.md)"
+        info "  vault -> http://garden-vault:8000/mcp (docs/vault.md)"
         ;;
     esac
   done
@@ -885,7 +885,7 @@ cmd_remove() {
     info "Its pipelock receipts and their signing key are deleted too; keep a backup if you need them."
   fi
   state=$(env_get "$f" LETTA_STATE_DIR)
-  if has_profile "$(env_get "$f" COMPOSE_PROFILES)" gmail-triggers || [[ -n $state && -d $state/garden/gmail-triggers ]]; then
+  if has_profile "$(env_get "$f" COMPOSE_PROFILES)" garden-gmail-triggers || [[ -n $state && -d $state/garden/gmail-triggers ]]; then
     info "Its Gmail triggers stop with it; their rules are in its state, so they go only with --purge."
   fi
   if [[ -n $purge && -n $state && -L $state/garden ]]; then
@@ -975,7 +975,7 @@ cmd_remove() {
     # Rendered without doc-tools: the app-server's doc-tools image and network
     # are not needed to empty the state, and the network is gone already.
     local renv
-    renv=$(env_without_profile "$f" doc-tools)
+    renv=$(env_without_profile "$f" garden-doc-tools)
     compose_env "$renv" "$name" run --rm --no-deps -T "${extra[@]}" --entrypoint find app-server \
       "${dirs[@]}" -mindepth 1 -delete || {
       rm -f "$renv"
@@ -1569,12 +1569,12 @@ backup_stack() {
   exec {lock}>"$dir/.lock"
   flock -n "$lock" || die "$name: another backup of $name is running"
   mounts=(--label "lettucectl.backup=$name" -v "$state:/src/state:ro" -v "$f:/src/stack.env:ro")
-  # Turning the secrets profile off keeps the volume, so look for it either way;
+  # Turning the garden-vault profile off keeps the volume, so look for it either way;
   # `run -v` would create a missing one.
   vol=$(vault_volume "$name")
   if has_vault "$name"; then
     mounts+=(-v "$vol:/src/vault:ro")
-  elif has_profile "$(env_get "$f" COMPOSE_PROFILES)" secrets; then
+  elif has_profile "$(env_get "$f" COMPOSE_PROFILES)" garden-vault; then
     warn "$name: the vault volume $vol does not exist yet; backing up without it"
   fi
   if has_receipts "$name"; then
@@ -1692,7 +1692,7 @@ PIPELOCK_RUN=()
 pipelock_setup() {
   local name=$1 config mask
   config=$(host_docker image inspect "$PIPELOCK_IMAGE" --format '{{json .Config}}') ||
-    die "$name: no $PIPELOCK_IMAGE image; run lettucectl up $name with the pipelock profile"
+    die "$name: no $PIPELOCK_IMAGE image; run lettucectl up $name with the garden-pipelock profile"
   mapfile -t mask < <(compose_label_mask "$config")
   PIPELOCK_RUN=(--rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges
     "${mask[@]}" --label "lettucectl.receipts=$name" -v "$(receipts_volume "$name"):/data:ro")
@@ -1719,7 +1719,7 @@ receipts_verify() {
     fi
   done
   printf '%s\n' "$out" >&2
-  if compose "$name" ps --status running --services | grep -qx pipelock; then
+  if compose "$name" ps --status running --services | grep -qx garden-pipelock; then
     die "$name: the receipts do not verify, but pipelock is running and may have written to them during each check; retry when the stack is quiet, or after: lettucectl down $name"
   fi
   die "$name: the receipts do not verify"
@@ -1787,7 +1787,7 @@ cmd_mcp() {
   require_initialised
   mapfile -t groups < <(mcp_groups "$(cfg PROFILES)")
   ((${#groups[@]})) ||
-    die "the doc-tools and secrets profiles are both off; turn one on first, e.g.: lettucectl profiles $(cfg PROFILES),doc-tools"
+    die "the garden-doc-tools and garden-vault profiles are both off; turn one on first, e.g.: lettucectl profiles $(cfg PROFILES),garden-doc-tools"
   targets=$(expand_targets "$1")
   for n in $targets; do
     register_mcp "$n" "${2:-}" "${groups[@]}" || failed+=("$n")

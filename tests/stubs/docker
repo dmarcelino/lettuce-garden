@@ -260,11 +260,11 @@ case $args in
         google) echo google-mcp ;;
         telegram) echo channel-gateway ;;
         cloudflared) echo cloudflared ;;
-        secrets) echo secret-broker ;;
-        gmail-triggers) echo gmail-triggers ;;
-        pipelock) echo pipelock ;;
-        code-server) printf '%s\n' code-server code-server-editor code-server-exec ;;
-        doc-tools) ;;
+        garden-vault) echo garden-vault ;;
+        garden-gmail-triggers) echo garden-gmail-triggers ;;
+        garden-pipelock) echo garden-pipelock ;;
+        garden-code-server) printf '%s\n' garden-code-server garden-code-server-editor garden-code-server-exec ;;
+        garden-doc-tools) ;;
       esac
     done
     ;;

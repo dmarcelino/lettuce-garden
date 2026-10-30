@@ -1,6 +1,6 @@
 # Document tools (Office and PDF)
 
-The `doc-tools` profile lets the agents of every stack create, read, edit and convert Word,
+The `garden-doc-tools` profile lets the agents of every stack create, read, edit and convert Word,
 PowerPoint and Excel files and PDFs in their own workspaces. Two MCP servers do the work:
 
 - **`office`**: [OfficeAgent.NET](https://github.com/ilia-sokolov/OfficeAgent.NET) (MIT). It
@@ -31,7 +31,7 @@ app-server (agents, root)                      app-server
 
 ## Turning it on
 ```bash
-./lettucectl profiles cloudflared,search,doc-tools   # your current list plus doc-tools
+./lettucectl profiles cloudflared,search,garden-doc-tools   # your current list plus garden-doc-tools
 ./lettucectl skills all                              # installs the working-with-documents skill
 ./lettucectl mcp all                                 # adds office and pdf to each Settings -> MCP
 ```
@@ -49,9 +49,9 @@ there. The entries survive restarts and upgrades (they live in the stack's `lett
 `mcp` runs once per stack: it remembers that it did (`DOC_TOOLS_MCP_REGISTERED` in `stack.env`),
 so a person who removes a server keeps it removed; `mcp <name> --force` adds it again. It adds
 only what is missing, and leaves alone every other server and a server of the same name with
-another command (it says so). `add` registers a new stack's servers itself. With the `secrets`
+another command (it says so). `add` registers a new stack's servers itself. With the `garden-vault`
 profile on, `mcp` registers the vault too, the same way and with its own marker
-([secret-broker.md](secret-broker.md#for-the-operator)); it needs one of the two profiles.
+([vault.md](vault.md#for-the-operator)); it needs one of the two profiles.
 
 The list belongs to Lettuce's BFF, which reads it from disk before every change, so an entry
 added from outside stays. `mcp` writes only the entries whose command is under
@@ -87,7 +87,7 @@ empty after a daemon restart or a reboot; a volume survives both like the rest o
 
 ## Turning it off
 ```bash
-./lettucectl profiles cloudflared,search   # the list without doc-tools
+./lettucectl profiles cloudflared,search   # the list without garden-doc-tools
 ```
 The app-servers restart without the mount and the network, Gotenberg stops and is removed, and
 every `lettuce-doc-tools-*` network and tools volume is deleted. Documents stay in the
@@ -195,7 +195,7 @@ If removing the network fails, the next `up` or `profiles` removes it.
   can lose each other's document ids. Open the file again by its path.
 - **`spawn failed: ENOENT /opt/lettuce-doc-tools/bin/...`**, or an empty `/opt/lettuce-doc-tools`
   in the app-server: the tools are not mounted. Run `./lettucectl up <name>`; if it says the
-  volume is incomplete and in use, every stack with doc-tools shares it: run
+  volume is incomplete and in use, every stack with garden-doc-tools shares it: run
   `./lettucectl down all`, then `./lettucectl up all`.
 - **`lettuce-doc-tools-<hash> was not made by lettucectl`** at `up`: a volume of that name exists
   without lettucectl's label, or with driver options (a bind to a host directory, say). Every

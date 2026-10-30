@@ -1,6 +1,6 @@
 #!/bin/bash
 # The editor's terminal profile: an interactive shell in the shell container
-# (code-server-exec), in this directory, with the agents' tools: agent-env
+# (garden-code-server-exec), in this directory, with the agents' tools: agent-env
 # (upstream's, in the app-server image) gives it the container's environment,
 # which an SSH session drops (PATH and the package managers pointing at
 # /opt/agent-tools). The notice is printed here, in the editor's image, so
@@ -23,5 +23,5 @@ fi
 dir=${dir//\'/\'\\\'\'}
 # TERM comes from SSH's pty request; agent-env would drop it.
 # shellcheck disable=SC2016 # $TERM is expanded by the remote shell
-exec ssh -F /opt/lettuce-editor/ssh_config -tt code-server-exec \
+exec ssh -F /opt/lettuce-editor/ssh_config -tt garden-code-server-exec \
   "cd -- '$dir' && exec agent-env env \"TERM=\$TERM\" bash -i"

@@ -1,5 +1,5 @@
 # The code editor's gate (see docs/code-server.md): the garden sidecar in front of
-# code-server-editor. Built by lettucectl via compose/code-server.yml;
+# garden-code-server-editor. Built by lettucectl via compose/code-server.yml;
 # tests/run-sidecar.sh builds the `test` stage and runs it. Both pass the shared
 # package as the build context named `garden-common`. The editor's and the shell's
 # images live in editor/ and exec/, outside this build context.

@@ -18,7 +18,7 @@ AUTH = {"authorization": f"Bearer {TOKEN}"}
 @pytest.fixture
 def api(env, authenticator):
     app = create_app(env.store, env.google, authenticator, TOKEN)
-    with TestClient(app, base_url="http://gmail-triggers:8000") as c:
+    with TestClient(app, base_url="http://garden-gmail-triggers:8000") as c:
         yield c
 
 

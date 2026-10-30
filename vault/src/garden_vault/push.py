@@ -19,7 +19,7 @@ from pywebpush import WebPushException, webpush
 from .config import Settings
 from .vault import Vault
 
-log = logging.getLogger("secret_broker.push")
+log = logging.getLogger("garden_vault.push")
 
 Sender = Callable[..., Any]
 
