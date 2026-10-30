@@ -359,7 +359,7 @@ for s in "${STACKS[@]}"; do
     die "app-server $s did not start: $(cat "$TMP/run.err")"
   docker network connect "$P-$s-doctools" "$P-$s-app"
   docker network connect --alias gotenberg "$P-$s-doctools" "$GOT"
-  added=$(docker exec -i "$P-$s-app" node --input-type=module - add /root/.letta/mcp-home/.letta/settings.json 0 0 \
+  added=$(docker exec -i "$P-$s-app" node --input-type=module - add /root/.letta/mcp-home/.letta/settings.json doc-tools 0 0 \
     <"$ROOT/lib/mcp-servers.mjs" | jq -r '.added | join(",")') || die "lib/mcp-servers.mjs failed in $s"
   [[ $added == office,pdf ]] || die "lib/mcp-servers.mjs added '$added' in $s, expected office,pdf"
 done
