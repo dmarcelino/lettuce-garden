@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env -S LC_ALL=C.UTF-8 bash
+# (The extension runs git with LC_ALL=en_US.UTF-8, which the image lacks; bash
+# would warn about it on stderr, which the extension reads.)
 # git.path for VS Code's git extension (settings.json): every git call runs in
 # the shell container (garden-code-server-exec), never in the editor, which has
 # no git. A repository's own config runs code (core.fsmonitor, filters, hooks,

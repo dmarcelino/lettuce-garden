@@ -200,6 +200,17 @@ test_git_passes_stdin_and_the_exit_status() {
   eq "$rc" 3
 }
 
+# The git extension runs git with LC_ALL=en_US.UTF-8, which the image lacks: no
+# warning about it may reach git's stderr, which the extension reads.
+test_git_writes_nothing_of_its_own_to_stderr() {
+  local err
+  mkdir -p /work/agent-5
+  cd /work/agent-5 || exit 1
+  err=$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 FAKE_LOG=$FAKES/git5.log PATH=$FAKES:$PATH \
+    "$HERE/bin/shell-git" status 2>&1 >/dev/null)
+  eq "$err" ""
+}
+
 test_git_refuses_folders_the_shell_lacks() {
   local rc=0 out
   mkdir -p /data/home
