@@ -25,4 +25,8 @@ GatewayPorts no
 PrintMotd no
 PrintLastLog no
 LoginGraceTime 30
+# One connection carries every terminal and Source Control's git calls, several
+# at once (the defaults are 10 and 10:30:100).
+MaxSessions 64
+MaxStartups 32
 ClientAliveInterval 30

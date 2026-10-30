@@ -4,7 +4,8 @@
 # own sits under /opt/code-server/lib), no npm, no compilers, no shell profiles to
 # detect (/etc/shells is empty), and root's login shell is the terminal profile, so
 # VS Code's fallback shell leads to the shell container too. openssh-client carries
-# the terminal to the shell container. Built by lettucectl via compose/code-server.yml;
+# the terminal, and every git call of Source Control (bin/shell-git), to the shell
+# container; the image has no git. Built by lettucectl via compose/code-server.yml;
 # tests/run-sidecar.sh code-server builds the `test` stage and runs it.
 FROM debian:12-slim AS fetch
 ARG CODE_SERVER_VERSION=4.143.1
@@ -49,6 +50,22 @@ RUN set -eu; \
   jq '.contributes.customEditors |= map(select(.viewType != "vscode.markdown.editor"))' "$md/package.json" >/tmp/package.json; \
   mv /tmp/package.json "$md/package.json"; \
   rm -rf "$md/markdown-editor-out" "$md/markdown-editor-src"
+# The git extension asks to trust each repository's folder before opening it, and
+# a trusted folder runs its tasks and terminal settings in the editor. The prompt
+# guards against the repository's own config (core.fsmonitor, filters, hooks),
+# which here never runs in the editor: git.path is bin/shell-git, which runs every
+# call in the shell container, and the image has no git. Both trust calls resolve
+# to true, so the editor stays in Restricted Mode. Both edits fail the build when
+# this release's code does not match them.
+RUN set -eu; \
+  js=/opt/code-server/lib/vscode/extensions/git/dist/main.js; \
+  for call in requestResourceTrust isResourceTrusted; do \
+    anchor="[A-Za-z_\$][A-Za-z0-9_\$.]*\\.$call\\("; \
+    n=$(grep -oE "$anchor" "$js" | wc -l); \
+    [ "$n" = 1 ] || { echo "git: expected one $call, found $n" >&2; exit 1; }; \
+    sed -Ei "s/$anchor/(async()=>!0)(/" "$js"; \
+  done; \
+  ! grep -qE 'requestResourceTrust|isResourceTrusted' "$js"
 
 FROM debian:12-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends openssh-client jq \

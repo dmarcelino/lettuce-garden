@@ -73,9 +73,16 @@ test_the_markdown_preview_stays_strict_and_has_no_markdown_editor() {
     fail "no preview command"
 }
 
+test_git_opens_repositories_without_a_trust_prompt() {
+  local js=$EXT/git/dist/main.js
+  eq "$(grep -o '(async()=>!0)(' "$js" | wc -l)" 2
+  ! grep -qE 'requestResourceTrust|isResourceTrusted' "$js" || fail "a trust call is left"
+}
+
 test_nothing_to_run_workspace_code_with() {
   local c
-  for c in node nodejs npm npx python3 python gcc cc make; do
+  # git above all: if shell-git ever failed, the git extension would look for one.
+  for c in git node nodejs npm npx python3 python gcc cc make; do
     ! command -v "$c" >/dev/null || fail "$c is on PATH"
   done
   [[ ! -s /etc/shells ]] || fail "/etc/shells lists shells VS Code would offer as profiles"
@@ -151,6 +158,100 @@ test_the_terminal_passes_the_exit_status() {
   eq "$rc" 7
 }
 
+GIT_ENV="[LC_ALL=C.UTF-8]
+[LANGUAGE=en]
+[GIT_TERMINAL_PROMPT=0]
+[GIT_EDITOR=true]
+[git]"
+
+test_git_runs_in_the_shell_with_every_argument_intact() {
+  local dir="/work/agent 3/it's \$HOME \"x\"" out
+  mkdir -p "$dir"
+  cd "$dir" || exit 1
+  FAKE_LOG=$FAKES/git.log PATH=$FAKES:$PATH "$HERE/bin/shell-git" -c a=b status -- 'f;rm -rf /' "\$(x)" '' 'a
+b'
+  eq "$(sed -n '1,4p' "$FAKES/git.log" | tr '\n' ' ')" "-F /opt/lettuce-editor/ssh_config -T garden-code-server-exec "
+  out=$(cd / && FAKE_LOG=$FAKES/git.log remote)
+  eq "$out" "pwd=$dir
+$GIT_ENV
+[-c]
+[a=b]
+[status]
+[--]
+[f;rm -rf /]
+[\$(x)]
+[]
+[a
+b]"
+}
+
+test_git_passes_stdin_and_the_exit_status() {
+  mkdir -p /work/agent-4 "$FAKES/pipe" "$FAKES/pipe-remote"
+  # An ssh that runs the remote command at once, and a git that echoes its stdin.
+  # shellcheck disable=SC2016 # expanded by the fake
+  printf '#!/bin/bash\nPATH=%q:$PATH exec bash -c "${!#}"\n' "$FAKES/pipe-remote" >"$FAKES/pipe/ssh"
+  printf '#!/bin/bash\nexec "$@"\n' >"$FAKES/pipe-remote/agent-env"
+  printf '#!/bin/bash\ncat\nexit 3\n' >"$FAKES/pipe-remote/git"
+  chmod +x "$FAKES/pipe/ssh" "$FAKES/pipe-remote/agent-env" "$FAKES/pipe-remote/git"
+  cd /work/agent-4 || exit 1
+  local out rc=0
+  out=$(printf 'the message\n' | PATH=$FAKES/pipe:$PATH "$HERE/bin/shell-git" commit --file -) || rc=$?
+  eq "$out" "the message"
+  eq "$rc" 3
+}
+
+# The git extension runs git with LC_ALL=en_US.UTF-8, which the image lacks: no
+# warning about it may reach git's stderr, which the extension reads.
+test_git_writes_nothing_of_its_own_to_stderr() {
+  local err
+  mkdir -p /work/agent-5
+  cd /work/agent-5 || exit 1
+  err=$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 FAKE_LOG=$FAKES/git5.log PATH=$FAKES:$PATH \
+    "$HERE/bin/shell-git" status 2>&1 >/dev/null)
+  eq "$err" ""
+}
+
+# The extension runs git status with GIT_OPTIONAL_LOCKS=0, so it never takes
+# index.lock in a repository agents are writing to; SSH sends no environment.
+test_git_keeps_the_extensions_optional_locks_setting() {
+  local out
+  mkdir -p /work/agent-6
+  cd /work/agent-6 || exit 1
+  GIT_OPTIONAL_LOCKS=0 FAKE_LOG=$FAKES/git6.log PATH=$FAKES:$PATH "$HERE/bin/shell-git" status
+  out=$(cd / && FAKE_LOG=$FAKES/git6.log remote)
+  eq "$out" "pwd=/work/agent-6
+[LC_ALL=C.UTF-8]
+[LANGUAGE=en]
+[GIT_TERMINAL_PROMPT=0]
+[GIT_EDITOR=true]
+[GIT_OPTIONAL_LOCKS=0]
+[git]
+[status]"
+}
+
+# The extension runs some calls from its home folder (the merge editor's
+# merge-file, safe.directory), and asks for the version from wherever it runs:
+# outside /work they run in /, which is no repository in the shell.
+test_git_runs_calls_from_folders_the_shell_lacks_in_root() {
+  local out
+  mkdir -p /data/home
+  cd /data/home || exit 1
+  FAKE_LOG=$FAKES/nowhere.log PATH=$FAKES:$PATH "$HERE/bin/shell-git" config --global --add safe.directory /work/x
+  out=$(cd / && FAKE_LOG=$FAKES/nowhere.log remote)
+  eq "$out" "pwd=/
+$GIT_ENV
+[config]
+[--global]
+[--add]
+[safe.directory]
+[/work/x]"
+  FAKE_LOG=$FAKES/nowhere.log PATH=$FAKES:$PATH "$HERE/bin/shell-git" --version
+  out=$(cd / && FAKE_LOG=$FAKES/nowhere.log remote)
+  eq "$out" "pwd=/
+$GIT_ENV
+[--version]"
+}
+
 # The entrypoint, with the real code-server swapped for a fake that records its arguments.
 start_editor() {
   /opt/lettuce-editor/entrypoint.sh --auth none /work >/dev/null
@@ -212,6 +313,9 @@ test_the_fixed_settings_come_back_and_the_persons_stay() {
   eq "$(jq -c '."extensions.supportUntrustedWorkspaces"' "$s")" "$(jq -c '."extensions.supportUntrustedWorkspaces"' "$HERE/settings.json")"
   eq "$(jq -r '."editor.fontSize"' "$s")" 15
   eq "$(jq -r '."security.workspace.trust.enabled"' "$s")" true
+  # Source Control works in Restricted Mode, and git runs in the shell container.
+  eq "$(jq -r '."extensions.supportUntrustedWorkspaces"["vscode.git"].supported' "$s")" true
+  eq "$(jq -r '."git.path"' "$s")" "$HERE/bin/shell-git"
   eq "$(jq -r '."chat.disableAIFeatures"' "$s")" true
   # Chat is off, so the secondary side bar would open empty.
   eq "$(jq -r '."workbench.secondarySideBar.defaultVisibility"' "$s")" hidden

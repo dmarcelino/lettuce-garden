@@ -1,7 +1,8 @@
 """Drives the workbench in Chromium for scripts/code-server-e2e.sh --browser: opens
-agent-1's folder, a TypeScript file and a terminal (typing a command into it), asks
-to run a task, and previews a planted README.md, also after choosing "Disable" in
-the preview's security picker, the way a person would. What ran where is checked
+agent-1's folder, a TypeScript file and a terminal (typing a command into it),
+stages and commits the planted change from Source Control, asks to run a task, and
+previews a planted README.md, also after choosing "Disable" in the preview's
+security picker, the way a person would. What ran where is checked
 afterwards by the script, from marker files; this prints what the page showed, and
 whether the planted Markdown asked for anything (every request it would make has
 /planted-md in its URL)."""
@@ -58,6 +59,40 @@ def main() -> None:
         page.keyboard.type("touch /tmp/typed-in-terminal\n")
         page.wait_for_timeout(3_000)
 
+        def command(name: str) -> None:
+            page.keyboard.press("F1")
+            page.wait_for_timeout(1_000)
+            page.keyboard.type(name)
+            page.wait_for_timeout(1_500)
+            page.keyboard.press("Enter")
+
+        # Source Control: the planted repository opens without a prompt, its change is
+        # listed, and a commit goes through. Where git and the hook ran is checked
+        # by the script.
+        command("View: Show Source Control")
+        page.wait_for_timeout(10_000)
+        quiet = page.locator(".monaco-dialog-box").count() == 0
+        print(f"{'ok  ' if quiet else 'FAIL'}  browser: Source Control opens the repository without asking")
+        ok &= quiet
+        if not quiet:
+            print("        " + page.locator(".monaco-dialog-box").first.inner_text().replace("\n", " ")[:300])
+            page.keyboard.press("Escape")
+        listed = page.locator(".scm-view").get_by_text("tracked.txt").count() > 0
+        print(f"{'ok  ' if listed else 'FAIL'}  browser: Source Control lists the change")
+        ok &= listed
+        command("Git: Stage All Changes")
+        page.wait_for_timeout(3_000)
+        page.locator(".scm-editor .monaco-editor").first.click()
+        page.keyboard.type("from source control")
+        page.keyboard.press("Control+Enter")
+        page.wait_for_timeout(8_000)
+        quiet = page.locator(".monaco-dialog-box").count() == 0
+        print(f"{'ok  ' if quiet else 'FAIL'}  browser: committing asks nothing")
+        ok &= quiet
+        if not quiet:
+            print("        " + page.locator(".monaco-dialog-box").first.inner_text().replace("\n", " ")[:300])
+            page.keyboard.press("Escape")
+
         page.keyboard.press("F1")
         page.wait_for_timeout(1_000)
         page.keyboard.type("Tasks: Run Task")
@@ -69,13 +104,6 @@ def main() -> None:
         ok &= asked
         page.keyboard.press("Escape")
         page.wait_for_timeout(2_000)
-
-        def command(name: str) -> None:
-            page.keyboard.press("F1")
-            page.wait_for_timeout(1_000)
-            page.keyboard.type(name)
-            page.wait_for_timeout(1_500)
-            page.keyboard.press("Enter")
 
         def preview_shows(text: str) -> bool:
             for frame in page.frames:

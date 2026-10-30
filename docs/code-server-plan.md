@@ -1,5 +1,7 @@
 # Code editor (code-server): implementation plan
 
+Note (2026-10-30): door 4 was revisited. The git extension is back: `git.path` is the fixed `bin/shell-git`, which runs every git call over SSH in the shell, the editor image has no git, and the image patches the extension's two trust calls (`requestResourceTrust`, `isResourceTrusted`) to resolve to true, failing the build when they no longer match. The prompt guarded against the repository's config running git's helpers, which now run in the shell, so the editor stays in Restricted Mode with Source Control on. Door 4 and the git row below say so; docs/code-server.md has the security model.
+
 Note (2026-10-28): the editor has since moved to `https://<name>-garden.<domain>/code-server/`, off Lettuce's origin, and the landing page's agent list is server-rendered by the `garden` service (docs/garden-host-plan.md). The record below is unchanged.
 
 Status: implemented on branch `vscode` (2026-10-27), steps 0-5; step 6, a real stack, is still to
@@ -134,6 +136,12 @@ by something agents can't change.
    Restricted Mode can't coexist, so the git extension is not in the image. git runs from the
    terminal, in the shell container, where hooks, `core.fsmonitor`, filters and the rest of a
    repository's config run where agents already run.
+   **Revisited (2026-10-30):** the prompt guards against that config, which with the `git.path`
+   wrapper never runs in the editor. So the extension is kept and allowed in Restricted Mode,
+   `git.path` is the fixed `bin/shell-git` (git over SSH in the shell, arguments `%q`-quoted, the
+   workspace's own folder), the editor image has no git for the extension to fall back on, and the
+   Dockerfile patches both trust calls in `extensions/git/dist/main.js` to resolve to true, each
+   anchor matching exactly once or the build fails.
 
 The editor image itself has no toolchain: no `node` on `PATH` (code-server's own sits under its
 install directory), no `npm`, no compilers, an empty `/etc/shells` (so VS Code detects no local
@@ -248,7 +256,7 @@ say so, as they do for pipelock.
 | Networks | `code-editor` (internal; gate and editor), `code-exec` (internal; editor and shell), `code-egress` (shell only), declared in the overlay | Agents reach neither container; the editor reaches nothing but the shell; the shell reaches the internet but not the stack. No upstream service changes |
 | Access token and cookies | The gate never forwards `Cookie`, `cf-access-jwt-assertion` or `Set-Cookie` | The person's token and Lettuce's session cookie never reach the editor; the editor can't set cookies on the origin |
 | Workspace Trust | On, never granted (Restricted Mode); TypeScript allowed in it through `extensions.supportUntrustedWorkspaces`, terminals through `terminal.integrated.allowInUntrustedWorkspace` | Restricted Mode is the only switch for tasks, debugging and workspace terminal settings |
-| git | From the terminal only; no git extension, no Source Control view | The git extension asks to trust each repository's folder (door 4) |
+| git | Source Control through `git.path` = `bin/shell-git` (every call over SSH in the shell), the extension's trust calls patched out, no git in the editor; the terminal too | A repository's config runs code; in the shell it runs where agents already run, so the trust prompt protects nothing there and trusting would open doors 1 and 3 (door 4) |
 | Settings | The editor's entrypoint merges the fixed settings (trust, the TypeScript override, terminals allowed, terminal profiles, type acquisition off, no schema downloads, no update checks or telemetry) into the user settings on every start; a file that isn't plain JSON is kept aside | The person can change them in the UI; a restart puts them back |
 | Folders | One agent's workspace per window, `/work/<agent-id>`; the docs say never to open `/work` itself | Search and file watching per agent; a slip with "Trust" covers one agent, not all |
 | Extensions | No marketplace; built-in allow-list; nothing installable | Doors 2 and 3 above |
