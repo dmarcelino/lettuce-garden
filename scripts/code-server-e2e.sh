@@ -20,7 +20,8 @@
 #   with a hook that runs in the shell and not in the editor, and the
 #   environment agent-env gives it (PATH, npm's prefix);
 # - Source Control's git (bin/shell-git): the editor has no git, and the
-#   wrapper runs git in the shell, where a repository's core.fsmonitor runs;
+#   wrapper runs git in the shell, where a repository's core.fsmonitor runs,
+#   and 30 calls at once all succeed with nothing on stderr;
 # - what the editor can't do: write its extensions dir, reach the internet,
 #   listen on any port, be reached from the stack network or from the shell
 #   (the gate, as nobody, reaches it only through its socket).
@@ -201,6 +202,15 @@ toplevel=$(editor_git rev-parse --show-toplevel 2>/dev/null || true)
 expect "shell-git finds the repository at the editor's path" test "$toplevel" = /work/agent-1
 in_shell "git config core.fsmonitor 'touch /tmp/fsmonitor-ran; false'"
 expect "shell-git status runs" editor_git status --porcelain
+# Source Control starts several git calls at once, over the one SSH connection
+# the terminals share; the first ones find no connection yet and each make one.
+# shellcheck disable=SC2016 # expanded in the editor
+burst='rm -f /tmp/burst.err; pids=()
+for _ in $(seq 30); do /opt/lettuce-editor/bin/shell-git rev-parse --git-dir >/dev/null 2>>/tmp/burst.err & pids+=($!); done
+for p in "${pids[@]}"; do wait "$p" || exit 1; done
+! test -s /tmp/burst.err'
+docker exec "$P-editor" ssh -F /opt/lettuce-editor/ssh_config -O exit garden-code-server-exec 2>/dev/null || true
+expect "30 git calls at once all succeed, quietly" docker exec -w /work/agent-1 "$P-editor" bash -c "$burst"
 expect "the repository's fsmonitor ran in the shell" docker exec "$P-exec" test -e /tmp/fsmonitor-ran
 refuse "and not in the editor" docker exec "$P-editor" test -e /tmp/fsmonitor-ran
 in_shell "git config --unset core.fsmonitor"
@@ -270,7 +280,7 @@ EOF'
   in_shell "git config user.name e2e && git config user.email e2e@example.com \
     && echo one >tracked.txt && git add tracked.txt && git commit -q -m tracked && echo two >tracked.txt"
   in_shell "git config core.fsmonitor 'touch /tmp/planted-git-fsmonitor; false' \
-    && printf '#!/bin/sh\ntouch /tmp/planted-git-hook\n' >.git/hooks/pre-commit"
+    && printf '#!/bin/sh\ntouch /tmp/planted-git-hook\n' >.git/hooks/pre-commit && chmod +x .git/hooks/pre-commit"
   docker create --name "$P-gate" --network "$P-default" --user 65534 -v "$P-sock:/run/code-server:ro" \
     "$P-gate:test" python tests/e2e/serve_gate.py >/dev/null
   docker start "$P-gate" >/dev/null

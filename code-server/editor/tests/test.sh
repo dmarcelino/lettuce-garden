@@ -211,16 +211,40 @@ test_git_writes_nothing_of_its_own_to_stderr() {
   eq "$err" ""
 }
 
-test_git_refuses_folders_the_shell_lacks() {
-  local rc=0 out
+# The extension runs git status with GIT_OPTIONAL_LOCKS=0, so it never takes
+# index.lock in a repository agents are writing to; SSH sends no environment.
+test_git_keeps_the_extensions_optional_locks_setting() {
+  local out
+  mkdir -p /work/agent-6
+  cd /work/agent-6 || exit 1
+  GIT_OPTIONAL_LOCKS=0 FAKE_LOG=$FAKES/git6.log PATH=$FAKES:$PATH "$HERE/bin/shell-git" status
+  out=$(cd / && FAKE_LOG=$FAKES/git6.log remote)
+  eq "$out" "pwd=/work/agent-6
+[LC_ALL=C.UTF-8]
+[LANGUAGE=en]
+[GIT_TERMINAL_PROMPT=0]
+[GIT_EDITOR=true]
+[GIT_OPTIONAL_LOCKS=0]
+[git]
+[status]"
+}
+
+# The extension runs some calls from its home folder (the merge editor's
+# merge-file, safe.directory), and asks for the version from wherever it runs:
+# outside /work they run in /, which is no repository in the shell.
+test_git_runs_calls_from_folders_the_shell_lacks_in_root() {
+  local out
   mkdir -p /data/home
   cd /data/home || exit 1
-  rm -f "$FAKES/nowhere.log"
-  out=$(FAKE_LOG=$FAKES/nowhere.log PATH=$FAKES:$PATH "$HERE/bin/shell-git" status 2>&1) || rc=$?
-  eq "$rc" 128
-  grep -q "not in the shell's workspaces" <<<"$out" || fail "no reason given"
-  [[ ! -e $FAKES/nowhere.log ]] || fail "ssh was called"
-  # The extension asks for the version from wherever it runs.
+  FAKE_LOG=$FAKES/nowhere.log PATH=$FAKES:$PATH "$HERE/bin/shell-git" config --global --add safe.directory /work/x
+  out=$(cd / && FAKE_LOG=$FAKES/nowhere.log remote)
+  eq "$out" "pwd=/
+$GIT_ENV
+[config]
+[--global]
+[--add]
+[safe.directory]
+[/work/x]"
   FAKE_LOG=$FAKES/nowhere.log PATH=$FAKES:$PATH "$HERE/bin/shell-git" --version
   out=$(cd / && FAKE_LOG=$FAKES/nowhere.log remote)
   eq "$out" "pwd=/

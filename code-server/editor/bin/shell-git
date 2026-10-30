@@ -6,24 +6,39 @@
 # no git. A repository's own config runs code (core.fsmonitor, filters, hooks,
 # diff.external); in the shell it runs where agents already run theirs. The
 # extension spawns git in the repository; the workspaces are at /work in both
-# containers. stdin, stdout, stderr and the exit status pass through SSH;
-# agent-env gives git the container's environment (PATH for hooks), and the
-# fixed variables keep git from asking anything or opening an editor.
+# containers, and a call from anywhere else (its home folder, for merge-file
+# and safe.directory) runs in /, which is no repository in the shell. stdin,
+# stdout, stderr and the exit status pass through SSH; agent-env gives git the
+# container's environment (PATH for hooks), and the fixed variables keep git
+# from asking anything or opening an editor. SSH sends no environment, so the
+# extension's GIT_OPTIONAL_LOCKS (0 for status, which then never takes
+# index.lock while agents write the repository) goes in the command.
 set -euo pipefail
 
 dir=$PWD
 if [[ $dir != /work && $dir != /work/* ]]; then
-  # The extension asks for the version from wherever it runs.
-  if [[ $# == 1 && $1 == --version ]]; then
-    dir=/
-  else
-    echo "fatal: $dir is not in the shell's workspaces (/work)" >&2
-    exit 128
-  fi
+  dir=/
+fi
+locks=
+if [[ -v GIT_OPTIONAL_LOCKS ]]; then
+  locks=" GIT_OPTIONAL_LOCKS=$(printf '%q' "$GIT_OPTIONAL_LOCKS")"
 fi
 # The remote side runs this with bash -c.
-cmd="cd -- $(printf '%q' "$dir") && exec agent-env env LC_ALL=C.UTF-8 LANGUAGE=en GIT_TERMINAL_PROMPT=0 GIT_EDITOR=true git"
+cmd="cd -- $(printf '%q' "$dir") && exec agent-env env LC_ALL=C.UTF-8 LANGUAGE=en GIT_TERMINAL_PROMPT=0 GIT_EDITOR=true$locks git"
 for arg in "$@"; do
   cmd+=" $(printf '%q' "$arg")"
 done
-exec ssh -F /opt/lettuce-editor/ssh_config -T garden-code-server-exec "$cmd"
+ssh=(ssh -F /opt/lettuce-editor/ssh_config)
+# Source Control starts several calls at once. Without a shared connection
+# (ControlMaster auto) each would open its own, and every one but the first
+# would say so on stderr: one opens it, under a lock, and the rest share it.
+if ! "${ssh[@]}" -O check garden-code-server-exec 2>/dev/null; then
+  exec 9>/tmp/shell-git.lock
+  flock 9
+  if ! "${ssh[@]}" -O check garden-code-server-exec 2>/dev/null; then
+    # The connection outlives this call (ControlPersist): not with the lock.
+    "${ssh[@]}" -T garden-code-server-exec true </dev/null >/dev/null 2>&1 9>&- || true
+  fi
+  exec 9>&-
+fi
+exec "${ssh[@]}" -T garden-code-server-exec "$cmd"
