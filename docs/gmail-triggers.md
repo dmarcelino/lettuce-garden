@@ -1,6 +1,6 @@
 # Gmail triggers
 
-Each stack can have Gmail triggers: rules like "when an email arrives in the *Invoices* label, ask my agent to file it". The person sets them up on a web page, with no technical knowledge needed. Checking Gmail costs nothing; an agent runs only when a rule matches. It is opt-in, behind the `gmail-triggers` profile, and needs the `google` profile with the person's Google account connected in Lettuce.
+Each stack can have Gmail triggers: rules like "when an email arrives in the *Invoices* label, ask my agent to file it". The person sets them up on a web page, with no technical knowledge needed. Checking Gmail costs nothing; an agent runs only when a rule matches. It is opt-in, behind the `garden-gmail-triggers` profile, and needs the `google` profile with the person's Google account connected in Lettuce.
 
 ```
 gmail-triggers ──every 2 minutes──────────────> Gmail API     what arrived, metadata only
@@ -32,12 +32,12 @@ The agent never gets the email itself from the trigger, only its id, sender and 
 
 ## For the operator
 ```bash
-./lettucectl profiles cloudflared,google,gmail-triggers   # plus whatever else you run
+./lettucectl profiles cloudflared,google,garden-gmail-triggers   # plus whatever else you run
 ```
 - The profile needs `google`; `check` refuses it otherwise. It adds no Google redirect URI: it reuses the account each person connected in Settings -> Google.
 - `profiles` routes `https://<garden>/gmail-triggers/` to the sidecar on every stack, on the stack's garden address and its own Access application, and `up` installs the garden executor in the app-server with Gmail triggers' part on. Dropping the profile removes the route and the container and turns that part off (the executor itself stays while the code editor is on, for its agent list); the rules stay in the stack's state.
 - Rules and pending requests live in `stacks/<name>/state/garden/gmail-triggers/` and are included in `backup`. Each stack gets a `GARDEN_EXECUTOR_TOKEN` in `stack.env`, generated once; `up` installs it for the executor.
-- Logs: `./lettucectl logs <name> gmail-triggers`; the executor writes `/root/.letta/garden/executor/executor.log` in the app-server (`./lettucectl shell <name> <agent>` can read it).
+- Logs: `./lettucectl logs <name> garden-gmail-triggers`; the executor writes `/root/.letta/garden/executor/executor.log` in the app-server (`./lettucectl shell <name> <agent>` can read it).
 
 ## Security model
 - **Every page needs Cloudflare Access.** The sidecar checks the Access JWT on every request and CSRF on every form, like the vault, because agents can reach it over the stack network. Like the vault's, its pages load only as top-level pages and its forms post only from its own pages (Fetch Metadata), and they open cut off from any other tab (Cross-Origin-Opener-Policy), so a script on the same address can't read a form token or make a rule. `<garden>/gmail-triggers/` is a route that bypasses the BFF; rules must live where agents can't edit them.

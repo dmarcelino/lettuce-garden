@@ -132,7 +132,7 @@ docker volume create "$P-keys" >/dev/null
 docker volume create "$P-sock" >/dev/null
 
 # As compose/code-server.yml runs it: on its socket, which only the gate mounts besides it.
-docker create --name "$P-editor" --network "$P-exec" --network-alias code-server-editor \
+docker create --name "$P-editor" --network "$P-exec" --network-alias garden-code-server-editor \
   --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true --user 0 \
   -e EXTENSIONS_GALLERY='{}' \
   -v "$TMP/workspaces:/work" -v "$P-data:/data" -v "$P-keys:/keys" -v "$P-sock:/run/code-server" \
@@ -150,7 +150,7 @@ for _ in $(seq 60); do
 done
 listening || die "the editor did not start: $(docker logs "$P-editor" 2>&1 | tail -5)"
 
-docker create --name "$P-exec" --network "$P-exec" --network-alias code-server-exec --init \
+docker create --name "$P-exec" --network "$P-exec" --network-alias garden-code-server-exec --init \
   --cap-drop NET_RAW --security-opt no-new-privileges:true -w /work \
   -v "$TMP/workspaces:/work" -v "$TMP/tools:/opt/agent-tools" -v "$P-keys:/keys:ro" \
   "$P-exec:e2e" >/dev/null
@@ -171,7 +171,7 @@ echo "the shell"
 # in_shell COMMAND -> runs COMMAND in agent-1's workspace in the shell, the way a
 # terminal does: over the editor's SSH session, through agent-env
 in_shell() {
-  docker exec "$P-editor" ssh -F /opt/lettuce-editor/ssh_config -T code-server-exec \
+  docker exec "$P-editor" ssh -F /opt/lettuce-editor/ssh_config -T garden-code-server-exec \
     "cd -- /work/agent-1 && exec agent-env bash -c $(printf '%q' "$1")"
 }
 GITC="git -c user.name=e2e -c user.email=e2e@example.com"
@@ -197,13 +197,13 @@ listeners() { docker exec "$1" awk 'NR > 1 && $4 == "0A" && $2 !~ /^0B00007F:/' 
 expect "it listens on no port, only on its socket" test -z "$(listeners "$P-editor")"
 refuse "it keeps no config file of its own on its volume" docker exec "$P-editor" test -e /data/home/.config/code-server
 expect "its fallback shell is the terminal profile" bash -c "docker exec $P-editor getent passwd root | grep -q ':/opt/lettuce-editor/bin/exec-shell\$'"
-refuse "the shell can't reach the editor" docker exec "$P-exec" bash -c 'exec 3<>/dev/tcp/code-server-editor/8080'
+refuse "the shell can't reach the editor" docker exec "$P-exec" bash -c 'exec 3<>/dev/tcp/garden-code-server-editor/8080'
 docker run -d --name "$P-probe" --network "$P-default" "$DEBIAN" sleep 300 >/dev/null
-refuse "the stack network can't reach the editor" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/code-server-editor/8080'
-refuse "the stack network can't reach the shell" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/code-server-exec/22'
+refuse "the stack network can't reach the editor" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/garden-code-server-editor/8080'
+refuse "the stack network can't reach the shell" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/garden-code-server-exec/22'
 docker exec "$P-editor" ssh-keygen -q -t ed25519 -N '' -f /tmp/stranger
 refuse "the shell lets in no other key" docker exec "$P-editor" ssh -F /dev/null -i /tmp/stranger -o IdentitiesOnly=yes \
-  -o BatchMode=yes -o UserKnownHostsFile=/data/ssh/known_hosts root@code-server-exec true
+  -o BatchMode=yes -o UserKnownHostsFile=/data/ssh/known_hosts root@garden-code-server-exec true
 
 if ((BROWSER)); then
   echo "the workbench in a browser, with a planted workspace"

@@ -7,7 +7,7 @@
 # Local git worktrees (git worktree add .worktrees/<branch>)
 /.worktrees/
 
-# Build and test output of broker/
+# Build and test output of vault/
 __pycache__/
 *.egg-info/
 .pytest_cache/

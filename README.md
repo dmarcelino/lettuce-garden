@@ -57,7 +57,7 @@ Nobody can reach another person's stack. **Cloudflare authenticates the people; 
    ```
 3. Each person opens their URL, signs in with Google, and connects a model provider in Lettuce under **Settings -> Providers & models**. One API key per person keeps spending separate.
 
-Day-to-day commands, optional features, upgrades, backups and troubleshooting are in **[docs/operations.md](docs/operations.md)**. To give agents Gmail, Calendar, Tasks and Contacts, see **[docs/google-setup.md](docs/google-setup.md)**. To give each person an encrypted vault for their address, cards, documents and logins, which agents may use only when that person agrees, see **[docs/secret-broker.md](docs/secret-broker.md)**. To send the agents' web traffic through a proxy that checks where it goes and signs a receipt for each request (advisory for now), see **[docs/egress-firewall.md](docs/egress-firewall.md)**. To let agents create, edit and convert Word, PowerPoint, Excel and PDF files, see **[docs/doc-tools.md](docs/doc-tools.md)**. To let each person open their agents' workspaces in VS Code in the browser, with a terminal that has the agents' tools, see **[docs/code-server.md](docs/code-server.md)**.
+Day-to-day commands, optional features, upgrades, backups and troubleshooting are in **[docs/operations.md](docs/operations.md)**. To give agents Gmail, Calendar, Tasks and Contacts, see **[docs/google-setup.md](docs/google-setup.md)**. To give each person an encrypted vault for their address, cards, documents and logins, which agents may use only when that person agrees, see **[docs/vault.md](docs/vault.md)**. To send the agents' web traffic through a proxy that checks where it goes and signs a receipt for each request (advisory for now), see **[docs/egress-firewall.md](docs/egress-firewall.md)**. To let agents create, edit and convert Word, PowerPoint, Excel and PDF files, see **[docs/doc-tools.md](docs/doc-tools.md)**. To let each person open their agents' workspaces in VS Code in the browser, with a terminal that has the agents' tools, see **[docs/code-server.md](docs/code-server.md)**.
 
 ## What lives where
 | Path | Tracked | What |
@@ -65,16 +65,16 @@ Day-to-day commands, optional features, upgrades, backups and troubleshooting ar
 | `lettucectl`, `lib/` | yes | the CLI |
 | `compose/hardening.yml` | yes | `no-new-privileges`, memory/pid caps for every service, no `NET_RAW` where agents run, letta-code self-update off |
 | `compose/multi.yml` | yes | drops all published ports, so stacks never collide |
-| `compose/secrets.yml`, `broker/` | yes | the optional vault (`secrets` profile) and its source |
-| `compose/gmail-triggers.yml`, `gmail-triggers/` | yes | optional Gmail triggers (`gmail-triggers` profile) and their source |
-| `compose/pipelock.yml`, `compose/pipelock-proxy.yml`, `pipelock/` | yes | the optional egress proxy (`pipelock` profile), its proxy settings and its image |
-| `compose/code-server.yml`, `code-server/` | yes | the optional code editor (`code-server` profile): its gate, the editor's image and the shell's image |
+| `compose/vault.yml`, `vault/` | yes | the optional vault (`garden-vault` profile) and its source |
+| `compose/gmail-triggers.yml`, `gmail-triggers/` | yes | optional Gmail triggers (`garden-gmail-triggers` profile) and their source |
+| `compose/pipelock.yml`, `compose/pipelock-proxy.yml`, `pipelock/` | yes | the optional egress proxy (`garden-pipelock` profile), its proxy settings and its image |
+| `compose/code-server.yml`, `code-server/` | yes | the optional code editor (`garden-code-server` profile): its gate, the editor's image and the shell's image |
 | `compose/garden.yml`, `garden/` | yes | the garden's landing page (on with any garden extra) and the garden executor, which runs Gmail triggers' requests and sends the landing page the agent list |
-| `compose/doc-tools.yml`, `compose/shared/gotenberg.yml`, `doc-tools/` | yes | the optional Office and PDF tools (`doc-tools` profile): the app-server's mount and network, the host's shared Gotenberg, and the tools' image and PDF server |
+| `compose/doc-tools.yml`, `compose/shared/gotenberg.yml`, `doc-tools/` | yes | the optional Office and PDF tools (`garden-doc-tools` profile): the app-server's mount and network, the host's shared Gotenberg, and the tools' image and PDF server |
 | `garden-common/` | yes | code the garden services share (sign-in checks, the executor API's checks, page styles, icons) |
 | `config.env.example` | yes | template for `config.env` |
 | `scripts/dns-preflight.sh` | yes | compares two nameservers before and after moving a domain |
-| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) the sidecars' tests (`tests/run-sidecar.sh broker`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
+| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) the sidecars' tests (`tests/run-sidecar.sh vault`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
 | `config.env` | **no** | your settings plus cached Cloudflare ids (mode 600) |
 | `.secrets/cloudflare-api-token` | **no** | Cloudflare API token (mode 600) |
 | `upstream/` | **no** | Lettuce, cloned at `LETTUCE_REF` |
@@ -85,14 +85,14 @@ The compose files of each stack are applied in this order:
 1. `upstream/docker/compose.yml`
 2. `compose/hardening.yml`
 3. `compose/multi.yml`
-4. `compose/secrets.yml` (adds nothing unless the `secrets` profile is on)
-5. `compose/gmail-triggers.yml` (adds nothing unless the `gmail-triggers` profile is on)
-6. `compose/pipelock.yml` (adds nothing unless the `pipelock` profile is on)
-7. `compose/code-server.yml` (adds nothing unless the `code-server` profile is on)
-8. `compose/doc-tools.yml` (merged only when the `doc-tools` profile is on)
-9. `compose/pipelock-proxy.yml` (merged only when the `pipelock` profile is on)
+4. `compose/vault.yml` (adds nothing unless the `garden-vault` profile is on)
+5. `compose/gmail-triggers.yml` (adds nothing unless the `garden-gmail-triggers` profile is on)
+6. `compose/pipelock.yml` (adds nothing unless the `garden-pipelock` profile is on)
+7. `compose/code-server.yml` (adds nothing unless the `garden-code-server` profile is on)
+8. `compose/doc-tools.yml` (merged only when the `garden-doc-tools` profile is on)
+9. `compose/pipelock-proxy.yml` (merged only when the `garden-pipelock` profile is on)
 
-Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<name>/stack.env`. With `doc-tools`, the host also runs the Compose project `lettuce_shared` (one Gotenberg for every stack).
+Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<name>/stack.env`. With `garden-doc-tools`, the host also runs the Compose project `lettuce_shared` (one Gotenberg for every stack).
 
 ## Limits and caveats
 - **Version pinning.** Lettuce is compiled against one exact letta-code release and pins the server image to it. Move between upstream tags only with `lettucectl upgrade <tag>`.

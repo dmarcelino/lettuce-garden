@@ -14,9 +14,9 @@ const SCRIPT = fileURLToPath(new URL("../lib/mcp-servers.mjs", import.meta.url))
 const OFFICE = { name: "office", transport: "stdio", command: "/opt/lettuce-doc-tools/bin/officeagent" };
 const PDF = { name: "pdf", transport: "stdio", command: "/opt/lettuce-doc-tools/bin/pdf-mcp" };
 const GOOGLE = { name: "google", transport: "http", url: "http://google-mcp:8000/mcp" };
-const VAULT = { name: "vault", transport: "http", url: "http://secret-broker:8000/mcp", headers: { "x-a": "b" } };
+const VAULT = { name: "vault", transport: "http", url: "http://garden-vault:8000/mcp", headers: { "x-a": "b" } };
 // The entry lettucectl adds for the vault (upstream bff/src/mcp/settings.ts).
-const OUR_VAULT = { name: "vault", transport: "http", url: "http://secret-broker:8000/mcp" };
+const OUR_VAULT = { name: "vault", transport: "http", url: "http://garden-vault:8000/mcp" };
 
 // The file as upstream's BFF renders it (renderMcpSettings).
 function settings(servers, extra = {}) {
@@ -205,7 +205,7 @@ test("adds the vault after the existing ones and keeps everything else as it was
 });
 
 test("the vault added by hand under any name counts as there", async () => {
-  const mine = { name: "secrets", transport: "http", url: "http://secret-broker:8000/mcp" };
+  const mine = { name: "secrets", transport: "http", url: "http://garden-vault:8000/mcp" };
   const file = tmpFile(render(settings([GOOGLE, mine])));
   const before = fs.readFileSync(file, "utf8");
   const result = await update(file, "add", "vault", { settleMs: 0 });
@@ -216,9 +216,9 @@ test("the vault added by hand under any name counts as there", async () => {
 
 test("a vault server that is not the vault's exact HTTP entry is the person's, and nothing is added", async () => {
   const cases = [
-    { name: "vault", transport: "http", url: "http://secret-broker:8000/mcp/" },
+    { name: "vault", transport: "http", url: "http://garden-vault:8000/mcp/" },
     { name: "vault", transport: "http", url: "https://vault.example.com/mcp" },
-    { name: "vault", transport: "sse", url: "http://secret-broker:8000/mcp" },
+    { name: "vault", transport: "sse", url: "http://garden-vault:8000/mcp" },
     { name: "vault", transport: "stdio", command: "/usr/local/bin/my-vault" },
   ];
   for (const mine of cases) {
@@ -232,7 +232,7 @@ test("a vault server that is not the vault's exact HTTP entry is the person's, a
 });
 
 test("removing the vault takes out only its exact HTTP entries, under any name", async () => {
-  const renamed = { name: "secrets", transport: "http", url: "http://secret-broker:8000/mcp" };
+  const renamed = { name: "secrets", transport: "http", url: "http://garden-vault:8000/mcp" };
   const other = { name: "vault", transport: "http", url: "https://vault.example.com/mcp" };
   const file = tmpFile(render(settings([GOOGLE, OFFICE, VAULT, renamed, other, PDF])));
   const result = await update(file, "remove", "vault", { settleMs: 0 });

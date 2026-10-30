@@ -79,7 +79,7 @@ def test_assets_load_as_subresources(garden):
 
 
 def test_only_the_landing_page_and_its_assets_are_served(garden):
-    paths = ("/index.html", "/secrets/", "/gmail-triggers/", "/code-server/", "/garden/", "/app.css")
+    paths = ("/index.html", "/vault/", "/gmail-triggers/", "/code-server/", "/garden/", "/app.css")
     for path in (*paths, "/garden.css", "/icon-192.png", "/assets/", "/assets/app.css"):
         assert garden.browser.get(path).status_code == 404, path
     assert garden.browser.get("/healthz", headers={"cf-access-jwt-assertion": ""}).text == "ok"
@@ -130,16 +130,17 @@ def test_the_page_links_to_the_garden_and_back_to_lettuce(garden):
 
 
 def test_the_page_links_to_the_garden_pages_that_are_on(garden_for):
-    page = garden_for("secrets").page().text
-    assert 'href="/secrets/"' in page and "Vault" in page
+    page = garden_for("garden-vault").page().text
+    # Profile garden-<page> serves /<page>/.
+    assert 'href="/vault/"' in page and "Vault" in page and "/garden-vault" not in page
     assert "/gmail-triggers/" not in page and "/code-server/" not in page and "Code editor" not in page
 
-    page = garden_for("secrets,gmail-triggers").page().text
-    assert 'href="/secrets/"' in page and 'href="/gmail-triggers/"' in page and "Gmail triggers" in page
-    assert page.index('href="/secrets/"') < page.index('href="/gmail-triggers/"')
+    page = garden_for("garden-vault,garden-gmail-triggers").page().text
+    assert 'href="/vault/"' in page and 'href="/gmail-triggers/"' in page and "Gmail triggers" in page
+    assert page.index('href="/vault/"') < page.index('href="/gmail-triggers/"')
 
     page = garden_for("").page().text
-    assert "No garden features are on" in page and 'href="/secrets/"' not in page
+    assert "No garden features are on" in page and 'href="/vault/"' not in page
 
 
 def test_with_the_editor_on_and_no_list_yet_the_page_says_it_is_on_its_way(garden):
@@ -213,7 +214,7 @@ def test_a_page_opened_while_the_executor_lists_asks_again(garden):
 
 
 def test_without_the_editor_no_list_is_asked_for_or_shown(garden_for):
-    garden = garden_for("secrets,gmail-triggers")
+    garden = garden_for("garden-vault,garden-gmail-triggers")
     assert not garden.wanted()
     garden.agents.set([(AGENT_1, "lucius")])
     page = garden.page().text

@@ -67,7 +67,7 @@
     {
       "id": "vault",
       "type": "backend",
-      "label": "secret-broker",
+      "label": "vault",
       "sublabel": "vault, unchanged",
       "pos": [
         440,

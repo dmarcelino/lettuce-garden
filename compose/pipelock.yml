@@ -1,7 +1,7 @@
 # Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
 # Pipelock (pipelock/, docs/egress-firewall.md): an egress proxy that checks
 # where the agents' tools connect and signs a receipt for every decision.
-# Opt-in behind the `pipelock` profile; without it this file adds nothing.
+# Opt-in behind the `garden-pipelock` profile; without it this file adds nothing.
 # compose/pipelock-proxy.yml, merged only with the profile, points the agents'
 # tools at it.
 #
@@ -14,8 +14,8 @@
 # does, or where this service loses its hardening or gains a host path.
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
-  pipelock:
-    profiles: ["pipelock"]
+  garden-pipelock:
+    profiles: ["garden-pipelock"]
     build:
       context: ../../pipelock
     image: lettuce-pipelock:local

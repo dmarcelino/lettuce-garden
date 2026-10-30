@@ -2,7 +2,7 @@
 # The garden (garden/): the landing page at the root of the stack's garden host,
 # https://<name>-garden.<domain>/, linking to the garden pages that are on and,
 # with the code editor, to each agent's workspace by name. On whenever any
-# garden profile is (Compose starts a service when any of its profiles is on);
+# garden page profile is (Compose starts a service when any of its profiles is on);
 # without one this file adds nothing.
 #
 # The tunnel forwards / and the landing page's assets on the garden host to it
@@ -17,7 +17,7 @@
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
   garden:
-    profiles: ["secrets", "gmail-triggers", "code-server"]
+    profiles: ["garden-vault", "garden-gmail-triggers", "garden-code-server"]
     build:
       context: ../../garden
       additional_contexts:

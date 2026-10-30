@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end test and measurements for the doc-tools profile (docs/doc-tools.md).
+# End-to-end test and measurements for the garden-doc-tools profile (docs/doc-tools.md).
 # Opt-in and never run by tests/run.sh: it needs Docker, the stack's app-server
 # image and the Gotenberg image, and takes a few minutes.
 #

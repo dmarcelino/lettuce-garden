@@ -1,8 +1,8 @@
 import pytest
 
-from secret_broker import crypto
-from secret_broker.kinds import KINDS
-from secret_broker.vault import AUTO, Locked, Vault, VaultError, build_fields
+from garden_vault import crypto
+from garden_vault.kinds import KINDS
+from garden_vault.vault import AUTO, Locked, Vault, VaultError, build_fields
 
 from .conftest import CARD, FAST_KDF, PASSPHRASE, SECRET, STREET, add_address, add_card
 

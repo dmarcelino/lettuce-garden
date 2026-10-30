@@ -73,7 +73,7 @@ eq() { [[ $1 == "$2" ]] || fail "expected [$2], got [$1]"; }
 GARDEN_ENV='{"CF_ACCESS_AUD":"${CF_GARDEN_AUD}","PUBLIC_ORIGIN":"${GARDEN_ORIGIN}"}'
 
 # garden_config -> the rendered config also holds the garden service
-# compose/garden.yml renders (on with any garden profile); the repo copy has
+# compose/garden.yml renders (on with any garden page profile); the repo copy has
 # the garden executor
 garden_config() {
   # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
@@ -84,12 +84,12 @@ garden_config() {
   printf '// test\n' >"$H/garden/executor/tests/run.test.mjs"
 }
 
-# broker_config [BROKER_JSON] -> the rendered compose config also holds this
-# secret-broker (default: the hardened one compose/secrets.yml renders) and the
+# vault_config [VAULT_JSON] -> the rendered compose config also holds this
+# vault (default: the hardened one compose/vault.yml renders) and the
 # garden service
-broker_config() {
-  local broker=${1:-'{"read_only":true,"cap_drop":["ALL"],"environment":'"$GARDEN_ENV"',"volumes":[{"type":"volume","source":"secret-broker-data","target":"/data"}]}'}
-  jq -c --argjson b "$broker" '.services["secret-broker"] = $b' "$T/compose-config.json" >"$T/c.json"
+vault_config() {
+  local vault=${1:-'{"read_only":true,"cap_drop":["ALL"],"environment":'"$GARDEN_ENV"',"volumes":[{"type":"volume","source":"vault-data","target":"/data"}]}'}
+  jq -c --argjson b "$vault" '.services["garden-vault"] = $b' "$T/compose-config.json" >"$T/c.json"
   mv "$T/c.json" "$T/compose-config.json"
   garden_config
 }
@@ -104,7 +104,7 @@ config_edit() {
 # compose/gmail-triggers.yml renders for alfred, the services upstream gives
 # google-creds and the garden service; the repo copy has the executor
 triggers_config() {
-  config_edit '.services["gmail-triggers"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
+  config_edit '.services["garden-gmail-triggers"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
       "environment":'"$GARDEN_ENV"',"volumes":[
       {"type":"bind","source":"'"$H"'/stacks/alfred/state/garden/gmail-triggers","target":"/data"},
       {"type":"volume","source":"google-creds","target":"/creds","read_only":true},
@@ -300,11 +300,11 @@ test_add_writes_private_stack_env() {
   s=$(senv alfred PUSH_VAPID_PRIVATE_KEY)
   ((${#s} == 43)) || fail "PUSH_VAPID_PRIVATE_KEY length ${#s}"
   eq "$(senv alfred PUSH_VAPID_CONTACT_EMAIL)" ops@example.org
-  s=$(senv alfred BROKER_VAPID_PUBLIC_KEY)
-  ((${#s} == 87)) || fail "BROKER_VAPID_PUBLIC_KEY length ${#s}"
-  s=$(senv alfred BROKER_VAPID_PRIVATE_KEY)
-  ((${#s} == 43)) || fail "BROKER_VAPID_PRIVATE_KEY length ${#s}"
-  [[ $(senv alfred BROKER_VAPID_PRIVATE_KEY) != "$(senv alfred PUSH_VAPID_PRIVATE_KEY)" ]] || fail "broker shares the BFF's VAPID key"
+  s=$(senv alfred VAULT_VAPID_PUBLIC_KEY)
+  ((${#s} == 87)) || fail "VAULT_VAPID_PUBLIC_KEY length ${#s}"
+  s=$(senv alfred VAULT_VAPID_PRIVATE_KEY)
+  ((${#s} == 43)) || fail "VAULT_VAPID_PRIVATE_KEY length ${#s}"
+  [[ $(senv alfred VAULT_VAPID_PRIVATE_KEY) != "$(senv alfred PUSH_VAPID_PRIVATE_KEY)" ]] || fail "the vault shares the BFF's VAPID key"
   ! grep -q '^DEV_BYPASS' "$H/stacks/alfred/stack.env" || fail "DEV_BYPASS in stack.env"
 }
 
@@ -316,26 +316,26 @@ test_add_secrets_differ_between_stacks() {
   [[ $(senv alfred PUSH_VAPID_PRIVATE_KEY) != "$(senv hal PUSH_VAPID_PRIVATE_KEY)" ]] || fail "same VAPID key"
 }
 
-test_add_routes_the_secrets_path_with_the_profile() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
-  broker_config
+test_add_routes_the_vault_path_with_the_profile() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  vault_config
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/vault(/|$)","service":"http://garden-vault:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
   out_has "Its garden pages: https://alfred-garden.example.org/"
 }
 
 test_add_routes_gmail_triggers_with_the_profile() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets/' "$H/config.env"
-  broker_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$H/config.env"
+  vault_config
   triggers_config
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/vault(/|$)","service":"http://garden-vault:8000"},{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://garden-gmail-triggers:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
 }
 
-# The landing page links each garden profile to /<profile>/ on the garden host,
-# so every PROFILE_ROUTES row must route that path to its sidecar.
+# The landing page links each garden page profile, garden-<page>, to /<page>/ on
+# the garden host, so every PROFILE_ROUTES row must route that path to its sidecar.
 test_garden_routes_follow_the_profile_names() {
   local r p path svc
   # shellcheck source=/dev/null
@@ -343,7 +343,8 @@ test_garden_routes_follow_the_profile_names() {
   ((${#PROFILE_ROUTES[@]} > 0)) || fail "no PROFILE_ROUTES"
   for r in "${PROFILE_ROUTES[@]}"; do
     read -r p path svc <<<"$r"
-    eq "$path" "^/$p(/|\$)"
+    [[ $p == garden-?* ]] || fail "profile $p lacks the garden- prefix"
+    eq "$path" "^/${p#garden-}(/|\$)"
   done
 }
 
@@ -353,27 +354,27 @@ test_up_gives_the_sidecars_only_the_garden_profiles() {
   ok_rc
   eq "$(senv alfred GARDEN_PROFILES)" ""
   with_triggers
-  broker_config
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,gmail-triggers,secrets/' "$H/stacks/alfred/stack.env"
+  vault_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$H/stacks/alfred/stack.env"
   ctl up alfred
   ok_rc
   # In PROFILE_ROUTES order, which is the landing page's.
-  eq "$(senv alfred GARDEN_PROFILES)" secrets,gmail-triggers
+  eq "$(senv alfred GARDEN_PROFILES)" garden-vault,garden-gmail-triggers
   eq "$(stat -c %a "$H/stacks/alfred/stack.env")" 600
 }
 
 # A profile that adds no garden page leaves GARDEN_PROFILES, and so the
 # sidecars' config, alone: Compose would recreate them, and the vault relock.
 test_profiles_leave_garden_profiles_alone_for_other_profiles() {
-  broker_config
+  vault_config
   added
-  ctl profiles cloudflared,search,secrets
+  ctl profiles cloudflared,search,garden-vault
   ok_rc
-  eq "$(senv alfred GARDEN_PROFILES)" secrets
-  ctl profiles cloudflared,secrets
+  eq "$(senv alfred GARDEN_PROFILES)" garden-vault
+  ctl profiles cloudflared,garden-vault
   ok_rc
-  eq "$(senv alfred GARDEN_PROFILES)" secrets
+  eq "$(senv alfred GARDEN_PROFILES)" garden-vault
   ctl profiles cloudflared,search
   ok_rc
   eq "$(senv alfred GARDEN_PROFILES)" ""
@@ -513,7 +514,7 @@ test_add_prints_the_google_redirect_uri() {
 
 test_add_keeps_the_google_hint_when_the_executor_cannot_be_installed() {
   triggers_config
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
   stub STUB_EXEC_RC=1
   ctl add alfred alfred@example.com
   bad_rc
@@ -609,15 +610,15 @@ test_up_adds_push_keys_to_existing_stack() {
   log_has "up -d"
 }
 
-test_up_adds_broker_push_keys_to_existing_stack() {
+test_up_adds_vault_push_keys_to_existing_stack() {
   added
   local pub
   pub=$(senv alfred PUSH_VAPID_PUBLIC_KEY)
-  sed -i '/^BROKER_VAPID_/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^VAULT_VAPID_/d' "$H/stacks/alfred/stack.env"
   ctl up alfred
   ok_rc
-  [[ -n $(senv alfred BROKER_VAPID_PUBLIC_KEY) ]] || fail "no BROKER_VAPID_PUBLIC_KEY"
-  [[ -n $(senv alfred BROKER_VAPID_PRIVATE_KEY) ]] || fail "no BROKER_VAPID_PRIVATE_KEY"
+  [[ -n $(senv alfred VAULT_VAPID_PUBLIC_KEY) ]] || fail "no VAULT_VAPID_PUBLIC_KEY"
+  [[ -n $(senv alfred VAULT_VAPID_PRIVATE_KEY) ]] || fail "no VAULT_VAPID_PRIVATE_KEY"
   eq "$(senv alfred PUSH_VAPID_PUBLIC_KEY)" "$pub"
 }
 
@@ -625,11 +626,11 @@ test_up_keeps_existing_push_keys() {
   added
   local pub priv
   pub=$(senv alfred PUSH_VAPID_PUBLIC_KEY)
-  priv=$(senv alfred BROKER_VAPID_PRIVATE_KEY)
+  priv=$(senv alfred VAULT_VAPID_PRIVATE_KEY)
   ctl up alfred
   ok_rc
   eq "$(senv alfred PUSH_VAPID_PUBLIC_KEY)" "$pub"
-  eq "$(senv alfred BROKER_VAPID_PRIVATE_KEY)" "$priv"
+  eq "$(senv alfred VAULT_VAPID_PRIVATE_KEY)" "$priv"
 }
 
 test_up_refuses_missing_push_contact() {
@@ -675,30 +676,30 @@ test_check_accepts_dropping_every_capability() {
   ok_rc
 }
 
-# with_secrets [BROKER_JSON] -> alfred runs the `secrets` profile and the
-# rendered config holds this secret-broker (default: the hardened one)
-with_secrets() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,secrets/' "$H/stacks/alfred/stack.env"
-  broker_config "$@"
+# with_vault [VAULT_JSON] -> alfred runs the `garden-vault` profile and the
+# rendered config holds this vault (default: the hardened one)
+with_vault() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-vault/' "$H/stacks/alfred/stack.env"
+  vault_config "$@"
 }
 
-test_check_accepts_the_hardened_broker() {
+test_check_accepts_the_hardened_vault() {
   added
-  with_secrets
+  with_vault
   ctl check alfred
   ok_rc
 }
 
-test_check_refuses_missing_broker_keys() {
+test_check_refuses_missing_vault_keys() {
   added
-  sed -i '/^BROKER_VAPID_PRIVATE_KEY=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^VAULT_VAPID_PRIVATE_KEY=/d' "$H/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "BROKER_VAPID_PRIVATE_KEY"
+  out_has "VAULT_VAPID_PRIVATE_KEY"
 }
 
-test_check_refuses_a_broker_that_is_not_hardened() {
+test_check_refuses_a_vault_that_is_not_hardened() {
   added
   local b
   for b in \
@@ -706,21 +707,21 @@ test_check_refuses_a_broker_that_is_not_hardened() {
     '{"read_only":true,"volumes":[]}' \
     '{"read_only":true,"cap_drop":["NET_RAW"],"volumes":[]}' \
     '{"read_only":true,"cap_drop":["ALL"],"volumes":[{"type":"bind","source":"/srv","target":"/data"}]}'; do
-    with_secrets "$b"
+    with_vault "$b"
     ctl check alfred
     bad_rc
-    out_has "secret-broker"
+    out_has "vault"
   done
 }
 
-test_check_refuses_a_broker_with_privileges_or_shared_namespaces() {
+test_check_refuses_a_vault_with_privileges_or_shared_namespaces() {
   added
   local k v
   while read -r k v; do
-    with_secrets '{"read_only":true,"cap_drop":["ALL"],"volumes":[],"'"$k"'":'"$v"'}'
+    with_vault '{"read_only":true,"cap_drop":["ALL"],"volumes":[],"'"$k"'":'"$v"'}'
     ctl check alfred
     bad_rc
-    out_has "alfred: secret-broker must not set $k"
+    out_has "alfred: garden-vault must not set $k"
   done <<'EOF'
 privileged true
 cap_add ["SYS_ADMIN"]
@@ -732,24 +733,24 @@ devices [{"source":"/dev/fuse","target":"/dev/fuse","permissions":"rwm"}]
 EOF
 }
 
-test_check_refuses_another_service_on_the_broker_volume() {
+test_check_refuses_another_service_on_the_vault_volume() {
   added
-  with_secrets
-  jq -c '.services.bff.volumes = [{"type":"volume","source":"secret-broker-data","target":"/x"}]' "$T/compose-config.json" >"$T/c.json"
+  with_vault
+  jq -c '.services.bff.volumes = [{"type":"volume","source":"vault-data","target":"/x"}]' "$T/compose-config.json" >"$T/c.json"
   mv "$T/c.json" "$T/compose-config.json"
   ctl check alfred
   bad_rc
   out_has "bff"
 }
 
-test_check_refuses_secrets_profile_without_the_broker() {
+test_check_refuses_the_vault_profile_without_the_vault() {
   added
-  with_secrets
-  jq -c 'del(.services["secret-broker"])' "$T/compose-config.json" >"$T/c.json"
+  with_vault
+  jq -c 'del(.services["garden-vault"])' "$T/compose-config.json" >"$T/c.json"
   mv "$T/c.json" "$T/compose-config.json"
   ctl check alfred
   bad_rc
-  out_has "secret-broker"
+  out_has "vault"
 }
 
 # pipelock_config [PIPELOCK_JSON] -> the rendered config also holds this pipelock
@@ -757,18 +758,18 @@ test_check_refuses_secrets_profile_without_the_broker() {
 # proxy settings from compose/pipelock-proxy.yml
 pipelock_config() {
   local svc=${1:-'{"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"volumes":[{"type":"volume","source":"pipelock-data","target":"/data"}]}'}
-  local np=localhost,127.0.0.1,::1,pipelock,secret-broker,gmail-triggers,garden,searxng,ddg-mcp,google-mcp,host.docker.internal
-  config_edit '.services.pipelock = '"$svc"'
-    | .services["app-server"].environment += {"HTTPS_PROXY":"http://pipelock:8888","HTTP_PROXY":"http://pipelock:8888",
-      "https_proxy":"http://pipelock:8888","http_proxy":"http://pipelock:8888","NO_PROXY":"'"$np"'","no_proxy":"'"$np"'",
+  local np=localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden,searxng,ddg-mcp,google-mcp,host.docker.internal
+  config_edit '.services["garden-pipelock"] = '"$svc"'
+    | .services["app-server"].environment += {"HTTPS_PROXY":"http://garden-pipelock:8888","HTTP_PROXY":"http://garden-pipelock:8888",
+      "https_proxy":"http://garden-pipelock:8888","http_proxy":"http://garden-pipelock:8888","NO_PROXY":"'"$np"'","no_proxy":"'"$np"'",
       "NODE_USE_ENV_PROXY":"1"}'
 }
 
-# with_pipelock [PIPELOCK_JSON] -> alfred runs the `pipelock` profile and the
+# with_pipelock [PIPELOCK_JSON] -> alfred runs the `garden-pipelock` profile and the
 # rendered config holds this pipelock (default: the hardened one)
 with_pipelock() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,pipelock/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,pipelock/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-pipelock/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-pipelock/' "$H/stacks/alfred/stack.env"
   pipelock_config "$@"
 }
 
@@ -790,7 +791,7 @@ test_check_refuses_a_pipelock_that_is_not_hardened() {
     with_pipelock "$p"
     ctl check alfred
     bad_rc
-    out_has "alfred: pipelock must"
+    out_has "alfred: garden-pipelock must"
   done
 }
 
@@ -813,7 +814,7 @@ test_check_refuses_the_pipelock_volume_without_the_profile() {
 
 test_check_refuses_the_vault_volume_without_the_profile() {
   added
-  config_edit '.services.bff.volumes = [{"type":"volume","source":"secret-broker-data","target":"/x"}]'
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"vault-data","target":"/x"}]'
   ctl check alfred
   bad_rc
   out_has "alfred: bff mount(s) the vault's volume"
@@ -821,19 +822,19 @@ test_check_refuses_the_vault_volume_without_the_profile() {
 
 test_check_refuses_volumes_from_pipelock() {
   added
-  config_edit '.services.searxng = {"volumes_from":["pipelock"]}'
+  config_edit '.services.searxng = {"volumes_from":["garden-pipelock"]}'
   ctl check alfred
   bad_rc
-  out_has "(searxng from pipelock)"
+  out_has "(searxng from garden-pipelock)"
 }
 
 test_check_refuses_pipelock_profile_without_the_service() {
   added
   with_pipelock
-  config_edit 'del(.services.pipelock)'
+  config_edit 'del(.services["garden-pipelock"])'
   ctl check alfred
   bad_rc
-  out_has "pipelock is not in the rendered config"
+  out_has "garden-pipelock is not in the rendered config"
 }
 
 test_check_refuses_an_app_server_that_skips_pipelock() {
@@ -844,7 +845,7 @@ test_check_refuses_an_app_server_that_skips_pipelock() {
     config_edit '.services["app-server"].environment["'"$k"'"] = "http://elsewhere:3128"'
     ctl check alfred
     bad_rc
-    out_has "the app-server's $k must be http://pipelock:8888"
+    out_has "the app-server's $k must be http://garden-pipelock:8888"
   done
 }
 
@@ -852,7 +853,7 @@ test_check_refuses_a_proxy_that_would_see_the_vault_or_the_executor() {
   added
   local k v
   for k in NO_PROXY no_proxy; do
-    for v in secret-broker gmail-triggers garden; do
+    for v in garden-vault garden-gmail-triggers garden; do
       with_pipelock
       config_edit '.services["app-server"].environment["'"$k"'"] |= (split(",") - ["'"$v"'"] | join(","))'
       ctl check alfred
@@ -868,11 +869,11 @@ test_check_ignores_proxy_settings_without_pipelock() {
   ok_rc
 }
 
-# with_triggers -> alfred runs the gmail-triggers profile (with google), and the
+# with_triggers -> alfred runs the garden-gmail-triggers profile (with google), and the
 # rendered config holds the hardened service
 with_triggers() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,gmail-triggers/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/stacks/alfred/stack.env"
   triggers_config
 }
 
@@ -886,11 +887,11 @@ test_check_accepts_the_hardened_gmail_triggers() {
 test_check_refuses_gmail_triggers_without_google() {
   added
   with_triggers
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,gmail-triggers/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,gmail-triggers/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-gmail-triggers/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-gmail-triggers/' "$H/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "alfred: the gmail-triggers profile needs google"
+  out_has "alfred: the garden-gmail-triggers profile needs google"
 }
 
 # triggers_refused JQ EXPECTED -> with alfred's hardened gmail-triggers edited by
@@ -903,80 +904,80 @@ triggers_refused() {
   bad_rc
   out_has "alfred: $2"
 }
-GT='.services["gmail-triggers"]'
+GT='.services["garden-gmail-triggers"]'
 
 test_check_refuses_gmail_triggers_missing() {
-  triggers_refused "del($GT)" "the gmail-triggers profile is on but gmail-triggers is not in the rendered config"
+  triggers_refused "del($GT)" "the garden-gmail-triggers profile is on but garden-gmail-triggers is not in the rendered config"
 }
 
 test_check_refuses_gmail_triggers_without_read_only() {
-  triggers_refused "del($GT.read_only)" "gmail-triggers must have read_only: true"
+  triggers_refused "del($GT.read_only)" "garden-gmail-triggers must have read_only: true"
 }
 
 test_check_refuses_gmail_triggers_with_capabilities() {
-  triggers_refused "$GT.cap_drop = [\"NET_RAW\"]" "gmail-triggers must drop all capabilities"
+  triggers_refused "$GT.cap_drop = [\"NET_RAW\"]" "garden-gmail-triggers must drop all capabilities"
 }
 
 test_check_refuses_gmail_triggers_privileged() {
-  triggers_refused "$GT.privileged = true" "gmail-triggers must not set privileged"
+  triggers_refused "$GT.privileged = true" "garden-gmail-triggers must not set privileged"
 }
 
 test_check_refuses_gmail_triggers_cap_add() {
-  triggers_refused "$GT.cap_add = [\"SYS_ADMIN\"]" "gmail-triggers must not set cap_add"
+  triggers_refused "$GT.cap_add = [\"SYS_ADMIN\"]" "garden-gmail-triggers must not set cap_add"
 }
 
 test_check_refuses_gmail_triggers_network_mode() {
   # In the app-server's namespace an agent could take over its port.
-  triggers_refused "$GT.network_mode = \"service:app-server\"" "gmail-triggers must not set network_mode"
+  triggers_refused "$GT.network_mode = \"service:app-server\"" "garden-gmail-triggers must not set network_mode"
 }
 
 test_check_refuses_gmail_triggers_pid() {
-  triggers_refused "$GT.pid = \"host\"" "gmail-triggers must not set pid"
+  triggers_refused "$GT.pid = \"host\"" "garden-gmail-triggers must not set pid"
 }
 
 test_check_refuses_gmail_triggers_ipc() {
-  triggers_refused "$GT.ipc = \"host\"" "gmail-triggers must not set ipc"
+  triggers_refused "$GT.ipc = \"host\"" "garden-gmail-triggers must not set ipc"
 }
 
 test_check_refuses_gmail_triggers_volumes_from() {
-  triggers_refused "$GT.volumes_from = [\"app-server\"]" "gmail-triggers must not set volumes_from"
+  triggers_refused "$GT.volumes_from = [\"app-server\"]" "garden-gmail-triggers must not set volumes_from"
 }
 
 test_check_refuses_gmail_triggers_devices() {
-  triggers_refused "$GT.devices = [{\"source\":\"/dev/fuse\",\"target\":\"/dev/fuse\",\"permissions\":\"rwm\"}]" "gmail-triggers must not set devices"
+  triggers_refused "$GT.devices = [{\"source\":\"/dev/fuse\",\"target\":\"/dev/fuse\",\"permissions\":\"rwm\"}]" "garden-gmail-triggers must not set devices"
 }
 
 test_check_refuses_gmail_triggers_with_another_host_path() {
-  triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "gmail-triggers may mount from the host only"
+  triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_without_its_state() {
-  triggers_refused "del($GT.volumes[0])" "gmail-triggers may mount from the host only"
+  triggers_refused "del($GT.volumes[0])" "garden-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_on_a_parent_of_its_state() {
-  triggers_refused "$GT.volumes[0].source = \"$H/stacks/alfred/state/garden\"" "gmail-triggers may mount from the host only"
+  triggers_refused "$GT.volumes[0].source = \"$H/stacks/alfred/state/garden\"" "garden-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_with_its_state_elsewhere() {
-  triggers_refused "$GT.volumes[0].target = \"/root\"" "gmail-triggers may mount from the host only"
+  triggers_refused "$GT.volumes[0].target = \"/root\"" "garden-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_the_old_spool() {
   triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/letta-home/garden/gmail-triggers/spool\",\"target\":\"/spool\"}]" \
-    "gmail-triggers may mount from the host only"
+    "garden-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_writable_google_creds() {
-  triggers_refused "del($GT.volumes[1].read_only)" "gmail-triggers must mount google-creds and google-policy read-only"
+  triggers_refused "del($GT.volumes[1].read_only)" "garden-gmail-triggers must mount google-creds and google-policy read-only"
 }
 
 test_check_refuses_gmail_triggers_writable_google_policy() {
-  triggers_refused "$GT.volumes[2].read_only = false" "gmail-triggers must mount google-creds and google-policy read-only"
+  triggers_refused "$GT.volumes[2].read_only = false" "garden-gmail-triggers must mount google-creds and google-policy read-only"
 }
 
 test_check_refuses_gmail_triggers_other_volumes() {
-  triggers_refused "$GT.volumes += [{\"type\":\"volume\",\"source\":\"bff-auth\",\"target\":\"/x\"}]" "gmail-triggers must not mount bff-auth"
+  triggers_refused "$GT.volumes += [{\"type\":\"volume\",\"source\":\"bff-auth\",\"target\":\"/x\"}]" "garden-gmail-triggers must not mount bff-auth"
 }
 
 test_check_refuses_another_service_on_the_rules() {
@@ -996,7 +997,7 @@ test_check_refuses_another_service_on_a_symlink_to_the_rules() {
 }
 
 test_check_refuses_volumes_from_gmail_triggers() {
-  triggers_refused ".services.bff.volumes_from = [\"gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor (bff from gmail-triggers)"
+  triggers_refused ".services.bff.volumes_from = [\"garden-gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor (bff from garden-gmail-triggers)"
 }
 
 test_check_refuses_a_volume_bound_to_the_rules() {
@@ -1060,12 +1061,12 @@ test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
   out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor (searxng from bff)"
 }
 
-test_check_refuses_volumes_from_the_broker() {
+test_check_refuses_volumes_from_the_vault() {
   added
-  config_edit '.services.searxng = {"volumes_from":["secret-broker"]}'
+  config_edit '.services.searxng = {"volumes_from":["garden-vault"]}'
   ctl check alfred
   bad_rc
-  out_has "(searxng from secret-broker)"
+  out_has "(searxng from garden-vault)"
 }
 
 test_check_accepts_volumes_from_elsewhere() {
@@ -1095,7 +1096,7 @@ test_check_refuses_a_malformed_executor_token() {
 
 test_check_refuses_a_missing_executor_token_with_any_garden_profile() {
   added
-  with_secrets
+  with_vault
   sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
@@ -1152,7 +1153,7 @@ exec_args() { tr '\0' '\n' <"$T/exec-args"; }
 
 # executor_cron_text [FLAGS] -> the cron file the executor is installed with
 executor_cron_text() {
-  printf '%s\n' '# Installed by lettucectl (gmail-triggers or code-server profile). Removed with the last of them.' \
+  printf '%s\n' '# Installed by lettucectl (garden-gmail-triggers or garden-code-server profile). Removed with the last of them.' \
     'PATH=/usr/local/bin:/usr/bin:/bin' 'MAILTO=""'
   printf '%s' "* * * * * root /usr/local/bin/agent-env node /root/.letta/garden/executor/bin/run.mjs${1:+ $1} >> /root/.letta/garden/executor/executor.log 2>&1"
 }
@@ -1191,7 +1192,7 @@ test_up_installs_the_executor_with_the_code_editor() {
 # from before goes.
 test_up_with_only_the_vault_has_no_executor() {
   added
-  with_secrets
+  with_vault
   ctl up alfred
   ok_rc
   log_lacks " exec "
@@ -1199,7 +1200,7 @@ test_up_with_only_the_vault_has_no_executor() {
   ctl up alfred
   ok_rc
   eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
-  out_has "alfred: removed the garden executor (neither gmail-triggers nor code-server is on)"
+  out_has "alfred: removed the garden executor (neither garden-gmail-triggers nor garden-code-server is on)"
 }
 
 test_up_passes_the_executor_token_only_on_stdin() {
@@ -1234,8 +1235,8 @@ test_up_all_continues_past_a_failed_executor_install() {
   # One rendered config serves both stacks in the stub, so hal shares alfred's
   # state path to pass the bind-mount check.
   sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$H/stacks/alfred/state|" "$H/stacks/hal/stack.env"
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,gmail-triggers/' "$H/stacks/alfred/stack.env" "$H/stacks/hal/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/stacks/alfred/stack.env" "$H/stacks/hal/stack.env"
   : >"$T/calls.log"
   stub STUB_EXEC_RC=1
   ctl up all
@@ -1294,7 +1295,7 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $H/stacks/alfred/stack.env"
   log_lacks "pipelock-proxy.yml"
 }
 
@@ -1434,8 +1435,8 @@ test_remove_reminds_to_delete_the_google_redirect_uri() {
 }
 
 test_remove_says_the_vault_goes_too() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
-  broker_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  vault_config
   added
   ctl remove alfred <<<"alfred"
   ok_rc
@@ -1448,11 +1449,11 @@ test_remove_warns_about_a_vault_whose_profile_is_off() {
   ctl remove alfred <<<"alfred"
   ok_rc
   out_has "Its vault"
-  log_has "volume inspect lettuce-alfred_secret-broker-data"
+  log_has "volume inspect lettuce-alfred_vault-data"
 }
 
 test_remove_says_where_the_gmail_triggers_are() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
   triggers_config
   added
   ctl remove alfred <<<"alfred"
@@ -1503,8 +1504,8 @@ test_remove_says_nothing_of_receipts_never_written() {
 }
 
 test_remove_says_nothing_of_a_vault_that_was_never_created() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
-  broker_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  vault_config
   added
   stub STUB_VOLUME_RC=1
   ctl remove alfred <<<"alfred"
@@ -1553,11 +1554,11 @@ test_profiles_removes_services_of_dropped_profiles() {
 test_profiles_dropping_pipelock_removes_it_and_the_proxy_settings() {
   added
   with_pipelock
-  containers alfred app-server bff cloudflared pipelock
+  containers alfred app-server bff cloudflared garden-pipelock
   : >"$T/calls.log"
   ctl profiles cloudflared
   ok_rc
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf pipelock$' "$T/calls.log" || fail "pipelock not removed"
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden-pipelock$' "$T/calls.log" || fail "pipelock not removed"
   grep '^docker compose -p lettuce-alfred .* up -d' "$T/calls.log" | grep -q pipelock-proxy.yml && fail "up still merged the proxy settings"
   true
 }
@@ -1611,29 +1612,29 @@ test_profiles_repairs_drift() {
   log_has "up -d --build"
 }
 
-test_profiles_routes_secrets_for_every_stack() {
-  broker_config
+test_profiles_routes_the_vault_for_every_stack() {
+  vault_config
   ctl add alfred alfred@example.com
   ctl add hal hal@example.com
   : >"$T/calls.log"
-  ctl profiles cloudflared,search,secrets
+  ctl profiles cloudflared,search,garden-vault
   ok_rc
   eq "$(grep -c '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log")" 2
-  grep '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log" | grep -qF '"hostname":"hal-garden.example.org","path":"^/secrets(/|$)"' ||
-    fail "hal's garden host has no /secrets route"
+  grep '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log" | grep -qF '"hostname":"hal-garden.example.org","path":"^/vault(/|$)"' ||
+    fail "hal's garden host has no /vault route"
   # The route is in place before the stacks start.
   [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stacks started before their route"
 }
 
 test_profiles_reapplies_every_stacks_access_application() {
-  broker_config
+  vault_config
   ctl add alfred alfred@example.com
   ctl add hal hal@example.com
   local created
   created=$(first_body_of POST /accounts/acc1/access/apps)
   : >"$T/calls.log"
-  ctl profiles cloudflared,search,secrets
+  ctl profiles cloudflared,search,garden-vault
   ok_rc
   # Stacks made before a setting existed (the HttpOnly cookie) get it too.
   eq "$(grep -c '^curl PUT /accounts/acc1/access/apps/app1 ' "$T/calls.log")" 2
@@ -1664,21 +1665,21 @@ test_profiles_reports_a_failed_access_application_update() {
   done
 }
 
-test_profiles_dropping_secrets_removes_the_route() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
-  broker_config
+test_profiles_dropping_the_vault_removes_the_route() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  vault_config
   added
   ctl profiles cloudflared
   ok_rc
   log_has "curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations"
-  log_lacks "secret-broker"
+  log_lacks "http://garden-vault:8000"
 }
 
 test_profiles_reports_a_failed_route_update() {
-  broker_config
+  vault_config
   added
   stub 'STUB_CF_FAIL="PUT /accounts/acc1/cfd_tunnel/tun1/configurations"'
-  ctl profiles cloudflared,search,secrets
+  ctl profiles cloudflared,search,garden-vault
   bad_rc
   out_has "run the same command again"
 }
@@ -1688,46 +1689,46 @@ test_profiles_routes_gmail_triggers_and_installs_the_executor() {
   added
   containers alfred app-server
   sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
-  ctl profiles cloudflared,search,google,gmail-triggers
+  ctl profiles cloudflared,search,google,garden-gmail-triggers
   ok_rc
   [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "profiles gave no executor token"
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://garden-gmail-triggers:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
   log_has "sh install $EXECUTOR_ARGS"
   [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stack started before its route"
 }
 
 test_profiles_dropping_gmail_triggers_removes_route_container_and_executor() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
   triggers_config
   added
-  containers alfred app-server bff cloudflared google-mcp gmail-triggers garden
+  containers alfred app-server bff cloudflared google-mcp garden-gmail-triggers garden
   mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl profiles cloudflared,google
   ok_rc
   log_has "curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations"
-  log_lacks "gmail-triggers:8000"
+  log_lacks "garden-gmail-triggers:8000"
   log_lacks "garden:8000"
-  # The last garden profile is off, so the garden goes too.
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden gmail-triggers$' "$T/calls.log" || fail "gmail-triggers and garden containers not removed"
+  # The last garden page profile is off, so the garden goes too.
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden garden-gmail-triggers$' "$T/calls.log" || fail "gmail-triggers and garden containers not removed"
   log_has "sh uninstall $EXECUTOR_ARGS"
   out_has "alfred: removed the garden executor"
 }
 
 test_profiles_dropping_gmail_triggers_keeps_the_garden_for_the_vault_but_not_the_executor() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$H/config.env"
   triggers_config
-  broker_config
+  vault_config
   added
-  containers alfred app-server bff cloudflared google-mcp gmail-triggers secret-broker garden
+  containers alfred app-server bff cloudflared google-mcp garden-gmail-triggers garden-vault garden
   mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
   : >"$T/calls.log"
-  ctl profiles cloudflared,google,secrets
+  ctl profiles cloudflared,google,garden-vault
   ok_rc
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf gmail-triggers$' "$T/calls.log" || fail "only gmail-triggers should go"
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden-gmail-triggers$' "$T/calls.log" || fail "only gmail-triggers should go"
   log_lacks "sh install"
   eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/vault(/|$)","service":"http://garden-vault:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
 }
 
 test_profiles_rerun_removes_a_leftover_executor() {
@@ -1762,11 +1763,11 @@ test_profiles_skips_a_stopped_stack_when_removing_the_executor() {
 }
 
 test_profiles_rerun_repairs_a_failed_executor_install() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
   triggers_config
   added
   containers alfred app-server
-  ctl profiles cloudflared,google,gmail-triggers
+  ctl profiles cloudflared,google,garden-gmail-triggers
   ok_rc
   out_has "nothing to change"
   log_has "sh install $EXECUTOR_ARGS"
@@ -1784,22 +1785,22 @@ test_profiles_continues_past_a_failed_executor_install() {
   containers hal app-server
   : >"$T/calls.log"
   stub STUB_EXEC_RC=1
-  ctl profiles cloudflared,search,google,gmail-triggers
+  ctl profiles cloudflared,search,google,garden-gmail-triggers
   bad_rc
   grep -q '^docker compose -p lettuce-hal .* up -d --build' "$T/calls.log" || fail "hal not started"
   out_has "alfred: could not install the garden executor"
   out_has "hal: could not install the garden executor"
   out_has "could not sync the garden executor of: alfred hal"
   out_has "run the same command again"
-  eq "$(senv hal COMPOSE_PROFILES)" cloudflared,search,google,gmail-triggers
+  eq "$(senv hal COMPOSE_PROFILES)" cloudflared,search,google,garden-gmail-triggers
 }
 
 test_profiles_checks_gmail_triggers_under_the_new_list_before_writing() {
   added
   # The rendered config has no gmail-triggers service.
-  ctl profiles cloudflared,search,google,gmail-triggers
+  ctl profiles cloudflared,search,google,garden-gmail-triggers
   bad_rc
-  out_has "alfred: the gmail-triggers profile is on but gmail-triggers is not in the rendered config"
+  out_has "alfred: the garden-gmail-triggers profile is on but garden-gmail-triggers is not in the rendered config"
   eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
   log_lacks "up -d"
@@ -1809,7 +1810,7 @@ test_profiles_checks_the_executor_token_before_writing() {
   triggers_config
   added
   sed -i 's/^GARDEN_EXECUTOR_TOKEN=.*/GARDEN_EXECUTOR_TOKEN=not-hex/' "$H/stacks/alfred/stack.env"
-  ctl profiles cloudflared,search,google,gmail-triggers
+  ctl profiles cloudflared,search,google,garden-gmail-triggers
   bad_rc
   out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
@@ -1821,7 +1822,7 @@ test_profiles_checks_symlinks_under_the_new_list_before_writing() {
   added
   mkdir -p "$T/elsewhere"
   ln -s "$T/elsewhere" "$H/stacks/alfred/state/garden"
-  ctl profiles cloudflared,search,google,gmail-triggers
+  ctl profiles cloudflared,search,google,garden-gmail-triggers
   bad_rc
   out_has "alfred: $H/stacks/alfred/state/garden is a symlink"
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
@@ -1830,10 +1831,10 @@ test_profiles_checks_symlinks_under_the_new_list_before_writing() {
 test_profiles_renders_the_new_list_for_the_check() {
   triggers_config
   added
-  ctl profiles cloudflared,search,google,gmail-triggers
+  ctl profiles cloudflared,search,google,garden-gmail-triggers
   ok_rc
   # The first rendering, before anything is written, already uses the new list.
-  eq "$(grep '^docker-env-file ' "$T/calls.log" | head -1)" "docker-env-file COMPOSE_PROFILES=cloudflared,search,google,gmail-triggers"
+  eq "$(grep '^docker-env-file ' "$T/calls.log" | head -1)" "docker-env-file COMPOSE_PROFILES=cloudflared,search,google,garden-gmail-triggers"
   eq "$(grep -c '^docker-env-file COMPOSE_PROFILES=cloudflared,search$' "$T/calls.log")" 0
   # The rendering's temp env file is gone.
   eq "$(find "$H/stacks/alfred" -maxdepth 1 -name 'stack.env.*' | wc -l)" 0
@@ -1841,9 +1842,9 @@ test_profiles_renders_the_new_list_for_the_check() {
 
 test_profiles_refuses_gmail_triggers_without_google() {
   added
-  ctl profiles cloudflared,gmail-triggers
+  ctl profiles cloudflared,garden-gmail-triggers
   bad_rc
-  out_has "the gmail-triggers profile needs google"
+  out_has "the garden-gmail-triggers profile needs google"
   eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search
   log_lacks "up -d"
 }
@@ -2595,7 +2596,7 @@ test_receipts_says_when_they_do_not_verify() {
 test_receipts_says_when_pipelock_was_writing() {
   added
   receipt_files
-  containers alfred app-server pipelock
+  containers alfred app-server garden-pipelock
   stub STUB_RUN_FAIL=verify-receipt
   ctl receipts alfred
   bad_rc
@@ -2735,11 +2736,11 @@ test_backup_removes_what_an_interrupted_run_left() {
 
 test_backup_includes_the_vault() {
   backed
-  with_secrets
+  with_vault
   ctl backup alfred "$B"
   ok_rc
-  log_has "docker volume inspect lettuce-alfred_secret-broker-data"
-  log_has "-v lettuce-alfred_secret-broker-data:/src/vault:ro"
+  log_has "docker volume inspect lettuce-alfred_vault-data"
+  log_has "-v lettuce-alfred_vault-data:/src/vault:ro"
 }
 
 # Turning the profile off keeps the volume; it still holds the vault.
@@ -2747,22 +2748,22 @@ test_backup_includes_a_vault_left_by_a_dropped_profile() {
   backed
   ctl backup alfred "$B"
   ok_rc
-  log_has "-v lettuce-alfred_secret-broker-data:/src/vault:ro"
+  log_has "-v lettuce-alfred_vault-data:/src/vault:ro"
 }
 
 test_backup_skips_a_vault_that_does_not_exist() {
   backed
-  with_secrets
+  with_vault
   stub STUB_VOLUME_RC=1
   ctl backup alfred "$B"
   ok_rc
-  out_has "the vault volume lettuce-alfred_secret-broker-data does not exist yet"
+  out_has "the vault volume lettuce-alfred_vault-data does not exist yet"
   log_lacks "/src/vault"
 }
 
 test_backup_includes_the_receipts() {
   backed
-  stub STUB_VOLUMES_MISSING=lettuce-alfred_secret-broker-data
+  stub STUB_VOLUMES_MISSING=lettuce-alfred_vault-data
   ctl backup alfred "$B"
   ok_rc
   log_has "docker volume inspect lettuce-alfred_pipelock-data"
@@ -2775,7 +2776,7 @@ test_backup_skips_receipts_that_do_not_exist() {
   stub STUB_VOLUMES_MISSING=lettuce-alfred_pipelock-data
   ctl backup alfred "$B"
   ok_rc
-  log_has "-v lettuce-alfred_secret-broker-data:/src/vault:ro -v $B/alfred:/dst"
+  log_has "-v lettuce-alfred_vault-data:/src/vault:ro -v $B/alfred:/dst"
   log_lacks "/src/pipelock"
 }
 
@@ -2970,10 +2971,10 @@ docs_config() {
       security_opt: ["no-new-privileges:true"], command: (["gotenberg"] + .), networks: {internal: null}}}, networks: {internal: {internal: true}}}' >"$T/shared-config.json"
 }
 
-# with_docs -> alfred runs the doc-tools profile (docs_config)
+# with_docs -> alfred runs the garden-doc-tools profile (docs_config)
 with_docs() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,doc-tools/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$H/stacks/alfred/stack.env"
   docs_config
 }
 
@@ -3027,7 +3028,7 @@ test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
   log_has "docker network create --internal --label lettuce.doc-tools.stack=alfred lettuce-doc-tools-alfred"
   log_has "docker network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
   # The network exists before the app-server joins it, and Gotenberg joins after.
-  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/secrets.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
+  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
     fail "the network was created after compose up"
   (($(line_of "-p lettuce_shared") > $(line_of "up -d --build --remove-orphans"))) || fail "gotenberg started before the stack"
 }
@@ -3339,7 +3340,7 @@ test_sync_connects_gotenberg_only_to_networks_lettucectl_made() {
   ctl add hal hal@example.com
   ok_rc
   with_docs
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,doc-tools/' "$H/stacks/hal/stack.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$H/stacks/hal/stack.env"
   # hal's name is taken by a network with a route out, made by someone else.
   echo "lettuce-doc-tools-hal - false -" >>"$T/networks"
   : >"$T/calls.log"
@@ -3442,7 +3443,7 @@ test_profiles_dropping_doc_tools_stops_gotenberg_and_removes_the_networks() {
 test_profiles_adding_doc_tools_prints_the_mcp_entries_and_registers_nothing() {
   added
   docs_config
-  ctl profiles cloudflared,doc-tools
+  ctl profiles cloudflared,garden-doc-tools
   ok_rc
   log_has "network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
   out_has "office -> /opt/lettuce-doc-tools/bin/officeagent"
@@ -3452,7 +3453,7 @@ test_profiles_adding_doc_tools_prints_the_mcp_entries_and_registers_nothing() {
 }
 
 test_add_with_doc_tools_registers_the_mcp_servers() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$H/config.env"
   docs_config
   mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
   ctl add alfred alfred@example.com
@@ -3466,10 +3467,10 @@ test_add_with_doc_tools_registers_the_mcp_servers() {
   out_has "office and pdf are in https://alfred.example.org Settings -> MCP"
 }
 
-test_add_with_secrets_and_doc_tools_registers_both() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets,doc-tools/' "$H/config.env"
+test_add_with_the_vault_and_doc_tools_registers_both() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$H/config.env"
   docs_config
-  broker_config
+  vault_config
   mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}' doc-tools
   mcp_answer '{"added":["vault"],"present":[],"conflicts":[],"removed":[],"attempts":1}' vault
   ctl add alfred alfred@example.com
@@ -3481,12 +3482,12 @@ test_add_with_secrets_and_doc_tools_registers_both() {
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
   eq "$(senv alfred VAULT_MCP_REGISTERED)" 1
   out_has "office and pdf are in https://alfred.example.org Settings -> MCP"
-  out_has "Vault: vault is in https://alfred.example.org Settings -> MCP (docs/secret-broker.md)"
+  out_has "Vault: vault is in https://alfred.example.org Settings -> MCP (docs/vault.md)"
 }
 
 test_add_still_succeeds_when_registering_the_vault_fails() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets/' "$H/config.env"
-  broker_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  vault_config
   stub STUB_EXEC_RC=3
   ctl add alfred alfred@example.com
   ok_rc
@@ -3494,23 +3495,23 @@ test_add_still_succeeds_when_registering_the_vault_fails() {
   log_lacks "$MCP_ADD"
   eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
   out_has "Vault: in https://alfred.example.org Settings -> MCP, add an HTTP server:"
-  out_has "vault -> http://secret-broker:8000/mcp (docs/secret-broker.md)"
+  out_has "vault -> http://garden-vault:8000/mcp (docs/vault.md)"
   out_has "or run: lettucectl mcp alfred"
 }
 
-test_profiles_adding_secrets_prints_the_vault_entry_and_registers_nothing() {
+test_profiles_adding_the_vault_prints_its_entry_and_registers_nothing() {
   added
-  broker_config
-  ctl profiles cloudflared,secrets
+  vault_config
+  ctl profiles cloudflared,garden-vault
   ok_rc
-  out_has "vault -> http://secret-broker:8000/mcp"
+  out_has "vault -> http://garden-vault:8000/mcp"
   out_has "or run: lettucectl mcp alfred"
   out_lacks "Documents:"
   log_lacks "node --input-type=module"
 }
 
 test_add_still_succeeds_when_registering_the_mcp_servers_fails() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$H/config.env"
   docs_config
   stub STUB_EXEC_RC=3
   ctl add alfred alfred@example.com
@@ -3529,12 +3530,12 @@ VAULT_REMOVE="exec -T app-server node --input-type=module - remove /root/.letta/
 # exec's output), for every group or only for GROUP
 mcp_answer() { printf '%s\n' "$1" >"$T/exec-stdout${2:+-$2}"; }
 
-# with_docs_and_secrets -> alfred runs the doc-tools and secrets profiles
-with_docs_and_secrets() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets,doc-tools/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,secrets,doc-tools/' "$H/stacks/alfred/stack.env"
+# with_docs_and_vault -> alfred runs the garden-doc-tools and garden-vault profiles
+with_docs_and_vault() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$H/stacks/alfred/stack.env"
   docs_config
-  broker_config
+  vault_config
 }
 
 # bff_restarts -> how many times the BFF was restarted alone
@@ -3604,23 +3605,23 @@ test_mcp_leaves_a_persons_server_of_the_same_name() {
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
 }
 
-test_mcp_needs_the_doc_tools_or_the_secrets_profile() {
+test_mcp_needs_the_doc_tools_or_the_vault_profile() {
   added
   ctl mcp alfred
   bad_rc
-  out_has "the doc-tools and secrets profiles are both off"
+  out_has "the garden-doc-tools and garden-vault profiles are both off"
   log_lacks "node --input-type=module"
 }
 
-test_mcp_registers_the_vault_with_the_secrets_profile() {
+test_mcp_registers_the_vault_with_its_profile() {
   added
-  with_secrets
+  with_vault
   mcp_answer '{"added":["vault"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
   ctl mcp alfred
   ok_rc
   log_has "$VAULT_ADD"
   log_lacks "$MCP_ADD"
-  grep -q 'secret-broker:8000/mcp' "$T/exec-stdin.log" || fail "the script was not streamed"
+  grep -q 'garden-vault:8000/mcp' "$T/exec-stdin.log" || fail "the script was not streamed"
   out_has "alfred: added vault to Settings -> MCP"
   eq "$(senv alfred VAULT_MCP_REGISTERED)" 1
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
@@ -3629,7 +3630,7 @@ test_mcp_registers_the_vault_with_the_secrets_profile() {
 
 test_mcp_registers_both_and_restarts_the_bff_once() {
   added
-  with_docs_and_secrets
+  with_docs_and_vault
   mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}' doc-tools
   mcp_answer '{"added":["vault"],"present":[],"conflicts":[],"removed":[],"attempts":1}' vault
   ctl mcp alfred
@@ -3645,7 +3646,7 @@ test_mcp_registers_both_and_restarts_the_bff_once() {
 
 test_mcp_runs_once_per_group_unless_forced() {
   added
-  with_docs_and_secrets
+  with_docs_and_vault
   echo "VAULT_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
   mcp_answer '{"added":[],"present":["office","pdf"],"conflicts":[],"removed":[],"attempts":1}' doc-tools
   ctl mcp alfred
@@ -3663,7 +3664,7 @@ test_mcp_runs_once_per_group_unless_forced() {
 
 test_mcp_leaves_a_persons_vault_server() {
   added
-  with_secrets
+  with_vault
   mcp_answer '{"added":[],"present":[],"conflicts":["vault"],"removed":[],"attempts":1}'
   ctl mcp alfred
   ok_rc
@@ -3674,7 +3675,7 @@ test_mcp_leaves_a_persons_vault_server() {
 
 test_mcp_says_where_a_vault_added_by_hand_is() {
   added
-  with_secrets
+  with_vault
   mcp_answer '{"added":[],"present":["secrets"],"conflicts":[],"removed":[],"attempts":1}'
   ctl mcp alfred
   ok_rc
@@ -3684,7 +3685,7 @@ test_mcp_says_where_a_vault_added_by_hand_is() {
 
 test_mcp_a_failed_group_fails_at_the_end_and_the_other_is_kept() {
   added
-  with_docs_and_secrets
+  with_docs_and_vault
   stub STUB_EXEC_FAIL_GROUP=vault
   mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}' doc-tools
   ctl mcp alfred
@@ -3696,19 +3697,19 @@ test_mcp_a_failed_group_fails_at_the_end_and_the_other_is_kept() {
   eq "$(bff_restarts)" 1
 }
 
-test_profiles_dropping_secrets_removes_the_registered_vault() {
+test_profiles_dropping_the_vault_removes_its_registered_entry() {
   added
-  with_docs_and_secrets
+  with_docs_and_vault
   ctl up alfred
   ok_rc
   printf '%s\n' DOC_TOOLS_MCP_REGISTERED=1 VAULT_MCP_REGISTERED=1 >>"$H/stacks/alfred/stack.env"
   : >"$T/calls.log"
   mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["vault"],"attempts":1}' vault
-  ctl profiles cloudflared,doc-tools
+  ctl profiles cloudflared,garden-doc-tools
   ok_rc
   log_has "$VAULT_REMOVE"
   log_lacks "$MCP_REMOVE"
-  out_has "alfred: removed vault from Settings -> MCP (the secrets profile is off)"
+  out_has "alfred: removed vault from Settings -> MCP (the garden-vault profile is off)"
   eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
   (($(line_of "restart --no-deps bff") > $(line_of "$VAULT_REMOVE"))) || fail "the BFF was not restarted after the removal"
@@ -3765,7 +3766,7 @@ test_profiles_dropping_doc_tools_removes_the_registered_servers() {
   ctl profiles cloudflared
   ok_rc
   log_has "$MCP_REMOVE"
-  out_has "alfred: removed office, pdf from Settings -> MCP (the doc-tools profile is off)"
+  out_has "alfred: removed office, pdf from Settings -> MCP (the garden-doc-tools profile is off)"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
   (($(line_of "restart --no-deps bff") > $(line_of "$MCP_REMOVE"))) || fail "the BFF was not restarted after the removal"
 }
@@ -3801,7 +3802,7 @@ test_up_retries_a_removal_that_failed_and_skips_unregistered_stacks() {
 }
 
 test_shared_project_is_not_a_stack_named_shared() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,doc-tools/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$H/config.env"
   docs_config shared
   ctl add shared shared@example.com
   ok_rc
@@ -3818,10 +3819,10 @@ test_shared_project_is_not_a_stack_named_shared() {
 # the garden service
 code_config() {
   local st=$H/stacks/alfred/state
-  config_edit '.services["code-server"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
+  config_edit '.services["garden-code-server"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
       "environment":'"$GARDEN_ENV"',"networks":{"default":null},
       "volumes":[{"type":"volume","source":"code-server-sock","target":"/run/code-server","read_only":true,"volume":{}}]}
-    | .services["code-server-editor"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
+    | .services["garden-code-server-editor"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
       "command":["--socket","/run/code-server/editor.sock","--socket-mode","666","--auth","none","--disable-proxy",
         "--disable-telemetry","--disable-update-check","--disable-getting-started-override","--extensions-dir",
         "/opt/lettuce-editor/no-extensions","--user-data-dir","/data/user","--config","/opt/lettuce-editor/config.yaml"],
@@ -3831,8 +3832,8 @@ code_config() {
         {"type":"volume","source":"code-server-data","target":"/data","volume":{}},
         {"type":"volume","source":"code-exec-keys","target":"/keys","volume":{}},
         {"type":"volume","source":"code-server-sock","target":"/run/code-server","volume":{}}]}
-    | .services["code-server-exec"] = {"cap_drop":["NET_RAW"],"init":true,
-      "depends_on":{"code-server-editor":{"condition":"service_healthy","required":true}},
+    | .services["garden-code-server-exec"] = {"cap_drop":["NET_RAW"],"init":true,
+      "depends_on":{"garden-code-server-editor":{"condition":"service_healthy","required":true}},
       "networks":{"code-egress":null,"code-exec":null},
       "volumes":[{"type":"bind","source":"'"$st"'/workspaces","target":"/work","bind":{"create_host_path":true}},
         {"type":"bind","source":"'"$st"'/tools","target":"/opt/agent-tools","bind":{"create_host_path":true}},
@@ -3841,10 +3842,10 @@ code_config() {
   garden_config
 }
 
-# with_code -> alfred runs the code-server profile, with the services it renders
+# with_code -> alfred runs the garden-code-server profile, with the services it renders
 with_code() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,code-server/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,code-server/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-code-server/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-code-server/' "$H/stacks/alfred/stack.env"
   code_config
 }
 
@@ -3858,9 +3859,9 @@ code_refused() {
   bad_rc
   out_has "alfred: $2"
 }
-CG='.services["code-server"]'
-CE='.services["code-server-editor"]'
-CX='.services["code-server-exec"]'
+CG='.services["garden-code-server"]'
+CE='.services["garden-code-server-editor"]'
+CX='.services["garden-code-server-exec"]'
 
 test_check_accepts_the_code_editor_as_rendered() {
   added
@@ -3871,23 +3872,23 @@ test_check_accepts_the_code_editor_as_rendered() {
 
 test_check_refuses_a_code_editor_service_missing() {
   local s
-  for s in code-server code-server-editor code-server-exec; do
-    code_refused "del(.services[\"$s\"])" "the code-server profile is on but $s is not in the rendered config"
+  for s in garden-code-server garden-code-server-editor garden-code-server-exec; do
+    code_refused "del(.services[\"$s\"])" "the garden-code-server profile is on but $s is not in the rendered config"
     teardown
     setup
   done
 }
 
 test_check_refuses_a_gate_without_its_hardening_or_on_another_network() {
-  code_refused "del($CG.read_only)" "code-server must have read_only: true"
+  code_refused "del($CG.read_only)" "garden-code-server must have read_only: true"
   teardown; setup
-  code_refused "$CG.volumes = [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "code-server must not mount host paths"
+  code_refused "$CG.volumes = [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden-code-server must not mount host paths"
   teardown; setup
-  code_refused "$CG.networks[\"code-exec\"] = null" "code-server (the gate) must be on the default network only"
+  code_refused "$CG.networks[\"code-exec\"] = null" "garden-code-server (the gate) must be on the default network only"
 }
 
 test_check_refuses_a_gate_without_the_editors_socket_or_with_more() {
-  local m="code-server (the gate) may mount only the volume code-server-sock, read-only (at /run/code-server)"
+  local m="garden-code-server (the gate) may mount only the volume code-server-sock, read-only (at /run/code-server)"
   code_refused "$CG.volumes = []" "$m"
   teardown; setup
   code_refused "$CG.volumes[0].read_only = false" "$m"
@@ -3896,29 +3897,29 @@ test_check_refuses_a_gate_without_the_editors_socket_or_with_more() {
 }
 
 test_check_refuses_an_editor_without_its_hardening() {
-  code_refused "$CE.cap_drop = [\"NET_RAW\"]" "code-server-editor must drop all capabilities"
+  code_refused "$CE.cap_drop = [\"NET_RAW\"]" "garden-code-server-editor must drop all capabilities"
   teardown; setup
-  code_refused "$CE.cap_add = [\"SYS_PTRACE\"]" "code-server-editor must not set cap_add"
+  code_refused "$CE.cap_add = [\"SYS_PTRACE\"]" "garden-code-server-editor must not set cap_add"
   teardown; setup
-  code_refused "$CE.pid = \"host\"" "code-server-editor must not set pid"
+  code_refused "$CE.pid = \"host\"" "garden-code-server-editor must not set pid"
 }
 
 test_check_refuses_an_editor_with_other_mounts() {
   code_refused "$CE.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/tools\",\"target\":\"/opt/agent-tools\"}]" \
-    "code-server-editor may mount from the host only $H/stacks/alfred/state/workspaces (at /work)"
+    "garden-code-server-editor may mount from the host only $H/stacks/alfred/state/workspaces (at /work)"
   teardown; setup
-  local m="code-server-editor may mount only the volumes code-server-data (at /data), code-exec-keys (at /keys) and code-server-sock (at /run/code-server)"
+  local m="garden-code-server-editor may mount only the volumes code-server-data (at /data), code-exec-keys (at /keys) and code-server-sock (at /run/code-server)"
   code_refused "$CE.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "$m"
   teardown; setup
   code_refused "$CE.volumes = [$CE.volumes[0], $CE.volumes[1], $CE.volumes[2]]" "$m"
 }
 
 test_check_refuses_an_editor_on_the_stack_network() {
-  code_refused "$CE.networks.default = null" "code-server-editor must be on the code-exec network only"
+  code_refused "$CE.networks.default = null" "garden-code-server-editor must be on the code-exec network only"
 }
 
 test_check_refuses_an_editor_that_runs_workspace_code_or_trusts_more() {
-  local flag m="code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lettuce-editor/no-extensions, --user-data-dir /data/user and --config /opt/lettuce-editor/config.yaml, each once"
+  local flag m="garden-code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lettuce-editor/no-extensions, --user-data-dir /data/user and --config /opt/lettuce-editor/config.yaml, each once"
   code_refused "$CE.command -= [\"--disable-proxy\"]" "$m"
   teardown; setup
   code_refused "$CE.command |= map(if . == \"none\" then \"password\" else . end)" "$m"
@@ -3938,39 +3939,39 @@ test_check_refuses_an_editor_that_runs_workspace_code_or_trusts_more() {
   done
   for flag in --bind-addr --socket-fd; do
     teardown; setup
-    code_refused "$CE.command += [\"$flag\", \"3\"]" "code-server-editor must not run with $flag"
+    code_refused "$CE.command += [\"$flag\", \"3\"]" "garden-code-server-editor must not run with $flag"
   done
   for flag in --disable-workspace-trust --trusted-origins=evil.example.org --link --enable-proposed-api \
     --install-extension --github-auth --builtin-extensions-dir; do
     teardown; setup
-    code_refused "$CE.command += [\"$flag\"]" "code-server-editor must not run with $flag"
+    code_refused "$CE.command += [\"$flag\"]" "garden-code-server-editor must not run with $flag"
   done
   teardown; setup
   code_refused "$CE.environment.EXTENSIONS_GALLERY = \"{\\\"serviceUrl\\\":\\\"https://open-vsx.org/vscode/gallery\\\"}\"" \
-    "code-server-editor must have EXTENSIONS_GALLERY={} (no marketplace)"
+    "garden-code-server-editor must have EXTENSIONS_GALLERY={} (no marketplace)"
 }
 
 test_check_refuses_a_shell_with_more_reach() {
-  code_refused "$CX.networks.default = null" "code-server-exec must be on the code-exec and code-egress networks only"
+  code_refused "$CX.networks.default = null" "garden-code-server-exec must be on the code-exec and code-egress networks only"
   teardown; setup
-  code_refused "$CX.cap_drop = []" "code-server-exec must drop NET_RAW"
+  code_refused "$CX.cap_drop = []" "garden-code-server-exec must drop NET_RAW"
   teardown; setup
-  code_refused "$CX.privileged = true" "code-server-exec must not set privileged"
+  code_refused "$CX.privileged = true" "garden-code-server-exec must not set privileged"
   teardown; setup
-  code_refused "$CX.network_mode = \"service:app-server\"" "code-server-exec must not set network_mode"
+  code_refused "$CX.network_mode = \"service:app-server\"" "garden-code-server-exec must not set network_mode"
   teardown; setup
   code_refused "$CX.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/letta-home\",\"target\":\"/root/.letta\"}]" \
-    "code-server-exec may mount from the host only"
+    "garden-code-server-exec may mount from the host only"
   teardown; setup
-  code_refused "$CX.volumes[2].read_only = false" "code-server-exec may mount only the volume code-exec-keys, read-only"
+  code_refused "$CX.volumes[2].read_only = false" "garden-code-server-exec may mount only the volume code-exec-keys, read-only"
 }
 
 test_check_refuses_others_on_the_code_editor_networks() {
   code_refused '.services["app-server"].networks = {"default":null,"code-exec":null}' \
-    "only code-server-editor,code-server-exec may join the code-exec network (found: app-server,code-server-editor,code-server-exec)"
+    "only garden-code-server-editor,garden-code-server-exec may join the code-exec network (found: app-server,garden-code-server-editor,garden-code-server-exec)"
   teardown; setup
   code_refused '.services.cloudflared = {"networks":{"default":null,"code-egress":null}}' \
-    "only code-server-exec may join the code-egress network"
+    "only garden-code-server-exec may join the code-egress network"
   teardown; setup
   code_refused '.networks["code-exec"].internal = false' "the code-exec network must be internal"
 }
@@ -4000,7 +4001,7 @@ test_check_guards_the_code_editor_volumes_whatever_the_profiles() {
   out_has "alfred: bff mount(s) the code editor's SSH keys"
   teardown; setup
   added
-  config_edit '.services.searxng = {"volumes_from":["code-server-exec"]}'
+  config_edit '.services.searxng = {"volumes_from":["garden-code-server-exec"]}'
   ctl check alfred
   bad_rc
   out_has "volumes_from reaches"
@@ -4009,12 +4010,12 @@ test_check_guards_the_code_editor_volumes_whatever_the_profiles() {
   config_edit '.services.bff.volumes = [{"type":"volume","source":"code-server-sock","target":"/run/code-server"}]'
   ctl check alfred
   bad_rc
-  out_has "alfred: bff mount(s) the code editor's socket; only code-server and code-server-editor may"
+  out_has "alfred: bff mount(s) the code editor's socket; only garden-code-server and garden-code-server-editor may"
 }
 
 test_check_refuses_sharing_a_code_editor_network_namespace_whatever_the_profiles() {
   local mode
-  for mode in service:code-server-editor service:code-server service:code-server-exec container:lettuce-alfred-code-server-editor-1; do
+  for mode in service:garden-code-server-editor service:garden-code-server service:garden-code-server-exec container:lettuce-alfred-garden-code-server-editor-1; do
     teardown; setup
     added
     config_edit ".services.searxng = {\"network_mode\":\"$mode\"}"
@@ -4034,21 +4035,21 @@ test_compose_always_merges_the_code_editor_overlay() {
 test_profiles_routes_the_code_editor_and_lists_it_on_the_landing_page() {
   added
   code_config
-  ctl profiles cloudflared,search,code-server
+  ctl profiles cloudflared,search,garden-code-server
   ok_rc
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/code-server(/|$)","service":"http://code-server:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
-  eq "$(senv alfred GARDEN_PROFILES)" code-server
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/code-server(/|$)","service":"http://garden-code-server:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(senv alfred GARDEN_PROFILES)" garden-code-server
 }
 
 test_profiles_dropping_the_code_editor_removes_its_containers() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,code-server/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-code-server/' "$H/config.env"
   code_config
   added
-  containers alfred app-server bff cloudflared code-server code-server-editor code-server-exec
+  containers alfred app-server bff cloudflared garden-code-server garden-code-server-editor garden-code-server-exec
   ctl profiles cloudflared
   ok_rc
-  log_lacks "code-server:8000"
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf code-server code-server-editor code-server-exec$' "$T/calls.log" ||
+  log_lacks "garden-code-server:8000"
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden-code-server garden-code-server-editor garden-code-server-exec$' "$T/calls.log" ||
     fail "the code editor's containers were not removed"
 }
 
@@ -4075,7 +4076,7 @@ test_profiles_gives_a_stack_back_its_deleted_executor_token() {
   added
   with_triggers
   sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
-  containers alfred app-server gmail-triggers
+  containers alfred app-server garden-gmail-triggers
   ctl profiles "$(senv alfred COMPOSE_PROFILES)"
   ok_rc
   [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "no new executor token"
@@ -4085,7 +4086,7 @@ test_the_executor_is_never_installed_without_a_token() {
   added
   with_triggers
   sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
-  containers alfred app-server gmail-triggers
+  containers alfred app-server garden-gmail-triggers
   # profiles syncs the executor on a running stack even when the list is unchanged.
   sed -i "s/^PROFILES=.*/PROFILES=$(senv alfred COMPOSE_PROFILES)/" "$H/config.env"
   : >"$T/exec-stdin.log"
@@ -4103,20 +4104,20 @@ test_garden_landing_path_routes_only_the_root_and_its_assets() {
   for p in / /assets/garden.css /assets/icon-192.png /assets/new-icon.svg; do
     grep -qE -- "$path" <<<"$p" || fail "$p is not routed to the garden service"
   done
-  for p in /executor/v1/ /executor/v1/agents /healthz /assets/ /assets/a/b /garden.css /secrets/; do
+  for p in /executor/v1/ /executor/v1/agents /healthz /assets/ /assets/a/b /garden.css /vault/; do
     ! grep -qE -- "$path" <<<"$p" || fail "$p is routed to the garden service"
   done
 }
 
 test_tunnel_routes_every_garden_page_on_the_garden_host_only() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets,code-server/' "$H/config.env"
-  broker_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$H/config.env"
+  vault_config
   triggers_config
   code_config
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/secrets(/|$)","service":"http://secret-broker:8000"},{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://gmail-triggers:8000"},{"hostname":"alfred-garden.example.org","path":"^/code-server(/|$)","service":"http://code-server:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
-  eq "$(senv alfred GARDEN_PROFILES)" secrets,gmail-triggers,code-server
+  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/vault(/|$)","service":"http://garden-vault:8000"},{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://garden-gmail-triggers:8000"},{"hostname":"alfred-garden.example.org","path":"^/code-server(/|$)","service":"http://garden-code-server:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(senv alfred GARDEN_PROFILES)" garden-vault,garden-gmail-triggers,garden-code-server
 }
 
 # Only the garden service gets GARDEN_PROFILES: a recreate would relock the vault.
@@ -4124,11 +4125,11 @@ test_only_the_garden_overlay_passes_the_garden_profiles() {
   eq "$(grep -l 'GARDEN_PROFILES' "$ROOT"/compose/*.yml | xargs -n1 basename | paste -sd' ')" garden.yml
 }
 
-# with_all_gardens -> alfred runs every garden profile, with every garden service rendered
+# with_all_gardens -> alfred runs every garden page profile, with every garden service rendered
 with_all_gardens() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,gmail-triggers,secrets,code-server/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,gmail-triggers,secrets,code-server/' "$H/stacks/alfred/stack.env"
-  broker_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$H/stacks/alfred/stack.env"
+  vault_config
   triggers_config
   code_config
 }
@@ -4157,11 +4158,11 @@ test_check_accepts_every_garden_service_as_rendered() {
 
 test_check_refuses_a_garden_profile_without_the_garden() {
   added
-  with_secrets
+  with_vault
   config_edit "del($GS)"
   ctl check alfred
   bad_rc
-  out_has "alfred: the secrets profile is on but garden is not in the rendered config (compose/garden.yml)"
+  out_has "alfred: the garden-vault profile is on but garden is not in the rendered config (compose/garden.yml)"
 }
 
 test_check_refuses_a_garden_that_is_not_hardened() {
@@ -4183,7 +4184,7 @@ test_check_refuses_a_garden_profile_without_its_host_or_audience() {
   for k in GARDEN_ORIGIN CF_GARDEN_AUD; do
     teardown; setup
     added
-    with_secrets
+    with_vault
     sed -i "/^$k=/d" "$H/stacks/alfred/stack.env"
     ctl check alfred
     bad_rc
@@ -4193,7 +4194,7 @@ test_check_refuses_a_garden_profile_without_its_host_or_audience() {
 
 test_check_refuses_a_garden_service_that_accepts_lettuces_token() {
   local s
-  for s in secret-broker gmail-triggers code-server garden; do
+  for s in garden-vault garden-gmail-triggers garden-code-server garden; do
     garden_refused ".services[\"$s\"].environment.CF_ACCESS_AUD = \"\${CF_ACCESS_AUD}\"" \
       "$s must accept only the garden's Access application (CF_ACCESS_AUD = CF_GARDEN_AUD), never Lettuce's"
     garden_refused "del(.services[\"$s\"].environment.CF_ACCESS_AUD)" "$s must accept only the garden's Access application"
@@ -4213,30 +4214,30 @@ test_check_refuses_a_garden_audience_that_is_lettuces() {
 
 test_check_refuses_a_garden_service_with_lettuces_token_whatever_the_profiles() {
   added
-  broker_config
+  vault_config
   # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
-  config_edit '.services["secret-broker"].environment.CF_ACCESS_AUD = "${CF_ACCESS_AUD}"'
+  config_edit '.services["garden-vault"].environment.CF_ACCESS_AUD = "${CF_ACCESS_AUD}"'
   ctl check alfred
   bad_rc
-  out_has "alfred: secret-broker must accept only the garden's Access application"
+  out_has "alfred: garden-vault must accept only the garden's Access application"
 }
 
 test_profiles_dropping_every_garden_profile_removes_the_garden() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,secrets,code-server/' "$H/config.env"
-  broker_config
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-code-server/' "$H/config.env"
+  vault_config
   code_config
   added
-  containers alfred app-server bff cloudflared secret-broker garden code-server code-server-editor code-server-exec
-  ctl profiles cloudflared,secrets
+  containers alfred app-server bff cloudflared garden-vault garden garden-code-server garden-code-server-editor garden-code-server-exec
+  ctl profiles cloudflared,garden-vault
   ok_rc
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf code-server code-server-editor code-server-exec$' "$T/calls.log" ||
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden-code-server garden-code-server-editor garden-code-server-exec$' "$T/calls.log" ||
     fail "the code editor's containers were not removed, or the garden went with them"
   : >"$T/calls.log"
   # (The stub still lists the code editor's containers.)
-  sed -i '/ code-server/d' "$T/containers.txt"
+  sed -i '/ garden-code-server/d' "$T/containers.txt"
   ctl profiles cloudflared
   ok_rc
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden secret-broker$' "$T/calls.log" || fail "the garden was not removed"
+  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden garden-vault$' "$T/calls.log" || fail "the garden was not removed"
   eq "$(ingress)" "[$GARDEN_404,$LETTUCE_TAIL]"
 }
 
@@ -4244,9 +4245,9 @@ test_profiles_dropping_every_garden_profile_removes_the_garden() {
 # including one added later.
 test_check_holds_every_routed_garden_sidecar_to_the_garden_audience() {
   added
-  with_secrets
-  sed -i "s#^  'code-server .*#&\n  'notes ^/notes(/|\$) http://notes:8000'#" "$H/lib/cloudflare.sh"
-  grep -q "^  'notes " "$H/lib/cloudflare.sh" || fail "fixture: no notes route"
+  with_vault
+  sed -i "s#^  'garden-code-server .*#&\n  'garden-notes ^/notes(/|\$) http://notes:8000'#" "$H/lib/cloudflare.sh"
+  grep -q "^  'garden-notes " "$H/lib/cloudflare.sh" || fail "fixture: no notes route"
   # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
   config_edit '.services.notes = {"environment":{"CF_ACCESS_AUD":"${CF_ACCESS_AUD}","PUBLIC_ORIGIN":"${GARDEN_ORIGIN}"}}'
   ctl check alfred

@@ -1,4 +1,4 @@
-"""The encrypted vault: one SQLite file on the broker-only volume.
+"""The encrypted vault: one SQLite file on the vault-only volume.
 
 On disk in plaintext: secret ids, kinds, sharing modes, timestamps, audit
 actions and push subscriptions. Secret names, usage notes, fields and audit

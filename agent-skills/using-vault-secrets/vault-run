@@ -39,7 +39,7 @@ def fail(message: str, code: int = 2) -> None:
 
 
 def redeem(handle: str) -> dict[str, str]:
-    base = os.environ.get("VAULT_URL", "http://secret-broker:8000").rstrip("/")
+    base = os.environ.get("VAULT_URL", "http://garden-vault:8000").rstrip("/")
     request = urllib.request.Request(
         f"{base}/redeem",
         data=json.dumps({"handle": handle}).encode(),

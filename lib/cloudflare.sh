@@ -120,15 +120,15 @@ cf_tunnel_token() {
 
 # Routes that profiles add on the stack's garden host (GARDEN_HOSTNAME):
 # "<profile> <path regex> <service>". Each service has its own UI and checks the
-# garden's Access application. Each serves /<profile>/, which the garden landing
-# page links to.
+# garden's Access application. A profile garden-<page> serves /<page>/, which the
+# garden landing page links to.
 PROFILE_ROUTES=(
-  'secrets ^/secrets(/|$) http://secret-broker:8000'
-  'gmail-triggers ^/gmail-triggers(/|$) http://gmail-triggers:8000'
-  'code-server ^/code-server(/|$) http://code-server:8000'
+  'garden-vault ^/vault(/|$) http://garden-vault:8000'
+  'garden-gmail-triggers ^/gmail-triggers(/|$) http://garden-gmail-triggers:8000'
+  'garden-code-server ^/code-server(/|$) http://garden-code-server:8000'
 )
 # The landing page and its assets (any file under /assets/), served by the garden
-# service (compose/garden.yml) whenever a garden profile is on. Its /executor/v1/
+# service (compose/garden.yml) whenever a garden page profile is on. Its /executor/v1/
 # API and /healthz never match.
 GARDEN_LANDING_PATH='^/(assets/[^/]+)?$'
 GARDEN_LANDING_SERVICE=http://garden:8000

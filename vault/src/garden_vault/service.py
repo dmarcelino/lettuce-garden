@@ -33,7 +33,7 @@ from .logs import SECRET_FILTER
 from .push import Pusher
 from .vault import AUTO, Locked, Secret, Vault, VaultError
 
-log = logging.getLogger("secret_broker")
+log = logging.getLogger("garden_vault")
 
 PENDING, DONE, DENIED, EXPIRED = "pending", "done", "denied", "expired"
 TEXT, ENV = "text", "env"
@@ -103,7 +103,7 @@ def env_name(key: str) -> str:
     return f"VAULT_{key.upper()}"
 
 
-class Broker:
+class Service:
     def __init__(self, vault: Vault, pusher: Pusher, public_origin: str):
         self.vault = vault
         self.pusher = pusher
@@ -118,7 +118,7 @@ class Broker:
 
     def _spawn_push(self, payload: dict[str, str]) -> None:
         if self._tasks is None:
-            raise RuntimeError("broker task group is not running")
+            raise RuntimeError("service task group is not running")
         self._tasks.start_soon(self._push, payload)
 
     async def _push(self, payload: dict[str, str]) -> None:
