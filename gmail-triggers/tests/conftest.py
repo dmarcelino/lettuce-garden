@@ -365,7 +365,7 @@ def raw_get(app: Any, raw_path: str, headers: dict[str, str]) -> int:
         "http_version": "1.1",
         "method": "GET",
         "scheme": "https",
-        "server": ("gmail-triggers", 8000),
+        "server": ("garden-gmail-triggers", 8000),
         "client": ("192.0.2.1", 1234),
         "root_path": "",
         "path": unquote(raw_path),

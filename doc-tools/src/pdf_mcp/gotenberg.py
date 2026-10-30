@@ -44,7 +44,7 @@ class Gotenberg:
             raise GotenbergError("the converter took too long; try a smaller file or fewer pages") from None
         except httpx.HTTPError:
             raise GotenbergError(
-                "the converter (Gotenberg) is unreachable; the operator may need to run `lettucectl up` with the doc-tools profile"
+                "the converter (Gotenberg) is unreachable; the operator may need to run `lettucectl up` with the garden-doc-tools profile"
             ) from None
         if not body.startswith(b"%PDF-"):
             raise GotenbergError("the converter returned something that is not a PDF")

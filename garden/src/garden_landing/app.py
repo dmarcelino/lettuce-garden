@@ -32,7 +32,7 @@ from starlette.routing import Route
 
 from . import icons
 from .agents import AgentList
-from .config import EDITOR, Settings
+from .config import EDITOR, Settings, page_path
 
 log = logging.getLogger("garden_landing")
 
@@ -48,9 +48,9 @@ SECURITY_HEADERS = {
 
 # What the page says about each garden page; one without an entry shows its profile name.
 LABELS = {
-    "secrets": ("Vault", "Your personal data, shared with your agents only when you say so"),
-    "gmail-triggers": ("Gmail triggers", "Ask an agent to act when mail arrives"),
-    "code-server": ("Code editor", "Your agents' files in VS Code"),
+    "garden-vault": ("Vault", "Your personal data, shared with your agents only when you say so"),
+    "garden-gmail-triggers": ("Gmail triggers", "Ask an agent to act when mail arrives"),
+    "garden-code-server": ("Code editor", "Your agents' files in VS Code"),
 }
 
 Handler = Callable[[Request, str], Awaitable[Response]]
@@ -64,7 +64,7 @@ class Feature:
 
     @property
     def path(self) -> str:
-        return f"/{self.profile}/"
+        return page_path(self.profile)
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ class AgentRow:
 
     @property
     def href(self) -> str:
-        return f"/{EDITOR}/?folder={quote(self.folder, safe='')}"
+        return f"{page_path(EDITOR)}?folder={quote(self.folder, safe='')}"
 
 
 def agent_rows(agents: list[tuple[str, str]]) -> list[AgentRow]:
@@ -119,7 +119,7 @@ def create_app(settings: Settings, authenticator: Authenticator, agents: AgentLi
             any_feature=bool(features),
             lists_agents=settings.lists_agents,
             agents=None if listed is None else agent_rows(listed),
-            editor=f"/{EDITOR}/",
+            editor=page_path(EDITOR),
             editor_label=LABELS[EDITOR][0],
         )
 

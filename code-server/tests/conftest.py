@@ -14,7 +14,7 @@ from code_server_gate.config import Settings
 
 EMAIL = "alfred@gmail.com"
 ORIGIN = "https://alfred-garden.example.com"
-UPSTREAM = "http://code-server-editor"
+UPSTREAM = "http://garden-code-server-editor"
 # What a browser sends when the person opens the workbench (Fetch Metadata).
 NAVIGATE = {"sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-site": "same-origin"}
 
@@ -68,7 +68,7 @@ def authenticator(settings: Settings, signing_key: Any) -> Authenticator:
 
 
 class FakeEditor:
-    """code-server-editor: records what reaches it and answers from `responses`
+    """garden-code-server-editor: records what reaches it and answers from `responses`
     (path without query -> httpx.Response), 200 "editor" otherwise. Its WebSocket
     echoes every message back."""
 

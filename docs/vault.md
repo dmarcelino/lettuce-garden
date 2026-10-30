@@ -1,22 +1,22 @@
 # Vault
 
-Each stack can have a personal vault of secrets: addresses, company details, notes, loyalty numbers, ID documents, payment cards and logins. Agents can ask to use a secret, for example to fill in a delivery form or a booking, and the person decides. Most secrets are a single private text box: agents read natural language, so an address is simply typed the way you would write it. The vault is encrypted with a passphrase only that person knows. It is opt-in, behind the `secrets` profile.
+Each stack can have a personal vault of secrets: addresses, company details, notes, loyalty numbers, ID documents, payment cards and logins. Agents can ask to use a secret, for example to fill in a delivery form or a booking, and the person decides. Most secrets are a single private text box: agents read natural language, so an address is simply typed the way you would write it. The vault is encrypted with a passphrase only that person knows. It is opt-in, behind the `garden-vault` profile.
 
 ```
 agent ──list_secrets─────────────────────> vault   names, types, public details; never private values
 agent ──request_secret(secret, why)───────> vault   ──push──> your phone
-you   ──https://<garden>/secrets/ ───────> vault   see what and why, untick fields, Share once / Deny
+you   ──https://<garden>/vault/ ───────> vault   see what and why, untick fields, Share once / Deny
 agent ──get_result──────────────────────> vault   the values you agreed to share, once
                                                   (or, with delivery "env", a one-time handle)
 vault-run ──/redeem (handle)─────────────> vault   the values, into one command's environment
 ```
 
-![The vault's containers, trust boundaries and requests](diagrams/secret-broker-architecture.svg)
+![The vault's containers, trust boundaries and requests](diagrams/vault-architecture.svg)
 
-An interactive version, [secret-broker-architecture.html](diagrams/secret-broker-architecture.html), opens in a browser from a clone of this repo.
+An interactive version, [vault-architecture.html](diagrams/vault-architecture.html), opens in a browser from a clone of this repo.
 
 ## For the person using it
-1. **Open `https://<your garden>/secrets/`** and sign in as usual; `<your garden>` is your stack's garden address, `<name>-garden.<domain>`. Its home page, `https://<your garden>/`, links to it too.
+1. **Open `https://<your garden>/vault/`** and sign in as usual; `<your garden>` is your stack's garden address, `<name>-garden.<domain>`. Its home page, `https://<your garden>/`, links to it too.
 2. **Create your vault:** choose a passphrase of at least 12 characters. Four or five unrelated words work well. **Nobody can recover it**, not even whoever runs the server. If you forget it, you have to erase the vault and start again.
 3. **Add secrets:** go to **Secrets**, then **Add a secret**, and pick a type. Every secret has a name. Fields in *italics* are private; the others agents can read, like the name.
 
@@ -37,7 +37,7 @@ An interactive version, [secret-broker-architecture.html](diagrams/secret-broker
 5. **Answer requests:** when an agent asks for something, a notification arrives, and the agent is told to post the request's link in the chat too, so you can answer without notifications. The request shows the secret, the private fields the agent wants and the reason it gave. Untick anything it doesn't need, then press **Share once** or **Deny**. Agents are told to keep checking until you answer (a request expires after 10 minutes); if one stopped without picking up your answer, send it any message in the chat and it collects it. **Requests** lists what is waiting and what you answered recently; **History** lists everything.
 6. **Locking:** the vault locks when the server restarts, after 12 hours without you using the page, or when you press **Lock**. While it is locked, agents get nothing and you get a notification asking you to unlock.
 
-**Connect your agents:** agents find the vault through Lettuce's **Settings -> MCP**, as an HTTP server named `vault` with URL `http://secret-broker:8000/mcp`. `lettucectl add` puts it there for a new stack; for a stack that existed before, the operator runs `./lettucectl mcp <name>` (see [For the operator](#for-the-operator)), or you add it there by hand. lettucectl does this once per stack: if you remove the server in Settings -> MCP, it stays removed. Registering it gives agents nothing new: they can already reach that address over the stack's network, and approving still happens only in the vault.
+**Connect your agents:** agents find the vault through Lettuce's **Settings -> MCP**, as an HTTP server named `vault` with URL `http://garden-vault:8000/mcp`. `lettucectl add` puts it there for a new stack; for a stack that existed before, the operator runs `./lettucectl mcp <name>` (see [For the operator](#for-the-operator)), or you add it there by hand. lettucectl does this once per stack: if you remove the server in Settings -> MCP, it stays removed. Registering it gives agents nothing new: they can already reach that address over the stack's network, and approving still happens only in the vault.
 
 ### Using values without the agent reading them
 An agent that will use a password, card number, security code or document number in a script (filling a form with Playwright, logging in with curl) can ask with `delivery: "env"`. The request page then says the values go to a command. Once you approve, the agent gets a **handle** instead of the values. It runs its script through `vault-run`, a helper that `lettucectl skills` installs with the `using-vault-secrets` skill. `vault-run` trades the handle for the values, gives them to that one command as `VAULT_<FIELD>` environment variables, and replaces them with `[VAULT_<FIELD>]` in the command's output, also when a card number is printed with spaces or dashes. A handle works once, for 5 minutes, and History records when it is used.
@@ -62,16 +62,16 @@ Free-text secrets (addresses, companies, notes) are still read by the agent, so 
 ## For the operator
 - **Turn it on:**
   ```bash
-  ./lettucectl profiles <current list>,secrets      # e.g. cloudflared,search,secrets
+  ./lettucectl profiles <current list>,garden-vault      # e.g. cloudflared,search,garden-vault
   ```
-  This routes `https://<garden>/secrets/` (and the garden's home page, linking to the garden features that are on) to the vault on every stack, on the stack's garden address and its own Access application, then builds and starts it. Each stack gets its own push keys for the vault (`BROKER_VAPID_*` in `stack.env`). Dropping `secrets` from the list removes the route and the container, and leaves the data where it is.
+  This routes `https://<garden>/vault/` (and the garden's home page, linking to the garden features that are on) to the vault on every stack, on the stack's garden address and its own Access application, then builds and starts it. Each stack gets its own push keys for the vault (`VAULT_VAPID_*` in `stack.env`). Dropping `garden-vault` from the list removes the route and the container, and leaves the data where it is.
 - **Register it with the agents:**
   ```bash
-  ./lettucectl mcp all      # adds the vault (and, with doc-tools, office and pdf) to each Settings -> MCP
+  ./lettucectl mcp all      # adds the vault (and, with garden-doc-tools, office and pdf) to each Settings -> MCP
   ```
-  `add` does this for a new stack, and `profiles` prints, for each stack, whether it is registered or the entry to add by hand. `mcp` adds `{"name": "vault", "transport": "http", "url": "http://secret-broker:8000/mcp"}` once per stack (`VAULT_MCP_REGISTERED` in `stack.env`), so a person who removes it keeps it removed; `mcp <name> --force` adds it again. An HTTP entry with that exact URL counts as the vault whatever its name, so one added by hand is not added twice; a different server named `vault` is left alone, and nothing is added (it says so). It writes only that one entry, then restarts the stack's BFF alone so agents see it (the vault and the app-server keep running; see [doc-tools.md](doc-tools.md#turning-it-on) for how the list is written and what can undo it). With `secrets` dropped from the list, `up` and `profiles` remove the entry they registered, since an HTTP server that does not answer makes every `letta mcp tools` call fail; if that fails, the next `up` or `profiles` retries it.
-- **Data:** the vault lives in the Docker volume `lettuce-<name>_secret-broker-data`, not under `stacks/<name>/`. `lettucectl backup` includes it (see [operations.md](operations.md#backups)). The backup is useless without the passphrase.
-- **Removal:** `lettucectl remove <name>` deletes the volume, so removing a stack deletes its vault, also after the `secrets` profile was turned off. It says so before asking for confirmation whenever the volume exists.
+  `add` does this for a new stack, and `profiles` prints, for each stack, whether it is registered or the entry to add by hand. `mcp` adds `{"name": "vault", "transport": "http", "url": "http://garden-vault:8000/mcp"}` once per stack (`VAULT_MCP_REGISTERED` in `stack.env`), so a person who removes it keeps it removed; `mcp <name> --force` adds it again. An HTTP entry with that exact URL counts as the vault whatever its name, so one added by hand is not added twice; a different server named `vault` is left alone, and nothing is added (it says so). It writes only that one entry, then restarts the stack's BFF alone so agents see it (the vault and the app-server keep running; see [doc-tools.md](doc-tools.md#turning-it-on) for how the list is written and what can undo it). With `garden-vault` dropped from the list, `up` and `profiles` remove the entry they registered, since an HTTP server that does not answer makes every `letta mcp tools` call fail; if that fails, the next `up` or `profiles` retries it.
+- **Data:** the vault lives in the Docker volume `lettuce-<name>_vault-data`, not under `stacks/<name>/`. `lettucectl backup` includes it (see [operations.md](operations.md#backups)). The backup is useless without the passphrase.
+- **Removal:** `lettucectl remove <name>` deletes the volume, so removing a stack deletes its vault, also after the `garden-vault` profile was turned off. It says so before asking for confirmation whenever the volume exists.
 - **Forgotten passphrase:** there is no recovery. The person can erase the vault in Settings. If they can't unlock to do that, delete the volume (see the troubleshooting table in [operations.md](operations.md#troubleshooting)).
 - **Isolation:** the vault container has a read-only root filesystem and no capabilities, runs as a non-root user and has no host mounts. Its volume is mounted by nothing else. The containers agents run in, and those sharing their network, drop `NET_RAW`, so agents cannot capture the Access token on its way to Lettuce. `lettucectl check` refuses a stack where any of that is not true.
 - **Rules for changing it:** never add a tool that lets agents edit secrets or skip approval, and never let a value or key reach a log or an unencrypted file.

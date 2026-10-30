@@ -301,7 +301,7 @@ def test_send_a_test_and_see_it_in_history(client, env):
     page = client.get(r.headers["location"]).text
     assert "Test request sent" in page and "Waiting for Lettuce" in page
     auth = {"authorization": f"Bearer {TOKEN}"}
-    with TestClient(client.app, base_url="http://gmail-triggers:8000") as api:
+    with TestClient(client.app, base_url="http://garden-gmail-triggers:8000") as api:
         claimed = api.get("/executor/v1/requests", headers=auth).json()["requests"]
         assert [c["id"] for c in claimed] == [req["id"]]
         assert "Sent to Lettuce" in client.get(f"{B}/r/{rule.id}/history").text

@@ -68,8 +68,8 @@ def test_the_prefix_is_stripped_and_the_path_kept_as_sent(browser, editor):
     browser.get(f"{P}/?folder=/work/agent-1")
     browser.get(f"{P}/vscode-remote-resource?path=/work/a%20b/c%2Fd.png&tkn=1", headers=IMAGE)
     assert [str(r.url) for r in editor.requests] == [
-        "http://code-server-editor/?folder=/work/agent-1",
-        "http://code-server-editor/vscode-remote-resource?path=/work/a%20b/c%2Fd.png&tkn=1",
+        "http://garden-code-server-editor/?folder=/work/agent-1",
+        "http://garden-code-server-editor/vscode-remote-resource?path=/work/a%20b/c%2Fd.png&tkn=1",
     ]
 
 
@@ -133,7 +133,7 @@ def test_only_listed_response_headers_reach_the_browser(browser, editor):
         ("./?folder=%2Fwork", "./?folder=%2Fwork"),
         ("login", "login"),
         (f"{ORIGIN}/?folder=x", f"{ORIGIN}{P}/?folder=x"),
-        ("http://code-server-editor/x", f"{ORIGIN}{P}/x"),
+        ("http://garden-code-server-editor/x", f"{ORIGIN}{P}/x"),
         (f"{ORIGIN}{P}/ok", f"{ORIGIN}{P}/ok"),
         ("https://example.org/elsewhere", "https://example.org/elsewhere"),
     ],
@@ -294,7 +294,7 @@ def test_settings_from_the_environment():
     assert s.allowed_users == {"alfred@gmail.com", "hal@example.com"}
     assert s.public_origin == ORIGIN and s.public_host == "alfred-garden.example.com"
     assert not hasattr(s, "garden_profiles")
-    assert s.upstream == "http://code-server-editor"
+    assert s.upstream == "http://garden-code-server-editor"
     for broken in (
         {"PUBLIC_ORIGIN": "http://alfred-garden.example.com"},
         {"PUBLIC_ORIGIN": f"{ORIGIN}/x"},
@@ -326,7 +326,7 @@ def test_a_websocket_is_relayed_both_ways(settings, authenticator, editor, signi
             ws.send_text("text")
             assert ws.receive_text() == "text"
     peer = editor.sockets[0]
-    assert peer.url == "ws://code-server-editor/?reconnectionToken=abc&skipWebSocketFrames=false"
+    assert peer.url == "ws://garden-code-server-editor/?reconnectionToken=abc&skipWebSocketFrames=false"
     assert peer.received == [b"\x00\x01binary", "text"]
     sent = dict(peer.headers)
     assert "cookie" not in sent and "cf-access-jwt-assertion" not in sent

@@ -1,8 +1,8 @@
 import json
 import logging
 
-from secret_broker.logs import SecretFilter
-from secret_broker.push import Pusher
+from garden_vault.logs import SecretFilter
+from garden_vault.push import Pusher
 
 from .conftest import EMAIL, SECRET, FakeSender
 

@@ -1,5 +1,5 @@
 """The `vault-run` helper agents run (agent-skills/using-vault-secrets), against a
-stub of the vault's /redeem; test_app covers the real endpoint. `tests/run-sidecar.sh broker`
+stub of the vault's /redeem; test_app covers the real endpoint. `tests/run-sidecar.sh vault`
 mounts agent-skills/ at /agent-skills, which is this path inside the test image."""
 
 import json
@@ -42,7 +42,7 @@ class Stub(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def vault_url():
-    assert HELPER.is_file(), f"{HELPER} missing; run the tests with tests/run-sidecar.sh broker"
+    assert HELPER.is_file(), f"{HELPER} missing; run the tests with tests/run-sidecar.sh vault"
     server = ThreadingHTTPServer(("127.0.0.1", 0), Stub)
     server.seen = []
     threading.Thread(target=server.serve_forever, daemon=True).start()

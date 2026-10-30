@@ -1,7 +1,7 @@
 #!/bin/bash
 # git.path for VS Code's git extension (settings.json): every git call runs in
-# the shell container (code-server-exec), never in the editor, which has no git.
-# A repository's own config runs code (core.fsmonitor, filters, hooks,
+# the shell container (garden-code-server-exec), never in the editor, which has
+# no git. A repository's own config runs code (core.fsmonitor, filters, hooks,
 # diff.external); in the shell it runs where agents already run theirs. The
 # extension spawns git in the repository; the workspaces are at /work in both
 # containers. stdin, stdout, stderr and the exit status pass through SSH;
@@ -24,4 +24,4 @@ cmd="cd -- $(printf '%q' "$dir") && exec agent-env env LC_ALL=C.UTF-8 LANGUAGE=e
 for arg in "$@"; do
   cmd+=" $(printf '%q' "$arg")"
 done
-exec ssh -F /opt/lettuce-editor/ssh_config -T code-server-exec "$cmd"
+exec ssh -F /opt/lettuce-editor/ssh_config -T garden-code-server-exec "$cmd"

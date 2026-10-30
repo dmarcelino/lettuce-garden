@@ -1,4 +1,4 @@
-# The shell container's SSH server: the editor (code-server-editor) is its only
+# The shell container's SSH server: the editor (garden-code-server-editor) is its only
 # client. Keys come from the code-exec-keys volume, mounted read-only, which the
 # editor's entrypoint writes: the host key and the editor's public key. Key login
 # as root only (agents write the workspaces as root); nothing is forwarded and no

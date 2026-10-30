@@ -23,8 +23,8 @@
 # service can reach the rules.
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
-  gmail-triggers:
-    profiles: ["gmail-triggers"]
+  garden-gmail-triggers:
+    profiles: ["garden-gmail-triggers"]
     build:
       context: ../../gmail-triggers
       additional_contexts:

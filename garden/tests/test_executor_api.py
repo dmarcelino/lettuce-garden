@@ -89,7 +89,7 @@ def test_a_list_is_wanted_until_one_arrives_then_again_once_stale(garden, clock)
 
 
 def test_without_the_editor_no_list_is_ever_wanted(garden_for, clock):
-    garden = garden_for("secrets,gmail-triggers")
+    garden = garden_for("garden-vault,garden-gmail-triggers")
     assert not garden.wanted()
     clock.t += 10 * AGENTS_FRESH_SECONDS
     assert not garden.wanted()
@@ -157,7 +157,7 @@ BASE = {
     "ALLOWED_USERS": "Alfred@Gmail.com, hal@example.com",
     "PUBLIC_ORIGIN": f"{ORIGIN}/",
     "LETTUCE_ORIGIN": LETTUCE,
-    "GARDEN_PROFILES": "secrets, gmail-triggers,../x,,Bad!,code-server",
+    "GARDEN_PROFILES": "garden-vault, garden-gmail-triggers,../x,,Bad!,garden-code-server",
     "GARDEN_EXECUTOR_TOKEN": TOKEN,
 }
 
@@ -167,7 +167,7 @@ def test_settings_from_the_environment():
     assert s.allowed_users == {"alfred@gmail.com", "hal@example.com"}
     assert s.public_origin == ORIGIN and s.lettuce_origin == LETTUCE
     assert s.issuer == "https://team1.cloudflareaccess.com"
-    assert s.garden_profiles == ("secrets", "gmail-triggers", "code-server")
+    assert s.garden_profiles == ("garden-vault", "garden-gmail-triggers", "garden-code-server")
     assert s.executor_token == TOKEN and TOKEN not in repr(s)
     assert Settings.from_env({**BASE, "GARDEN_PROFILES": ""}).garden_profiles == ()
 

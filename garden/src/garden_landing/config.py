@@ -11,7 +11,12 @@ from garden_common.executor import EXECUTOR_TOKEN
 
 PROFILE = re.compile(r"[a-z][a-z0-9-]*")
 # The code editor's profile: with it on, the page lists the agents.
-EDITOR = "code-server"
+EDITOR = "garden-code-server"
+
+
+def page_path(profile: str) -> str:
+    """Where a garden page lives: profile garden-<page> serves /<page>/ (PROFILE_ROUTES in lib/cloudflare.sh)."""
+    return f"/{profile.removeprefix('garden-')}/"
 
 
 class ConfigError(Exception):

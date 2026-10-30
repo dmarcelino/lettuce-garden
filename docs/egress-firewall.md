@@ -1,6 +1,6 @@
 # Egress proxy (pipelock)
 
-The `pipelock` profile gives each stack its own [pipelock](https://github.com/pipelab-org/pipelock),
+The `garden-pipelock` profile gives each stack its own [pipelock](https://github.com/pipelab-org/pipelock),
 an egress proxy for AI agents. The agents' tools send their web traffic through it. It checks
 where each request goes, blocks some destinations, and writes a **signed receipt** for every
 decision. It is opt-in and **advisory**: it catches mistakes and naive attempts, and records
@@ -10,7 +10,7 @@ relying on it.
 ```
 agent shells, Claude Code, Codex (app-server) ──HTTPS_PROXY──┐
 SearXNG, DuckDuckGo reader ───────────────────HTTPS_PROXY──┼──► pipelock ──► internet
-agents reading pages: curl http://pipelock:8888/fetch?url=… ─┘      │
+agents reading pages: curl http://garden-pipelock:8888/fetch?url=… ─┘      │
                                                                     └─ signed receipts
 letta-code itself, the BFF, the vault, Google sidecars ──────────────────────► internet
 ```
@@ -21,7 +21,7 @@ browser from a clone of this repo.
 
 ## Turning it on
 ```bash
-./lettucectl profiles cloudflared,search,pipelock   # your current list plus pipelock
+./lettucectl profiles cloudflared,search,garden-pipelock   # your current list plus garden-pipelock
 ./lettucectl skills all                             # installs the fetching-web-pages skill
 ```
 `up` builds the image (`pipelock/Dockerfile`) from pipelock's source at a pinned release,
@@ -42,7 +42,7 @@ receipts.
   - at most 600 requests per minute to one site (each plain-HTTP request and each HTTPS
     connection counts), which only stops runaway loops.
 - **Page checks, for pages read through `/fetch`.** Agents that follow the
-  `fetching-web-pages` skill read pages through `http://pipelock:8888/fetch?url=...`. Pipelock
+  `fetching-web-pages` skill read pages through `http://garden-pipelock:8888/fetch?url=...`. Pipelock
   fetches the page itself, so it checks the whole URL for secrets and the page's text for
   prompt injection, and returns the text as JSON. A page with prompt injection is **blocked**
   (pipelock's balanced mode would only log a warning and hand the agent the page): the agent

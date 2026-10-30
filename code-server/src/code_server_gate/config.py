@@ -9,10 +9,10 @@ from urllib.parse import urlsplit
 # The editor lives under this path on the garden's host, behind the tunnel route
 # of the same name.
 PREFIX = "/code-server"
-# code-server-editor listens only on this Unix socket, on a volume only this gate
+# garden-code-server-editor listens only on this Unix socket, on a volume only this gate
 # and the editor mount (compose/code-server.yml); the URL names it for Host.
 EDITOR_SOCKET = "/run/code-server/editor.sock"
-DEFAULT_UPSTREAM = "http://code-server-editor"
+DEFAULT_UPSTREAM = "http://garden-code-server-editor"
 
 
 class ConfigError(Exception):

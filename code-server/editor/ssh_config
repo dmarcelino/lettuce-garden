@@ -1,8 +1,8 @@
-# How the editor's terminals reach the shell (code-server-exec). The
+# How the editor's terminals reach the shell (garden-code-server-exec). The
 # only host; key login with the editor's own key; the host key is pinned (the
 # entrypoint writes known_hosts). Nothing is forwarded and no environment is sent.
-Host code-server-exec
-  HostName code-server-exec
+Host garden-code-server-exec
+  HostName garden-code-server-exec
   Port 22
   User root
   IdentityFile /data/ssh/id_ed25519

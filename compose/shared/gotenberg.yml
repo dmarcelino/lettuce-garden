@@ -1,5 +1,5 @@
 # The host's shared Gotenberg (docs/doc-tools.md): one container for every stack
-# with the doc-tools profile, run by lettucectl as the Compose project
+# with the garden-doc-tools profile, run by lettucectl as the Compose project
 # `lettuce_shared` (compose_shared in lib/common.sh). It converts documents the
 # PDF MCP uploads (LibreOffice for Office files, Chromium for HTML) and merges,
 # rotates, watermarks and stamps PDFs; it keeps nothing, and it mounts no

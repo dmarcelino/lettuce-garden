@@ -1,5 +1,5 @@
 [project]
-name = "secret-broker"
+name = "garden-vault"
 version = "0.1.0"
 description = "Lettuce vault: personal data agents may use only when the user agrees"
 requires-python = ">=3.12"
@@ -27,7 +27,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-secret_broker = ["templates/*.html", "static/*"]
+garden_vault = ["templates/*.html", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,4 +1,4 @@
-"""Entry point: python -m secret_broker"""
+"""Entry point: python -m garden_vault"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from . import logs
 from .app import create_app
 from .config import ConfigError, Settings
 from .push import Pusher
-from .service import Broker
+from .service import Service
 from .vault import Vault
 
 
@@ -20,11 +20,11 @@ def main() -> None:
     try:
         settings = Settings.from_env()
     except ConfigError as e:
-        print(f"secret-broker: {e}", file=sys.stderr)
+        print(f"vault: {e}", file=sys.stderr)
         sys.exit(2)
     vault = Vault(settings.db_path)
-    broker = Broker(vault, Pusher(settings, vault), settings.public_origin)
-    app = create_app(broker, Authenticator(settings), settings.vapid_public_key)
+    service = Service(vault, Pusher(settings, vault), settings.public_origin)
+    app = create_app(service, Authenticator(settings), settings.vapid_public_key)
     uvicorn.run(
         app,
         host="0.0.0.0",

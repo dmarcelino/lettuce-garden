@@ -1,4 +1,4 @@
-"""Settings, read once from the environment that compose/secrets.yml passes in."""
+"""Settings, read once from the environment that compose/vault.yml passes in."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 # The pages live under this path on the garden's host, behind the tunnel route
 # of the same name.
-PREFIX = "/secrets"
+PREFIX = "/vault"
 # An agent's request waits this long for the user's decision.
 REQUEST_TTL_SECONDS = 600
 # Shared values wait this long for the agent to fetch them (once).
@@ -68,8 +68,8 @@ class Settings:
             issuer=env.get("CF_ACCESS_ISSUER", "").strip() or f"https://{team}.cloudflareaccess.com",
             allowed_users=users,
             public_origin=origin,
-            vapid_public_key=required("BROKER_VAPID_PUBLIC_KEY"),
-            vapid_private_key=required("BROKER_VAPID_PRIVATE_KEY"),
+            vapid_public_key=required("VAULT_VAPID_PUBLIC_KEY"),
+            vapid_private_key=required("VAULT_VAPID_PRIVATE_KEY"),
             vapid_contact=required("PUSH_VAPID_CONTACT_EMAIL"),
-            db_path=env.get("BROKER_DB_PATH", "/data/vault.db"),
+            db_path=env.get("VAULT_DB_PATH", "/data/vault.db"),
         )

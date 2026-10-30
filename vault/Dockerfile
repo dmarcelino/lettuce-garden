@@ -1,5 +1,5 @@
-# The Lettuce secret broker (see docs/secret-broker.md). Built by lettucectl via
-# compose/secrets.yml. `tests/run-sidecar.sh broker` builds the `test` stage and
+# The Lettuce vault (see docs/vault.md). Built by lettucectl via
+# compose/vault.yml. `tests/run-sidecar.sh vault` builds the `test` stage and
 # runs it. Both need the `garden-common` build context (the repo's garden-common/).
 FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -18,12 +18,12 @@ CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
 FROM base
 # A fixed non-root user that owns /data, so the named volume Docker creates on
 # first start inherits that ownership.
-RUN groupadd --system --gid 10001 broker \
- && useradd --system --uid 10001 --gid 10001 --no-create-home broker \
+RUN groupadd --system --gid 10001 vault \
+ && useradd --system --uid 10001 --gid 10001 --no-create-home vault \
  && mkdir /data && chown 10001:10001 /data && chmod 700 /data
 USER 10001
 VOLUME /data
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
-CMD ["python", "-m", "secret_broker"]
+CMD ["python", "-m", "garden_vault"]

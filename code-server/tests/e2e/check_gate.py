@@ -1,5 +1,5 @@
 """The gate in front of the real editor, for scripts/code-server-e2e.sh (not a pytest
-module: it needs a running code-server-editor). It builds the gate with a test
+module: it needs a running garden-code-server-editor). It builds the gate with a test
 signing key in place of Cloudflare's, real HTTP and WebSockets over the editor's Unix socket,
 and drives it in-process. Prints one line per check; exits 1 when any fails."""
 
