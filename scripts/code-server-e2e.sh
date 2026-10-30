@@ -19,20 +19,26 @@
 # - the terminal's way into the shell (the SSH session exec-shell opens): git
 #   with a hook that runs in the shell and not in the editor, and the
 #   environment agent-env gives it (PATH, npm's prefix);
+# - Source Control's git (bin/shell-git): the editor has no git, and the
+#   wrapper runs git in the shell, where a repository's core.fsmonitor runs;
 # - what the editor can't do: write its extensions dir, reach the internet,
 #   listen on any port, be reached from the stack network or from the shell
 #   (the gate, as nobody, reaches it only through its socket).
 # - with --browser: agent-1's workspace gets what an agent could plant (a
 #   terminal profile, an automatic task, its own TypeScript and tsserver node,
-#   a tsconfig plugin, git.path, a git repository); Chromium opens the folder, a
-#   TypeScript file and a terminal through the gate (cloudflared and Access
-#   simulated by code-server/tests/e2e/serve_gate.py), asks to run a task, and
-#   previews a planted README.md full of HTML that would run script, before and
-#   after choosing "Disable" in the preview's security picker.
+#   a tsconfig plugin, git.path, a git repository with a change, a core.fsmonitor
+#   and a pre-commit hook); Chromium opens the folder, a TypeScript file and a
+#   terminal through the gate (cloudflared and Access simulated by
+#   code-server/tests/e2e/serve_gate.py), stages and commits the change from
+#   Source Control, asks to run a task, and previews a planted README.md full of
+#   HTML that would run script, before and after choosing "Disable" in the
+#   preview's security picker.
 #   Opening the folder must ask nothing; nothing planted may run in the editor;
-#   TypeScript (bundled) must run; the terminal must open in the shell; running
-#   a task must ask for trust, which is never given; the preview must render and
-#   the planted Markdown must make no request.
+#   TypeScript (bundled) must run; the terminal must open in the shell; Source
+#   Control must list the change and commit it without asking anything, its
+#   fsmonitor and hook running in the shell; running a task must ask for trust,
+#   which is never given; the preview must render and the planted Markdown must
+#   make no request.
 #
 # Everything it creates is named cs-e2e-<random>; it refuses to start while
 # anything named cs-e2e-* exists, and removes what it created on exit (the
@@ -186,6 +192,19 @@ expect "the terminal's PATH has the agents' tools" grep -q '/opt/agent-tools/bin
 expect "npm installs into /opt/agent-tools" grep -qx '/opt/agent-tools' <<<"$shell_env"
 expect "the terminal prints the notice" bash -c "docker exec -w /work/agent-1 $P-editor bash -c 'exec 0</dev/null; /opt/lettuce-editor/bin/exec-shell' 2>/dev/null | grep -q 'never store tokens or passwords here'"
 
+echo "Source Control's git (shell-git)"
+# editor_git ARGS... -> git as the git extension runs it, from agent-1's workspace
+editor_git() { docker exec -w /work/agent-1 "$P-editor" /opt/lettuce-editor/bin/shell-git "$@"; }
+refuse "the editor has no git" docker exec "$P-editor" sh -c 'command -v git'
+expect "shell-git reaches git in the shell" editor_git --version
+toplevel=$(editor_git rev-parse --show-toplevel 2>/dev/null || true)
+expect "shell-git finds the repository at the editor's path" test "$toplevel" = /work/agent-1
+in_shell "git config core.fsmonitor 'touch /tmp/fsmonitor-ran; false'"
+expect "shell-git status runs" editor_git status --porcelain
+expect "the repository's fsmonitor ran in the shell" docker exec "$P-exec" test -e /tmp/fsmonitor-ran
+refuse "and not in the editor" docker exec "$P-editor" test -e /tmp/fsmonitor-ran
+in_shell "git config --unset core.fsmonitor"
+
 echo "the editor's limits"
 refuse "nothing can be installed into its extensions dir" docker exec "$P-editor" touch /opt/lettuce-editor/no-extensions/x
 refuse "its root is read-only" docker exec "$P-editor" touch /opt/code-server/x
@@ -245,6 +264,13 @@ EOF
 
 ![control](http://localhost:8000/control-md-image.png)
 EOF'
+  # A change for Source Control to show, and repository config and a hook that run
+  # code: Source Control must run them in the shell. The commit identity is the
+  # repository's, as a person would set it in the terminal.
+  in_shell "git config user.name e2e && git config user.email e2e@example.com \
+    && echo one >tracked.txt && git add tracked.txt && git commit -q -m tracked && echo two >tracked.txt"
+  in_shell "git config core.fsmonitor 'touch /tmp/planted-git-fsmonitor; false' \
+    && printf '#!/bin/sh\ntouch /tmp/planted-git-hook\n' >.git/hooks/pre-commit"
   docker create --name "$P-gate" --network "$P-default" --user 65534 -v "$P-sock:/run/code-server:ro" \
     "$P-gate:test" python tests/e2e/serve_gate.py >/dev/null
   docker start "$P-gate" >/dev/null
@@ -268,6 +294,10 @@ EOF'
   expect "TypeScript runs in the editor (bundled)" running '/opt/code-server/lib/vscode/extensions/node_modules/typescript/lib/tsserver.js' "$P-editor"
   expect "what is typed in the terminal runs in the shell" docker exec "$P-exec" test -e /tmp/typed-in-terminal
   refuse "and not in the editor" docker exec "$P-editor" test -e /tmp/typed-in-terminal
+  expect "Source Control ran the repository's fsmonitor in the shell" docker exec "$P-exec" test -e /tmp/planted-git-fsmonitor
+  expect "Source Control's commit ran its hook in the shell" docker exec "$P-exec" test -e /tmp/planted-git-hook
+  subject=$(in_shell "git log -1 --format=%s" 2>/dev/null || true)
+  expect "Source Control committed the typed message" test "$subject" = "from source control"
 fi
 
 echo

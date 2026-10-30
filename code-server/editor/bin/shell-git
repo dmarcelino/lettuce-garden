@@ -1,0 +1,27 @@
+#!/bin/bash
+# git.path for VS Code's git extension (settings.json): every git call runs in
+# the shell container (code-server-exec), never in the editor, which has no git.
+# A repository's own config runs code (core.fsmonitor, filters, hooks,
+# diff.external); in the shell it runs where agents already run theirs. The
+# extension spawns git in the repository; the workspaces are at /work in both
+# containers. stdin, stdout, stderr and the exit status pass through SSH;
+# agent-env gives git the container's environment (PATH for hooks), and the
+# fixed variables keep git from asking anything or opening an editor.
+set -euo pipefail
+
+dir=$PWD
+if [[ $dir != /work && $dir != /work/* ]]; then
+  # The extension asks for the version from wherever it runs.
+  if [[ $# == 1 && $1 == --version ]]; then
+    dir=/
+  else
+    echo "fatal: $dir is not in the shell's workspaces (/work)" >&2
+    exit 128
+  fi
+fi
+# The remote side runs this with bash -c.
+cmd="cd -- $(printf '%q' "$dir") && exec agent-env env LC_ALL=C.UTF-8 LANGUAGE=en GIT_TERMINAL_PROMPT=0 GIT_EDITOR=true git"
+for arg in "$@"; do
+  cmd+=" $(printf '%q' "$arg")"
+done
+exec ssh -F /opt/lettuce-editor/ssh_config -T code-server-exec "$cmd"

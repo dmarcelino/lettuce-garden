@@ -6,8 +6,17 @@
   "extensions.supportUntrustedWorkspaces": {
     "vscode.typescript-language-features": {
       "supported": true
+    },
+    "vscode.git": {
+      "supported": true
     }
   },
+  "git.path": "/opt/lettuce-editor/bin/shell-git",
+  "git.autofetch": false,
+  "git.useIntegratedAskPass": false,
+  "git.terminalAuthentication": false,
+  "git.useEditorAsCommitInput": false,
+  "git.terminalGitEditor": false,
   "terminal.integrated.profiles.linux": {
     "shell": {
       "path": "/opt/lettuce-editor/bin/exec-shell",

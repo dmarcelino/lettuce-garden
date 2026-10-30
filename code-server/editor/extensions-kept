@@ -10,16 +10,16 @@
 # stays, with its preview pinned to its Strict policy and its Markdown Editor
 # removed by the Dockerfile) and logins
 # or outside services (copilot, prompt-basics, github, github-authentication,
-# microsoft-authentication, extension-editing), and git: VS Code 1.143's git
-# extension asks to trust each repository's folder before opening it, and a
-# trusted folder runs its tasks and terminal settings in the editor; git runs
-# from the terminal instead, in the shell container.
+# microsoft-authentication, extension-editing). git stays, with its trust prompt
+# removed by the Dockerfile: every git call runs in the shell container
+# (bin/shell-git), never in the editor.
 # One name per line; theme-* keeps every colour and icon theme.
 node_modules
 theme-*
 configuration-editing
 css-language-features
 emmet
+git
 git-base
 html-language-features
 json-language-features
