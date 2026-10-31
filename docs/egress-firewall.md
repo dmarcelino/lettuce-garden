@@ -15,9 +15,10 @@ agents reading pages: curl http://garden-pipelock:8888/fetch?url=… ─┘     
 letta-code itself, the BFF, the vault, Google sidecars ──────────────────────► internet
 ```
 
-An interactive diagram of what passes pipelock and what does not,
-[egress-firewall-architecture.html](diagrams/egress-firewall-architecture.html), opens in a
-browser from a clone of this repo.
+![What passes pipelock, and what does not](diagrams/egress-firewall-architecture.svg)
+
+An interactive version, [egress-firewall-architecture.html](diagrams/egress-firewall-architecture.html),
+opens in a browser from a clone of this repo.
 
 ## Turning it on
 ```bash
@@ -99,5 +100,5 @@ roughly one line per request. `backup` copies them, and `remove` deletes them wi
 The agent gets a 403 with an `X-Pipelock-Block-Reason` header (or `blocked: true` and a
 `block_reason` from `/fetch`).
 The skill tells agents to report it rather than try another way. To see why, read the receipts
-or `./lettucectl logs alfred pipelock`. The policy is the same for every stack and lives in
+or `./lettucectl logs alfred garden-pipelock`. The policy is the same for every stack and lives in
 `pipelock/pipelock.yaml`; after changing it, `./lettucectl up all` rebuilds the image.

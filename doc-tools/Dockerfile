@@ -1,8 +1,9 @@
 # The document tools (see docs/doc-tools.md): OfficeAgent.NET and the PDF MCP,
 # with their own Python, under /opt/lettuce-doc-tools. lettucectl builds it
-# with plain `docker build` as lettuce-doc-tools:<content hash> and every stack
-# with the garden-doc-tools profile mounts it read-only into its app-server
-# (compose/doc-tools.yml): one copy per host, never run as a container.
+# with plain `docker build` as lettuce-doc-tools:<content hash> and copies the
+# tree into the volume lettuce-doc-tools-<content hash> (ensure_doc_tools_volume),
+# which every stack with the garden-doc-tools profile mounts read-only into its
+# app-server (compose/doc-tools.yml): one copy per host, never run as a container.
 # `tests/run-sidecar.sh doc-tools` builds the `test` stage and runs it.
 #
 # Upgrading OfficeAgent: change OFFICEAGENT_VERSION and OFFICEAGENT_SHA256 (from

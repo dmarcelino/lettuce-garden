@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Document tools: from image to agent call to Gotenberg",
+    "output": "docs/diagrams/doc-tools-architecture.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+    }
+  },
+  "components": [
+    {
+      "id": "ctl",
+      "type": "external",
+      "label": "lettucectl",
+      "sublabel": "up, profiles, add, mcp",
+      "pos": [40, 250],
+      "size": [170, 64],
+      "sources": [
+        { "path": "lettucectl", "line": 390, "end_line": 402, "label": "up_stack: volume and network first" },
+        { "path": "lettucectl", "line": 504, "end_line": 576, "label": "sync_doc_tools" },
+        { "path": "lettucectl", "line": 635, "end_line": 651, "label": "mcp_servers, refresh_mcp_skill" }
+      ]
+    },
+    {
+      "id": "image",
+      "type": "external",
+      "label": "lettuce-doc-tools:<tag>",
+      "sublabel": "FROM scratch, never run",
+      "tag": "tag = content hash",
+      "pos": [300, 40],
+      "size": [180, 64],
+      "sources": [
+        { "path": "doc-tools/Dockerfile", "line": 1, "end_line": 6, "label": "what the image holds" },
+        { "path": "doc-tools/Dockerfile", "line": 66, "end_line": 69, "label": "only the tree" },
+        { "path": "lettucectl", "line": 418, "end_line": 425, "label": "ensure_doc_tools_image" }
+      ]
+    },
+    {
+      "id": "fill",
+      "type": "security",
+      "label": "fill container",
+      "sublabel": "backup image, no network",
+      "pos": [600, 40],
+      "size": [185, 64],
+      "sources": [
+        { "path": "lettucectl", "line": 444, "end_line": 482, "label": "fill_doc_tools_volume" },
+        { "path": "lettucectl", "line": 1455, "end_line": 1456, "label": "BACKUP_RUN options" }
+      ]
+    },
+    {
+      "id": "volume",
+      "type": "database",
+      "label": "lettuce-doc-tools-<tag>",
+      "sublabel": "one per host, marker written last",
+      "pos": [930, 40],
+      "size": [200, 64],
+      "sources": [
+        { "path": "compose/doc-tools.yml", "line": 5, "end_line": 12, "label": "shared, external volume" },
+        { "path": "lettucectl", "line": 410, "end_line": 416, "label": "label and marker" },
+        { "path": "lettucectl", "line": 427, "end_line": 442, "label": "host-wide lock" }
+      ]
+    },
+    {
+      "id": "bff",
+      "type": "frontend",
+      "label": "BFF",
+      "sublabel": "renders the mcp-servers skill",
+      "pos": [370, 250],
+      "size": [170, 64],
+      "sources": [
+        { "path": "lettucectl", "line": 641, "end_line": 651, "label": "restarted alone after a list change" },
+        { "path": "lib/mcp-servers.mjs", "line": 7, "end_line": 15, "label": "the list is the BFF's" }
+      ]
+    },
+    {
+      "id": "app",
+      "type": "backend",
+      "label": "app-server",
+      "sublabel": "letta-code, agents as root",
+      "pos": [590, 250],
+      "size": [180, 64],
+      "sources": [
+        { "path": "compose/doc-tools.yml", "line": 25, "end_line": 36, "label": "mount and networks" },
+        { "path": "doc-tools/lib/launch.sh", "line": 1, "end_line": 8, "label": "one server per letta mcp call" }
+      ]
+    },
+    {
+      "id": "servers",
+      "type": "backend",
+      "label": "office, pdf",
+      "sublabel": "stdio, in /work/<agent-id>",
+      "pos": [930, 250],
+      "size": [200, 64],
+      "sources": [
+        { "path": "doc-tools/bin/officeagent", "line": 1, "end_line": 18, "label": "OfficeAgent launcher" },
+        { "path": "doc-tools/bin/pdf-mcp", "line": 1, "end_line": 10, "label": "PDF MCP launcher" },
+        { "path": "doc-tools/lib/launch.sh", "line": 12, "end_line": 35, "label": "workspace from pwd -P" }
+      ]
+    },
+    {
+      "id": "settings",
+      "type": "database",
+      "label": "Settings -> MCP list",
+      "sublabel": "mcp-home/.letta/settings.json",
+      "pos": [580, 470],
+      "size": [200, 64],
+      "sources": [
+        { "path": "lib/mcp-servers.mjs", "line": 26, "end_line": 53, "label": "office and pdf entries" },
+        { "path": "lettucectl", "line": 587, "end_line": 590, "label": "file and markers" }
+      ]
+    },
+    {
+      "id": "gotenberg",
+      "type": "security",
+      "label": "gotenberg",
+      "sublabel": "LibreOffice, Chromium",
+      "tag": "no ports, no route out",
+      "pos": [930, 470],
+      "size": [200, 64],
+      "sources": [
+        { "path": "compose/shared/gotenberg.yml", "line": 1, "end_line": 25, "label": "shared, deny flags" },
+        { "path": "doc-tools/src/pdf_mcp/gotenberg.py", "line": 1, "end_line": 22, "label": "uploads only, no proxy" },
+        { "path": "lib/common.sh", "line": 514, "end_line": 538, "label": "check_gotenberg" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "shared network namespace",
+      "wraps": ["bff", "app", "servers"],
+      "pad": 26
+    },
+    {
+      "kind": "security-group",
+      "label": "app-server container",
+      "wraps": ["app", "servers"],
+      "pad": 12
+    },
+    {
+      "kind": "region",
+      "label": "lettuce_shared (one per host)",
+      "wraps": ["gotenberg"],
+      "pad": 16
+    }
+  ],
+  "connections": [
+    { "from": "ctl", "to": "image", "label": "docker build if missing" },
+    { "from": "image", "to": "fill", "label": "docker cp | tar" },
+    { "from": "fill", "to": "volume", "label": "untar, then marker", "variant": "emphasis" },
+    { "from": "volume", "to": "servers", "label": "read-only at /opt/lettuce-doc-tools", "variant": "emphasis" },
+    { "from": "app", "to": "servers", "label": "letta mcp call", "variant": "emphasis" },
+    { "from": "servers", "to": "gotenberg", "label": "pdf uploads, lettuce-doc-tools-<name>", "variant": "security" },
+    { "from": "ctl", "to": "bff", "label": "restart --no-deps" },
+    { "from": "ctl", "to": "settings", "label": "mcp: mcp-servers.mjs" },
+    { "from": "app", "to": "settings", "label": "reads office, pdf" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Owned by lettucectl, not Compose",
+      "items": [
+        "The image, the volume and each stack's internal network are made by lettucectl; compose/doc-tools.yml declares the volume and network external, so down -v never removes them",
+        "sync_doc_tools starts the shared Gotenberg (Compose project lettuce_shared), connects it with the alias gotenberg to every complete stack's internal, labelled network, and deletes stale networks and volumes",
+        "mcp adds office and pdf to Settings -> MCP once per stack (DOC_TOOLS_MCP_REGISTERED), then restarts the BFF so the mcp-servers skill names them"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Guarded by lettucectl check",
+      "items": [
+        "Only the app-server mounts the tools' volume, read-only at /opt/lettuce-doc-tools, and only it joins the doc-tools network, keeping its default network",
+        "The doc-tools network must be internal and labelled for this stack",
+        "Gotenberg: hardened, non-root, no ports, no mounts, internal networks only, and every flag that stops a document fetching URLs"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Not a boundary",
+      "items": [
+        "The servers' workspace jail stops mistakes, not agents: agents are root in the same container",
+        "Gotenberg is the one container on every stack's doc-tools network"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,343 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "How a garden request is checked",
+    "output": "docs/diagrams/garden-request-checks.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+    },
+    "legend": {
+      "entries": {
+        "emphasis": {
+          "label": "request through Access"
+        },
+        "dashed": {
+          "label": "key fetch (cached 1 h)"
+        },
+        "security": {
+          "label": "executor call (bearer token)"
+        },
+        "default": {
+          "label": "request with no route"
+        }
+      }
+    }
+  },
+  "participants": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Person's browser",
+      "sublabel": "sends Sec-Fetch-*",
+      "sources": [
+        {
+          "path": "garden-common/src/garden_common/auth.py",
+          "line": 26,
+          "end_line": 36,
+          "label": "why Fetch Metadata"
+        }
+      ]
+    },
+    {
+      "id": "access",
+      "type": "security",
+      "label": "Cloudflare Access",
+      "sublabel": "garden's own app",
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 80,
+          "end_line": 91,
+          "label": "cf_app_body"
+        },
+        {
+          "path": "lettucectl",
+          "line": 163,
+          "end_line": 179,
+          "label": "the garden's Access app"
+        }
+      ]
+    },
+    {
+      "id": "cloudflared",
+      "type": "cloud",
+      "label": "cloudflared",
+      "sublabel": "garden host routes",
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 121,
+          "end_line": 134,
+          "label": "page routes, landing page"
+        },
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 160,
+          "end_line": 180,
+          "label": "404 for the rest"
+        }
+      ]
+    },
+    {
+      "id": "sidecar",
+      "type": "backend",
+      "label": "Garden sidecar",
+      "sublabel": "garden_common",
+      "sources": [
+        {
+          "path": "garden-common/src/garden_common/auth.py",
+          "line": 77,
+          "end_line": 150,
+          "label": "Authenticator, check_fetch, admit"
+        },
+        {
+          "path": "garden-common/src/garden_common/executor.py",
+          "line": 81,
+          "end_line": 104,
+          "label": "guard"
+        },
+        {
+          "path": "vault/src/garden_vault/app.py",
+          "line": 110,
+          "end_line": 148,
+          "label": "how a sidecar wires them"
+        }
+      ]
+    },
+    {
+      "id": "jwks",
+      "type": "security",
+      "label": "Access signing keys",
+      "sublabel": "team JWKS",
+      "sources": [
+        {
+          "path": "garden-common/src/garden_common/auth.py",
+          "line": 66,
+          "end_line": 74,
+          "label": "PyJWKClient, cached 1 h"
+        }
+      ]
+    },
+    {
+      "id": "executor",
+      "type": "backend",
+      "label": "Garden executor",
+      "sublabel": "in the app-server",
+      "sources": [
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 276,
+          "end_line": 294,
+          "label": "Bearer token, no Origin"
+        },
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 27,
+          "end_line": 31,
+          "label": "sidecar URLs, token file"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 445,
+      "label": "Page (GET)"
+    },
+    {
+      "from": 455,
+      "to": 625,
+      "label": "Form post"
+    },
+    {
+      "from": 635,
+      "to": 848,
+      "label": "Executor API"
+    }
+  ],
+  "messages": [
+    {
+      "id": "page-get",
+      "from": "browser",
+      "to": "access",
+      "y": 170,
+      "label": "GET /vault/",
+      "variant": "emphasis",
+      "note": "No session yet: Access sends the person through Google login, then back (a cross-site navigation)"
+    },
+    {
+      "id": "page-jwt",
+      "from": "access",
+      "to": "cloudflared",
+      "y": 232,
+      "label": "+ garden JWT header",
+      "variant": "emphasis"
+    },
+    {
+      "id": "page-route",
+      "from": "cloudflared",
+      "to": "sidecar",
+      "y": 260,
+      "label": "path rule, garden host",
+      "variant": "emphasis"
+    },
+    {
+      "id": "key-get",
+      "from": "sidecar",
+      "to": "jwks",
+      "y": 288,
+      "label": "signing key",
+      "variant": "dashed"
+    },
+    {
+      "id": "key-back",
+      "from": "jwks",
+      "to": "sidecar",
+      "y": 316,
+      "label": "RS256 key",
+      "variant": "return",
+      "note": "email(): signature, aud = CF_GARDEN_AUD, iss, exp, iat; email in ALLOWED_USERS"
+    },
+    {
+      "id": "page-back",
+      "from": "sidecar",
+      "to": "browser",
+      "y": 386,
+      "label": "page + form token, COOP",
+      "variant": "return",
+      "note": "check_fetch(PAGE): navigate + document, any site; a refusal renders without the email"
+    },
+    {
+      "id": "form-post",
+      "from": "browser",
+      "to": "access",
+      "y": 470,
+      "label": "POST + Origin + csrf",
+      "variant": "emphasis"
+    },
+    {
+      "id": "form-jwt",
+      "from": "access",
+      "to": "cloudflared",
+      "y": 498,
+      "label": "+ garden JWT header",
+      "variant": "emphasis"
+    },
+    {
+      "id": "form-route",
+      "from": "cloudflared",
+      "to": "sidecar",
+      "y": 526,
+      "label": "path rule",
+      "variant": "emphasis"
+    },
+    {
+      "id": "form-back",
+      "from": "sidecar",
+      "to": "browser",
+      "y": 554,
+      "label": "303 redirect",
+      "variant": "return",
+      "note": "check_fetch(FORM): also same-origin; check_origin: GARDEN_ORIGIN; check_csrf: HMAC(email), per-process key"
+    },
+    {
+      "id": "api-outside",
+      "from": "browser",
+      "to": "cloudflared",
+      "y": 655,
+      "label": "GET /executor/v1/ (via Access)",
+      "variant": "default"
+    },
+    {
+      "id": "api-404",
+      "from": "cloudflared",
+      "to": "browser",
+      "y": 683,
+      "label": "404: no route",
+      "variant": "return",
+      "note": "The garden host routes only each page prefix, / and /assets/"
+    },
+    {
+      "id": "api-call",
+      "from": "executor",
+      "to": "sidecar",
+      "y": 740,
+      "label": "GET /executor/v1/... + Bearer",
+      "variant": "security",
+      "note": "guard(): raw path under /executor/v1/ (else 404), no Origin and no cf-* tunnel header (else 403), the token (else 401)"
+    },
+    {
+      "id": "api-back",
+      "from": "sidecar",
+      "to": "executor",
+      "y": 830,
+      "label": "JSON, no-store",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "sidecar",
+      "from": 255,
+      "to": 392,
+      "type": "backend"
+    },
+    {
+      "participant": "jwks",
+      "from": 283,
+      "to": 322,
+      "type": "security"
+    },
+    {
+      "participant": "sidecar",
+      "from": 521,
+      "to": 560,
+      "type": "backend"
+    },
+    {
+      "participant": "sidecar",
+      "from": 735,
+      "to": 836,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "garden_common.auth",
+      "items": [
+        "Authenticator.email: the Cf-Access-Jwt-Assertion header, verified against the team's keys for the garden's audience; the unsigned email header is never read",
+        "check_fetch: PAGE (top-level document, any site), FORM (also same-origin), FETCH (cors or same-origin, empty destination, same-origin)",
+        "check_origin and check_csrf on every POST; the CSRF key lives only in the process, so a restart expires open forms",
+        "COOP: Cross-Origin-Opener-Policy same-origin, which every garden response sets"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Who uses what",
+      "items": [
+        "vault: PAGE, FORM and FETCH (its own fetch() calls send X-CSRF-Token)",
+        "gmail-triggers: PAGE and FORM; garden landing page: PAGE only (no forms, no script)",
+        "Assets (stylesheets, scripts, icons, the manifest) need the JWT but no Fetch Metadata",
+        "The code editor's gate uses Authenticator and COOP, with its own Sec-Fetch rules (docs/code-server.md)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "garden_common.executor",
+      "items": [
+        "guard: served by garden and gmail-triggers; refuses cf-access-jwt-assertion, cf-connecting-ip and cf-ray; the token is GARDEN_EXECUTOR_TOKEN",
+        "read_json: JSON objects with v = 1 under a size cap; read_agents validates the agent list",
+        "AgentAsks: when a sidecar wants a new agent list (none, older than 15 minutes, or a page asked)",
+        "Agents can read the token; it keeps out the other containers on the stack network, not agents"
+      ]
+    }
+  ]
+}

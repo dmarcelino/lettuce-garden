@@ -1,0 +1,707 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Lettuce Garden: one stack with every profile on",
+    "output": "docs/diagrams/lettuce-garden-overview.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+    }
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Person's browser",
+      "sublabel": "Lettuce + garden",
+      "pos": [
+        20,
+        300
+      ],
+      "size": [
+        110,
+        62
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "line": 5,
+          "end_line": 8,
+          "label": "two hosts per person"
+        }
+      ]
+    },
+    {
+      "id": "access_lettuce",
+      "type": "security",
+      "label": "Access: Lettuce",
+      "sublabel": "<name>.<domain>",
+      "pos": [
+        190,
+        150
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 79,
+          "end_line": 91,
+          "label": "Access application body"
+        }
+      ]
+    },
+    {
+      "id": "access_garden",
+      "type": "security",
+      "label": "Access: garden",
+      "sublabel": "<name>-garden.<domain>",
+      "pos": [
+        190,
+        450
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 79,
+          "end_line": 91,
+          "label": "same policy, own AUD"
+        }
+      ]
+    },
+    {
+      "id": "cloudflared",
+      "type": "cloud",
+      "label": "cloudflared",
+      "sublabel": "tunnel, no ports",
+      "pos": [
+        390,
+        140
+      ],
+      "size": [
+        120,
+        542
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 121,
+          "end_line": 134,
+          "label": "garden host routes"
+        },
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 160,
+          "end_line": 179,
+          "label": "tunnel ingress"
+        },
+        {
+          "path": "compose/multi.yml",
+          "line": 1,
+          "end_line": 10,
+          "label": "nothing published"
+        }
+      ]
+    },
+    {
+      "id": "searxng",
+      "type": "backend",
+      "label": "searxng",
+      "sublabel": "web search",
+      "pos": [
+        840,
+        20
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/hardening.yml",
+          "line": 33,
+          "end_line": 35
+        },
+        {
+          "path": "compose/pipelock-proxy.yml",
+          "line": 39,
+          "end_line": 41,
+          "label": "proxied by pipelock"
+        }
+      ]
+    },
+    {
+      "id": "bff",
+      "type": "frontend",
+      "label": "bff",
+      "sublabel": "web UI on :8080",
+      "pos": [
+        840,
+        140
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/hardening.yml",
+          "line": 13,
+          "end_line": 17,
+          "label": "shares app-server netns"
+        },
+        {
+          "path": "AGENTS.md",
+          "line": 22,
+          "label": "the only connection"
+        }
+      ]
+    },
+    {
+      "id": "appserver",
+      "type": "backend",
+      "label": "app-server",
+      "sublabel": "letta-code, agents as root",
+      "tag": "+ garden executor (cron)",
+      "pos": [
+        840,
+        260
+      ],
+      "size": [
+        150,
+        500
+      ],
+      "sources": [
+        {
+          "path": "compose/hardening.yml",
+          "line": 18,
+          "end_line": 25,
+          "label": "hardening"
+        },
+        {
+          "path": "lettucectl",
+          "line": 371,
+          "end_line": 381,
+          "label": "sync_executor"
+        },
+        {
+          "path": "compose/doc-tools.yml",
+          "line": 25,
+          "end_line": 36,
+          "label": "tools mount and network"
+        }
+      ]
+    },
+    {
+      "id": "ddg",
+      "type": "backend",
+      "label": "ddg-mcp",
+      "sublabel": "page fetch",
+      "pos": [
+        1050,
+        140
+      ],
+      "size": [
+        130,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/hardening.yml",
+          "line": 36,
+          "end_line": 38
+        },
+        {
+          "path": "compose/pipelock-proxy.yml",
+          "line": 36,
+          "end_line": 38,
+          "label": "proxied by pipelock"
+        }
+      ]
+    },
+    {
+      "id": "pipelock",
+      "type": "security",
+      "label": "garden-pipelock",
+      "sublabel": "egress proxy, advisory",
+      "pos": [
+        1050,
+        260
+      ],
+      "size": [
+        130,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/pipelock.yml",
+          "line": 1,
+          "end_line": 33,
+          "label": "service"
+        },
+        {
+          "path": "compose/pipelock-proxy.yml",
+          "line": 20,
+          "end_line": 41,
+          "label": "who follows the proxy"
+        }
+      ]
+    },
+    {
+      "id": "googlemcp",
+      "type": "backend",
+      "label": "google-mcp",
+      "sublabel": "Gmail, Calendar",
+      "pos": [
+        1050,
+        380
+      ],
+      "size": [
+        130,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/hardening.yml",
+          "line": 39,
+          "end_line": 41
+        }
+      ]
+    },
+    {
+      "id": "gotenberg",
+      "type": "backend",
+      "label": "Gotenberg",
+      "sublabel": "lettuce_shared",
+      "pos": [
+        1050,
+        520
+      ],
+      "size": [
+        130,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/shared/gotenberg.yml",
+          "line": 1,
+          "end_line": 12,
+          "label": "one per host"
+        },
+        {
+          "path": "compose/shared/gotenberg.yml",
+          "line": 70,
+          "end_line": 74,
+          "label": "internal network"
+        }
+      ]
+    },
+    {
+      "id": "toolsvol",
+      "type": "database",
+      "label": "doc-tools volume",
+      "sublabel": "lettuce-doc-tools-*",
+      "pos": [
+        1050,
+        640
+      ],
+      "size": [
+        130,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/doc-tools.yml",
+          "line": 1,
+          "end_line": 24,
+          "label": "shared, read-only"
+        },
+        {
+          "path": "lettucectl",
+          "line": 418,
+          "end_line": 425,
+          "label": "image lettucectl builds"
+        }
+      ]
+    },
+    {
+      "id": "garden",
+      "type": "frontend",
+      "label": "garden",
+      "sublabel": "/ landing page",
+      "pos": [
+        560,
+        260
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/garden.yml",
+          "line": 1,
+          "end_line": 48
+        }
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "security",
+      "label": "garden-vault",
+      "sublabel": "/vault/, vault-data",
+      "pos": [
+        560,
+        380
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/vault.yml",
+          "line": 1,
+          "end_line": 56
+        }
+      ]
+    },
+    {
+      "id": "gmail",
+      "type": "backend",
+      "label": "garden-gmail-triggers",
+      "sublabel": "/gmail-triggers/",
+      "pos": [
+        560,
+        500
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/gmail-triggers.yml",
+          "line": 1,
+          "end_line": 55
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "garden-code-server",
+      "sublabel": "/code-server/ gate",
+      "pos": [
+        560,
+        620
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/code-server.yml",
+          "line": 27,
+          "end_line": 54,
+          "label": "the gate"
+        }
+      ]
+    },
+    {
+      "id": "editor",
+      "type": "frontend",
+      "label": "code-server editor",
+      "sublabel": "socket only, no port",
+      "pos": [
+        560,
+        760
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/code-server.yml",
+          "line": 56,
+          "end_line": 109,
+          "label": "the editor"
+        }
+      ]
+    },
+    {
+      "id": "shell",
+      "type": "backend",
+      "label": "code-server shell",
+      "sublabel": "SSH in, code-egress out",
+      "pos": [
+        560,
+        880
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/code-server.yml",
+          "line": 111,
+          "end_line": 150,
+          "label": "the shell and networks"
+        }
+      ]
+    },
+    {
+      "id": "state",
+      "type": "database",
+      "label": "stacks/<name>/state",
+      "sublabel": "letta-home, workspaces",
+      "pos": [
+        840,
+        880
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "line": 82,
+          "label": "the stack's data"
+        },
+        {
+          "path": "compose/code-server.yml",
+          "line": 124,
+          "end_line": 127,
+          "label": "shell mounts"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Cloudflare",
+      "wraps": [
+        "access_lettuce",
+        "access_garden"
+      ],
+      "pad": 16
+    },
+    {
+      "kind": "security-group",
+      "label": "app-server network namespace",
+      "wraps": [
+        "bff",
+        "appserver"
+      ],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "garden host",
+      "wraps": [
+        "garden",
+        "vault",
+        "gmail",
+        "gate"
+      ],
+      "pad": 14
+    },
+    {
+      "kind": "security-group",
+      "label": "code-exec (internal)",
+      "wraps": [
+        "editor",
+        "shell"
+      ],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "host: every stack",
+      "wraps": [
+        "gotenberg",
+        "toolsvol"
+      ],
+      "pad": 14
+    }
+  ],
+  "connections": [
+    {
+      "from": "browser",
+      "to": "access_lettuce",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "from": "browser",
+      "to": "access_garden",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "from": "access_lettuce",
+      "to": "cloudflared",
+      "label": "JWT",
+      "variant": "security"
+    },
+    {
+      "from": "access_garden",
+      "to": "cloudflared",
+      "label": "JWT",
+      "variant": "security"
+    },
+    {
+      "from": "cloudflared",
+      "to": "bff",
+      "label": "Lettuce host",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cloudflared",
+      "to": "garden"
+    },
+    {
+      "from": "cloudflared",
+      "to": "vault"
+    },
+    {
+      "from": "cloudflared",
+      "to": "gmail"
+    },
+    {
+      "from": "cloudflared",
+      "to": "gate"
+    },
+    {
+      "from": "bff",
+      "to": "appserver",
+      "label": "one connection",
+      "variant": "emphasis"
+    },
+    {
+      "from": "bff",
+      "to": "searxng",
+      "label": "search"
+    },
+    {
+      "from": "bff",
+      "to": "ddg",
+      "label": "fetch"
+    },
+    {
+      "from": "appserver",
+      "to": "garden",
+      "label": "agent list",
+      "variant": "dashed"
+    },
+    {
+      "from": "appserver",
+      "to": "vault",
+      "label": "/mcp",
+      "variant": "security"
+    },
+    {
+      "from": "appserver",
+      "to": "gmail",
+      "label": "executor",
+      "variant": "dashed"
+    },
+    {
+      "from": "appserver",
+      "to": "pipelock",
+      "label": "proxy"
+    },
+    {
+      "from": "appserver",
+      "to": "googlemcp",
+      "label": "MCP"
+    },
+    {
+      "from": "appserver",
+      "to": "gotenberg",
+      "label": "pdf"
+    },
+    {
+      "from": "toolsvol",
+      "to": "appserver",
+      "label": "ro"
+    },
+    {
+      "from": "appserver",
+      "to": "state",
+      "label": "bind mounts"
+    },
+    {
+      "from": "gate",
+      "to": "editor",
+      "label": "Unix socket",
+      "variant": "security"
+    },
+    {
+      "from": "editor",
+      "to": "shell",
+      "label": "SSH"
+    },
+    {
+      "from": "shell",
+      "to": "state",
+      "label": "workspaces"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One of these per person",
+      "items": [
+        "Each stack is its own Compose project, lettuce-<name>, with its own tunnel, two Access applications and state directory.",
+        "Only Gotenberg and the doc-tools volume are shared by every stack on the host, over one internal network per stack.",
+        "Lettuce's host reaches only the BFF (app-server:8080); every garden page is on the garden host, and anything else there gets a 404."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust boundaries",
+      "items": [
+        "Agents are root in the app-server and share its network namespace with the BFF; every container there drops NET_RAW.",
+        "Garden services accept only the garden's Access application (CF_GARDEN_AUD), never Lettuce's JWT.",
+        "The code editor runs nothing agents wrote; its terminals are SSH sessions into the shell, which is no stronger than an agent.",
+        "Pipelock is advisory: the stack network keeps its direct route out."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Volumes not drawn",
+      "items": [
+        "vault-data: only garden-vault. pipelock-data: only garden-pipelock.",
+        "google-creds: the BFF, google-mcp, and garden-gmail-triggers read-only.",
+        "code-server-sock, code-server-data, code-exec-keys: only the code editor's services.",
+        "state/garden/gmail-triggers: only garden-gmail-triggers, outside every app-server mount."
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Profiles",
+      "items": [
+        "garden-*: this repo's extras; garden starts with any garden page profile.",
+        "search (searxng, ddg-mcp), google (google-mcp), cloudflared (required): upstream's.",
+        "Not drawn: channel-gateway (upstream's telegram profile), which also shares the app-server's namespace."
+      ]
+    }
+  ]
+}

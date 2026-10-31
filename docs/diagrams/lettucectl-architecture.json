@@ -1,0 +1,420 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "lettucectl: the CLI, its libraries and what they reach",
+    "output": "docs/diagrams/lettucectl-architecture.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+    }
+  },
+  "components": [
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "Operator",
+      "sublabel": "./lettucectl <cmd>",
+      "pos": [
+        40,
+        220
+      ],
+      "size": [
+        130,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 15,
+          "end_line": 48,
+          "label": "usage"
+        }
+      ]
+    },
+    {
+      "id": "cli",
+      "type": "backend",
+      "label": "lettucectl",
+      "sublabel": "main -> cmd_*",
+      "pos": [
+        250,
+        220
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 7,
+          "end_line": 11,
+          "label": "sources lib/*.sh"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1799,
+          "end_line": 1812,
+          "label": "dispatch"
+        }
+      ]
+    },
+    {
+      "id": "cloudflare-lib",
+      "type": "backend",
+      "label": "lib/cloudflare.sh",
+      "sublabel": "cf_api + cf_* helpers",
+      "tag": "token on stdin",
+      "pos": [
+        250,
+        40
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 1,
+          "end_line": 32,
+          "label": "cf_api"
+        },
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 160,
+          "end_line": 179,
+          "label": "tunnel ingress"
+        }
+      ]
+    },
+    {
+      "id": "cf-api",
+      "type": "cloud",
+      "label": "Cloudflare API v4",
+      "sublabel": "Access, tunnel, DNS",
+      "pos": [
+        850,
+        40
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 62,
+          "end_line": 119,
+          "label": "policy, apps, tunnel"
+        },
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 181,
+          "end_line": 187,
+          "label": "DNS CNAME"
+        }
+      ]
+    },
+    {
+      "id": "common",
+      "type": "backend",
+      "label": "lib/common.sh",
+      "sublabel": "env files, compose, check_stack",
+      "pos": [
+        520,
+        220
+      ],
+      "size": [
+        200,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/common.sh",
+          "line": 1,
+          "end_line": 48,
+          "label": "env files parsed"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 170,
+          "end_line": 220,
+          "label": "compose wrappers"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 370,
+          "end_line": 485,
+          "label": "check_stack"
+        }
+      ]
+    },
+    {
+      "id": "config-env",
+      "type": "database",
+      "label": "config.env",
+      "sublabel": "PROFILES, cached CF ids",
+      "pos": [
+        400,
+        400
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/common.sh",
+          "line": 55,
+          "end_line": 63,
+          "label": "cfg"
+        },
+        {
+          "path": "lettucectl",
+          "line": 763,
+          "end_line": 767,
+          "label": "init caches ids"
+        }
+      ]
+    },
+    {
+      "id": "stack-env",
+      "type": "database",
+      "label": "stacks/<name>/stack.env",
+      "sublabel": "secrets + CF ids, 600",
+      "pos": [
+        620,
+        400
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 123,
+          "end_line": 145,
+          "label": "written by add"
+        },
+        {
+          "path": "lettucectl",
+          "line": 799,
+          "end_line": 822,
+          "label": "ids stored as they exist"
+        }
+      ]
+    },
+    {
+      "id": "docker",
+      "type": "cloud",
+      "label": "Docker / Compose",
+      "sublabel": "lettuce-<name>, lettuce_shared",
+      "pos": [
+        850,
+        220
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/common.sh",
+          "line": 176,
+          "end_line": 220,
+          "label": "compose_env, compose_shared"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 251,
+          "end_line": 254,
+          "label": "host_docker"
+        }
+      ]
+    },
+    {
+      "id": "app-server",
+      "type": "backend",
+      "label": "app-server",
+      "sublabel": "agents run as root",
+      "pos": [
+        1100,
+        220
+      ],
+      "size": [
+        140,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 333,
+          "end_line": 361,
+          "label": "executor via exec"
+        },
+        {
+          "path": "lettucectl",
+          "line": 637,
+          "end_line": 639,
+          "label": "mcp_servers"
+        }
+      ]
+    },
+    {
+      "id": "mcp-script",
+      "type": "backend",
+      "label": "lib/mcp-servers.mjs",
+      "sublabel": "Settings -> MCP list",
+      "pos": [
+        1100,
+        400
+      ],
+      "size": [
+        140,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/mcp-servers.mjs",
+          "line": 1,
+          "end_line": 21,
+          "label": "what it owns"
+        },
+        {
+          "path": "lib/mcp-servers.mjs",
+          "line": 36,
+          "end_line": 53,
+          "label": "groups"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Host: this repo (config.env, stacks/ untracked)",
+      "wraps": [
+        "cloudflare-lib",
+        "cli",
+        "common",
+        "config-env",
+        "stack-env"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Stack lettuce-<name>",
+      "wraps": [
+        "app-server",
+        "mcp-script"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "operator-cli",
+      "from": "operator",
+      "to": "cli",
+      "label": "runs",
+      "variant": "emphasis"
+    },
+    {
+      "id": "cli-cloudflare",
+      "from": "cli",
+      "to": "cloudflare-lib",
+      "label": "cf_* calls"
+    },
+    {
+      "id": "cloudflare-api",
+      "from": "cloudflare-lib",
+      "to": "cf-api",
+      "label": "curl HTTPS, token via stdin",
+      "variant": "security"
+    },
+    {
+      "id": "cli-common",
+      "from": "cli",
+      "to": "common",
+      "label": "calls helpers",
+      "variant": "emphasis"
+    },
+    {
+      "id": "common-config",
+      "from": "common",
+      "to": "config-env",
+      "label": "cfg",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "common-stack",
+      "from": "common",
+      "to": "stack-env",
+      "label": "env_get / env_set",
+      "variant": "dashed"
+    },
+    {
+      "id": "common-docker",
+      "from": "common",
+      "to": "docker",
+      "label": "env -i docker",
+      "variant": "emphasis"
+    },
+    {
+      "id": "docker-stack-env",
+      "from": "docker",
+      "to": "stack-env",
+      "label": "--env-file",
+      "variant": "dashed"
+    },
+    {
+      "id": "docker-app",
+      "from": "docker",
+      "to": "app-server",
+      "label": "exec -T",
+      "variant": "emphasis"
+    },
+    {
+      "id": "script-app",
+      "from": "mcp-script",
+      "to": "app-server",
+      "label": "node, on stdin",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "add creates, in order",
+      "items": [
+        "Access policy, Access app, garden Access app, tunnel, tunnel token, tunnel ingress, garden DNS, DNS",
+        "each id goes into stack.env as soon as it exists; CF_DNS_RECORD_ID last means complete"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "remove deletes in reverse",
+      "items": [
+        "DNS, garden DNS, tunnel (with its token), garden app, Lettuce app, policy",
+        "each id is unset only when its DELETE succeeds, so remove can be retried"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Never",
+      "items": [
+        "source config.env or stack.env",
+        "put the Cloudflare API token in argv",
+        "call docker compose outside the compose wrappers"
+      ]
+    }
+  ]
+}

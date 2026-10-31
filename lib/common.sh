@@ -220,7 +220,7 @@ compose_shared() {
 }
 
 # ── document tools ───────────────────────────────────────────────────────────
-# doc_tools_tag -> the content hash of doc-tools/ (its tests excluded), the tag
+# doc_tools_tag -> the content hash of doc-tools/ (its tests and README excluded), the tag
 # of the tools' image and volume every stack with the garden-doc-tools profile shares.
 # Any change to what goes into the image is a new tag, so `up` rebuilds it,
 # fills a new volume and recreates the app-servers; an unchanged tree reuses
@@ -228,7 +228,7 @@ compose_shared() {
 doc_tools_tag() {
   local d=$LETTUCE_HOME/doc-tools
   [[ -f $d/Dockerfile ]] || die "doc-tools/Dockerfile is missing"
-  (cd "$d" && find . -type f ! -path './tests/*' ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 |
+  (cd "$d" && find . -type f ! -path './tests/*' ! -path ./README.md ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 |
     LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-10)
 }
 
@@ -684,7 +684,7 @@ check_gmail_triggers() {
 
 # check_code_server NAME RENDERED STATE_DIR -> the code editor's three services
 # keep what compose/code-server.yml gives them (docs/code-server.md):
-# - the gate (code-server): a hardened sidecar (check_sidecar), on default only,
+# - the gate (garden-code-server): a hardened sidecar (check_sidecar), on default only,
 #   with the editor's socket read-only as its one mount;
 # - the editor (garden-code-server-editor): hardened, the workspaces as its one host
 #   path, its own volume, the SSH keys and its socket, on code-exec only,

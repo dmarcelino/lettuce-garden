@@ -5,7 +5,13 @@
     "title": "Pipelock: what passes the egress proxy, and what does not",
     "output": "docs/diagrams/egress-firewall-architecture.html",
     "quality_profile": "showcase",
-    "locale": "en"
+    "locale": "en",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+    }
   },
   "components": [
     {
@@ -20,13 +26,27 @@
       "size": [
         220,
         64
+      ],
+      "sources": [
+        {
+          "path": "compose/pipelock-proxy.yml",
+          "line": 11,
+          "end_line": 14,
+          "label": "Node 22.19 ignores the proxy"
+        },
+        {
+          "path": "compose/pipelock.yml",
+          "line": 8,
+          "end_line": 10,
+          "label": "advisory"
+        }
       ]
     },
     {
       "id": "agents",
       "type": "backend",
       "label": "agent tools",
-      "sublabel": "shells, Claude Code, Codex",
+      "sublabel": "shells, Claude Code, Codex, curl",
       "tag": "HTTPS_PROXY set",
       "pos": [
         40,
@@ -35,13 +55,27 @@
       "size": [
         220,
         64
+      ],
+      "sources": [
+        {
+          "path": "compose/pipelock-proxy.yml",
+          "line": 23,
+          "end_line": 35,
+          "label": "proxy variables on app-server"
+        },
+        {
+          "path": "agent-skills/fetching-web-pages/SKILL.md",
+          "line": 12,
+          "end_line": 25,
+          "label": "/fetch for reading pages"
+        }
       ]
     },
     {
       "id": "vault",
       "type": "backend",
-      "label": "vault, gmail-triggers",
-      "sublabel": "stack-internal services",
+      "label": "garden services",
+      "sublabel": "garden-vault, -gmail-triggers, garden",
       "pos": [
         40,
         460
@@ -49,13 +83,27 @@
       "size": [
         220,
         64
+      ],
+      "sources": [
+        {
+          "path": "compose/pipelock-proxy.yml",
+          "line": 16,
+          "end_line": 29,
+          "label": "NO_PROXY list"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 595,
+          "end_line": 614,
+          "label": "check_pipelock"
+        }
       ]
     },
     {
       "id": "search",
       "type": "backend",
       "label": "searxng, ddg-mcp",
-      "sublabel": "search sidecars",
+      "sublabel": "queries and page fetches",
       "tag": "HTTPS_PROXY set",
       "pos": [
         440,
@@ -64,12 +112,26 @@
       "size": [
         180,
         64
+      ],
+      "sources": [
+        {
+          "path": "compose/pipelock-proxy.yml",
+          "line": 3,
+          "end_line": 9,
+          "label": "who follows the proxy"
+        },
+        {
+          "path": "compose/pipelock-proxy.yml",
+          "line": 36,
+          "end_line": 41,
+          "label": "ddg-mcp, searxng"
+        }
       ]
     },
     {
       "id": "pipelock",
       "type": "security",
-      "label": "pipelock :8888",
+      "label": "garden-pipelock :8888",
       "sublabel": "forward proxy + /fetch",
       "tag": "balanced, advisory",
       "pos": [
@@ -79,6 +141,25 @@
       "size": [
         180,
         64
+      ],
+      "sources": [
+        {
+          "path": "compose/pipelock.yml",
+          "line": 16,
+          "end_line": 33,
+          "label": "hardened service"
+        },
+        {
+          "path": "pipelock/pipelock.yaml",
+          "line": 5,
+          "end_line": 37,
+          "label": "balanced mode, /fetch, forward proxy"
+        },
+        {
+          "path": "pipelock/entrypoint.sh",
+          "line": 18,
+          "label": "listens on :8888"
+        }
       ]
     },
     {
@@ -93,6 +174,26 @@
       "size": [
         180,
         64
+      ],
+      "sources": [
+        {
+          "path": "compose/pipelock.yml",
+          "line": 35,
+          "end_line": 39,
+          "label": "named volume"
+        },
+        {
+          "path": "pipelock/entrypoint.sh",
+          "line": 7,
+          "end_line": 16,
+          "label": "key made once"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 436,
+          "end_line": 440,
+          "label": "only garden-pipelock mounts it"
+        }
       ]
     },
     {
@@ -107,6 +208,20 @@
       "size": [
         180,
         64
+      ],
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1688,
+          "end_line": 1707,
+          "label": "receipts: no network, read-only"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1580,
+          "end_line": 1582,
+          "label": "backup mounts it read-only"
+        }
       ]
     },
     {
@@ -121,6 +236,14 @@
       "size": [
         176,
         64
+      ],
+      "sources": [
+        {
+          "path": "pipelock/pipelock.yaml",
+          "line": 28,
+          "end_line": 34,
+          "label": "CONNECT, no TLS interception"
+        }
       ]
     },
     {
@@ -135,6 +258,20 @@
       "size": [
         176,
         64
+      ],
+      "sources": [
+        {
+          "path": "pipelock/pipelock.yaml",
+          "line": 10,
+          "end_line": 17,
+          "label": "rate limit, shipped blocklist"
+        },
+        {
+          "path": "pipelock/pipelock.yaml",
+          "line": 19,
+          "end_line": 26,
+          "label": "prompt injection blocked"
+        }
       ]
     }
   ],
@@ -149,7 +286,7 @@
     },
     {
       "kind": "security-group",
-      "label": "mounted by pipelock only",
+      "label": "mounted by garden-pipelock only",
       "wraps": [
         "evidence"
       ]
@@ -167,7 +304,7 @@
       "id": "search-to-pipelock",
       "from": "search",
       "to": "pipelock",
-      "label": "search queries"
+      "label": "searches, page fetches"
     },
     {
       "id": "pipelock-to-internet",
@@ -233,7 +370,7 @@
       "title": "What pipelock checks",
       "items": [
         "Destination of every proxied request: paste and file-drop blocklist, private and cloud-metadata addresses, data hidden in host names, 600 requests per minute per site",
-        "Page text and full URL only for pages read through /fetch (the fetching-web-pages skill); a page with prompt injection is blocked",
+        "Page text and full URL only for pages read through /fetch (the fetching-web-pages skill); a page with prompt injection is blocked with a 403",
         "Every allow and block is a hash-chained receipt signed with the stack's own Ed25519 key"
       ]
     },
@@ -243,16 +380,16 @@
       "items": [
         "Advisory, not a boundary: the stack network still reaches the internet, and any agent can unset HTTPS_PROXY",
         "No TLS interception: for HTTPS it sees the host name, not paths, bodies or responses",
-        "letta-code, the BFF, the vault, google-mcp and gmail-triggers connect directly"
+        "letta-code, the BFF, garden-vault, google-mcp and garden-gmail-triggers connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg and host.docker.internal direct"
       ]
     },
     {
       "dot": "slate",
       "title": "Guarded by lettucectl check",
       "items": [
-        "pipelock hardened: read-only, no capabilities, no host mounts",
-        "Only pipelock mounts pipelock-data, whatever the profiles",
-        "The app-server's proxy points at pipelock, and NO_PROXY keeps the vault and the executor's token away from it"
+        "garden-pipelock hardened: read-only, no capabilities, no host mounts",
+        "Only garden-pipelock mounts pipelock-data, whatever the profiles",
+        "The app-server's proxy variables point at garden-pipelock, and its NO_PROXY lists garden-vault, garden-gmail-triggers and garden, so pipelock never sees the vault's values or the executor's token"
       ]
     }
   ]
