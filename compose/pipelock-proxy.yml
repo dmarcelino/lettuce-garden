@@ -1,4 +1,4 @@
-# Merged by lettucectl after compose/pipelock.yml, only when the stack has the
+# Merged by lettucectl last, after every other compose file, only when the stack has the
 # `garden-pipelock` profile (the `compose` wrapper in lib/common.sh), so without it no
 # container gets a proxy setting. Points the tools that fetch what agents ask
 # for at pipelock: agent shells and subagents in the app-server, ddg-mcp's

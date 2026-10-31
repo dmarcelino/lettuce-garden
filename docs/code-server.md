@@ -10,6 +10,10 @@ browser --Access--> tunnel: <garden>/code-server/ --> code-server (the gate: Acc
                                                      garden-code-server-exec (the terminal and git: the app-server's image and tools) --> internet
 ```
 
+![The code editor's containers, networks, volumes and what they reach](diagrams/code-server-architecture.svg)
+
+An interactive version, [code-server-architecture.html](diagrams/code-server-architecture.html), opens in a browser from a clone of this repo.
+
 ## For the person using it
 1. **Open `https://<your garden>/`** and sign in as usual. Under "Code editor" it lists your agents, by the names Lettuce shows; each opens the editor in that agent's folder, `/work/<agent-id>`. Opening the page asks for a fresh list, which arrives within a minute, so a new agent shows up when you reload it.
 2. **Or open the editor itself,** `https://<your garden>/code-server/`, and choose File -> Open Folder -> `/work/<agent-id>`. Keep to one agent per window; don't open `/work` itself.

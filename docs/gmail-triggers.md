@@ -10,7 +10,9 @@ executor ──letta cron add --once──> Lettuce's scheduler ──"Gmail: <r
 executor ──results, agent list, heartbeat──> gmail-triggers
 ```
 
-An interactive diagram of the containers and boundaries, [gmail-triggers-architecture.html](diagrams/gmail-triggers-architecture.html), opens in a browser from a clone of this repo.
+![Gmail triggers' containers, trust boundaries and requests](diagrams/gmail-triggers-architecture.svg)
+
+An interactive version, [gmail-triggers-architecture.html](diagrams/gmail-triggers-architecture.html), opens in a browser from a clone of this repo.
 
 ## For the person using it
 1. **Connect Google in Lettuce first:** Settings -> Google, with Gmail read access at least.

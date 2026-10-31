@@ -1,0 +1,581 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Code editor: gate, editor, shell and what they reach",
+    "output": "docs/diagrams/code-server-architecture.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+    }
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Person's browser",
+      "sublabel": "garden host tab",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        130,
+        62
+      ],
+      "sources": [
+        {
+          "path": "docs/code-server.md",
+          "line": 13,
+          "end_line": 18,
+          "label": "using the editor"
+        }
+      ]
+    },
+    {
+      "id": "access",
+      "type": "security",
+      "label": "Cloudflare Access",
+      "sublabel": "garden app, Google login",
+      "pos": [
+        250,
+        40
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 79,
+          "end_line": 91,
+          "label": "Access app: HttpOnly, Lax"
+        },
+        {
+          "path": "compose/code-server.yml",
+          "line": 34,
+          "end_line": 41,
+          "label": "gate takes CF_GARDEN_AUD"
+        }
+      ]
+    },
+    {
+      "id": "cloudflared",
+      "type": "cloud",
+      "label": "cloudflared",
+      "sublabel": "tunnel container",
+      "pos": [
+        250,
+        210
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 125,
+          "end_line": 134,
+          "label": "garden host routes"
+        },
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 164,
+          "end_line": 179,
+          "label": "ingress rules"
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "garden-code-server",
+      "sublabel": "gate: JWT, Origin, headers",
+      "pos": [
+        700,
+        210
+      ],
+      "size": [
+        200,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/code-server.yml",
+          "line": 27,
+          "end_line": 54,
+          "label": "gate service"
+        },
+        {
+          "path": "code-server/src/code_server_gate/app.py",
+          "line": 231,
+          "end_line": 269,
+          "label": "HTTP checks and proxy"
+        },
+        {
+          "path": "code-server/src/code_server_gate/app.py",
+          "line": 271,
+          "end_line": 291,
+          "label": "WebSocket checks"
+        }
+      ]
+    },
+    {
+      "id": "bff",
+      "type": "frontend",
+      "label": "BFF",
+      "sublabel": "Lettuce UI :8080",
+      "pos": [
+        40,
+        380
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "AGENTS.md",
+          "line": 75,
+          "label": "shares app-server netns"
+        }
+      ]
+    },
+    {
+      "id": "garden",
+      "type": "frontend",
+      "label": "garden",
+      "sublabel": "landing page, agent links",
+      "pos": [
+        250,
+        380
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/garden.yml",
+          "line": 18,
+          "end_line": 48,
+          "label": "garden service"
+        },
+        {
+          "path": "garden/src/garden_landing/app.py",
+          "line": 70,
+          "end_line": 83,
+          "label": "/code-server/?folder= links"
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "type": "database",
+      "label": "code-server-data",
+      "sublabel": "settings, SSH key",
+      "pos": [
+        460,
+        380
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/code-server.yml",
+          "line": 88,
+          "end_line": 92,
+          "label": "editor mounts"
+        },
+        {
+          "path": "code-server/editor/entrypoint.sh",
+          "line": 28,
+          "end_line": 53,
+          "label": "keys and fixed settings"
+        }
+      ]
+    },
+    {
+      "id": "sock",
+      "type": "database",
+      "label": "code-server-sock",
+      "sublabel": "volume: editor.sock",
+      "pos": [
+        700,
+        380
+      ],
+      "size": [
+        200,
+        62
+      ],
+      "sources": [
+        {
+          "path": "code-server/src/code_server_gate/config.py",
+          "line": 9,
+          "end_line": 15,
+          "label": "EDITOR_SOCKET"
+        },
+        {
+          "path": "code-server/src/code_server_gate/app.py",
+          "line": 131,
+          "end_line": 156,
+          "label": "HTTP and WS over the socket"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 441,
+          "end_line": 451,
+          "label": "volume and netns checks"
+        }
+      ]
+    },
+    {
+      "id": "keys",
+      "type": "database",
+      "label": "code-exec-keys",
+      "sublabel": "host key, authorized_keys",
+      "pos": [
+        990,
+        380
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "code-server/editor/entrypoint.sh",
+          "line": 29,
+          "end_line": 42,
+          "label": "written by the editor"
+        },
+        {
+          "path": "code-server/exec/sshd_config",
+          "line": 1,
+          "end_line": 18,
+          "label": "read by sshd"
+        }
+      ]
+    },
+    {
+      "id": "appserver",
+      "type": "backend",
+      "label": "app-server",
+      "sublabel": "agents run as root",
+      "pos": [
+        40,
+        550
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "AGENTS.md",
+          "line": 73,
+          "label": "agents share the netns"
+        },
+        {
+          "path": "AGENTS.md",
+          "line": 22,
+          "label": "BFF owns the connection"
+        }
+      ]
+    },
+    {
+      "id": "editor",
+      "type": "frontend",
+      "label": "garden-code-server-editor",
+      "sublabel": "code-server, Restricted Mode",
+      "pos": [
+        700,
+        550
+      ],
+      "size": [
+        200,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/code-server.yml",
+          "line": 56,
+          "end_line": 109,
+          "label": "editor service"
+        },
+        {
+          "path": "code-server/editor/Dockerfile",
+          "line": 70,
+          "end_line": 91,
+          "label": "image: no git, no node"
+        },
+        {
+          "path": "code-server/editor/settings.json",
+          "line": 1,
+          "end_line": 35,
+          "label": "fixed settings"
+        }
+      ]
+    },
+    {
+      "id": "shell",
+      "type": "backend",
+      "label": "garden-code-server-exec",
+      "sublabel": "sshd on app-server image",
+      "pos": [
+        990,
+        550
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/code-server.yml",
+          "line": 111,
+          "end_line": 140,
+          "label": "shell service"
+        },
+        {
+          "path": "code-server/exec/Dockerfile",
+          "line": 1,
+          "end_line": 16,
+          "label": "FROM the app-server image"
+        },
+        {
+          "path": "code-server/editor/bin/shell-git",
+          "line": 16,
+          "end_line": 44,
+          "label": "git over SSH"
+        }
+      ]
+    },
+    {
+      "id": "state",
+      "type": "database",
+      "label": "workspaces + tools",
+      "sublabel": "host: $LETTA_STATE_DIR",
+      "pos": [
+        480,
+        720
+      ],
+      "size": [
+        260,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/code-server.yml",
+          "line": 124,
+          "end_line": 127,
+          "label": "shell host paths"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 716,
+          "end_line": 760,
+          "label": "editor and shell mount checks"
+        }
+      ]
+    },
+    {
+      "id": "internet",
+      "type": "external",
+      "label": "Internet",
+      "sublabel": "direct, no pipelock",
+      "pos": [
+        990,
+        720
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/code-server.yml",
+          "line": 142,
+          "end_line": 145,
+          "label": "code-exec internal"
+        },
+        {
+          "path": "docs/code-server.md",
+          "line": 45,
+          "label": "direct, not through pipelock"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Cloudflare",
+      "wraps": [
+        "access"
+      ],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "Compose project lettuce-<name>",
+      "wraps": [
+        "cloudflared",
+        "gate",
+        "bff",
+        "garden",
+        "data",
+        "sock",
+        "keys",
+        "appserver",
+        "editor",
+        "shell"
+      ],
+      "pad": 24
+    },
+    {
+      "kind": "security-group",
+      "label": "shared network namespace",
+      "wraps": [
+        "bff",
+        "appserver"
+      ],
+      "pad": 12
+    },
+    {
+      "kind": "security-group",
+      "label": "code-exec (internal network)",
+      "wraps": [
+        "editor",
+        "shell"
+      ],
+      "pad": 12
+    }
+  ],
+  "connections": [
+    {
+      "from": "browser",
+      "to": "access",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "from": "access",
+      "to": "cloudflared",
+      "label": "tunnel + garden JWT",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cloudflared",
+      "to": "gate",
+      "label": "/code-server/ :8000",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cloudflared",
+      "to": "garden",
+      "label": "/ and /assets/"
+    },
+    {
+      "from": "cloudflared",
+      "to": "bff",
+      "label": "Lettuce host"
+    },
+    {
+      "from": "bff",
+      "to": "appserver",
+      "label": "WebSocket"
+    },
+    {
+      "from": "gate",
+      "to": "sock",
+      "label": "HTTP + WS, ro mount",
+      "variant": "emphasis"
+    },
+    {
+      "from": "editor",
+      "to": "sock",
+      "label": "listens, no port"
+    },
+    {
+      "from": "editor",
+      "to": "shell",
+      "label": "SSH",
+      "variant": "emphasis"
+    },
+    {
+      "from": "editor",
+      "to": "data",
+      "label": "settings, key"
+    },
+    {
+      "from": "editor",
+      "to": "keys",
+      "label": "writes keys"
+    },
+    {
+      "from": "shell",
+      "to": "keys",
+      "label": "reads, ro"
+    },
+    {
+      "from": "editor",
+      "to": "state",
+      "label": "/work"
+    },
+    {
+      "from": "shell",
+      "to": "state",
+      "label": "/work, tools"
+    },
+    {
+      "from": "appserver",
+      "to": "state",
+      "label": "/work, /opt/agent-tools"
+    },
+    {
+      "from": "shell",
+      "to": "internet",
+      "label": "code-egress",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "The only way in",
+      "items": [
+        "The gate checks the garden's Access JWT on every request and WebSocket, the garden Origin on upgrades, and Sec-Fetch-Site same-origin for anything but a read",
+        "It passes only listed headers: the editor never sees the Access token or cookies, and never sets a cookie or COOP",
+        "Only the workbench and code-server's own frames load as pages; everything else is nosniff with CSP sandbox",
+        "The editor listens only on editor.sock; only the gate (ro) and the editor mount code-server-sock"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Not connected",
+      "items": [
+        "The editor and the shell are not on the stack's default network: no route to the app-server, the BFF, the vault, Gmail triggers or garden",
+        "No code editor service opens a connection to the app-server or the BFF or starts a turn",
+        "code-exec is internal and holds only the editor and the shell; only the shell is on code-egress"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "As strong as an agent",
+      "items": [
+        "Terminals (exec-shell) and Source Control's git (shell-git) run over SSH in the shell, through agent-env",
+        "The shell is the app-server's image with the workspaces and /opt/agent-tools mounted read-write, like the agents'",
+        "The editor shares the garden origin with the vault and Gmail triggers, so it stays in Restricted Mode and runs nothing from the workspaces"
+      ]
+    }
+  ]
+}

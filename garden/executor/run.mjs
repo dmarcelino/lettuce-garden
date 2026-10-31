@@ -1,12 +1,14 @@
 // The garden executor: runs as root in the Lettuce app-server, from system cron every
-// minute, whenever any garden page profile is on. Over HTTP on the stack network, with one
+// minute, whenever it has work (garden-gmail-triggers or garden-code-server on; the vault
+// alone gives it none). Over HTTP on the stack network, with one
 // bearer token for both sidecars, it:
 // - asks the garden service whether it wants the agent list (for the landing page);
 // - with --gmail-triggers (the stack has that profile), claims the requests the
 //   gmail-triggers sidecar has queued, turns each into a one-off letta-code task
 //   (`letta cron add --once`) and posts the outcome back;
-// - when either wants it, runs `letta agents list` once and sends the list to both;
-// - with --gmail-triggers, sends gmail-triggers a heartbeat for its page.
+// - when either wants it, runs `letta agents list` once and sends the list to each
+//   that answered;
+// - when it claimed gmail-triggers' requests, sends it a heartbeat for its page.
 // Without --gmail-triggers it never calls gmail-triggers. One sidecar being unreachable
 // never stops what the run does for the other.
 //

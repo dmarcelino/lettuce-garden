@@ -1,0 +1,464 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Garden: landing page and garden executor",
+    "output": "docs/diagrams/garden-architecture.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+    }
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Person's browser",
+      "sublabel": "garden host",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        140,
+        62
+      ],
+      "sources": [
+        {
+          "path": "docs/code-server.md",
+          "line": 14,
+          "label": "the landing page in use"
+        }
+      ]
+    },
+    {
+      "id": "access",
+      "type": "security",
+      "label": "Cloudflare Access",
+      "sublabel": "garden app, Google login",
+      "pos": [
+        240,
+        40
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 79,
+          "end_line": 91,
+          "label": "Access app: HttpOnly, Lax"
+        },
+        {
+          "path": "compose/garden.yml",
+          "line": 26,
+          "end_line": 31,
+          "label": "garden takes CF_GARDEN_AUD"
+        }
+      ]
+    },
+    {
+      "id": "cloudflared",
+      "type": "cloud",
+      "label": "cloudflared",
+      "sublabel": "tunnel container",
+      "pos": [
+        240,
+        380
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 121,
+          "end_line": 134,
+          "label": "garden host routes"
+        },
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 160,
+          "end_line": 179,
+          "label": "ingress rules"
+        }
+      ]
+    },
+    {
+      "id": "pages",
+      "type": "security",
+      "label": "vault, code editor",
+      "sublabel": "/vault/, /code-server/",
+      "pos": [
+        490,
+        210
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 125,
+          "end_line": 129,
+          "label": "PROFILE_ROUTES"
+        },
+        {
+          "path": "garden/src/garden_landing/config.py",
+          "line": 12,
+          "end_line": 19,
+          "label": "page_path"
+        }
+      ]
+    },
+    {
+      "id": "garden",
+      "type": "frontend",
+      "label": "garden",
+      "sublabel": "landing page, agent list",
+      "pos": [
+        490,
+        380
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/garden.yml",
+          "line": 18,
+          "end_line": 48,
+          "label": "garden service"
+        },
+        {
+          "path": "garden/src/garden_landing/app.py",
+          "line": 109,
+          "end_line": 124,
+          "label": "landing page"
+        },
+        {
+          "path": "garden/src/garden_landing/app.py",
+          "line": 134,
+          "end_line": 157,
+          "label": "routes, executor API"
+        }
+      ]
+    },
+    {
+      "id": "gmail",
+      "type": "backend",
+      "label": "garden-gmail-triggers",
+      "sublabel": "/gmail-triggers/ + API",
+      "pos": [
+        490,
+        550
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "gmail-triggers/src/gmail_triggers/executor_api.py",
+          "line": 47,
+          "end_line": 96,
+          "label": "executor API"
+        }
+      ]
+    },
+    {
+      "id": "cron",
+      "type": "messagebus",
+      "label": "system cron",
+      "sublabel": "lettuce-garden-executor",
+      "pos": [
+        770,
+        210
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 272,
+          "end_line": 281,
+          "label": "executor_cron"
+        }
+      ]
+    },
+    {
+      "id": "executor",
+      "type": "backend",
+      "label": "garden executor",
+      "sublabel": "node run.mjs, as root",
+      "pos": [
+        770,
+        380
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 1,
+          "end_line": 20,
+          "label": "what a run does"
+        },
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 491,
+          "end_line": 541,
+          "label": "run order"
+        },
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 276,
+          "end_line": 293,
+          "label": "bearer token calls"
+        }
+      ]
+    },
+    {
+      "id": "token",
+      "type": "database",
+      "label": "executor-token",
+      "sublabel": "/etc/lettuce-garden, 0600",
+      "pos": [
+        1000,
+        380
+      ],
+      "size": [
+        160,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 261,
+          "end_line": 263,
+          "label": "install paths"
+        },
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 149,
+          "end_line": 159,
+          "label": "readToken"
+        }
+      ]
+    },
+    {
+      "id": "letta",
+      "type": "backend",
+      "label": "letta CLI",
+      "sublabel": "agents list, cron add",
+      "pos": [
+        1000,
+        550
+      ],
+      "size": [
+        160,
+        62
+      ],
+      "sources": [
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 189,
+          "end_line": 242,
+          "label": "argv, no shell"
+        },
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 415,
+          "end_line": 445,
+          "label": "cron add --once"
+        },
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 451,
+          "end_line": 473,
+          "label": "agents list"
+        }
+      ]
+    },
+    {
+      "id": "lettucectl",
+      "type": "external",
+      "label": "lettucectl (host)",
+      "sublabel": "sync_executor, stack.env",
+      "pos": [
+        770,
+        720
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 283,
+          "end_line": 315,
+          "label": "GARDEN_INSTALL"
+        },
+        {
+          "path": "lettucectl",
+          "line": 338,
+          "end_line": 381,
+          "label": "install and sync_executor"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 333,
+          "end_line": 368,
+          "label": "token and GARDEN_PROFILES"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Cloudflare",
+      "wraps": [
+        "access"
+      ],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "Compose project lettuce-<name>",
+      "wraps": [
+        "cloudflared",
+        "pages",
+        "garden",
+        "gmail",
+        "cron",
+        "executor",
+        "token",
+        "letta"
+      ],
+      "pad": 24
+    },
+    {
+      "kind": "security-group",
+      "label": "app-server: agents run as root",
+      "wraps": [
+        "cron",
+        "executor",
+        "token",
+        "letta"
+      ],
+      "pad": 12
+    }
+  ],
+  "connections": [
+    {
+      "from": "browser",
+      "to": "access",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "from": "access",
+      "to": "cloudflared",
+      "label": "tunnel + garden JWT",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cloudflared",
+      "to": "garden",
+      "label": "/ and /assets/",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cloudflared",
+      "to": "pages",
+      "label": "their prefixes"
+    },
+    {
+      "from": "cloudflared",
+      "to": "gmail",
+      "label": "/gmail-triggers/"
+    },
+    {
+      "from": "garden",
+      "to": "pages",
+      "label": "links",
+      "variant": "dashed"
+    },
+    {
+      "from": "cron",
+      "to": "executor",
+      "label": "every minute, agent-env"
+    },
+    {
+      "from": "executor",
+      "to": "token",
+      "label": "reads"
+    },
+    {
+      "from": "executor",
+      "to": "garden",
+      "label": "status, agents",
+      "variant": "security"
+    },
+    {
+      "from": "executor",
+      "to": "gmail",
+      "label": "with --gmail-triggers",
+      "variant": "security"
+    },
+    {
+      "from": "executor",
+      "to": "letta",
+      "label": "argv"
+    },
+    {
+      "from": "lettucectl",
+      "to": "executor",
+      "label": "compose exec: tar"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Executor API (/executor/v1/)",
+      "items": [
+        "garden: GET status (agents_wanted), PUT agents",
+        "gmail-triggers: GET requests (claims them), POST results, PUT agents, POST heartbeat",
+        "Every call needs Bearer GARDEN_EXECUTOR_TOKEN and is refused with an Origin or a Cloudflare tunnel header; the tunnel never routes the prefix",
+        "The list from letta agents list goes to each sidecar that answered, once per run, when either asks"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Not a boundary",
+      "items": [
+        "Agents are root in the app-server and can read the token: they can read, claim or forge what the executor sees",
+        "So both sides validate the other's data; garden shows names as escaped text and links only ids shaped like agent ids"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Install and isolation",
+      "items": [
+        "lettucectl up installs run.mjs, the token and the cron file only with garden-gmail-triggers or garden-code-server on; the vault alone gives it no work",
+        "The token lives in the container layer, not under state/, so up reinstalls it after every recreate",
+        "garden keeps the agent list in memory: no volume, default network only, no connection to Lettuce"
+      ]
+    }
+  ]
+}

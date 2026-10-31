@@ -5,7 +5,7 @@
 #
 # Three services, because the editor shares the garden's origin with the vault
 # and must never run what agents wrote:
-# - code-server, the gate: the tunnel forwards /code-server/ on the garden host
+# - garden-code-server, the gate: the tunnel forwards /code-server/ on the garden host
 #   to it. It checks the garden's Access JWT on every request and WebSocket,
 #   strips the prefix and lets only listed headers and pages through. It is the
 #   only one on `default` and the only way in: it reaches the editor through

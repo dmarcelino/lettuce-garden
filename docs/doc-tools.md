@@ -29,6 +29,10 @@ app-server (agents, root)                      app-server
                   no ports, no route out, no workspace mounted)
 ```
 
+![The document tools: image, volume, agent call and Gotenberg](diagrams/doc-tools-architecture.svg)
+
+An interactive version, [doc-tools-architecture.html](diagrams/doc-tools-architecture.html), opens in a browser from a clone of this repo.
+
 ## Turning it on
 ```bash
 ./lettucectl profiles cloudflared,search,garden-doc-tools   # your current list plus garden-doc-tools
@@ -70,7 +74,7 @@ restart fails, it says so, and agents see the servers after the next `./lettucec
 
 What `up` does with the profile:
 1. It builds `lettuce-doc-tools:<hash>` (`doc-tools/Dockerfile`), once per host. The hash covers
-   everything in `doc-tools/` but its tests, so a change there is a new image. The first build
+   everything in `doc-tools/` but its tests and README, so a change there is a new image. The first build
    downloads OfficeAgent (checked against its pinned SHA-256), a Python runtime and the Python
    packages (hash-pinned in `doc-tools/requirements.lock`), and takes a few minutes.
 2. It creates the stack's internal network `lettuce-doc-tools-<name>`.
@@ -123,7 +127,7 @@ text in place, and Excel calculation beyond OfficeAgent's list of supported func
   app-servers of two stacks share no network: each stack has its own internal network, which
   only its app-server (and the BFF in its namespace) and Gotenberg join. `check` refuses a stack
   where another service joins it, where the app-server loses its default network, or where the
-  mount is anything but this image, read-only.
+  mount is anything but the tools' volume, read-only.
 - **Within a stack, the path checks are a guard, not a boundary.** Each server is confined to
   the calling agent's workspace (`/work/<agent-id>`): paths are relative, `..` and absolute paths
   are refused, and symbolic links are never followed (each path component is opened from the

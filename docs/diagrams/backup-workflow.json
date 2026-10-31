@@ -1,0 +1,421 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "lettucectl backup: one snapshot per stack",
+    "output": "docs/diagrams/backup-workflow.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+    },
+    "legend": {
+      "entries": {
+        "backend": {
+          "label": "lettucectl step"
+        },
+        "security": {
+          "label": "Gate or refusal"
+        },
+        "database": {
+          "label": "Destination on disk"
+        },
+        "cloud": {
+          "label": "Docker container or stack"
+        },
+        "external": {
+          "label": "Operator"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "refusal",
+      "label": "Refused",
+      "variant": "exception"
+    },
+    {
+      "id": "cli",
+      "label": "lettucectl on the host"
+    },
+    {
+      "id": "stack",
+      "label": "The stack (Compose)"
+    },
+    {
+      "id": "copier",
+      "label": "Backup container"
+    },
+    {
+      "id": "dest",
+      "label": "<dir>/<name>/"
+    }
+  ],
+  "phases": [
+    {
+      "id": "setup",
+      "label": "Once",
+      "fromCol": 0,
+      "toCol": 0
+    },
+    {
+      "id": "per-stack",
+      "label": "Each stack, in its own subshell",
+      "fromCol": 1,
+      "toCol": 4,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "start",
+    "subshell",
+    "running",
+    "copy",
+    "partial",
+    "rename",
+    "prune"
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "lane": "cli",
+      "col": 0,
+      "type": "external",
+      "label": "lettucectl backup",
+      "sublabel": "<name|all> <dir>",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1630,
+          "end_line": 1662,
+          "label": "cmd_backup"
+        }
+      ]
+    },
+    {
+      "id": "image",
+      "lane": "copier",
+      "col": 0,
+      "type": "cloud",
+      "label": "lettuce-backup:local",
+      "sublabel": "Debian slim + rsync",
+      "sources": [
+        {
+          "path": "backup/Dockerfile",
+          "line": 1,
+          "end_line": 7
+        },
+        {
+          "path": "lettucectl",
+          "line": 1451,
+          "end_line": 1466,
+          "label": "build and run options"
+        }
+      ]
+    },
+    {
+      "id": "subshell",
+      "lane": "cli",
+      "col": 1,
+      "type": "backend",
+      "label": "backup_stack",
+      "sublabel": "flock -n <dir>/<name>/.lock",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1663,
+          "end_line": 1680,
+          "label": "one subshell per stack"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1559,
+          "end_line": 1591,
+          "label": "lock, mounts, excludes"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1593,
+          "end_line": 1597,
+          "label": "old .partial-* removed"
+        }
+      ],
+      "tag": "read-only mounts"
+    },
+    {
+      "id": "held",
+      "lane": "refusal",
+      "col": 1,
+      "type": "security",
+      "label": "die",
+      "sublabel": "another backup runs",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1568,
+          "end_line": 1570,
+          "label": "flock -n"
+        }
+      ]
+    },
+    {
+      "id": "running",
+      "lane": "cli",
+      "col": 2,
+      "type": "security",
+      "label": "Stack running?",
+      "sublabel": "--pause, --live or ask",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1598,
+          "end_line": 1602
+        },
+        {
+          "path": "lettucectl",
+          "line": 1526,
+          "end_line": 1544,
+          "label": "backup_choice"
+        }
+      ]
+    },
+    {
+      "id": "abort",
+      "lane": "refusal",
+      "col": 2,
+      "type": "security",
+      "label": "die",
+      "sublabel": "aborted, nothing copied",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1534,
+          "end_line": 1543,
+          "label": "no --pause, --live or answer"
+        }
+      ]
+    },
+    {
+      "id": "pause",
+      "lane": "stack",
+      "col": 2,
+      "type": "cloud",
+      "label": "compose pause",
+      "sublabel": "trap unpauses on exit",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1603,
+          "end_line": 1610,
+          "label": "trap, then pause"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1625,
+          "label": "subshell exit"
+        }
+      ]
+    },
+    {
+      "id": "copy",
+      "lane": "copier",
+      "col": 3,
+      "type": "cloud",
+      "label": "rsync -aH",
+      "sublabel": "--chown, --link-dest",
+      "tag": "no network, read-only root",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1452,
+          "end_line": 1456,
+          "label": "BACKUP_RUN"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1478,
+          "end_line": 1503,
+          "label": "BACKUP_COPY"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1618,
+          "end_line": 1622
+        }
+      ]
+    },
+    {
+      "id": "partial",
+      "lane": "dest",
+      "col": 3,
+      "type": "database",
+      "label": ".partial-<TS>",
+      "sublabel": "hard links to previous",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1619,
+          "end_line": 1622,
+          "label": "prev snapshot, partial name"
+        }
+      ]
+    },
+    {
+      "id": "rename",
+      "lane": "dest",
+      "col": 4,
+      "type": "database",
+      "label": "<TS>/",
+      "sublabel": "renamed when complete",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1623,
+          "label": "mv"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1468,
+          "end_line": 1469,
+          "label": "UTC timestamp names"
+        }
+      ]
+    },
+    {
+      "id": "prune",
+      "lane": "cli",
+      "col": 4,
+      "type": "backend",
+      "label": "--keep N",
+      "sublabel": "oldest snapshots go",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 1546,
+          "end_line": 1557,
+          "label": "backup_prune"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1626,
+          "end_line": 1627
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "start-image",
+      "from": "start",
+      "to": "image",
+      "label": "docker build",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "start-subshell",
+      "from": "start",
+      "to": "subshell",
+      "label": "each target",
+      "variant": "emphasis"
+    },
+    {
+      "id": "subshell-held",
+      "from": "subshell",
+      "to": "held",
+      "label": "lock held",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "subshell-running",
+      "from": "subshell",
+      "to": "running",
+      "variant": "emphasis"
+    },
+    {
+      "id": "running-abort",
+      "from": "running",
+      "to": "abort",
+      "label": "abort",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "running-pause",
+      "from": "running",
+      "to": "pause",
+      "label": "pause",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "running-copy",
+      "from": "running",
+      "to": "copy",
+      "label": "live or stopped",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "pause-copy",
+      "from": "pause",
+      "to": "copy",
+      "variant": "default",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "copy-partial",
+      "from": "copy",
+      "to": "partial",
+      "label": "writes",
+      "variant": "emphasis"
+    },
+    {
+      "id": "partial-rename",
+      "from": "partial",
+      "to": "rename",
+      "label": "copy ok",
+      "variant": "emphasis"
+    },
+    {
+      "id": "rename-prune",
+      "from": "rename",
+      "to": "prune",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Container limits",
+      "items": [
+        "--init, --network none, --read-only, --tmpfs /tmp, no-new-privileges",
+        "cap_drop ALL, then CHOWN, DAC_OVERRIDE and FOWNER only",
+        "state, stack.env, vault-data and pipelock-data (when the volume exists) read-only; only <dir>/<name> is writable",
+        "Old .partial-* entries and pruned snapshots are deleted through the same container"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "--compress",
+      "items": [
+        "tar.gz to stdout into .partial-<TS>.tar.gz, renamed when complete",
+        "no --link-dest: each archive holds everything"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Same image, other use",
+      "items": [
+        "ensure_doc_tools_volume fills the doc-tools volume through this image"
+      ]
+    }
+  ]
+}

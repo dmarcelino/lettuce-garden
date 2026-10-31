@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "276151afc3799a30b8cdaec62c2093a0ce1af049"
+      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
     }
   },
   "components": [
@@ -18,7 +18,7 @@
       "id": "browser",
       "type": "external",
       "label": "Person's browser",
-      "sublabel": "Lettuce UI + /garden/",
+      "sublabel": "garden host /vault/",
       "pos": [40, 300],
       "size": [130, 62],
       "sources": [{ "path": "docs/vault.md", "line": 18, "end_line": 41, "label": "using the vault" }]
@@ -27,42 +27,58 @@
       "id": "edge",
       "type": "security",
       "label": "Cloudflare Access",
-      "sublabel": "Google login, adds JWT",
+      "sublabel": "Lettuce's app + garden's app",
       "pos": [230, 300],
-      "size": [150, 62],
-      "sources": [{ "path": "lib/cloudflare.sh", "line": 62, "end_line": 91, "label": "Access policy and app" }]
+      "size": [170, 62],
+      "sources": [
+        { "path": "lib/cloudflare.sh", "line": 80, "end_line": 91, "label": "cf_app_body: HttpOnly, SameSite=Lax" },
+        { "path": "lettucectl", "line": 163, "end_line": 179, "label": "the garden's own Access app (CF_GARDEN_AUD)" }
+      ]
     },
     {
       "id": "jwks",
       "type": "security",
       "label": "Access signing keys",
       "sublabel": "team JWKS (certs)",
-      "pos": [230, 470],
+      "pos": [240, 470],
       "size": [150, 62],
-      "sources": [{ "path": "garden-common/src/garden_common/auth.py", "line": 49, "end_line": 58, "label": "JWKS resolver" }]
+      "sources": [{ "path": "garden-common/src/garden_common/auth.py", "line": 66, "end_line": 74, "label": "JWKS resolver" }]
     },
     {
       "id": "cloudflared",
       "type": "cloud",
       "label": "cloudflared",
-      "sublabel": "tunnel container",
-      "pos": [450, 300],
-      "size": [140, 62],
+      "sublabel": "routes by host + path",
+      "pos": [470, 300],
+      "size": [150, 62],
       "sources": [
-        { "path": "lib/cloudflare.sh", "line": 105, "end_line": 143, "label": "tunnel ingress rules" },
+        { "path": "lib/cloudflare.sh", "line": 121, "end_line": 134, "label": "garden routes and landing page" },
+        { "path": "lib/cloudflare.sh", "line": 160, "end_line": 180, "label": "cf_tunnel_configure" },
         { "path": "compose/multi.yml", "line": 1, "end_line": 10, "label": "no published ports" }
+      ]
+    },
+    {
+      "id": "garden",
+      "type": "frontend",
+      "label": "garden",
+      "sublabel": "landing page, links /vault/",
+      "pos": [470, 130],
+      "size": [150, 62],
+      "sources": [
+        { "path": "compose/garden.yml", "line": 18, "end_line": 48, "label": "on with any garden page profile" },
+        { "path": "garden/src/garden_landing/app.py", "line": 148, "end_line": 158, "label": "routes" }
       ]
     },
     {
       "id": "bff",
       "type": "frontend",
       "label": "BFF",
-      "sublabel": "UI :8080, MCP bridge",
-      "pos": [700, 140],
-      "size": [150, 62],
+      "sublabel": "Lettuce UI :8080, MCP bridge",
+      "pos": [730, 130],
+      "size": [170, 62],
       "sources": [
-        { "path": "AGENTS.md", "line": 63, "label": "shares app-server netns" },
-        { "path": "vault/src/garden_vault/app.py", "line": 422, "end_line": 423, "label": "bridge calls /mcp" }
+        { "path": "AGENTS.md", "line": 75, "label": "shares the app-server's network namespace" },
+        { "path": "vault/src/garden_vault/app.py", "line": 423, "end_line": 434, "label": "the bridge calls /mcp" }
       ]
     },
     {
@@ -70,11 +86,11 @@
       "type": "backend",
       "label": "app-server",
       "sublabel": "letta-code, agents as root",
-      "pos": [1050, 140],
-      "size": [160, 62],
+      "pos": [1050, 130],
+      "size": [170, 62],
       "sources": [
-        { "path": "AGENTS.md", "line": 61, "label": "agents share the netns" },
-        { "path": "compose/hardening.yml", "line": 13, "end_line": 21 }
+        { "path": "AGENTS.md", "line": 73, "label": "agents share the namespace" },
+        { "path": "compose/hardening.yml", "line": 13, "end_line": 29, "label": "NET_RAW dropped" }
       ]
     },
     {
@@ -83,24 +99,24 @@
       "label": "vault-run",
       "sublabel": "redeem, run, scrub",
       "pos": [1050, 300],
-      "size": [160, 62],
+      "size": [170, 62],
       "sources": [
         { "path": "agent-skills/using-vault-secrets/vault-run", "line": 107, "end_line": 125, "label": "main" },
         { "path": "agent-skills/using-vault-secrets/vault-run", "line": 41, "end_line": 63, "label": "POST /redeem" },
-        { "path": "lettucectl", "line": 150, "end_line": 170, "label": "installed by skills" }
+        { "path": "lettucectl", "line": 227, "end_line": 248, "label": "installed by lettucectl skills" }
       ]
     },
     {
       "id": "vault",
       "type": "security",
-      "label": "vault",
+      "label": "garden-vault",
       "sublabel": "/vault/, /mcp, /redeem",
-      "pos": [450, 470],
+      "pos": [470, 470],
       "size": [150, 62],
       "sources": [
-        { "path": "compose/vault.yml", "line": 18, "end_line": 49, "label": "container hardening" },
-        { "path": "vault/src/garden_vault/app.py", "line": 452, "end_line": 462, "label": "routes" },
-        { "path": "vault/src/garden_vault/app.py", "line": 111, "end_line": 119, "label": "JWT on every page" }
+        { "path": "compose/vault.yml", "line": 20, "end_line": 50, "label": "service and hardening" },
+        { "path": "vault/src/garden_vault/app.py", "line": 456, "end_line": 466, "label": "routes" },
+        { "path": "vault/src/garden_vault/app.py", "line": 110, "end_line": 148, "label": "Access JWT, Fetch Metadata, CSRF" }
       ]
     },
     {
@@ -108,12 +124,12 @@
       "type": "database",
       "label": "vault-data",
       "sublabel": "vault.db, encrypted",
-      "pos": [450, 640],
+      "pos": [470, 640],
       "size": [150, 62],
       "sources": [
-        { "path": "compose/vault.yml", "line": 51, "end_line": 55, "label": "named volume" },
+        { "path": "compose/vault.yml", "line": 52, "end_line": 56, "label": "named volume" },
         { "path": "vault/src/garden_vault/vault.py", "line": 1, "end_line": 7, "label": "what is encrypted" },
-        { "path": "lib/common.sh", "line": 364, "end_line": 370, "label": "volume and hardening checks" }
+        { "path": "lib/common.sh", "line": 436, "end_line": 438, "label": "only the vault mounts it" }
       ]
     },
     {
@@ -131,7 +147,7 @@
     {
       "kind": "region",
       "label": "Compose project lettuce-<name> (one per person)",
-      "wraps": ["cloudflared", "bff", "appserver", "vaultrun", "vault", "volume"],
+      "wraps": ["cloudflared", "garden", "bff", "appserver", "vaultrun", "vault", "volume"],
       "pad": 26
     },
     { "kind": "security-group", "label": "shared network namespace", "wraps": ["bff", "appserver", "vaultrun"], "pad": 18 },
@@ -146,8 +162,9 @@
   "connections": [
     { "from": "browser", "to": "edge", "label": "HTTPS", "variant": "emphasis" },
     { "from": "edge", "to": "cloudflared", "label": "tunnel", "variant": "emphasis" },
-    { "from": "cloudflared", "to": "bff", "label": "other paths :8080" },
-    { "from": "cloudflared", "to": "vault", "label": "/vault/, + JWT", "variant": "security" },
+    { "from": "cloudflared", "to": "garden", "label": "garden host /" },
+    { "from": "cloudflared", "to": "bff", "label": "Lettuce host + Lettuce JWT" },
+    { "from": "cloudflared", "to": "vault", "label": "garden host /vault/ + garden JWT", "variant": "security" },
     { "from": "bff", "to": "appserver", "label": "WebSocket 127.0.0.1:4500" },
     { "from": "appserver", "to": "bff", "label": "mcp_call (vault tool)", "fromSide": "top", "toSide": "top" },
     { "from": "bff", "to": "vault", "label": "POST /mcp, Host garden-vault" },
@@ -163,9 +180,10 @@
       "dot": "emerald",
       "title": "Boundaries that hold",
       "items": [
-        "Every /vault// page, the /garden/ landing page and every approval need an Access JWT the vault verifies; only Cloudflare adds it",
-        "The tunnel forwards only /vault/ and /garden/ to the vault; /mcp and /redeem answer to Host garden-vault with no Origin",
-        "lettucectl check refuses a vault without read_only or cap_drop ALL, with a host mount, or whose volume another service mounts",
+        "Every /vault/ page and every approval needs an Access JWT for the garden's own application (CF_GARDEN_AUD); only Cloudflare signs it",
+        "Lettuce's JWT, which reaches the BFF in plain HTTP, is for another audience: the vault refuses it, and check_garden_audience refuses a stack where it would not",
+        "Pages load only as top-level documents and forms post only from the garden origin (Fetch Metadata); every response sets COOP same-origin",
+        "/mcp and /redeem answer only Host garden-vault with no Origin; the tunnel routes only /vault/ to the vault",
         "The data key lives only in the vault process while unlocked; a lock drops handles and uncollected values"
       ]
     },
@@ -173,7 +191,7 @@
       "dot": "rose",
       "title": "Not a boundary",
       "items": [
-        "BFF and app-server share one network namespace; agents run as root in app-server",
+        "BFF and app-server share one network namespace; agents run as root in the app-server",
         "Agents can call /mcp and /redeem themselves, so approval is the gate",
         "vault-run keeps values out of the conversation, but an agent could redeem a handle directly"
       ]
@@ -182,9 +200,9 @@
       "dot": "slate",
       "title": "Not shown",
       "items": [
-        "Opt-in sidecars: searxng, ddg-mcp, google-mcp, gmail-triggers, pipelock, channel-gateway (it also joins the app-server namespace)",
-        "The LLM provider that app-server calls",
-        "lettucectl on the host: builds and checks each stack, installs vault-run with lettucectl skills"
+        "Other garden pages on the same host (gmail-triggers, the code editor) and Lettuce's opt-in services",
+        "The LLM provider that the app-server calls",
+        "lettucectl on the host: builds and checks each stack, registers the vault in Settings -> MCP (lettucectl mcp), installs vault-run (lettucectl skills)"
       ]
     }
   ]

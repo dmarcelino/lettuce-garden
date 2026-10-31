@@ -2,7 +2,7 @@
 # Gmail triggers (gmail-triggers/, docs/gmail-triggers-plan.md): a page where
 # each person says "when an email arrives in label X, ask agent Y to do Z",
 # and a poller that watches Gmail and queues each match for the executor
-# lettucectl installs in the app-server. Opt-in behind the `gmail-triggers`
+# lettucectl installs in the app-server. Opt-in behind the `garden-gmail-triggers`
 # profile, which needs `google`; without it this file adds nothing.
 #
 # The tunnel forwards https://<name>-garden.<domain>/gmail-triggers/ to it

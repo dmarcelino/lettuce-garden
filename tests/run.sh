@@ -3003,6 +3003,8 @@ test_doc_tools_tag_follows_what_goes_into_the_image() {
   [[ $a =~ ^[0-9a-f]{10}$ ]] || fail "bad tag $a"
   printf 'x\n' >"$H/doc-tools/tests/test_x.py"
   eq "$(docs_tag)" "$a"
+  printf '# docs\n' >"$H/doc-tools/README.md"
+  eq "$(docs_tag)" "$a"
   printf 'RUN true\n' >>"$H/doc-tools/Dockerfile"
   [[ $(docs_tag) != "$a" ]] || fail "the tag did not change with the Dockerfile"
 }
