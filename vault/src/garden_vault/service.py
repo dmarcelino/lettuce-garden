@@ -19,6 +19,8 @@ from typing import Any
 import anyio
 
 from .config import (
+    ERASE_DELAY_SECONDS,
+    ERASE_GRACE_SECONDS,
     HANDLE_TTL_SECONDS,
     MAX_HANDLES,
     MAX_PENDING,
@@ -99,6 +101,15 @@ class Handle:
     env: dict[str, str] = field(repr=False)  # VAULT_<FIELD> -> value
 
 
+def hours(seconds: int) -> str:
+    n = seconds // 3600
+    return f"{n} hour" if n == 1 else f"{n} hours"
+
+
+ERASE_DELAY = hours(ERASE_DELAY_SECONDS)
+ERASE_GRACE = hours(ERASE_GRACE_SECONDS)
+
+
 def env_name(key: str) -> str:
     return f"VAULT_{key.upper()}"
 
@@ -112,6 +123,8 @@ class Service:
         self._handles: dict[str, Handle] = {}
         self._tasks: anyio.abc.TaskGroup | None = None
         self._last_unlock_notice = -UNLOCK_NOTICE_SECONDS
+        # An erase that came due while the server was down still waits this long.
+        self._erase_not_before = vault.now() + ERASE_GRACE_SECONDS
 
     def bind_task_group(self, tg: anyio.abc.TaskGroup | None) -> None:
         self._tasks = tg
@@ -147,6 +160,67 @@ class Service:
             "message": "The user's vault is locked. Send them this link in your reply now, since they may not "
             f"get a notification, and ask them to unlock it: {self.url('')} Then try again.",
         }
+
+    # ── erase without the passphrase ─────────────────────────────────────────
+    # Every step is announced on every device, so whoever has the passphrase
+    # hears of an erase they did not ask for while there is time to stop it.
+    def _erase_notice(self, tag: str, title: str, body: str) -> None:
+        # A tag per kind of notice: the same tag would silently replace one still on screen.
+        self._spawn_push({"title": title, "body": body, "url": f"{PREFIX}/", "tag": f"vault-erase-{tag}"})
+
+    def pending_erase(self) -> tuple[int, str] | None:
+        """(when it will really run, who asked), counting the wait after a restart."""
+        pending = self.vault.pending_erase()
+        return None if pending is None else (max(pending[0], self._erase_not_before), pending[1])
+
+    def announce_overdue_erase(self) -> None:
+        """At startup: an erase due within the grace period gets a last notice."""
+        pending = self.vault.pending_erase()
+        if pending is not None and pending[0] < self._erase_not_before:
+            self._erase_notice(
+                "restart",
+                f"Vault erase in {ERASE_GRACE}",
+                f"The server restarted around the time your vault's erase was due. It is erased in {ERASE_GRACE} "
+                "unless someone unlocks the vault or cancels the erase.",
+            )
+
+    def schedule_erase(self, email: str) -> int:
+        at, new = self.vault.schedule_erase(email)
+        if new:
+            self.vault.audit(email, "scheduled an erase")
+            self._erase_notice(
+                "scheduled",
+                "Vault erase scheduled",
+                f"{email} asked to erase your vault. Everything in it is deleted in {ERASE_DELAY} "
+                "unless someone unlocks the vault or cancels the erase.",
+            )
+        return at
+
+    def cancel_erase(self, email: str) -> bool:
+        if not self.vault.cancel_erase():
+            return False
+        self.erase_cancelled(email, by_unlock=False)
+        return True
+
+    def erase_cancelled(self, email: str, by_unlock: bool) -> None:
+        """After `cancel_erase`, or an unlock that cancelled one."""
+        self.vault.audit(email, "cancelled the scheduled erase" + (" by unlocking" if by_unlock else ""))
+        how = "unlocked the vault, which cancels" if by_unlock else "cancelled"
+        self._erase_notice("cancelled", "Vault erase cancelled", f"{email} {how} the erase. Nothing was deleted.")
+
+    def erase_if_due(self) -> bool:
+        """Run from housekeeping, which must go on (expiry, auto-lock) if this fails;
+        a failed erase stays scheduled and is tried again on the next pass."""
+        try:
+            by = self.vault.erase_if_due(not_before=self._erase_not_before)
+        except Exception as e:
+            log.warning("scheduled erase failed error=%s", type(e).__name__)
+            return False
+        if by is None:
+            return False
+        self.vault.audit(by, f"erased the vault (scheduled {ERASE_DELAY} earlier)")
+        self._erase_notice("done", "Vault erased", "Your vault was erased as scheduled. Open it to create a new one.")
+        return True
 
     # ── housekeeping ─────────────────────────────────────────────────────────
     def expire(self) -> None:

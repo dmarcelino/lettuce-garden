@@ -1,6 +1,6 @@
 """The ASGI app: MCP at /mcp and vault-run's /redeem (internal only; the tunnel
 forwards /vault/ on the garden's host alone) and the vault UI at /vault/
-(every route needs a verified Access JWT, and all but setup/unlock/notifications
+(every route needs a verified Access JWT, and all but setup/unlock/erase/notifications
 an unlocked vault)."""
 
 from __future__ import annotations
@@ -26,10 +26,10 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, R
 from starlette.routing import Mount, Route
 
 from . import icons
-from .config import PREFIX, UNLOCK_ATTEMPTS_PER_MINUTE
+from .config import ERASE_REQUESTS_PER_HOUR, PREFIX, UNLOCK_ATTEMPTS_PER_MINUTE
 from .kinds import KINDS, preview
 from .mcp_tools import build_server
-from .service import Service
+from .service import ERASE_DELAY, Service, hours
 from .vault import ASK, AUTO, Field, Locked, Secret, Vault, VaultError, build_fields
 
 log = logging.getLogger("garden_vault.ui")
@@ -61,17 +61,18 @@ def _fmt_time(ts: int | None) -> str:
 
 
 class RateLimiter:
-    def __init__(self, per_minute: int, clock: Callable[[], float] = time.monotonic):
-        self._per_minute = per_minute
+    def __init__(self, limit: int, window: float = 60, clock: Callable[[], float] = time.monotonic):
+        self._limit = limit
+        self._window = window
         self._clock = clock
         self._hits: dict[str, deque[float]] = defaultdict(deque)
 
     def allow(self, key: str) -> bool:
         now = self._clock()
         hits = self._hits[key]
-        while hits and now - hits[0] > 60:
+        while hits and now - hits[0] > self._window:
             hits.popleft()
-        if len(hits) >= self._per_minute:
+        if len(hits) >= self._limit:
             return False
         hits.append(now)
         return True
@@ -85,9 +86,12 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
     env = Environment(loader=PackageLoader("garden_vault", "templates"), autoescape=select_autoescape(default=True))
     env.filters["time"] = _fmt_time
     env.globals["base"] = PREFIX
+    env.globals["erase_delay"] = ERASE_DELAY
     static = resources.files("garden_vault") / "static"
     vault: Vault = service.vault
     unlock_limiter = RateLimiter(UNLOCK_ATTEMPTS_PER_MINUTE)
+    # Every erase request notifies every device: a session must not flood them.
+    erase_limiter = RateLimiter(ERASE_REQUESTS_PER_HOUR, window=3600)
 
     def render(name: str, email: str, status: int = 200, **ctx: Any) -> HTMLResponse:
         unlocked = vault.is_unlocked()
@@ -100,6 +104,16 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
             **ctx,
         )
         return HTMLResponse(html, status_code=status, headers=SECURITY_HEADERS)
+
+    def locked_page(email: str, next_path: str, status: int = 200, problem: str = "") -> HTMLResponse:
+        """The unlock page, with the scheduled erase if there is one."""
+        erase = None
+        pending = service.pending_erase()
+        if pending is not None:
+            at, by = pending
+            left = hours(max(at - vault.now(), 0) + 3599)  # rounded up: never claims more time than is left
+            erase = {"when": time.strftime("%Y-%m-%d %H:%M %Z", time.localtime(at)), "by": by, "left": left}
+        return render("unlock.html", email, status=status, next=next_path, problem=problem, erase=erase)
 
     def error(message: str, status: int, email: str = "") -> HTMLResponse:
         return render("error.html", email, status=status, message=message)
@@ -136,12 +150,12 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
                     return render("setup.html", email)
                 if not vault.is_unlocked():
                     target = request.url.path if request.method == "GET" else PREFIX + "/"
-                    return render("unlock.html", email, next=target)
+                    return locked_page(email, target)
             vault.touch()
             try:
                 return await handler(request, email)
             except Locked:
-                return render("unlock.html", email, next=PREFIX + "/")
+                return locked_page(email, PREFIX + "/")
             except VaultError as e:
                 return error(str(e), 400, email)
 
@@ -164,13 +178,15 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
         form = await request.form()
         nxt = _safe_next(form.get("next"))
         if not unlock_limiter.allow(email):
-            return render("unlock.html", email, status=429, next=nxt, problem="Too many attempts. Wait a minute.")
+            return locked_page(email, nxt, 429, "Too many attempts. Wait a minute.")
         try:
-            vault.unlock(str(form.get("passphrase", "")))
+            cancelled_erase = vault.unlock(str(form.get("passphrase", "")))
         except VaultError as e:
             vault.audit(email, "failed unlock")
-            return render("unlock.html", email, status=403, next=nxt, problem=str(e))
+            return locked_page(email, nxt, 403, str(e))
         vault.audit(email, "unlocked")
+        if cancelled_erase:
+            service.erase_cancelled(email, by_unlock=True)
         return RedirectResponse(nxt, status_code=303, headers=SECURITY_HEADERS)
 
     async def lock(request: HttpRequest, email: str) -> Response:
@@ -196,6 +212,22 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
             raise VaultError("type DELETE to erase the vault")
         vault.reset()
         vault.audit(email, "erased the vault")
+        return back("/")
+
+    async def erase(request: HttpRequest, email: str) -> Response:
+        """A locked vault (forgotten passphrase): erased after a delay, unless
+        someone unlocks it or cancels first. Every device is told."""
+        form = await request.form()
+        if form.get("confirm") != "DELETE":
+            raise VaultError("type DELETE to erase the vault")
+        if not erase_limiter.allow(email):
+            return locked_page(email, PREFIX + "/", 429, "Too many erase requests. Wait an hour.")
+        service.schedule_erase(email)
+        return back("/")
+
+    async def erase_cancel(request: HttpRequest, email: str) -> Response:
+        # No passphrase: cancelling keeps data, so it needs no more proof than scheduling.
+        service.cancel_erase(email)
         return back("/")
 
     # ── approvals ────────────────────────────────────────────────────────────
@@ -390,6 +422,8 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
         Route("/setup", page(setup, post=True, **open_page), methods=["POST"]),
         Route("/unlock", page(unlock, post=True, **open_page), methods=["POST"]),
         Route("/lock", page(lock, post=True, **open_page), methods=["POST"]),
+        Route("/erase", page(erase, post=True, **open_page), methods=["POST"]),
+        Route("/erase/cancel", page(erase_cancel, post=True, **open_page), methods=["POST"]),
         Route("/settings", page(settings_page)),
         Route("/settings/passphrase", page(change_passphrase, post=True), methods=["POST"]),
         Route("/settings/reset", page(reset, post=True), methods=["POST"]),
@@ -437,9 +471,11 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         async with mcp_app.router.lifespan_context(mcp_app), anyio.create_task_group() as tg:
             service.bind_task_group(tg)
+            service.announce_overdue_erase()
 
             async def housekeeping() -> None:
                 while True:
+                    service.erase_if_due()
                     service.expire()
                     vault.is_unlocked()  # applies the auto-lock
                     await anyio.sleep(30)
