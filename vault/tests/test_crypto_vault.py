@@ -1,6 +1,9 @@
+import sqlite3
+
 import pytest
 
 from garden_vault import crypto
+from garden_vault.config import ERASE_DELAY_SECONDS
 from garden_vault.kinds import KINDS
 from garden_vault.vault import AUTO, Locked, Vault, VaultError, build_fields
 
@@ -98,6 +101,75 @@ def test_reset_erases_everything(vault, vault_path):
     assert CARD.encode() not in open(vault_path, "rb").read()
 
 
+def test_erase_can_be_scheduled_only_for_a_locked_vault(vault, vault_path, clock):
+    with pytest.raises(VaultError, match="unlocked"):
+        vault.schedule_erase("alfred@gmail.com")
+    assert vault.pending_erase() is None
+    empty = Vault(str(vault_path) + ".new", clock=clock, kdf=FAST_KDF)
+    with pytest.raises(VaultError, match="no vault"):
+        empty.schedule_erase("alfred@gmail.com")
+
+
+def test_scheduled_erase_runs_after_24_hours(vault, vault_path, clock):
+    add_card(vault)
+    vault.add_subscription("https://push.example/1", "k", "a", "alfred@gmail.com")
+    vault.lock()
+    at, new = vault.schedule_erase("alfred@gmail.com")
+    assert new and at == int(clock.t) + ERASE_DELAY_SECONDS
+    assert vault.pending_erase() == (at, "alfred@gmail.com")
+    clock.t += 3600
+    # Asking again neither moves the time nor counts as a new request.
+    assert vault.schedule_erase("hal@example.com") == (at, False)
+    assert vault.pending_erase() == (at, "alfred@gmail.com")
+    clock.t = at - 1
+    assert vault.erase_if_due() is None and vault.is_setup()
+    clock.t = at
+    assert vault.erase_if_due() == "alfred@gmail.com"
+    assert not vault.is_setup() and vault.pending_erase() is None
+    assert len(vault.subscriptions()) == 1
+    assert CARD.encode() not in open(vault_path, "rb").read()
+    assert vault.erase_if_due() is None
+
+
+def test_scheduled_erase_survives_a_restart(vault, vault_path, clock):
+    vault.lock()
+    at, _ = vault.schedule_erase("alfred@gmail.com")
+    again = Vault(vault_path, clock=clock, kdf=FAST_KDF)
+    assert again.pending_erase() == (at, "alfred@gmail.com")
+    clock.t = at + 1
+    assert again.erase_if_due() == "alfred@gmail.com" and not again.is_setup()
+
+
+def test_unlocking_or_cancelling_stops_the_erase(vault, clock):
+    vault.lock()
+    vault.schedule_erase("alfred@gmail.com")
+    assert vault.unlock(PASSPHRASE) is True
+    assert vault.pending_erase() is None
+    vault.lock()
+    assert vault.unlock(PASSPHRASE) is False
+    vault.lock()
+    vault.schedule_erase("alfred@gmail.com")
+    assert vault.cancel_erase() is True and vault.pending_erase() is None
+    assert vault.cancel_erase() is False
+    clock.t += 2 * ERASE_DELAY_SECONDS
+    assert vault.erase_if_due() is None and vault.is_setup()
+
+
+def test_unlock_fails_when_the_vault_was_erased_meanwhile(vault, monkeypatch):
+    vault.lock()
+    unwrap = vault._unwrap
+
+    def erase_during_kdf(passphrase):
+        key = unwrap(passphrase)
+        vault.reset()
+        return key
+
+    monkeypatch.setattr(vault, "_unwrap", erase_during_kdf)
+    with pytest.raises(VaultError, match="erased"):
+        vault.unlock(PASSPHRASE)
+    assert not vault.is_unlocked()
+
+
 def test_types_are_short_and_private_where_it_matters():
     shapes = {key: [(f.key, f.sensitive, f.required) for f in kind.fields] for key, kind in KINDS.items()}
     text = [("text", True, True)]
@@ -151,3 +223,26 @@ def test_audit_is_encrypted_and_readable_when_unlocked(vault):
     vault.audit("alfred@gmail.com", "failed unlock")
     with pytest.raises(Locked):
         vault.audit_log()
+
+
+def test_a_failed_cancel_leaves_the_vault_locked(vault, monkeypatch):
+    vault.lock()
+    vault.schedule_erase("alfred@gmail.com")
+
+    def broken():
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(vault, "cancel_erase", broken)
+    with pytest.raises(sqlite3.OperationalError):
+        vault.unlock(PASSPHRASE)
+    # Unlocked with the erase still scheduled, it would run after the next lock, unannounced.
+    assert not vault.is_unlocked() and vault.pending_erase() is not None
+
+
+def test_an_erase_waits_for_its_not_before(vault, clock):
+    vault.lock()
+    at, _ = vault.schedule_erase("alfred@gmail.com")
+    clock.t = at + 10
+    assert vault.erase_if_due(not_before=at + 3600) is None and vault.is_setup()
+    clock.t = at + 3600
+    assert vault.erase_if_due(not_before=at + 3600) == "alfred@gmail.com"
