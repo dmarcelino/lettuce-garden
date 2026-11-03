@@ -1,74 +1,74 @@
-# Architecture
+# How it works
 
-What runs for one person, with every profile on, and how the parts reach each other. Each person has a stack like this one: its own Compose project (`lettuce-<name>`), Cloudflare Tunnel, two Cloudflare Access applications and state directory. Only the document tools' Gotenberg and volume are shared by the stacks of a host.
+What lettuce-garden runs for each person, what reaches it from the internet, and where each person's data lives. This page is for whoever installs and runs it. The internals (networks, mounts, which service calls which, and the checks that keep them so) are in [ARCHITECTURE.md](../ARCHITECTURE.md).
+
+## One stack per person
+Lettuce is single-user: agents in one stack can read each other's memory and tokens. So lettuce-garden gives every person a stack of their own: a separate Docker Compose project (`lettuce-<name>`), with its own Cloudflare Tunnel, its own Cloudflare Access applications and its own data directory. Nobody can reach another person's stack. **Cloudflare authenticates the people; Docker separates the assistants.** Upstream Lettuce needs no multi-user code for this.
+
+- **No open ports.** `cloudflared` connects outbound, so the host can run behind NAT, and its firewall can stay closed except for SSH. Every published port is removed.
+- **Defence in depth.** Each stack is checked three times:
+  - The Access policy admits only that stack's people.
+  - The Lettuce BFF verifies the Access JWT against that application's own AUD tag, so a token minted for another stack is rejected.
+  - `ALLOWED_USERS` must also match. `lettucectl users` updates the policy and `ALLOWED_USERS` together, because upstream says they must be kept in sync.
+- **One command per person.** `lettucectl add <name> <email>` creates the Access policy and applications, the tunnel and its routing, and the DNS records through the Cloudflare API, then starts the stack.
+- **Checked before every start.** `lettucectl up` (and every command that starts a stack) refuses a stack whose isolation or hardening has been weakened, and says which rule it broke. A container Docker restarts on its own (after a reboot or a daemon restart) is not checked again until the next `up`.
+
+Within one stack there is no such separation: agents run as root in the same container and can read everything else in that stack, including its provider keys. The vault is the exception (see [vault.md](vault.md#security-model)).
+
+## Two addresses per stack
+| Address | What is there | Who may sign in |
+|---|---|---|
+| `https://<name>.<your-domain>` | Lettuce: the web app (a PWA) and the agents | the stack's people, through Lettuce's Access application |
+| `https://<name>-garden.<your-domain>` | the garden pages that are on: a landing page at `/`, the vault at `/vault/`, Gmail triggers at `/gmail-triggers/`, the code editor at `/code-server/` | the same people, through the garden's own Access application |
+
+Both Access applications share the stack's one Access policy, so `lettucectl users` changes who may sign in to both. The garden pages accept only the garden's sign-in, never Lettuce's, which agents could catch inside their own container. Anything else on the garden address gets a 404. When that name is already taken in the zone, `add` picks a numbered one (`-garden-2` to `-garden-9`); `lettucectl list` shows each stack's addresses.
+
+## What runs in each stack
+Every container of one stack with every profile on, its networks and volumes, and how they reach each other:
 
 ![Every container of one stack, its networks, volumes and routes](diagrams/lettuce-garden-overview.svg)
 
-An interactive version, [lettuce-garden-overview.html](diagrams/lettuce-garden-overview.html), opens in a browser from a clone of this repo. Each folder's README has a narrower diagram of its own part.
+An interactive version, [lettuce-garden-overview.html](diagrams/lettuce-garden-overview.html), opens in a browser from a clone of this repo.
 
-## Two hosts per stack
-| Host | Access application | Tunnel routes it to |
+| Service | What it does | On with |
 |---|---|---|
-| `<name>.<domain>` | Lettuce's (`CF_ACCESS_AUD`) | `app-server:8080`, the BFF's port in the app-server's network namespace |
-| `<name>-garden.<domain>` | the garden's (`CF_GARDEN_AUD`) | `^/vault(/\|$)` to `garden-vault:8000`, `^/gmail-triggers(/\|$)` to `garden-gmail-triggers:8000`, `^/code-server(/\|$)` to `garden-code-server:8000` (each only with its profile), `^/(assets/[^/]+)?$` to `garden:8000` (with any of them); anything else gets a 404 |
+| `cloudflared` | connects the stack to Cloudflare, outbound only | `cloudflared` (required) |
+| `app-server` | letta-code: the agents, their shell and tools, memory and workspaces | always |
+| `bff` | Lettuce's web app and its server, the only connection to the agents | always |
+| `channel-gateway` | the Telegram channel | `telegram` |
+| `searxng`, `ddg-mcp` | web search and the page reader for the agents | `search` |
+| `google-mcp` | Gmail, Calendar, Tasks and Contacts for the agents | `google` |
+| `garden` | the garden's landing page | any of `garden-vault`, `garden-gmail-triggers`, `garden-code-server` |
+| `garden-vault` | the vault | `garden-vault` |
+| `garden-gmail-triggers` | Gmail triggers | `garden-gmail-triggers` |
+| `garden-pipelock` | the egress proxy | `garden-pipelock` |
+| `garden-code-server`, `garden-code-server-editor`, `garden-code-server-exec` | the code editor's gate, the editor, and the shell its terminals run in | `garden-code-server` |
+| `gotenberg` | document conversions, **one per host** for every stack (Compose project `lettuce_shared`) | `garden-doc-tools` |
 
-Both applications share the stack's Access policy, so `lettucectl users` changes who may sign in to both. The garden's services accept only the garden's tokens, never Lettuce's, which agents could catch inside the app-server's namespace. The routes are written by `cf_tunnel_configure` ([lib/cloudflare.sh](../lib/cloudflare.sh)) from `PROFILE_ROUTES`, on `add` and on every `profiles` run. `/executor/v1/` and `/healthz` are never routed.
+Every service runs with `no-new-privileges` and a memory cap. The memory caps are 8 GiB for each app-server and for the code editor's shell, 2 GiB for the editor and for Gotenberg, 1 GiB for upstream's other services, 512 MiB for the vault, 256 MiB for cloudflared, Gmail triggers, pipelock and the code editor's gate, and 128 MiB for the landing page. These are caps, not reservations; measure idle use with `docker stats`. The garden's services, pipelock, and the code editor's gate and editor also run read-only with every capability dropped. The code editor's shell is the exception: it is as strong as an agent, so it keeps Docker's default capabilities except `NET_RAW`, and a writable root. Profiles are global: all stacks share one app-server image, whose contents depend on `PROFILES`, so `lettucectl profiles` changes the list for every stack at once.
 
-## Containers
-| Service | From | Profile | Networks | Mounts |
-|---|---|---|---|---|
-| `cloudflared` | upstream | `cloudflared` (required) | `default` | none |
-| `app-server` | upstream | always | `default`; `lettuce-doc-tools-<name>` with `garden-doc-tools` | `state/letta-home`, `letta-data`, `workspaces`, `tools`; the doc-tools volume read-only with `garden-doc-tools` |
-| `bff` | upstream | always | the app-server's namespace | `google-policy`, `google-creds`, `bff-data`, `bff-auth`; `workspaces`, `letta-home` and the memory files read-only |
-| `channel-gateway` | upstream | `telegram` | the app-server's namespace | `letta-home`, `letta-data`, `workspaces` |
-| `searxng`, `ddg-mcp` | upstream | `search` | `default` | none |
-| `google-mcp` | upstream | `google` | `default` | `google-policy` read-only, `google-creds` |
-| `garden` | [garden/](../garden/README.md) | any garden page profile | `default` | none |
-| `garden-vault` | [vault/](../vault/README.md) | `garden-vault` | `default` | `vault-data` |
-| `garden-gmail-triggers` | [gmail-triggers/](../gmail-triggers/README.md) | `garden-gmail-triggers` | `default` | `state/garden/gmail-triggers`; `google-creds` and `google-policy` read-only |
-| `garden-pipelock` | [pipelock/](../pipelock/README.md) | `garden-pipelock` | `default` | `pipelock-data` |
-| `garden-code-server` (the gate) | [code-server/](../code-server/README.md) | `garden-code-server` | `default` | `code-server-sock` read-only |
-| `garden-code-server-editor` | [code-server/editor/](../code-server/README.md) | `garden-code-server` | `code-exec` | `workspaces`, `code-server-data`, `code-exec-keys`, `code-server-sock` |
-| `garden-code-server-exec` (the shell) | [code-server/exec/](../code-server/README.md) | `garden-code-server` | `code-exec`, `code-egress` | `workspaces`, `tools`, `code-exec-keys` read-only |
-| `gotenberg` (project `lettuce_shared`, one per host) | [compose/shared/](../compose/README.md) | `garden-doc-tools` | its own internal network and each stack's `lettuce-doc-tools-<name>` | none |
-
-`state/` is `stacks/<name>/state/` on the host. Every service runs with `no-new-privileges` and a memory cap ([compose/hardening.yml](../compose/hardening.yml)); every container in the app-server's namespace drops `NET_RAW`; the garden's services, the code editor and pipelock are read-only with every capability dropped. The code editor's shell is the exception: it is as strong as an agent, so it keeps Docker's default capabilities but `NET_RAW` and a writable root. [compose/README.md](../compose/README.md) describes each overlay, and `lettucectl check` refuses a stack that departs from this table (AGENTS.md, "Key invariants").
-
-## Networks
-| Network | Internal | Members | Made by |
+## Where the data lives
+| Data | Where | `backup` | Deleted by |
 |---|---|---|---|
-| `default` (one per stack) | no | every stack service but the editor and the shell | Compose |
-| `code-exec` | yes | the editor and the shell | Compose |
-| `code-egress` | no | the shell: its only way out | Compose |
-| `lettuce-doc-tools-<name>` | yes | the app-server and Gotenberg (alias `gotenberg`) | lettucectl (`sync_doc_tools`) |
-| `lettuce_shared`'s `internal` | yes | Gotenberg | Compose, project `lettuce_shared` |
+| agents, conversations, memory, provider keys | `stacks/<name>/state/letta-data` | yes | `remove --purge` |
+| settings, schedules, transcripts, Claude Code/Codex/gh logins, skills from Settings | `stacks/<name>/state/letta-home` | yes | `remove --purge` |
+| the agents' workspaces | `stacks/<name>/state/workspaces` | yes | `remove --purge` |
+| the tools agents installed | `stacks/<name>/state/tools` | yes, unless `--no-tools` | `remove --purge` |
+| Gmail trigger rules | `stacks/<name>/state/garden` | yes | `remove --purge` |
+| the stack's secrets and Cloudflare ids | `stacks/<name>/stack.env` | yes | `remove --purge` |
+| the vault, encrypted | Docker volume `lettuce-<name>_vault-data` | yes, whenever it exists | `remove` |
+| pipelock's receipts and signing key | Docker volume `lettuce-<name>_pipelock-data` | yes, whenever it exists | `remove` |
+| Lettuce's Google client and tokens | Docker volumes `lettuce-<name>_google-policy`, `lettuce-<name>_google-creds` | no | `remove` |
+| push subscriptions and pinned-agent lists | Docker volume `lettuce-<name>_bff-data` | no; losing it is harmless | `remove` |
+| the code editor's settings | Docker volume `lettuce-<name>_code-server-data` | no; nothing in it is needed to restore a stack | `remove` |
+| the document tools | Docker volume `lettuce-doc-tools-<hash>`, one per host | no; rebuilt from this repo | turning `garden-doc-tools` off |
 
-## Volumes
-| Volume | Mounted by | Notes |
-|---|---|---|
-| `vault-data` | `garden-vault` | the encrypted vault; `backup` copies it read-only |
-| `pipelock-data` | `garden-pipelock` | receipt signing key and receipts; `backup` and `receipts` read it read-only |
-| `google-creds`, `google-policy` | `bff`, `google-mcp`, `garden-gmail-triggers` (read-only) | upstream's; never the app-server |
-| `bff-data`, `bff-auth` | `bff` | upstream's |
-| `code-server-data` | the editor | its settings and state |
-| `code-exec-keys` | the editor (writes), the shell (read-only) | the SSH keys between them |
-| `code-server-sock` | the editor, the gate (read-only) | the editor's Unix socket, its only listener |
-| `lettuce-doc-tools-<tag>` | every app-server, read-only | one per host, filled by lettucectl; not a Compose volume |
+`remove` deletes the stack's Docker volumes with it, and keeps `stacks/<name>/` (its `stack.env` and `state/`) unless `--purge`. Backups and restores: [operations.md](operations.md#backups).
 
-Named volumes of a stack are deleted with it by `lettucectl remove` (`compose down -v`). The host paths under `stacks/<name>/state/` are kept unless `--purge`.
+## Limits and caveats
+- **Version pinning.** Lettuce is compiled against one exact letta-code release and pins the server image to it. Move between upstream tags only with `lettucectl upgrade <tag>`.
+- **Shared app-server image.** All stacks share one image, whose contents depend on `PROFILES`. That is why profiles are global, and why `check` refuses a stack whose profiles differ.
+- **Agent web apps.** Upstream's agent-served apps on ports 3000-3099 are not exposed: they are unauthenticated, and one host cannot publish the same range twice.
+- **Data on disk.** A stack's data is only as private as the host. Whoever has root on it can read every stack.
 
-## Who calls whom
-| From | To | How |
-|---|---|---|
-| The BFF | the app-server | the only connection to agents; nothing else opens one or starts a turn |
-| The BFF | `searxng`, `ddg-mcp` | backends of the agents' web search and page fetch |
-| Agents (app-server) | `google-mcp` | MCP over HTTP, as Settings -> Google Workspace allows |
-| Agents | `garden-vault` | MCP at `http://garden-vault:8000/mcp`; `vault-run` at `/redeem` |
-| Agents | `garden-pipelock` | `HTTPS_PROXY` (advisory) and `/fetch` for scanned pages |
-| Agents | Gotenberg | the PDF MCP, started per call from the doc-tools volume |
-| The garden executor (cron in the app-server) | `garden`, `garden-gmail-triggers` | `/executor/v1/` with `GARDEN_EXECUTOR_TOKEN`: the agent list, and Gmail triggers' requests, which it runs as `letta cron add --once` ([garden-executor.md](garden-executor.md)) |
-| `garden-gmail-triggers` | Gmail | read-only, with the token Settings -> Google stores |
-| The gate | the editor | the editor's Unix socket |
-| The editor | the shell | SSH, for terminals and every git call |
-
-What each part does, and why it is built the way it is, is in its folder's README and its guide under `docs/`.
+Each feature's own guarantees and limits are in its guide: [vault](vault.md#security-model), [Gmail triggers](gmail-triggers.md#security-model), [code editor](code-server.md#security-model), [document tools](doc-tools.md#security-model), [egress proxy](egress-firewall.md#what-it-does-not-do). [operations.md](operations.md#security-notes) has the operator's security notes.

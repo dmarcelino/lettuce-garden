@@ -1,6 +1,6 @@
 # vault
 
-The vault service: each person's secrets, encrypted with their passphrase, shared with agents only when the person approves. It is Python (Starlette, MCP SDK 2.x, `cryptography`), runs as the `garden-vault` service behind the `garden-vault` profile, and serves its pages at `/vault/` on the stack's garden host (`<name>-garden.<domain>`). Usage and the security model are in [docs/vault.md](../docs/vault.md).
+The vault service: each person's secrets, encrypted with their passphrase, shared with agents only when the person approves. It is Python (Starlette, MCP SDK 2.x, `cryptography`), runs as the `garden-vault` service behind the `garden-vault` profile, and serves its pages at `/vault/` on the stack's garden host (`<name>-garden.<domain>`). For users and admins (using it, running it, the security model): [docs/vault.md](../docs/vault.md).
 
 ![The vault's containers, trust boundaries and requests](../docs/diagrams/vault-architecture.svg)
 
@@ -43,6 +43,9 @@ tests/run-sidecar.sh vault            # pytest in the image's test stage
 tests/run-sidecar.sh vault -k vault   # extra args go to pytest
 ```
 Run them before changing this directory or `garden-common/`.
+
+## Rules for changing it
+Never add a tool that lets agents edit secrets or skip approval, and never let a value or key reach a log or an unencrypted file.
 
 ## Upstream seams
 These are the Lettuce behaviours the vault depends on, as AGENTS.md names them:

@@ -1,5 +1,5 @@
 # The garden service (the landing page at the root of the garden's host and the
-# agent list; docs/garden-host-plan.md). Built by lettucectl via
+# agent list; garden/DESIGN.md). Built by lettucectl via
 # compose/garden.yml; tests/run-sidecar.sh builds the `test` stage and runs it.
 # Both pass the shared package as the build context named `garden-common`. The
 # executor (executor/) runs in the app-server, not in this image.

@@ -1,6 +1,6 @@
 # Garden executor
 
-The garden executor, `garden/executor/run.mjs`, is how the garden sidecars get anything done inside Lettuce's app-server. (Other code from this repo runs there too, at an agent's call: `vault-run` and the document tools.) The garden sidecars never connect to Lettuce; once a minute the executor asks them over HTTP on the stack network what they want, runs `letta` for them and sends the results back. It gives the landing page ([garden/](../garden/README.md)) the agent list and turns Gmail triggers' requests into one-off letta-code tasks ([docs/gmail-triggers.md](gmail-triggers.md)). This page is the maintainer's reference for how it is installed and what it says to whom. The diagram is in [garden/README.md](../garden/README.md).
+The garden executor, `garden/executor/run.mjs`, is how the garden sidecars get anything done inside Lettuce's app-server. (Other code from this repo runs there too, at an agent's call: `vault-run` and the document tools.) The garden sidecars never connect to Lettuce; once a minute the executor asks them over HTTP on the stack network what they want, runs `letta` for them and sends the results back. It gives the landing page ([garden/](../README.md)) the agent list and turns Gmail triggers' requests into one-off letta-code tasks ([docs/gmail-triggers.md](../../docs/gmail-triggers.md)). This page is the maintainer's reference for how it is installed and what it says to whom. The diagram is in [garden/README.md](../README.md).
 
 ## Install
 
@@ -76,7 +76,7 @@ The `--flag=value` form is needed because letta's argument parser refuses a sepa
 
 ## Trust
 
-Agents are root in the app-server, so they can read the token and the installed script and call the API themselves: read, claim or forge what the executor sees, or answer in a sidecar's place. The token keeps out the stack's other containers, not agents. So both sides treat the other's data as untrusted: the executor validates every field and runs `letta` from an argument array, the sidecars validate every body, and garden shows agent names only as escaped text and links only to ids shaped like agent ids. A claimed Gmail request is never offered twice (a lost turn beats a duplicate). The sidecars and the executor share no directory: a bind mount inside `letta-home` would be agent-writable. See [AGENTS.md](../AGENTS.md), "Key invariants", and the security model in [docs/gmail-triggers.md](gmail-triggers.md).
+Agents are root in the app-server, so they can read the token and the installed script and call the API themselves: read, claim or forge what the executor sees, or answer in a sidecar's place. The token keeps out the stack's other containers, not agents. So both sides treat the other's data as untrusted: the executor validates every field and runs `letta` from an argument array, the sidecars validate every body, and garden shows agent names only as escaped text and links only to ids shaped like agent ids. A claimed Gmail request is never offered twice (a lost turn beats a duplicate). The sidecars and the executor share no directory: a bind mount inside `letta-home` would be agent-writable. See [AGENTS.md](../../AGENTS.md), "Key invariants", and the security model in [docs/gmail-triggers.md](../../docs/gmail-triggers.md).
 
 ## Testing
 

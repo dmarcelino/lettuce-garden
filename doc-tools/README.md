@@ -1,6 +1,6 @@
 # doc-tools
 
-The document tools' image: [OfficeAgent.NET](https://github.com/ilia-sokolov/OfficeAgent.NET) and this repo's PDF MCP server, with their own Python, under `/opt/lettuce-doc-tools`. With the `garden-doc-tools` profile, every stack's app-server mounts that tree read-only, and agents call the two stdio MCP servers, `office` and `pdf`, from their workspaces. Conversions to PDF, merges, rotations, watermarks and stamps go to one shared Gotenberg per host. [docs/doc-tools.md](../docs/doc-tools.md) is the guide and the security model.
+The document tools' image: [OfficeAgent.NET](https://github.com/ilia-sokolov/OfficeAgent.NET) and this repo's PDF MCP server, with their own Python, under `/opt/lettuce-doc-tools`. With the `garden-doc-tools` profile, every stack's app-server mounts that tree read-only, and agents call the two stdio MCP servers, `office` and `pdf`, from their workspaces. Conversions to PDF, merges, rotations, watermarks and stamps go to one shared Gotenberg per host. For users and admins (using it, running it, the security model): [docs/doc-tools.md](../docs/doc-tools.md).
 
 ![The document tools: image, volume, agent call and Gotenberg](../docs/diagrams/doc-tools-architecture.svg)
 
@@ -31,6 +31,23 @@ An interactive version, [doc-tools-architecture.html](../docs/diagrams/doc-tools
 - **`check_stack`:** whatever the profiles, only the app-server may mount an image or the tools' volume. With the profile, the mount must be this tree's volume, read-only, at `/opt/lettuce-doc-tools`; only the app-server joins the network and it keeps `default`; the network must be internal and labelled for the stack (`check_doc_tools`). Before Gotenberg starts, `check_gotenberg` refuses it without its hardening, as root, with a port, a mount or a non-internal network, without any of the flags that stop documents fetching URLs or with one set back to `false`, or with an allow-list, disabled web security or debug logging. See [Key invariants](../AGENTS.md#key-invariants).
 - **No tunnel route, no ports:** nothing here is reachable from outside the host.
 
+### What `up` does with the profile
+1. It builds `lettuce-doc-tools:<hash>` (`doc-tools/Dockerfile`), once per host. The hash covers
+   everything in `doc-tools/` but its tests and README, so a change there is a new image. The first build
+   downloads OfficeAgent (checked against its pinned SHA-256), a Python runtime and the Python
+   packages (hash-pinned in `doc-tools/requirements.lock`), and takes a few minutes.
+2. It creates the stack's internal network `lettuce-doc-tools-<name>`.
+3. It copies the image's tools into the volume `lettuce-doc-tools-<hash>`, once per host (about
+   300 MB, a second or two), and marks it complete last; a volume without the mark is filled again.
+   The copy runs in a container with no network and no capabilities beyond file ownership.
+4. It starts the app-server with the volume mounted read-only at `/opt/lettuce-doc-tools` and on
+   that network (`compose/doc-tools.yml`).
+5. It starts the shared Gotenberg (`compose/shared/gotenberg.yml`, project `lettuce_shared`) if it
+   is not running, and connects it to every stack's network.
+
+The tools are a volume rather than an image mount because Docker 29 brings image mounts back
+empty after a daemon restart or a reboot; a volume survives both like the rest of the stack.
+
 ## Build and test
 ```bash
 tests/run-sidecar.sh doc-tools            # the PDF server's tests (pytest in the image's test stage)
@@ -41,6 +58,21 @@ shellcheck -x doc-tools/bin/* doc-tools/lib/launch.sh
 scripts/doc-tools-e2e.sh                  # against the real app-server image and a real Gotenberg (Docker, internet for the first build)
 ```
 `up` builds the image of a new tag, fills its volume and recreates the app-servers.
+
+## Maintaining
+Every version is pinned in `doc-tools/`:
+- **OfficeAgent:** `OFFICEAGENT_VERSION` and `OFFICEAGENT_SHA256` in `doc-tools/Dockerfile`. Take
+  the SHA-256 from the release's `SHA256SUMS`, and check it with
+  `gh attestation verify officeagent-mcp-linux-x64.tar.gz --repo ilia-sokolov/OfficeAgent.NET`.
+- **Python packages:** `doc-tools/pyproject.toml`, then regenerate `doc-tools/requirements.lock`
+  with the command at its top.
+- **Python:** `PYTHON_VERSION` in `doc-tools/Dockerfile`.
+- **Gotenberg:** the image and its multi-arch index digest in `compose/shared/gotenberg.yml`. Read
+  its release notes for removed or renamed flags: an unknown flag stops it from starting.
+
+Then run `tests/run-sidecar.sh doc-tools` and `./lettucectl up all` (what that rebuilds and keeps: [docs/doc-tools.md](../docs/doc-tools.md#after-an-update)). On every Lettuce upgrade, check the dependencies listed in AGENTS.md (how `letta mcp` starts stdio servers, the `/work/<agent-id>` layout, the app-server's glibc and ICU).
+
+`scripts/doc-tools-e2e.sh` measured the figures in [Resource use](../docs/doc-tools.md#resource-use). Run it again after changing `doc-tools/` or the Gotenberg pin; it uses throwaway containers only.
 
 ## Upstream seams
 Named in [AGENTS.md](../AGENTS.md) under `doc-tools`:

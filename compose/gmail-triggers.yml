@@ -1,5 +1,5 @@
 # Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
-# Gmail triggers (gmail-triggers/, docs/gmail-triggers-plan.md): a page where
+# Gmail triggers (gmail-triggers/, gmail-triggers/DESIGN.md): a page where
 # each person says "when an email arrives in label X, ask agent Y to do Z",
 # and a poller that watches Gmail and queues each match for the executor
 # lettucectl installs in the app-server. Opt-in behind the `garden-gmail-triggers`

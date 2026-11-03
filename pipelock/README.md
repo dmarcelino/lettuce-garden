@@ -1,6 +1,6 @@
 # pipelock
 
-The image of the per-stack egress proxy, [pipelock](https://github.com/pipelab-org/pipelock), and its config. With the `garden-pipelock` profile each stack runs it as the service `garden-pipelock`, and the agents' tools in the app-server, SearXNG and the DuckDuckGo reader send their web traffic through it. It checks destinations, reads pages fetched through its `/fetch` endpoint, and signs a receipt for every decision. It is advisory, not a boundary: anything that ignores or unsets `HTTPS_PROXY` goes around it. [docs/egress-firewall.md](../docs/egress-firewall.md) is the guide, with what it does and does not do.
+The image of the per-stack egress proxy, [pipelock](https://github.com/pipelab-org/pipelock), and its config. With the `garden-pipelock` profile each stack runs it as the service `garden-pipelock`, and the agents' tools in the app-server, SearXNG and the DuckDuckGo reader send their web traffic through it. It checks destinations, reads pages fetched through its `/fetch` endpoint, and signs a receipt for every decision. It is advisory, not a boundary: anything that ignores or unsets `HTTPS_PROXY` goes around it. For users and admins (what it does and does not do, running it, reading the receipts): [docs/egress-firewall.md](../docs/egress-firewall.md).
 
 ![What passes pipelock, and what does not](../docs/diagrams/egress-firewall-architecture.svg)
 
