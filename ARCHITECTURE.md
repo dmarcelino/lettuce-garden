@@ -2,7 +2,7 @@
 
 For developers of lettuce-garden: what runs for one person, with every profile on, how the parts reach each other, and where each part lives in this repo. The same system in plain terms, for those who install and run it, is [docs/architecture.md](docs/architecture.md). Each person has a stack like this one: its own Compose project (`lettuce-<name>`), Cloudflare Tunnel, two Cloudflare Access applications and state directory. Only the document tools' Gotenberg and volume are shared by the stacks of a host.
 
-![Every container of one stack, its networks, volumes and routes](docs/diagrams/lettuce-garden-overview.svg)
+![One stack with every garden profile on: its containers, networks, volumes and routes](docs/diagrams/lettuce-garden-overview.svg)
 
 An interactive version, [lettuce-garden-overview.html](docs/diagrams/lettuce-garden-overview.html), opens in a browser from a clone of this repo. Each folder's README has a narrower diagram of its own part.
 
@@ -78,7 +78,7 @@ Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<nam
 | Path | What |
 |---|---|
 | `lettucectl`, [`lib/`](lib/README.md) | the CLI |
-| `compose/hardening.yml` | `no-new-privileges`, memory/pid caps for every service, no `NET_RAW` where agents run, letta-code self-update off |
+| `compose/hardening.yml` | `no-new-privileges`, memory caps for every service, a pid cap on the app-server, no `NET_RAW` where agents run, letta-code self-update off |
 | `compose/multi.yml` | drops all published ports, so stacks never collide |
 | `compose/vault.yml`, [`vault/`](vault/README.md) | the optional vault (`garden-vault` profile) and its source |
 | `compose/gmail-triggers.yml`, [`gmail-triggers/`](gmail-triggers/README.md) | optional Gmail triggers (`garden-gmail-triggers` profile) and their source |
@@ -93,7 +93,7 @@ Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<nam
 | `config.env.example` | template for `config.env` |
 | `scripts/dns-preflight.sh` | compares two nameservers before and after moving a domain |
 | `scripts/doc-tools-e2e.sh`, `scripts/code-server-e2e.sh` | end-to-end runs of the document tools and the code editor against real images |
-| `tests/` | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) the sidecars' tests (`tests/run-sidecar.sh vault`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
+| `tests/` | offline tests (`tests/run.sh`; docker, curl, dig, gh and secret-tool are stubbed), the sidecars' tests (`tests/run-sidecar.sh vault`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
 
 Untracked instance data (`config.env`, `.secrets/`, `upstream/`, `stacks/`) is listed in [docs/operations.md](docs/operations.md#files-on-the-host).
 

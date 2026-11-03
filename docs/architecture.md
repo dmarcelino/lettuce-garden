@@ -3,7 +3,7 @@
 What lettuce-garden runs for each person, what reaches it from the internet, and where each person's data lives. This page is for whoever installs and runs it. The internals (networks, mounts, which service calls which, and the checks that keep them so) are in [ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## One stack per person
-Lettuce is single-user: agents in one stack can read each other's memory and tokens. So lettuce-garden gives every person a stack of their own: a separate Docker Compose project (`lettuce-<name>`), with its own Cloudflare Tunnel, its own Cloudflare Access applications and its own data directory. Nobody can reach another person's stack. **Cloudflare authenticates the people; Docker separates the assistants.** Upstream Lettuce needs no multi-user code for this.
+Lettuce is single-user: agents in one stack can read each other's memory and tokens. So lettuce-garden gives every person a stack of their own: a separate Docker Compose project (`lettuce-<name>`), with its own Cloudflare Tunnel, its own Cloudflare Access applications and its own data directory. Nobody can reach another person's stack. The one exception is the document tools' Gotenberg, a single converter on every stack's network ([its caveat](doc-tools.md#security-model)). **Cloudflare authenticates the people; Docker separates the assistants.** Upstream Lettuce needs no multi-user code for this.
 
 - **No open ports.** `cloudflared` connects outbound, so the host can run behind NAT, and its firewall can stay closed except for SSH. Every published port is removed.
 - **Defence in depth.** Each stack is checked three times:
@@ -24,9 +24,9 @@ Within one stack there is no such separation: agents run as root in the same con
 Both Access applications share the stack's one Access policy, so `lettucectl users` changes who may sign in to both. The garden pages accept only the garden's sign-in, never Lettuce's, which agents could catch inside their own container. Anything else on the garden address gets a 404. When that name is already taken in the zone, `add` picks a numbered one (`-garden-2` to `-garden-9`); `lettucectl list` shows each stack's addresses.
 
 ## What runs in each stack
-Every container of one stack with every profile on, its networks and volumes, and how they reach each other:
+One stack with every garden profile on, its networks and volumes, and how they reach each other (`channel-gateway`, the Telegram channel, is left out):
 
-![Every container of one stack, its networks, volumes and routes](diagrams/lettuce-garden-overview.svg)
+![One stack with every garden profile on: its containers, networks, volumes and routes](diagrams/lettuce-garden-overview.svg)
 
 An interactive version, [lettuce-garden-overview.html](diagrams/lettuce-garden-overview.html), opens in a browser from a clone of this repo.
 
@@ -72,3 +72,18 @@ Every service runs with `no-new-privileges` and a memory cap. The memory caps ar
 - **Data on disk.** A stack's data is only as private as the host. Whoever has root on it can read every stack.
 
 Each feature's own guarantees and limits are in its guide: [vault](vault.md#security-model), [Gmail triggers](gmail-triggers.md#security-model), [code editor](code-server.md#security-model), [document tools](doc-tools.md#security-model), [egress proxy](egress-firewall.md#what-it-does-not-do). [operations.md](operations.md#security-notes) has the operator's security notes.
+
+## Glossary
+| Term | Meaning |
+|---|---|
+| Letta, letta-code | [Letta](https://www.letta.com/) agents keep their own memory across conversations. letta-code is the server that runs them, with their shell and tools. |
+| Lettuce | The web app (a PWA, installable on a phone) for talking to Letta agents. Single-user; lettuce-garden runs one per person. |
+| stack | One person's copy of everything: a Docker Compose project `lettuce-<name>` with its own data, tunnel and sign-in. |
+| app-server | The container that runs letta-code: the agents, their shell, memory and workspaces. Agents are root in it. |
+| BFF | "Backend for frontend": Lettuce's own server, which serves the web app, checks the sign-in and holds the only connection to the agents. |
+| profile | An optional feature, named in `PROFILES` (for example `search`, `google`, `garden-vault`). It is on for every stack or for none. |
+| garden, garden pages | lettuce-garden's own extras with a page of their own (the vault, Gmail triggers, the code editor), on each stack's second address, `<name>-garden.<domain>`. |
+| sidecar | A small extra container next to the app-server, such as the vault or `google-mcp`, which agents use but which is not part of their container. |
+| MCP | Model Context Protocol: how agents call tools that run outside their own code, such as the vault or the document tools. Listed in Lettuce under **Settings -> MCP**. |
+| Cloudflare Tunnel | An outbound connection from the stack's `cloudflared` to Cloudflare, which carries the stack's traffic, so the host opens no port. |
+| Access application | Cloudflare's sign-in in front of an address. Each stack has two, one per address, both admitting the same people. |

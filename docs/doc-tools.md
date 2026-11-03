@@ -75,7 +75,7 @@ profile on, `mcp` registers the vault too, the same way and with its own marker
 The list belongs to Lettuce's BFF, which reads it from disk before every change, so an entry
 added from outside stays. `mcp` writes only the entries whose command is under
 `/opt/lettuce-doc-tools/` (and the vault's exact HTTP entry), and refuses, changing nothing, when the file is not the shape it
-knows (after a Lettuce upgrade, say): then add the servers by hand. Two things can still undo
+knows (after a Lettuce upgrade, say): then add the servers by hand. One thing can still undo
 it: a Settings -> MCP page that was open before `mcp` ran and is saved afterwards writes back
 the list it loaded, without the servers; run `mcp <name> --force` again.
 

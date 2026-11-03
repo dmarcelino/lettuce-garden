@@ -11,7 +11,7 @@ You run it with `lettucectl`, a Bash CLI: one command adds a person, with their 
 - the Lettuce web UI (a PWA) at `https://<name>.<your-domain>`;
 - the garden extras that are on, at their own address, `https://<name>-garden.<your-domain>/`, behind the same Google sign-in.
 
-Nobody can reach another person's stack. **Cloudflare authenticates the people; Docker separates the assistants.** Upstream Lettuce needs no multi-user code for this, and the host publishes no ports: each stack's `cloudflared` connects outbound. [How it works](docs/architecture.md) explains the design, the two addresses, what runs and where the data lives.
+Nobody can reach another person's stack; the one piece stacks share, the document tools' converter, is [covered in its guide](docs/doc-tools.md#security-model). **Cloudflare authenticates the people; Docker separates the assistants.** Upstream Lettuce needs no multi-user code for this, and the host publishes no ports: each stack's `cloudflared` connects outbound. [How it works](docs/architecture.md) explains the design, the two addresses, what runs and where the data lives, and its [glossary](docs/architecture.md#glossary) explains the terms these docs use.
 
 ## Garden extras
 Each extra is a Compose profile whose name starts with `garden-`. Profiles are global: `lettucectl profiles <list>` turns them on or off for every stack at once.
@@ -29,22 +29,28 @@ With any of the vault, Gmail triggers or the code editor on, the garden address 
 ## Requirements
 - Linux host with Docker Engine and Docker Compose >= 2.24, plus `git`, `curl`, `jq`, `openssl` and `dig` (`dnsutils` / `bind-utils`).
 - A domain whose DNS is on Cloudflare. The free plan is enough.
-- Cloudflare Zero Trust. The free plan covers up to 50 users.
+- Cloudflare Zero Trust. The free plan covers up to 50 users; Cloudflare asks for payment details even for it, and charges nothing.
 - A Google Cloud OAuth client for the Google login method (free).
+- An account with a model provider for each person (Anthropic, OpenAI and others), paid per use: lettuce-garden runs the agents, the provider runs the model.
 - RAM for every stack you run. Each app-server is capped at 8 GiB, upstream's other services at 1 GiB and cloudflared at 256 MiB (`compose/hardening.yml`); the garden's services at 128 MiB to 512 MiB, the code editor at 2 GiB for the editor plus 8 GiB for its shell, and the document tools' Gotenberg, one per host, at 2 GiB ([caps per service](docs/architecture.md#what-runs-in-each-stack)). These are caps, not reservations; measure idle use with `docker stats`.
 
 ## Quickstart
-1. Do the one-time Cloudflare and Google setup: **[docs/cloudflare-setup.md](docs/cloudflare-setup.md)**. Allow about an hour, most of it waiting for DNS.
-2. Configure and start:
+1. Clone this repo on the host. The setup guide runs scripts from it, and it stores the Cloudflare token there:
    ```bash
    git clone <this repo> ~/lettuce && cd ~/lettuce
+   ```
+2. Do the one-time Cloudflare and Google setup: **[docs/cloudflare-setup.md](docs/cloudflare-setup.md)**. It takes about an hour of work. Moving your domain's DNS to Cloudflare then takes minutes to hours to become active, and up to 48 h; if DNSSEC is on, turning it off first adds 24-48 h. A domain you don't use for anything else avoids the risk of breaking its email.
+3. Configure and start:
+   ```bash
    ./lettucectl init                 # creates config.env from the example; edit it
-   $EDITOR config.env                # DOMAIN, PROFILES, TZ, PUSH_CONTACT_EMAIL
+   $EDITOR config.env                # set DOMAIN, PUSH_CONTACT_EMAIL (required), TZ and PROFILES
    ./lettucectl init                 # clones Lettuce, checks the token, caches Cloudflare ids
    ./lettucectl add alfred alfred@gmail.com
    ./lettucectl add hal hal@example.com
+   ./lettucectl skills all           # the agent skills; `up` doesn't install them
    ```
-3. Each person opens their URL, signs in with Google, and connects a model provider in Lettuce under **Settings -> Providers & models**. One API key per person keeps spending separate. Send them **[docs/user-guide.md](docs/user-guide.md)**.
+   The example's `PROFILES=cloudflared,search` is a working start (web search for the agents); add the [garden extras](#garden-extras) you want, e.g. `cloudflared,search,garden-vault`. You can change the list later with `lettucectl profiles`.
+4. Each person opens their URL, signs in with Google, and connects a model provider in Lettuce under **Settings -> Providers & models**. One API key per person keeps spending separate. Send them **[docs/user-guide.md](docs/user-guide.md)**.
 
 ## Documentation
 **Using a stack** (for the people you give one to)
