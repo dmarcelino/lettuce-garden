@@ -31,7 +31,7 @@ With any of the vault, Gmail triggers or the code editor on, the garden address 
 - A domain whose DNS is on Cloudflare. The free plan is enough.
 - Cloudflare Zero Trust. The free plan covers up to 50 users.
 - A Google Cloud OAuth client for the Google login method (free).
-- RAM for every stack you run. Each app-server is capped at 8 GiB, upstream's other services at 1 GiB and cloudflared at 256 MiB (`compose/hardening.yml`); the garden's services at 128 MiB to 512 MiB, and the code editor at 2 GiB for the editor plus 8 GiB for its shell ([caps per service](docs/architecture.md#what-runs-in-each-stack)). These are caps, not reservations; measure idle use with `docker stats`.
+- RAM for every stack you run. Each app-server is capped at 8 GiB, upstream's other services at 1 GiB and cloudflared at 256 MiB (`compose/hardening.yml`); the garden's services at 128 MiB to 512 MiB, the code editor at 2 GiB for the editor plus 8 GiB for its shell, and the document tools' Gotenberg, one per host, at 2 GiB ([caps per service](docs/architecture.md#what-runs-in-each-stack)). These are caps, not reservations; measure idle use with `docker stats`.
 
 ## Quickstart
 1. Do the one-time Cloudflare and Google setup: **[docs/cloudflare-setup.md](docs/cloudflare-setup.md)**. Allow about an hour, most of it waiting for DNS.

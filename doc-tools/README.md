@@ -31,19 +31,36 @@ An interactive version, [doc-tools-architecture.html](../docs/diagrams/doc-tools
 - **`check_stack`:** whatever the profiles, only the app-server may mount an image or the tools' volume. With the profile, the mount must be this tree's volume, read-only, at `/opt/lettuce-doc-tools`; only the app-server joins the network and it keeps `default`; the network must be internal and labelled for the stack (`check_doc_tools`). Before Gotenberg starts, `check_gotenberg` refuses it without its hardening, as root, with a port, a mount or a non-internal network, without any of the flags that stop documents fetching URLs or with one set back to `false`, or with an allow-list, disabled web security or debug logging. See [Key invariants](../AGENTS.md#key-invariants).
 - **No tunnel route, no ports:** nothing here is reachable from outside the host.
 
+### At a glance
+```
+stack alfred                                   stack hal
+app-server (agents, root)                      app-server
+  letta mcp call ─► office / pdf (stdio,         letta mcp call ─► office / pdf
+  one process per call, /work/<agent-id>)        (/work/<agent-id>)
+        │ /opt/lettuce-doc-tools (read-only volume, the same one for every stack)
+        │                                               │
+  lettuce-doc-tools-alfred (internal)          lettuce-doc-tools-hal (internal)
+        └──────────────► gotenberg ◄────────────────────┘
+                 (one per host, Compose project lettuce_shared,
+                  no ports, no route out, no workspace mounted)
+```
+
 ### What `up` does with the profile
-1. It builds `lettuce-doc-tools:<hash>` (`doc-tools/Dockerfile`), once per host. The hash covers
-   everything in `doc-tools/` but its tests and README, so a change there is a new image. The first build
-   downloads OfficeAgent (checked against its pinned SHA-256), a Python runtime and the Python
-   packages (hash-pinned in `doc-tools/requirements.lock`), and takes a few minutes.
+1. It fills the volume `lettuce-doc-tools-<hash>` when it is missing or lacks its completion mark,
+   once per host (about 300 MB, a second or two), and marks it complete last; a volume without the
+   mark is filled again. The copy runs in a container with no network and no capabilities beyond
+   file ownership. Only for a fill, it first builds `lettuce-doc-tools:<hash>` (`doc-tools/Dockerfile`)
+   when that image is missing. The hash covers everything in `doc-tools/` but its tests and README,
+   so a change there is a new image and a new volume. The first build downloads OfficeAgent (checked
+   against its pinned SHA-256), a Python runtime and the Python packages (hash-pinned in
+   `doc-tools/requirements.lock`), and takes a few minutes. A failed fill stops the `up` before
+   anything else is created.
 2. It creates the stack's internal network `lettuce-doc-tools-<name>`.
-3. It copies the image's tools into the volume `lettuce-doc-tools-<hash>`, once per host (about
-   300 MB, a second or two), and marks it complete last; a volume without the mark is filled again.
-   The copy runs in a container with no network and no capabilities beyond file ownership.
-4. It starts the app-server with the volume mounted read-only at `/opt/lettuce-doc-tools` and on
+3. It starts the app-server with the volume mounted read-only at `/opt/lettuce-doc-tools` and on
    that network (`compose/doc-tools.yml`).
-5. It starts the shared Gotenberg (`compose/shared/gotenberg.yml`, project `lettuce_shared`) if it
-   is not running, and connects it to every stack's network.
+4. At the end of the command, it starts the shared Gotenberg (`compose/shared/gotenberg.yml`,
+   project `lettuce_shared`) if it is not running, and connects it to every stack's network
+   (`sync_doc_tools`).
 
 The tools are a volume rather than an image mount because Docker 29 brings image mounts back
 empty after a daemon restart or a reboot; a volume survives both like the rest of the stack.

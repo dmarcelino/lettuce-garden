@@ -22,7 +22,7 @@
       "sublabel": "browser or phone",
       "pos": [
         40,
-        144
+        160
       ],
       "size": [
         120,
@@ -41,13 +41,35 @@
       "id": "access-alfred",
       "type": "security",
       "label": "Access: lettuce-alfred",
-      "sublabel": "Google sign-in, alfred@\u2026 only",
+      "sublabel": "Lettuce's sign-in",
       "pos": [
-        230,
-        144
+        240,
+        100
       ],
       "size": [
-        190,
+        220,
+        62
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "line": 34,
+          "end_line": 37,
+          "label": "checked three times"
+        }
+      ]
+    },
+    {
+      "id": "access-alfred-garden",
+      "type": "security",
+      "label": "Access: lettuce-alfred-garden",
+      "sublabel": "the garden's sign-in",
+      "pos": [
+        240,
+        220
+      ],
+      "size": [
+        220,
         62
       ],
       "sources": [
@@ -65,8 +87,8 @@
       "label": "Tunnel lettuce-alfred",
       "sublabel": "outbound from the host",
       "pos": [
-        510,
-        144
+        560,
+        160
       ],
       "size": [
         170,
@@ -86,8 +108,8 @@
       "label": "Lettuce",
       "sublabel": "alfred.example.com",
       "pos": [
-        760,
-        84
+        820,
+        100
       ],
       "size": [
         170,
@@ -107,8 +129,8 @@
       "label": "Garden pages",
       "sublabel": "alfred-garden.example.com",
       "pos": [
-        760,
-        204
+        820,
+        220
       ],
       "size": [
         170,
@@ -128,8 +150,8 @@
       "label": "Agents and data",
       "sublabel": "stacks/alfred/state",
       "pos": [
-        1030,
-        144
+        1070,
+        160
       ],
       "size": [
         160,
@@ -151,7 +173,7 @@
       "sublabel": "browser or phone",
       "pos": [
         40,
-        444
+        480
       ],
       "size": [
         120,
@@ -162,13 +184,27 @@
       "id": "access-hal",
       "type": "security",
       "label": "Access: lettuce-hal",
-      "sublabel": "Google sign-in, hal@\u2026 only",
+      "sublabel": "Lettuce's sign-in",
       "pos": [
-        230,
-        444
+        240,
+        420
       ],
       "size": [
-        190,
+        220,
+        62
+      ]
+    },
+    {
+      "id": "access-hal-garden",
+      "type": "security",
+      "label": "Access: lettuce-hal-garden",
+      "sublabel": "the garden's sign-in",
+      "pos": [
+        240,
+        540
+      ],
+      "size": [
+        220,
         62
       ]
     },
@@ -178,8 +214,8 @@
       "label": "Tunnel lettuce-hal",
       "sublabel": "outbound from the host",
       "pos": [
-        510,
-        444
+        560,
+        480
       ],
       "size": [
         170,
@@ -192,8 +228,8 @@
       "label": "Lettuce",
       "sublabel": "hal.example.com",
       "pos": [
-        760,
-        384
+        820,
+        420
       ],
       "size": [
         170,
@@ -206,8 +242,8 @@
       "label": "Garden pages",
       "sublabel": "hal-garden.example.com",
       "pos": [
-        760,
-        504
+        820,
+        540
       ],
       "size": [
         170,
@@ -220,8 +256,8 @@
       "label": "Agents and data",
       "sublabel": "stacks/hal/state",
       "pos": [
-        1030,
-        444
+        1070,
+        480
       ],
       "size": [
         160,
@@ -235,8 +271,10 @@
       "label": "Cloudflare",
       "wraps": [
         "access-alfred",
+        "access-alfred-garden",
         "tunnel-alfred",
         "access-hal",
+        "access-hal-garden",
         "tunnel-hal"
       ]
     },
@@ -274,15 +312,28 @@
   ],
   "connections": [
     {
-      "id": "alfred-signs-in",
+      "id": "alfred-to-lettuce-access",
       "from": "alfred",
       "to": "access-alfred",
       "label": "HTTPS",
       "variant": "emphasis"
     },
     {
-      "id": "alfred-admitted",
+      "id": "alfred-to-garden-access",
+      "from": "alfred",
+      "to": "access-alfred-garden",
+      "label": "HTTPS"
+    },
+    {
+      "id": "alfred-lettuce-admitted",
       "from": "access-alfred",
+      "to": "tunnel-alfred",
+      "label": "signed in",
+      "variant": "security"
+    },
+    {
+      "id": "alfred-garden-admitted",
+      "from": "access-alfred-garden",
       "to": "tunnel-alfred",
       "label": "signed in",
       "variant": "security"
@@ -312,15 +363,28 @@
       "variant": "dashed"
     },
     {
-      "id": "hal-signs-in",
+      "id": "hal-to-lettuce-access",
       "from": "hal",
       "to": "access-hal",
       "label": "HTTPS",
       "variant": "emphasis"
     },
     {
-      "id": "hal-admitted",
+      "id": "hal-to-garden-access",
+      "from": "hal",
+      "to": "access-hal-garden",
+      "label": "HTTPS"
+    },
+    {
+      "id": "hal-lettuce-admitted",
       "from": "access-hal",
+      "to": "tunnel-hal",
+      "label": "signed in",
+      "variant": "security"
+    },
+    {
+      "id": "hal-garden-admitted",
+      "from": "access-hal-garden",
       "to": "tunnel-hal",
       "label": "signed in",
       "variant": "security"
@@ -364,9 +428,9 @@
       "dot": "rose",
       "title": "Cloudflare authenticates the people",
       "items": [
-        "Access admits only that stack's people, with Google sign-in",
-        "Lettuce checks the token is for its own stack, and the email against its list",
-        "lettucectl users changes both together"
+        "Two Access applications per stack, Lettuce's and the garden's, sharing one policy: only that stack's people, with Google sign-in",
+        "The garden pages accept only the garden's sign-in, never Lettuce's",
+        "Lettuce checks the token is for its own stack, and the email against its list; lettucectl users changes both together"
       ]
     },
     {

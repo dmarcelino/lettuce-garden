@@ -16,18 +16,7 @@ Conversions to PDF, merging, rotating, watermarks and stamps run on one shared
 [Gotenberg](https://gotenberg.dev) per host (MIT; LibreOffice for Office files, Chromium for
 HTML); everything else, splitting and extracting pages included, runs in the `pdf` server itself.
 
-```
-stack alfred                                   stack hal
-app-server (agents, root)                      app-server
-  letta mcp call ─► office / pdf (stdio,         letta mcp call ─► office / pdf
-  one process per call, /work/<agent-id>)        (/work/<agent-id>)
-        │ /opt/lettuce-doc-tools (read-only volume, the same one for every stack)
-        │                                               │
-  lettuce-doc-tools-alfred (internal)          lettuce-doc-tools-hal (internal)
-        └──────────────► gotenberg ◄────────────────────┘
-                 (one per host, Compose project lettuce_shared,
-                  no ports, no route out, no workspace mounted)
-```
+Every stack's agents use the same copy of the tools, read-only, and one Gotenberg serves the conversions of every stack on the host. It has no published port, no route out to the internet and no workspace mounted; each stack reaches it over a network of its own.
 
 ![An agent creates a Word file with office, converts it with pdf through Gotenberg, and checks it](diagrams/doc-tools-flow.svg)
 

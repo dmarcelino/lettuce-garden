@@ -91,7 +91,7 @@ Optional features are compose profiles, the same list for **all** stacks. Upstre
 | `claude`, `codex` | Claude Code CLI workers; `codex` does the same for Codex | | upstream |
 | `google` | Gmail/Calendar/Tasks/Contacts sidecar | It needs a Google OAuth client, and each person connects their own account. | **[google-setup.md](google-setup.md)** |
 | `telegram` | Telegram channel gateway | | upstream |
-| `garden-vault` | A personal vault per stack, at `https://<name>-garden.<domain>/vault/` | Agents reach it as the `vault` server in Settings -> MCP: `add` registers it for new stacks; for existing ones run `./lettucectl mcp all` (once per stack, restarting the BFF of each stack it changed). | **[vault.md](vault.md)** |
+| `garden-vault` | A personal vault per stack, at `https://<name>-garden.<domain>/vault/` | Run `./lettucectl skills all` for the `using-vault-secrets` skill (`vault-run`, and how to wait for an approval). Agents reach it as the `vault` server in Settings -> MCP: `add` registers it for new stacks; for existing ones run `./lettucectl mcp all` (once per stack, restarting the BFF of each stack it changed). | **[vault.md](vault.md)** |
 | `garden-gmail-triggers` | Gmail rules each person sets up at `https://<name>-garden.<domain>/gmail-triggers/` | Needs `google` (`profiles` and `check` refuse it otherwise) and each person's Google account connected in Lettuce. `up` installs a small executor in the app-server; dropping the profile removes it and keeps the rules. | **[gmail-triggers.md](gmail-triggers.md)** |
 | `garden-doc-tools` | Office and PDF tools for the agents: two stdio MCP servers mounted read-only into every app-server from one shared volume, plus one shared Gotenberg per host | Run `./lettucectl skills all`, then `./lettucectl mcp all`, which adds the two servers to each stack's Settings -> MCP (once per stack; `add` does it for new stacks) and restarts the BFF of each stack it changed, so agents see them. | **[doc-tools.md](doc-tools.md)** |
 | `garden-code-server` | VS Code in the browser at `https://<name>-garden.<domain>/code-server/`, on that stack's agent workspaces, with a terminal in a separate container that has the agents' tools | Every `profiles` run keeps each stack's Access cookies HttpOnly (it re-applies every stack's Access applications). | **[code-server.md](code-server.md)** |
@@ -117,7 +117,7 @@ These live in your clone of this repo and are never tracked by git. Keep them pr
 | `.secrets/cloudflare-api-token` | Cloudflare API token (mode 600) |
 | `upstream/` | Lettuce, cloned at `LETTUCE_REF` |
 | `stacks/<name>/stack.env` | that stack's secrets and Cloudflare ids (mode 600) |
-| `stacks/<name>/state/` | that stack's data: `letta-home/`, `letta-data/`, `workspaces/`, and `garden/` for Gmail trigger rules |
+| `stacks/<name>/state/` | that stack's data: `letta-home/`, `letta-data/`, `workspaces/`, `tools/` (the tools agents installed), and `garden/` for Gmail trigger rules |
 
 Named Docker volumes hold the rest (the vault, pipelock's receipts, Lettuce's Google tokens): [architecture.md](architecture.md) lists them.
 
