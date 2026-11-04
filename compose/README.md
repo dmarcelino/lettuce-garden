@@ -36,7 +36,7 @@ There are two written exceptions, both merged only with their profile:
 - `pipelock-proxy.yml` adds the standard proxy variables to three upstream services. Upstream sets none of them, and they change where traffic goes, not what the services do. It is merged after every other file, and only with the profile, because a profile cannot gate an environment variable; the `garden-pipelock` service itself stays in `pipelock.yml` so `stale_services` can remove it when the profile goes.
 - `doc-tools.yml` adds a mount and a network to the app-server, since stdio MCP servers can only run inside it. It lists `default` too: naming any network drops the implicit one. A profile cannot gate a mount, hence the separate file.
 
-Any other exception needs a written reason here first, and a line in AGENTS.md's directives.
+Any other exception needs a written reason here first. AGENTS.md's overlay directive names every exception, so that agents leave them be; add the new one there too.
 
 ## How it plugs in
 - **The wrapper.** Every Compose call goes through `compose NAME ...` (or `compose_env ENV_FILE NAME ...`), which runs `docker compose` under `env -i`, so the caller's shell cannot override `stack.env`, with `-p lettuce-<name>`, `--project-directory upstream/docker`, the files above and `--env-file stacks/<name>/stack.env`. With `garden-doc-tools` it also passes `DOC_TOOLS_VOLUME` and `DOC_TOOLS_NETWORK`, which lettucectl computes and never writes to `stack.env`. `compose_shared` does the same for `shared/gotenberg.yml` with `-p lettuce_shared` and `--env-file /dev/null`; no stack name can contain an underscore, so it never matches a stack's project.

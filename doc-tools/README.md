@@ -88,7 +88,7 @@ With the profile (`check_doc_tools`):
 Before `sync_doc_tools` starts Gotenberg (`check_gotenberg`): a rendered shared Gotenberg that is not hardened (`check_hardened`), runs as root or without `no-new-privileges`, publishes a port, mounts anything, sits on a non-internal network, lacks any of the flags that stop documents fetching URLs or sets one back to `false`, or sets an allow-list, disabled web security or debug logging.
 
 ### Docs live only in this README
-`doc_tools_tag` skips only `tests/`, this `README.md` and Python caches. Any other new file here changes the tag, which rebuilds the image, refills the volume and recreates every app-server. So never add another doc file to this folder.
+`doc_tools_tag` skips only `tests/`, this `README.md`, the agents' pointer to it (`AGENTS.md`, and `CLAUDE.md` linking to it) and Python caches. Any other new file here changes the tag, which rebuilds the image, refills the volume and recreates every app-server. So never add another doc file to this folder.
 
 ## Build and test
 ```bash

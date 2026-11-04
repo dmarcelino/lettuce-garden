@@ -10,7 +10,7 @@ An interactive version, [garden-request-checks.html](../docs/diagrams/garden-req
 | Path | What it does |
 |---|---|
 | `pyproject.toml` | The package and its pinned dependencies (`anyio`, `pyjwt[crypto]`, `starlette`), kept in step with the sidecars that install it |
-| `.dockerignore` | Keeps caches, build output and this README out of the build context |
+| `.dockerignore` | Keeps caches, build output, this README and the agents' pointer to it (`AGENTS.md`, `CLAUDE.md`) out of the build context |
 | `src/garden_common/auth.py` | `Authenticator` (the `Cf-Access-Jwt-Assertion` JWT: RS256 against the team's keys, the garden's audience and issuer, an email in `ALLOWED_USERS`; `csrf_token`, `check_csrf`, `check_origin`), `check_fetch` (Fetch Metadata for `PAGE`, `FORM`, `FETCH`), `admit` (both), `COOP` |
 | `src/garden_common/executor.py` | `guard` (the executor API: `/executor/v1/` only, no `Origin` or tunnel headers, the bearer token), `read_json` and `read_agents` (capped, validated bodies), `AgentAsks` (when a sidecar wants a new agent list), `EXECUTOR_TOKEN` |
 | `src/garden_common/text.py` | `one_line`, `encodable` and `CONTROL`: outside text made safe to store and show |
@@ -21,7 +21,7 @@ Who uses what: the vault uses `admit` with `PAGE`, `FORM` and `FETCH`; gmail-tri
 
 ## How it plugs in
 - **Installed from a build context, not PyPI.** Each overlay (`compose/garden.yml`, `vault.yml`, `gmail-triggers.yml`, `code-server.yml`) passes this directory as the build context named `garden-common` (`additional_contexts`), and each Dockerfile copies it and runs `pip install` on it before its own package. `tests/run-sidecar.sh` and `scripts/code-server-e2e.sh` pass it with `--build-context`. It is never a pip dependency by name.
-- **The whole directory is copied into four images.** Any file here changes that layer and rebuilds all four, so `README.md` is in `.dockerignore`: editing these docs rebuilds nothing.
+- **The whole directory is copied into four images.** Any file here changes that layer and rebuilds all four, so `README.md`, `AGENTS.md` and `CLAUDE.md` are in `.dockerignore`: editing these docs rebuilds nothing.
 - **Settings it expects:** an object with `team_domain`, `audience`, `issuer`, `allowed_users` and `public_origin` (`AccessSettings`). The overlays fill them from `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` (set from `CF_GARDEN_AUD`), `CF_ACCESS_ISSUER`, `ALLOWED_USERS` and `PUBLIC_ORIGIN` (set from `GARDEN_ORIGIN`); `check_garden_audience` refuses a garden service with Lettuce's audience or another origin. The executor guard takes `GARDEN_EXECUTOR_TOKEN`, which `check_stack` requires to be 64 lowercase hex characters. Every `check_stack` rule: [CONTRIBUTING.md](../CONTRIBUTING.md#what-check_stack-enforces).
 
 ## Rules

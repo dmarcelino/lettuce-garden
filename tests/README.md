@@ -2,6 +2,9 @@
 
 The CLI's offline tests and the scripts that run every other test suite. Each folder's own tests (the sidecars' pytest, the executor's `node --test`, the editor image's `test.sh`) are described in that folder's README. What to run before changing what: [CONTRIBUTING.md](../CONTRIBUTING.md#building-and-testing).
 
+## Build and test
+No build step. Before changing a file here, run what it runs: `tests/run.sh` for `run.sh` or a stub, the folder's suite for `run-sidecar.sh` (every folder it takes, for a change to the script itself), `tests/run-pipelock.sh` for itself, and `node --test tests/<name>.test.mjs` for a `*.test.mjs`. Shellcheck covers `run*.sh` and `stubs/*` ([CONTRIBUTING.md](../CONTRIBUTING.md#building-and-testing) has the line).
+
 ## Files
 | File | What it does |
 |---|---|
@@ -10,6 +13,7 @@ The CLI's offline tests and the scripts that run every other test suite. Each fo
 | `run-sidecar.sh <dir>` | Builds a sidecar's image to its `test` stage and runs its tests in it; extra arguments go to pytest |
 | `run-pipelock.sh` | The pipelock image and config against a real pipelock ([pipelock/README.md](../pipelock/README.md#build-and-test)) |
 | `mcp-servers.test.mjs` | `lib/mcp-servers.mjs` against temp settings files, with hooks that land a concurrent write before and after its rename |
+| `check-doc-links.test.mjs` | `scripts/check-doc-links.mjs` against temp Markdown trees |
 
 ## How `run.sh` works
 - Each test gets a copy of the repo in a temp dir, `$T`, and runs under `set -e`, so a failing assert ends it.

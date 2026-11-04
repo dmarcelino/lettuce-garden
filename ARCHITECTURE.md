@@ -93,6 +93,7 @@ Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<nam
 | `config.env.example` | template for `config.env` |
 | `scripts/dns-preflight.sh` | compares two nameservers before and after moving a domain |
 | `scripts/doc-tools-e2e.sh`, `scripts/code-server-e2e.sh` | end-to-end runs of the document tools and the code editor against real images |
+| `scripts/check-doc-links.mjs` | checks the Markdown's relative links and anchors, and each folder README's agents' pointer |
 | `tests/` | offline tests (`tests/run.sh`; docker, curl, dig, gh and secret-tool are stubbed), the sidecars' tests (`tests/run-sidecar.sh vault`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
 
 Untracked instance data (`config.env`, `.secrets/`, `upstream/`, `stacks/`) is listed in [docs/operations.md](docs/operations.md#files-on-the-host).

@@ -80,11 +80,14 @@ Agents are root in the app-server, so they can read the token and the installed 
 
 The executor starts turns only through letta-code's own scheduler, the one written exception to "no second way into an agent" ([CONTRIBUTING.md](../../CONTRIBUTING.md#relationship-to-upstream), [gmail-triggers/README.md](../../gmail-triggers/README.md#rules)). What people are told: the security model in [docs/gmail-triggers.md](../../docs/gmail-triggers.md#security-model).
 
-## Testing
+## Build and test
 
 ```bash
 node --test 'garden/executor/tests/*.test.mjs'   # on the host: local node:http servers play garden and gmail-triggers, a fake letta records its argv
 tests/run-sidecar.sh garden                      # the garden service's tests, plus the executor's in node:22.22.0-slim
+tests/run-sidecar.sh gmail-triggers              # the other end of the Gmail request and claim protocol
+tests/run.sh executor                            # the CLI's install, removal and cron (stubbed docker)
 ```
+There is no build step: `sync_executor` installs `run.mjs` as it is.
 
 Overrides for tests only: `GARDEN_URL`, `GT_URL`, `GT_TOKEN_FILE`, `GT_LOCK`, `GT_LOG`.

@@ -108,7 +108,7 @@ When it runs:
 - `add` and `profiles` say, for each group whose profile is on, whether each stack is registered, or print the entries and `lettucectl mcp <name>` (`mcp_reminder`).
 
 ## Build and test
-No build step. Before changing the CLI, run `tests/run.sh` (or `tests/run.sh <pattern>`, e.g. `tests/run.sh test_add_`), shellcheck and, for `mcp-servers.mjs`, `node --test tests/mcp-servers.test.mjs`; the exact commands are in [CONTRIBUTING.md](../CONTRIBUTING.md#building-and-testing). The curl stub fails on unknown routes, so a new Cloudflare call needs a route in `tests/stubs/curl`. [tests/README.md](../tests/README.md) describes the stubs and helpers.
+No build step. Before changing the CLI, run `tests/run.sh` (or `tests/run.sh <pattern>`, e.g. `tests/run.sh test_add_`), shellcheck and, for `mcp-servers.mjs`, `node --test tests/mcp-servers.test.mjs` (for `scripts/check-doc-links.mjs`, `node --test tests/check-doc-links.test.mjs`); the exact commands are in [CONTRIBUTING.md](../CONTRIBUTING.md#building-and-testing). The curl stub fails on unknown routes, so a new Cloudflare call needs a route in `tests/stubs/curl`. [tests/README.md](../tests/README.md) describes the stubs and helpers.
 
 ## Upstream seams
 - `mcp-servers.mjs`: the shape of the shared MCP list (`/root/.letta/mcp-home/.letta/settings.json`, one `agent-local-mcp-global` entry in `agents` whose `mcpServers` every `letta mcp` call reads), which the BFF renders whole, reads back from disk before every change, and shows as it is (so a person can see and remove our entries). A stdio entry with no args or env passes its validation, and so does the vault's `http` entry of only `name`, `transport` and `url`.

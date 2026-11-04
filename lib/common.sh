@@ -220,15 +220,16 @@ compose_shared() {
 }
 
 # ── document tools ───────────────────────────────────────────────────────────
-# doc_tools_tag -> the content hash of doc-tools/ (its tests and README excluded), the tag
-# of the tools' image and volume every stack with the garden-doc-tools profile shares.
+# doc_tools_tag -> the content hash of doc-tools/ (its tests, README.md, AGENTS.md
+# and CLAUDE.md excluded), the tag of the tools' image and volume every stack
+# with the garden-doc-tools profile shares.
 # Any change to what goes into the image is a new tag, so `up` rebuilds it,
 # fills a new volume and recreates the app-servers; an unchanged tree reuses
 # both. Ten hex characters.
 doc_tools_tag() {
   local d=$LETTUCE_HOME/doc-tools
   [[ -f $d/Dockerfile ]] || die "doc-tools/Dockerfile is missing"
-  (cd "$d" && find . -type f ! -path './tests/*' ! -path ./README.md ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 |
+  (cd "$d" && find . -type f ! -path './tests/*' ! -path ./README.md ! -path ./AGENTS.md ! -path ./CLAUDE.md ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 |
     LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-10)
 }
 

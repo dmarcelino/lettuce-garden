@@ -156,12 +156,14 @@ tests/run-sidecar.sh code-server       # the code editor's gate (pytest), plus t
 node --test 'garden/executor/tests/*.test.mjs'         # garden executor tests on the host
 tests/run-pipelock.sh                  # the pipelock image and config against a real pipelock (needs Docker, not the internet)
 node --test tests/mcp-servers.test.mjs # lib/mcp-servers.mjs against temp settings files
+node --test tests/check-doc-links.test.mjs # the link checker against temp Markdown trees
+node scripts/check-doc-links.mjs       # every relative link and anchor resolves; every folder README has its agents' pointer
 tests/run-sidecar.sh garden            # the landing page and its executor API (pytest), plus the garden executor's tests (node --test in node:22.22.0-slim) when no args are given
 tests/run-sidecar.sh doc-tools         # the PDF MCP's tests (pytest in the doc-tools image's `test` stage, Debian 12 like the app-server)
 ```
-- **Before changing the CLI** (`lettucectl`, `lib/`, `scripts/`): `tests/run.sh` and shellcheck. [tests/README.md](tests/README.md) describes the stubs and helpers.
-- **Before changing a garden service** (`vault/`, `gmail-triggers/`, `code-server/`, `garden/`), `garden-common/` (which those four use) or `doc-tools/`: `tests/run-sidecar.sh <dir>` (needs Docker).
-- **Before changing `pipelock/`:** `tests/run-pipelock.sh`.
+- **Before changing a folder, run every command in its README's "Build and test"**. Those sections are the one list of what covers what; they also name the suites another folder shares, such as the executor's and Gmail triggers' two ends of one protocol.
+- **`tests/run-sidecar.sh <dir>` takes a folder with a Dockerfile:** `vault`, `gmail-triggers`, `code-server`, `garden` or `doc-tools`. `garden-common/` has no image or tests of its own; before changing it, run the four suites that use it (its [Build and test](garden-common/README.md#build-and-test)).
+- **Before changing docs:** `node scripts/check-doc-links.mjs`.
 - **End to end**, against real images (Docker, and the internet for the first build; throwaway containers only): `scripts/doc-tools-e2e.sh`, and `scripts/code-server-e2e.sh --browser` before keeping a new code editor extension or setting.
 
 CI (`.github/workflows/ci.yml`) runs all of these but the end-to-end scripts on every branch push, and by hand from Actions ("Run workflow"). A new test script or linted file goes there too, and in both copies of the block above.
@@ -175,14 +177,15 @@ Each audience has its own place:
 | People who use a stack | [docs/user-guide.md](docs/user-guide.md), and each guide's "Using it" section | what they see and do, in the product's own words |
 | Admins who install and run it | the rest of [docs/](docs/) | `lettucectl` commands, data and backups, troubleshooting, and each feature's security model: what it protects and what it does not |
 | Developers | this page, [ARCHITECTURE.md](ARCHITECTURE.md), the folder READMEs, the design records | wiring, function and file names, the rules and how each is enforced, tests, maintenance (pin bumps, upgrades of bundled tools) |
-| Coding agents | [AGENTS.md](AGENTS.md) (`CLAUDE.md` links to it) | one-line directives and the commands, each directive linking to its rule in the developer docs |
+| Coding agents | [AGENTS.md](AGENTS.md) (`CLAUDE.md` links to it), and each folder's `AGENTS.md` pointer | one-line directives and the commands, each directive linking to its rule in the developer docs |
 
 The rule of thumb: running `lettucectl`, using a page or knowing what is protected belongs in `docs/`; editing tracked files, how something is wired, the rules and tests belong with the developers. Each fact has one home, and the other places link to it.
 
 - **A rule lives in the developer docs.** Changing one edits its folder README or this page, then the AGENTS.md directive if its one-line form changed. AGENTS.md never carries a rule's detail.
 - **Never claim more than is true.** When a security model is written in plain language, every limit stays in the user doc: pipelock is advisory, the vault's `env` delivery is not a boundary, agents are root in their stack, and a folder in the code editor must never be trusted. Only the mechanism moves to the folder README.
 - **Keep the guides' file names and `docs/cloudflare-setup.md`'s step numbers.** `lettucectl`'s messages cite them (`docs/cloudflare-setup.md, step 5`, `docs/vault.md`, `docs/doc-tools.md`, `docs/google-setup.md`), and `tests/run.sh` asserts some of those messages.
-- **Don't add files to `doc-tools/` or `garden-common/` for docs.** `doc_tools_tag` (`lib/common.sh`) hashes everything in `doc-tools/` but `tests/`, `README.md` and Python caches, and `garden-common/.dockerignore` leaves out only `README.md`: any other file there rebuilds an image, and for `doc-tools/` refills the tools' volume and recreates every app-server.
+- **Don't add files to `doc-tools/` or `garden-common/` for docs.** `doc_tools_tag` (`lib/common.sh`) hashes everything in `doc-tools/` but `tests/`, `README.md`, `AGENTS.md`, `CLAUDE.md` and Python caches, and `garden-common/.dockerignore` leaves out only `README.md`, `AGENTS.md` and `CLAUDE.md`: any other file there rebuilds an image, and for `doc-tools/` refills the tools' volume and recreates every app-server.
+- **Each folder README has an agents' pointer next to it:** an `AGENTS.md` that tells a coding agent to read the README's "Rules" and run its "Build and test" before changing the folder, and a `CLAUDE.md` symlink to it, which Claude Code loads when it works in that folder. The pointer holds no rule; a new folder README gets one too. `node scripts/check-doc-links.mjs` checks that every README has it.
 - **Diagrams** are archify candidates in `docs/diagrams/`: `<name>.json` is the source, finalised to `<name>.html` (interactive) and exported to `<name>.svg` with the viewer's own SVG export; the docs embed the SVG. User-level diagrams (`lettuce-garden-at-a-glance` and one `*-flow` per extra) are embedded from README and `docs/`. The developer wiring diagrams are embedded from ARCHITECTURE.md and the folder READMEs, with one exception: `lettuce-garden-overview`, one stack with every garden profile on, is also embedded from docs/architecture.md, since admins operate those containers.
 - **When the wiring changes**, update that folder's README and regenerate its diagram; a change to containers, networks, volumes or routes also updates ARCHITECTURE.md, [docs/architecture.md](docs/architecture.md) and the `lettuce-garden-overview` diagram. A change to `garden/executor/run.mjs`, `GARDEN_INSTALL`, `executor_cron` or an `/executor/v1/` route updates [garden/executor/README.md](garden/executor/README.md). A change in what a person or admin sees or does updates the guide and its flow diagram.
 
