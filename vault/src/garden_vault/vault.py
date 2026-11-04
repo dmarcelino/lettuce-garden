@@ -21,7 +21,7 @@ from typing import Any
 
 from . import crypto
 from .config import AUTO_LOCK_SECONDS, ERASE_DELAY_SECONDS, MAX_FIELD_VALUE, MIN_PASSPHRASE_LENGTH
-from .kinds import KINDS
+from .kinds import KINDS, MAX_CUSTOM_FIELDS, MAX_CUSTOM_NAME, custom_key
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS vault_meta (k TEXT PRIMARY KEY, v BLOB NOT NULL);
@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 ASK, AUTO = "ask", "auto"
 KEY_AAD = b"vault-data-key"
+# The shape of the secrets' fields. Secrets of another format are deleted on
+# unlock: 2 is Bitwarden's item types (kinds.py).
+FORMAT = b"2"
 
 
 class VaultError(Exception):
@@ -96,6 +99,11 @@ class Secret:
         return tuple(f for f in self.fields if f.sensitive)
 
     @property
+    def custom_fields(self) -> tuple[Field, ...]:
+        kind = KINDS.get(self.kind)
+        return tuple(f for f in self.fields if kind is None or kind.spec(f.key) is None)
+
+    @property
     def kind_label(self) -> str:
         return KINDS[self.kind].label if self.kind in KINDS else self.kind
 
@@ -125,20 +133,39 @@ def check_passphrase(passphrase: str) -> str:
     return passphrase
 
 
-def build_fields(kind: str, values: dict[str, str]) -> tuple[Field, ...]:
-    """The kind's fields in order; empty optional fields are dropped."""
+def build_fields(kind: str, values: dict[str, str], custom: list[tuple[str, str]] | None = None) -> tuple[Field, ...]:
+    """The kind's fields in order, then the custom fields (name, value), all
+    private; empty fields are dropped, and at least one must be left."""
     if kind not in KINDS:
         raise VaultError("unknown type of secret")
     out: list[Field] = []
-    for spec in KINDS[kind].fields:
-        value = values.get(spec.key, "").strip()
-        if not value:
-            if spec.required:
-                raise VaultError(f"{spec.label} is required")
-            continue
+
+    def add(key: str, label: str, value: str, sensitive: bool, multiline: bool) -> None:
         if len(value) > MAX_FIELD_VALUE:
-            raise VaultError(f"{spec.label} is longer than {MAX_FIELD_VALUE} characters")
-        out.append(Field(spec.key, spec.label, value, spec.sensitive, spec.multiline))
+            raise VaultError(f"{label} is longer than {MAX_FIELD_VALUE} characters")
+        out.append(Field(key, label, value, sensitive, multiline))
+
+    for spec in KINDS[kind].fields:
+        if value := values.get(spec.key, "").strip():
+            add(spec.key, spec.label, value, spec.sensitive, spec.multiline)
+    builtin = len(out)
+    taken = {spec.key for spec in KINDS[kind].fields}
+    for name, value in custom or []:
+        name, value = name.strip(), value.strip()
+        if not name and not value:
+            continue
+        key = custom_key(name)
+        if not key or len(name) > MAX_CUSTOM_NAME:
+            raise VaultError(f"a custom field needs a name of 1 to {MAX_CUSTOM_NAME} letters or digits")
+        if key in taken:
+            raise VaultError(f"two fields would be called {key}: rename the custom field {name}")
+        taken.add(key)
+        if value:
+            add(key, name, value, True, "\n" in value)
+    if len(out) - builtin > MAX_CUSTOM_FIELDS:
+        raise VaultError(f"at most {MAX_CUSTOM_FIELDS} custom fields")
+    if not out:
+        raise VaultError("fill in at least one field")
     return tuple(out)
 
 
@@ -232,6 +259,7 @@ class Vault:
                 raise VaultError("the vault already exists")
             key = crypto.new_key()
             self._store_wrapped(key, passphrase)
+            self._set_meta((("format", FORMAT),))
             self._state = _Unlocked(key, self._clock())
 
     def _store_wrapped(self, key: bytes, passphrase: str) -> None:
@@ -263,7 +291,18 @@ class Vault:
             # after the next lock without a new notice.
             cancelled = self.cancel_erase()
             self._state = _Unlocked(key, self._clock())
+            self._upgrade_format()
             return cancelled
+
+    def _upgrade_format(self) -> None:
+        """Secrets saved in an older shape are deleted, not converted."""
+        if self._meta("format") == FORMAT:
+            return
+        with self._transaction():
+            deleted = self._db.execute("DELETE FROM secrets").rowcount
+            self._db.execute("INSERT OR REPLACE INTO vault_meta (k, v) VALUES ('format', ?)", (FORMAT,))
+        if deleted:
+            self.audit("vault", f"deleted {deleted} secrets of an older format")
 
     def lock(self) -> None:
         with self._lock:
