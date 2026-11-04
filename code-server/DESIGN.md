@@ -2,7 +2,7 @@
 
 Note (2026-10-30): door 4 was revisited. The git extension is back: `git.path` is the fixed `bin/shell-git`, which runs every git call over SSH in the shell, the editor image has no git, and the image patches the extension's two trust calls (`requestResourceTrust`, `isResourceTrusted`) to resolve to true, failing the build when they no longer match. The prompt guarded against the repository's config running git's helpers, which now run in the shell, so the editor stays in Restricted Mode with Source Control on. Door 4 and the git row below say so; docs/code-server.md has the security model.
 
-Note (2026-10-28): the editor has since moved to `https://<name>-garden.<domain>/code-server/`, off Lettuce's origin, and the landing page's agent list is server-rendered by the `garden` service (docs/garden-host-plan.md). The record below is unchanged.
+Note (2026-10-28): the editor has since moved to `https://<name>-garden.<domain>/code-server/`, off Lettuce's origin, and the landing page's agent list is server-rendered by the `garden` service (garden/DESIGN.md). The record below is unchanged.
 
 Status: implemented on branch `vscode` (2026-10-27), steps 0-5; step 6, a real stack, is still to
 do. The source review below was checked at runtime (step 0, results at the end), which changed two

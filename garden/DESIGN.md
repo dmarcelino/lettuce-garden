@@ -1,7 +1,7 @@
 # Garden hostname: implementation plan
 
 Status: implemented on branch `garden-host` (2026-10-28), after the code editor (PR #13,
-docs/code-server-plan.md). The migration ran on every stack (2026-10-29), and its code (moving
+code-server/DESIGN.md). The migration ran on every stack (2026-10-29), and its code (moving
 existing stacks to their garden host, the old `/garden/` routes kept during the move, the
 executor's old token and install, and the vault's push origin) was removed afterwards; the plan
 below stays as the design record. Where the build differs from the plan below:

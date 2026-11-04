@@ -72,7 +72,7 @@ In their own stack, each person:
 
 Whoever clicks **Connect** decides which Google account that stack reads. Mind what levels combine to: an agent that can create calendar events can invite any address, which sends mail even with Gmail read-only, and email the agent reads can carry instructions aimed at it.
 
-The client ID, secret and token are stored in the stack's `google-policy` and `google-creds` Docker volumes, which only the BFF and the sidecar mount. Agents can't read them. Never put them in `stack.env`, `.secrets/` or the MCP settings.
+The client ID, secret and token are stored in the stack's `google-policy` and `google-creds` Docker volumes, which only the BFF, the sidecar and, when it is on, Gmail triggers (read-only) mount. Agents can't read them. Never put them in `stack.env`, `.secrets/` or the MCP settings.
 
 ## Troubleshooting
 | Symptom | Look at |

@@ -1,5 +1,5 @@
 # Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
-# The code editor (code-server/, docs/code-server.md): VS Code in the browser at
+# The code editor (code-server/README.md; docs/code-server.md for users): VS Code in the browser at
 # https://<name>-garden.<domain>/code-server/, on the agents' workspaces. Opt-in
 # behind the `garden-code-server` profile; without it this file adds nothing.
 #

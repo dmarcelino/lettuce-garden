@@ -2,20 +2,13 @@
 
 Each stack can have a personal vault of secrets: addresses, company details, notes, loyalty numbers, ID documents, payment cards and logins. Agents can ask to use a secret, for example to fill in a delivery form or a booking, and the person decides. Most secrets are a single private text box: agents read natural language, so an address is simply typed the way you would write it. The vault is encrypted with a passphrase only that person knows. It is opt-in, behind the `garden-vault` profile.
 
-```
-agent ──list_secrets─────────────────────> vault   names, types, public details; never private values
-agent ──request_secret(secret, why)───────> vault   ──push──> your phone
-you   ──https://<garden>/vault/ ───────> vault   see what and why, untick fields, Share once / Deny
-agent ──get_result──────────────────────> vault   the values you agreed to share, once
-                                                  (or, with delivery "env", a one-time handle)
-vault-run ──/redeem (handle)─────────────> vault   the values, into one command's environment
-```
+![An agent asks the vault, you approve or deny, and the agent gets the values once or a handle for vault-run](diagrams/vault-flow.svg)
 
-![The vault's containers, trust boundaries and requests](diagrams/vault-architecture.svg)
+An interactive version, [vault-flow.html](diagrams/vault-flow.html), opens in a browser from a clone of this repo.
 
-An interactive version, [vault-architecture.html](diagrams/vault-architecture.html), opens in a browser from a clone of this repo.
+How the vault is built and wired, for developers: [vault/README.md](../vault/README.md).
 
-## For the person using it
+## Using it
 1. **Open `https://<your garden>/vault/`** and sign in as usual; `<your garden>` is your stack's garden address, `<name>-garden.<domain>`. Its home page, `https://<your garden>/`, links to it too.
 2. **Create your vault:** choose a passphrase of at least 12 characters. Four or five unrelated words work well. **Nobody can recover it**, not even whoever runs the server. If you forget it, you have to erase the vault and start again.
 3. **Add secrets:** go to **Secrets**, then **Add a secret**, and pick a type. Every secret has a name. Fields in *italics* are private; the others agents can read, like the name.
@@ -37,29 +30,14 @@ An interactive version, [vault-architecture.html](diagrams/vault-architecture.ht
 5. **Answer requests:** when an agent asks for something, a notification arrives, and the agent is told to post the request's link in the chat too, so you can answer without notifications. The request shows the secret, the private fields the agent wants and the reason it gave. Untick anything it doesn't need, then press **Share once** or **Deny**. Agents are told to keep checking until you answer (a request expires after 10 minutes); if one stopped without picking up your answer, send it any message in the chat and it collects it. **Requests** lists what is waiting and what you answered recently; **History** lists everything.
 6. **Locking:** the vault locks when the server restarts, after 12 hours without you using the page, or when you press **Lock**. While it is locked, agents get nothing and you get a notification asking you to unlock.
 
-**Connect your agents:** agents find the vault through Lettuce's **Settings -> MCP**, as an HTTP server named `vault` with URL `http://garden-vault:8000/mcp`. `lettucectl add` puts it there for a new stack; for a stack that existed before, the operator runs `./lettucectl mcp <name>` (see [For the operator](#for-the-operator)), or you add it there by hand. lettucectl does this once per stack: if you remove the server in Settings -> MCP, it stays removed. Registering it gives agents nothing new: they can already reach that address over the stack's network, and approving still happens only in the vault.
+**Connect your agents:** agents find the vault through Lettuce's **Settings -> MCP**, as an HTTP server named `vault` with URL `http://garden-vault:8000/mcp`. `lettucectl add` puts it there for a new stack; for a stack that existed before, the operator runs `./lettucectl mcp <name>` (see [Running it](#running-it)), or you add it there by hand. lettucectl does this once per stack: if you remove the server in Settings -> MCP, it stays removed. Registering it gives agents nothing new: they can already reach that address over the stack's network, and approving still happens only in the vault.
 
 ### Using values without the agent reading them
-An agent that will use a password, card number, security code or document number in a script (filling a form with Playwright, logging in with curl) can ask with `delivery: "env"`. The request page then says the values go to a command. Once you approve, the agent gets a **handle** instead of the values. It runs its script through `vault-run`, a helper that `lettucectl skills` installs with the `using-vault-secrets` skill. `vault-run` trades the handle for the values, gives them to that one command as `VAULT_<FIELD>` environment variables, and replaces them with `[VAULT_<FIELD>]` in the command's output, also when a card number is printed with spaces or dashes. A handle works once, for 5 minutes, and History records when it is used.
+An agent that will use a password, card number, security code or document number in a script (filling a form with Playwright, logging in with curl) can ask with `delivery: "env"`. The request page then says the values go to a command. Once you approve, the agent gets a **handle** instead of the values. It runs its script through `vault-run`, a helper that `lettucectl skills` installs with the `using-vault-secrets` skill. `vault-run` trades the handle for the values, gives them to that one command as `VAULT_<FIELD>` environment variables, and replaces them with `[VAULT_<FIELD>]` in the command's output, also when a card number is printed with spaces or dashes. A handle works once, for 5 minutes, and History records when it is used. This keeps values out of the conversation; it does not stop a misled agent (see [Security model](#security-model)).
 
 Free-text secrets (addresses, companies, notes) are still read by the agent, so they normally use the default `delivery: "text"`.
 
-## What is protected, and what is not
-- **The vault file is encrypted.** Each secret is encrypted with AES-256-GCM using a random data key. That key is stored only wrapped with a key derived from your passphrase (scrypt, 128 MiB). Secret names, fields and the history details are all encrypted. Someone who copies the vault file or a backup sees only secret ids, types and timestamps, and can only try guessing your passphrase, which scrypt makes slow.
-- **The key is only in memory:** from when you unlock until you lock, the 12-hour auto-lock, or a restart. Agents asking for secrets do not keep the vault open.
-- **Agents never get a private value without your say-so:**
-  - Every page, every unlock and every approval requires your Cloudflare Access sign-in, which the vault itself checks. Agents can reach the vault service but cannot sign in as you. Your sign-in token also passes, unencrypted, through the network the agents share with Lettuce; `lettucectl` takes away the capability they would need to read that traffic, and `check` refuses a stack that has it. While Lettuce's web server restarts and the agents keep running, an agent could take its place and receive Lettuce's sign-in token, but the vault accepts only the garden's.
-  - Pages load only as pages, and forms post only from the vault's own pages, which the browser vouches for (Fetch Metadata). A script running on the same address (the garden's, which the code editor shares) or on Lettuce's can't read a page's form token or approve anything; opening a vault page from such a tab cuts it off from that tab (Cross-Origin-Opener-Policy). The Access sign-in cookie is HttpOnly, so no script can read your sign-in token either.
-  - Agents cannot add, change or delete secrets.
-  - ID documents, payment cards and logins always ask. Notes, addresses, companies and memberships ask unless you switch that secret to "Agents may use it without asking".
-  - Public fields (programme, document type, name on card, expiry, website, username) and the name are visible to agents, so they can pick the right secret.
-- **Once shared, a value is in the conversation.** Whatever you share goes to the agent. The AI provider sees it, and Lettuce stores the conversation unencrypted on the server. Share only what the task needs.
-- **Agents are told not to repeat what you share.** The values come with rules: use them only for the purpose you approved, send them to no outside service (a search, a map, an address checker) unless that purpose needs it, and never write them back in a reply, memory or files, not even to confirm them. Asked to check an address, an agent should say what it checked and the result, not the address. These are instructions the agent follows, not something the vault can enforce.
-- **Values passed with `vault-run` stay out of the conversation**, so the AI provider and the stored chat don't get them. That keeps a well-behaved agent from leaking them by accident. It does **not** stop an agent that has been misled, for example by a web page it read: it can redeem the handle itself, or have the command send the value somewhere. Approving stays the decision that matters; read the purpose and approve only what fits it.
-- **The vault doesn't protect against a determined administrator:** someone with root on the server can read the vault service's memory while it is unlocked, or change its code. What it does stop is someone browsing the server's files or backups.
-- **Cloudflare sees your passphrase in transit,** as it sees all traffic to your Lettuce stack.
-
-## For the operator
+## Running it
 - **Turn it on:**
   ```bash
   ./lettucectl profiles <current list>,garden-vault      # e.g. cloudflared,search,garden-vault
@@ -74,7 +52,23 @@ Free-text secrets (addresses, companies, notes) are still read by the agent, so 
 - **Removal:** `lettucectl remove <name>` deletes the volume, so removing a stack deletes its vault, also after the `garden-vault` profile was turned off. It says so before asking for confirmation whenever the volume exists.
 - **Forgotten passphrase:** there is no recovery. The person can erase the vault in Settings. If they can't unlock to do that, delete the volume (see the troubleshooting table in [operations.md](operations.md#troubleshooting)).
 - **Isolation:** the vault container has a read-only root filesystem and no capabilities, runs as a non-root user and has no host mounts. Its volume is mounted by nothing else. The containers agents run in, and those sharing their network, drop `NET_RAW`, so agents cannot capture the Access token on its way to Lettuce. `lettucectl check` refuses a stack where any of that is not true.
-- **Rules for changing it:** never add a tool that lets agents edit secrets or skip approval, and never let a value or key reach a log or an unencrypted file.
+
+## Security model
+What the vault protects, and what it does not.
+
+- **The vault file is encrypted.** Each secret is encrypted with AES-256-GCM using a random data key. That key is stored only wrapped with a key derived from your passphrase (scrypt, 128 MiB). Secret names, fields and the history details are all encrypted. Someone who copies the vault file or a backup sees only secret ids, types and timestamps, and can only try guessing your passphrase, which scrypt makes slow.
+- **The key is only in memory:** from when you unlock until you lock, the 12-hour auto-lock, or a restart. Agents asking for secrets do not keep the vault open.
+- **Agents never get a private value without your say-so:**
+  - Every page, every unlock and every approval requires your Cloudflare Access sign-in, which the vault itself checks. Agents can reach the vault service but cannot sign in as you. Your sign-in token also passes, unencrypted, through the network the agents share with Lettuce; `lettucectl` takes away the capability they would need to read that traffic, and `check` refuses a stack that has it. While Lettuce's web server restarts and the agents keep running, an agent could take its place and receive Lettuce's sign-in token, but the vault accepts only the garden's.
+  - Pages load only as pages, and forms post only from the vault's own pages, which the browser vouches for (Fetch Metadata). A script running on the same address (the garden's, which the code editor shares) or on Lettuce's can't read a page's form token or approve anything; opening a vault page from such a tab cuts it off from that tab (Cross-Origin-Opener-Policy). The Access sign-in cookie is HttpOnly, so no script can read your sign-in token either.
+  - Agents cannot add, change or delete secrets.
+  - ID documents, payment cards and logins always ask. Notes, addresses, companies and memberships ask unless you switch that secret to "Agents may use it without asking".
+  - Public fields (programme, document type, name on card, expiry, website, username) and the name are visible to agents, so they can pick the right secret.
+- **Once shared, a value is in the conversation.** Whatever you share goes to the agent. The AI provider sees it, and Lettuce stores the conversation unencrypted on the server. Share only what the task needs.
+- **Agents are told not to repeat what you share.** The values come with rules: use them only for the purpose you approved, send them to no outside service (a search, a map, an address checker) unless that purpose needs it, and never write them back in a reply, memory or files, not even to confirm them. Asked to check an address, an agent should say what it checked and the result, not the address. These are instructions the agent follows, not something the vault can enforce.
+- **Values passed with `vault-run` stay out of the conversation**, so the AI provider and the stored chat don't get them. That keeps a well-behaved agent from leaking them by accident. It does **not** stop an agent that has been misled, for example by a web page it read: it can redeem the handle itself, or have the command send the value somewhere. Approving stays the decision that matters; read the purpose and approve only what fits it.
+- **The vault doesn't protect against a determined administrator:** someone with root on the server can read the vault service's memory while it is unlocked, or change its code. What it does stop is someone browsing the server's files or backups.
+- **Cloudflare sees your passphrase in transit,** as it sees all traffic to your Lettuce stack.
 
 ## Limits
 - At most 5 requests can wait at once. A request expires after 10 minutes, and shared values wait 30 minutes for the agent to collect them. A `vault-run` handle works once, within 5 minutes of the agent receiving it, and an agent can hold at most 10 unused handles. Locking the vault cancels every handle and every shared value the agent has not collected yet.

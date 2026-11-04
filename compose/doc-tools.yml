@@ -18,7 +18,8 @@
 #   it cloudflared, the vault and every other service of the stack.
 #
 # This adds to an upstream service (a mount and a network) instead of
-# restricting it: a named exception in AGENTS.md. It replaces nothing.
+# restricting it: a named exception in compose/README.md ("Rules"). It
+# replaces nothing.
 # `lettucectl check` refuses a stack where the mount is not this read-only
 # volume, where another service mounts it or joins the network, or where the
 # app-server loses `default`.

@@ -683,7 +683,7 @@ check_gmail_triggers() {
 }
 
 # check_code_server NAME RENDERED STATE_DIR -> the code editor's three services
-# keep what compose/code-server.yml gives them (docs/code-server.md):
+# keep what compose/code-server.yml gives them (code-server/README.md, "Security mechanisms"):
 # - the gate (garden-code-server): a hardened sidecar (check_sidecar), on default only,
 #   with the editor's socket read-only as its one mount;
 # - the editor (garden-code-server-editor): hardened, the workspaces as its one host
