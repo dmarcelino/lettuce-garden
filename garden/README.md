@@ -36,10 +36,21 @@ An interactive version, [garden-architecture.html](../docs/diagrams/garden-archi
 
 - **Overlay:** `compose/garden.yml` defines the `garden` service behind all three garden page profiles: image `lettuce-garden:local`, the `default` network only, no volumes and no host paths, read-only root, no capabilities, `no-new-privileges`, 128 MB.
 - **Environment:** `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` (set from `CF_GARDEN_AUD`), `CF_ACCESS_ISSUER`, `ALLOWED_USERS`, `PUBLIC_ORIGIN` (set from `GARDEN_ORIGIN`), `LETTUCE_ORIGIN` (set from Lettuce's `PUBLIC_ORIGIN`, for "Back to Lettuce"), `GARDEN_PROFILES` and `GARDEN_EXECUTOR_TOKEN`.
-- **Tunnel:** `cf_tunnel_configure` puts the garden host's rules first: each `PROFILE_ROUTES` row whose profile is on, then, when any is, `GARDEN_LANDING_PATH` (`^/(assets/[^/]+)?$`) to `http://garden:8000`, then a 404 for the rest of the garden host. So `/executor/v1/` and `/healthz` are never routed.
+- **Tunnel:** `cf_tunnel_configure` puts the garden host's rules first: each `PROFILE_ROUTES` row whose profile is on, then, when any is, `GARDEN_LANDING_PATH` (`^/(assets/[^/]+)?$`) to `http://garden:8000`, then a 404 for the rest of the garden host. So `/executor/v1/` and `/healthz` are never routed. `garden` serves every asset under `/assets/`, and `test_every_page_route_is_the_root_or_under_assets` checks that its routes stay within what the tunnel sends it.
 - **API for the executor:** `GET /executor/v1/status` and `PUT /executor/v1/agents`, behind `guard` from `garden-common` (the token, no `Origin`, no tunnel headers).
-- **lettucectl:** `up` (`up_stack`) runs `ensure_executor_token` and `sync_garden_profiles`, which writes `GARDEN_PROFILES` in `stack.env` from `COMPOSE_PROFILES` (the `PROFILE_ROUTES` profiles that are on, in that order; only `garden` gets it). After `compose up`, `sync_executor` installs or removes the executor ([executor/README.md](executor/README.md)). `check_stack`, with any garden page profile on, requires `GARDEN_ORIGIN`, `CF_GARDEN_AUD` and a well-formed `GARDEN_EXECUTOR_TOKEN`, and runs `check_garden` (a hardened sidecar on `default` only, mounting nothing); whatever the profiles, `check_garden_audience` holds every garden service, this one included, to the garden's Access application and origin. The full list is in [AGENTS.md](../AGENTS.md), "Key invariants".
-- **A new garden page:** a `PROFILE_ROUTES` row in `lib/cloudflare.sh` (profile `garden-<page>`, page at `/<page>/`), the profile in `compose/garden.yml` and an entry in `LABELS`; tests check that the first two match.
+- **lettucectl:** `up` (`up_stack`) runs `ensure_executor_token` and `sync_garden_profiles`, which writes `GARDEN_PROFILES` in `stack.env` from `COMPOSE_PROFILES` (the `PROFILE_ROUTES` profiles that are on, in that order; only `garden` gets it). After `compose up`, `sync_executor` installs or removes the executor ([executor/README.md](executor/README.md)). `check_stack`, with any garden page profile on, requires `GARDEN_ORIGIN`, `CF_GARDEN_AUD` and a well-formed `GARDEN_EXECUTOR_TOKEN`, and runs `check_garden` (a hardened sidecar on `default` only, mounting nothing); whatever the profiles, `check_garden_audience` holds every garden service, this one included, to the garden's Access application and origin ([Rules](#rules)).
+- **A new garden page:** a `PROFILE_ROUTES` row in `lib/cloudflare.sh` (profile `garden-<page>`, page at `/<page>/`), the profile in `compose/garden.yml` and an entry in `LABELS`; tests check that the first two match. The whole checklist: [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-garden-sidecar).
+
+## Rules
+
+### The garden accepts only its own Access application
+Whatever the profiles, `check_garden_audience` refuses a garden service (`garden_services`: each `PROFILE_ROUTES` service and `garden`) whose `CF_ACCESS_AUD` is not `CF_GARDEN_AUD`, or is Lettuce's `CF_ACCESS_AUD`, or whose `PUBLIC_ORIGIN` is not `GARDEN_ORIGIN`. cloudflared hands Lettuce's token to the BFF in plain HTTP, inside the namespace agents share, so a garden page that took it could be driven by an agent that caught it.
+
+### What `check_garden` refuses
+With any garden page profile (`garden-vault`, `garden-gmail-triggers`, `garden-code-server`): `GARDEN_ORIGIN` or `CF_GARDEN_AUD` empty (the garden host is missing, and `up` creates it), a missing or malformed `GARDEN_EXECUTOR_TOKEN`, and a `garden` service that is missing, not a hardened sidecar (`check_sidecar`), on a network other than `default`, or mounting anything.
+
+### The landing page stays passive
+It has no script (its CSP allows none), touches no other sidecar and opens no connection to Lettuce: it reads only the agent list the executor sends. Garden sidecars go under `/<sidecar>/` on the garden host, never on Lettuce's. The Fetch Metadata rules every garden page follows are in [garden-common](../garden-common/README.md#rules).
 
 ## Build and test
 
@@ -53,7 +64,7 @@ node --test 'garden/executor/tests/*.test.mjs'   # the executor's tests on the h
 
 ## Upstream seams
 
-Named in [AGENTS.md](../AGENTS.md), "Relationship to upstream"; `lettucectl upgrade` must check them:
+Listed in [CONTRIBUTING.md](../CONTRIBUTING.md#upstream-seams); every Lettuce upgrade checks them:
 
 - The executor: `letta cron add` with `--name=`, `--description=`, `--prompt=`, `--at=in 1m`, `--once`, `--agent=`, `--conversation=new|default` (the `=` form) and its JSON output (`.id`); `letta agents list` (`.items[]`); the scheduler picking up a changed task file without a restart; the app-server entrypoint copying `/root/.letta/system-cron` to `/etc/cron.d`; the image's `/usr/local/bin/agent-env`.
 - The landing page's agent links, with the code editor on: code-server's `?folder=` query and the workspaces at `/work/<agent-id>`; the list itself comes from `letta agents list` through the executor.

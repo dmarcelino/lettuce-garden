@@ -1,5 +1,6 @@
-# The checks of AGENTS.md "Commands", run as an operator would run them, on
-# every branch push and by hand. A new test script or linted file goes here too.
+# The checks of CONTRIBUTING.md "Building and testing" (and AGENTS.md
+# "Commands"), run as an operator would run them, on every branch push and by
+# hand. A new test script or linted file goes here too, and in both docs.
 name: CI
 
 on:

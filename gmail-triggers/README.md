@@ -33,12 +33,27 @@ The executor is not here: it is [garden/executor/run.mjs](../garden/executor/run
 - **Tunnel:** the `PROFILE_ROUTES` row in [lib/cloudflare.sh](../lib/cloudflare.sh) sends `^/gmail-triggers(/|$)` on the garden host to `http://garden-gmail-triggers:8000`. `/executor/v1/` and `/healthz` are outside that prefix, so the tunnel answers them with 404.
 - **Requests checked in the app:** pages and form posts go through `garden_common.auth` (Access JWT, Fetch Metadata, Origin and CSRF, COOP), the executor API through `garden_common.executor.guard` (bearer token, no `Origin`, no tunnel headers); see [garden-common](../garden-common/README.md).
 - **The executor:** `up` installs it in the app-server when this profile or `garden-code-server` is on (`executor_wanted`, `sync_executor`), with `--gmail-triggers` in its cron line exactly when this profile is on (`executor_cron`). `ensure_executor_token` generates `GARDEN_EXECUTOR_TOKEN` once per stack. Each minute it claims requests, runs `letta cron add --once` for each, and posts the results, the agent list when asked, and a heartbeat. Its run, API and limits are in [garden/executor/README.md](../garden/executor/README.md).
-- **`check_stack`:** `check_gmail_triggers` (hardened, the one bind mount, the Google volumes read-only and no other volume, nothing else reaching `$LETTA_STATE_DIR/garden`, no symlink on that path), `profile_unmet` (needs `google`), `google-creds` mounted only by `bff`, `google-mcp` and this service, `check_garden_audience`, and with pipelock `NO_PROXY` lists `garden-gmail-triggers`. The full rules are in [AGENTS.md](../AGENTS.md) ("Key invariants").
+- **`check_stack`:** `check_gmail_triggers` (hardened, the one bind mount, the Google volumes read-only and no other volume, nothing else reaching `$LETTA_STATE_DIR/garden`, no symlink on that path), `profile_unmet` (needs `google`), `google-creds` mounted only by `bff`, `google-mcp` and this service, `check_garden_audience`, and with pipelock `NO_PROXY` lists `garden-gmail-triggers`. The details are under [Rules](#rules); every `check_stack` rule: [CONTRIBUTING.md](../CONTRIBUTING.md#what-check_stack-enforces).
 
-## Security mechanisms
-The guarantees and limits are in [docs/gmail-triggers.md](../docs/gmail-triggers.md#security-model); this is how two of them are kept.
-- **The executor is the one written exception to "no second way into an agent"** in [AGENTS.md](../AGENTS.md) ("Relationship to upstream"). It opens no connection to the app-server: it turns each request into a one-off task with letta-code's own `letta cron add`, and Lettuce's scheduler starts the turn on the BFF's connection. It gives agents nothing new, since they can already create scheduled tasks themselves.
-- **No directory is shared with the app-server.** A shared directory would have to sit where agents can write, and they could swap it for a symlink that Docker follows on the host. The sidecar's only bind mount is its own rules directory, and `check` refuses a symlink on that path (`check_gmail_triggers`).
+## Rules
+The guarantees and limits people see are in [docs/gmail-triggers.md](../docs/gmail-triggers.md#security-model); these are the rules that keep them.
+
+### The one written exception to "no second way into an agent"
+The rule itself is in [CONTRIBUTING.md](../CONTRIBUTING.md#relationship-to-upstream). Gmail triggers start turns, but open no connection to the app-server: the sidecar hands each request to the garden executor in the app-server, which runs `letta cron add --once`, and Lettuce's scheduler fires the task on the BFF's connection. It gives agents nothing new, since they can already run `letta cron add` themselves.
+
+Only Gmail triggers use this path. The sidecar issues requests only for rules the person made on its Access-protected page, within each rule's hourly limit. The executor runs whatever well-formed request it is served, and agents can read its token, which gives them nothing `letta cron add` doesn't. Trigger rules live in this sidecar, not inside Lettuce, because agents could edit them there.
+
+### No directory is shared with the app-server
+A shared directory would have to sit where agents can write, and they could swap a component for a symlink that Docker follows on the host. So the sidecar and the executor talk over HTTP ([garden/executor/README.md](../garden/executor/README.md#trust)), and the sidecar's only bind mount is its own rules directory, `$LETTA_STATE_DIR/garden/gmail-triggers`, which the app-server does not mount.
+
+### What `check_gmail_triggers` refuses
+With the profile on, `check_stack` refuses:
+- a `garden-gmail-triggers` service that is missing or not hardened (`check_hardened`);
+- any bind mount on it but `$LETTA_STATE_DIR/garden/gmail-triggers:/data`, `google-creds` or `google-policy` writable, or any other named volume;
+- another service bind-mounting `$LETTA_STATE_DIR/garden`, a path under it or a parent of it (also after resolving symlinks at check time), or a volume whose `driver_opts` point there. Relative bind devices are refused outright;
+- `$LETTA_STATE_DIR`, `state/garden` or `state/garden/gmail-triggers` being a symlink, which Docker would follow on the host.
+
+Whatever the profiles, `google-creds` may be mounted only by `bff`, `google-mcp` and `garden-gmail-triggers`, and no `volumes_from` may name `garden-gmail-triggers`. `profile_unmet` refuses the profile without `google`, and `profiles` checks that before writing.
 
 ## Build and test
 `lettucectl up` builds the image. The tests need only Docker:
@@ -49,7 +64,9 @@ node --test 'garden/executor/tests/*.test.mjs'  # the executor's tests on the ho
 ```
 Run them before changing this directory, `garden-common/` or the executor.
 
+The tests never use the network: Google is an `httpx.MockTransport`, Access tokens follow the vault's `make_jwt` pattern, a fake clock drives time, and a fake email body is asserted never to reach requests, pages or logs.
+
 ## Upstream seams
-These are the Lettuce behaviours Gmail triggers depend on, as AGENTS.md and the code name them:
+These are the Lettuce behaviours Gmail triggers depend on (all of them are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#upstream-seams)):
 - The Google files the BFF writes on the `google-policy` and `google-creds` volumes (`/policy/sidecar.json`, `/creds/<account>.json`, upstream `bff/src/google/settings.ts`; see `google.py`).
 - Through the executor: `letta cron add` with `--name=`, `--description=`, `--prompt=`, `--at=in 1m`, `--once`, `--agent=`, `--conversation=new|default` and its JSON output (`.id`); `letta agents list` (`.items[]`); the scheduler picking up a changed task file without a restart; the app-server entrypoint copying `/root/.letta/system-cron` to `/etc/cron.d`; and `/usr/local/bin/agent-env`.

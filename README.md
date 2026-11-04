@@ -67,7 +67,8 @@ With any of the vault, Gmail triggers or the code editor on, the garden address 
 **Developing lettuce-garden**
 - [CONTRIBUTING.md](CONTRIBUTING.md): where to start, the rules, tests and how the docs are organised.
 - [ARCHITECTURE.md](ARCHITECTURE.md): the whole stack's containers, networks, volumes and routes, and a map of the repo.
-- Each folder's README ([lib/](lib/README.md), [compose/](compose/README.md), [vault/](vault/README.md), [gmail-triggers/](gmail-triggers/README.md), [code-server/](code-server/README.md), [garden/](garden/README.md), [garden-common/](garden-common/README.md), [pipelock/](pipelock/README.md), [doc-tools/](doc-tools/README.md), [agent-skills/](agent-skills/README.md), [backup/](backup/README.md)) and [AGENTS.md](AGENTS.md), the rules every change follows.
+- Each folder's README ([lib/](lib/README.md), [compose/](compose/README.md), [vault/](vault/README.md), [gmail-triggers/](gmail-triggers/README.md), [code-server/](code-server/README.md), [garden/](garden/README.md), [garden-common/](garden-common/README.md), [pipelock/](pipelock/README.md), [doc-tools/](doc-tools/README.md), [agent-skills/](agent-skills/README.md), [backup/](backup/README.md), [tests/](tests/README.md)), each with its rules.
+- [AGENTS.md](AGENTS.md): the short directives for coding agents, linking to those rules.
 
 ## Licence
 MIT, for the contents of this repository only. See [LICENSE](LICENSE).

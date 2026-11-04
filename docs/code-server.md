@@ -46,4 +46,4 @@ The editor shares its address with the vault and Gmail triggers: the stack's gar
 - **What this does not cover.** A bug in code-server or in a kept built-in (rendering crafted file content, terminal or git output, or a TypeScript hover) could still run script in the editor's tab. There it acts on the garden's address as the person, where the checks above guard the vault and Gmail triggers. The garden and Lettuce are the same *site*, so the browser still sends Lettuce's sign-in cookie with requests from that tab: script there could send Lettuce's HTTP API requests it can't read the answers to. Whether that API refuses them (it checks the origin only on WebSockets) is upstream's to change. code-server's pin is kept current for these reasons.
 - `lettucectl check` refuses to start a stack where the editor, the gate or the shell has lost any of this isolation.
 
-How each of these is enforced, and how it is tested: [code-server/README.md](../code-server/README.md#security-mechanisms).
+How each of these is enforced, and how it is tested: [code-server/README.md](../code-server/README.md#rules).
