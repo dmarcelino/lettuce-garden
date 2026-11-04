@@ -17,10 +17,13 @@
     <p>It says it needs them to:</p>
     <blockquote>{{ req.purpose }}</blockquote>
   </div>
-  {% if req.delivery == "env" %}
-  <p class="hint">The agent asked to pass these to a command it runs, so they won't appear in the conversation. It can still use them however that command does.</p>
+  {% if req.delivery == "text" %}
+  <div class="banner warn" role="note">
+    <p><strong>The agent wants to read these values.</strong> They stay in that conversation, which the AI provider also sees. Its reason:</p>
+    <blockquote>{{ req.reason }}</blockquote>
+  </div>
   {% else %}
-  <p class="hint">What you share is given to the agent and stays in that conversation, which the AI provider also sees.</p>
+  <p class="hint">The agent asked to pass these to a command or file it prepared, so they won't appear in the conversation. It can still use them however that command does.</p>
   {% endif %}
   <div class="form-actions">
     <button class="button" name="action" value="share">Share once</button>

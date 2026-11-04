@@ -5,7 +5,7 @@ import pytest
 from garden_vault import crypto
 from garden_vault.config import ERASE_DELAY_SECONDS
 from garden_vault.kinds import KINDS
-from garden_vault.vault import AUTO, Locked, Vault, VaultError, build_fields
+from garden_vault.vault import AUTO, FORMAT, Locked, Vault, VaultError, build_fields
 
 from .conftest import CARD, FAST_KDF, PASSPHRASE, SECRET, STREET, add_address, add_card
 
@@ -48,7 +48,7 @@ def test_restart_comes_back_locked(vault, vault_path, clock):
     with pytest.raises(VaultError, match="wrong passphrase"):
         again.unlock("not the passphrase at all")
     again.unlock(PASSPHRASE)
-    assert STREET in again.secret(secret_id).field("text").value
+    assert again.secret(secret_id).field("address1").value == STREET
 
 
 def test_setup_rules(vault_path, clock):
@@ -170,35 +170,56 @@ def test_unlock_fails_when_the_vault_was_erased_meanwhile(vault, monkeypatch):
     assert not vault.is_unlocked()
 
 
-def test_types_are_short_and_private_where_it_matters():
-    shapes = {key: [(f.key, f.sensitive, f.required) for f in kind.fields] for key, kind in KINDS.items()}
-    text = [("text", True, True)]
-    assert shapes["note"] == shapes["address"] == shapes["company"] == text
-    assert shapes["membership"] == [("programme", False, False), ("member_number", True, True), ("notes", True, False)]
-    assert shapes["id_document"] == [("document_type", False, False), ("number", True, True), ("notes", True, False)]
-    assert shapes["card"] == [
-        ("cardholder", False, False),
-        ("number", True, True),
-        ("expiry", False, False),
-        ("security_code", True, False),
-        ("notes", True, False),
+def test_types_are_bitwardens_with_private_fields_where_it_matters():
+    shapes = {key: [(f.key, f.sensitive, f.auto) for f in kind.fields] for key, kind in KINDS.items()}
+    public, private, auto = False, True, True
+    assert list(shapes) == ["login", "card", "identity", "secure_note", "ssh_key"]
+    assert shapes["login"] == [
+        ("username", public, False),
+        ("password", private, False),
+        ("totp", private, False),
+        ("uris", public, False),
+        ("notes", private, False),
     ]
-    assert shapes["login"] == [("website", False, False), ("username", False, False), ("password", True, True)]
+    assert shapes["card"] == [
+        ("cardholder_name", public, False),
+        ("brand", public, False),
+        ("number", private, False),
+        ("exp_month", private, False),
+        ("exp_year", private, False),
+        ("code", private, False),
+        ("notes", private, False),
+    ]
+    identity_public = [k for k, s, _ in shapes["identity"] if not s]
+    assert identity_public == ["title", "first_name", "middle_name", "last_name", "country"]
+    assert [k for k, _, a in shapes["identity"] if a] == [
+        "address1",
+        "address2",
+        "address3",
+        "city",
+        "state",
+        "postal_code",
+    ]
+    assert shapes["secure_note"] == [("notes", private, auto)]
+    assert shapes["ssh_key"] == [
+        ("private_key", private, False),
+        ("public_key", public, False),
+        ("key_fingerprint", public, False),
+        ("notes", private, False),
+    ]
 
 
-@pytest.mark.parametrize("kind", ["note", "address", "company", "membership"])
-def test_these_types_may_share_without_asking_even_with_private_fields(vault, kind):
-    values = {"text": "x", "member_number": "123"}
+@pytest.mark.parametrize("kind,values", [("identity", {"city": "Lisboa"}), ("secure_note", {"notes": SECRET})])
+def test_identities_and_notes_may_share_without_asking(vault, kind, values):
     fields = build_fields(kind, values)
-    assert any(f.sensitive for f in fields)
     assert vault.secret(vault.add_secret(kind, "s", "", fields, AUTO)).share_mode == AUTO
 
 
 @pytest.mark.parametrize(
     "kind,values",
-    [("card", {"number": CARD}), ("login", {"password": SECRET}), ("id_document", {"number": "AB123456"})],
+    [("card", {"number": CARD}), ("login", {"password": SECRET}), ("ssh_key", {"private_key": SECRET})],
 )
-def test_cards_logins_and_documents_always_ask(vault, kind, values):
+def test_cards_logins_and_keys_always_ask(vault, kind, values):
     with pytest.raises(VaultError, match="always ask"):
         vault.add_secret(kind, "s", "", build_fields(kind, values), AUTO)
 
@@ -206,14 +227,60 @@ def test_cards_logins_and_documents_always_ask(vault, kind, values):
 def test_build_fields_rules():
     fields = build_fields("login", {"username": "alfred", "password": SECRET, "unknown": "dropped"})
     assert [(f.key, f.sensitive) for f in fields] == [("username", False), ("password", True)]
-    with pytest.raises(VaultError, match="Password is required"):
-        build_fields("login", {"website": "shop.example"})
-    with pytest.raises(VaultError, match="Text is required"):
-        build_fields("address", {"text": "   "})
+    with pytest.raises(VaultError, match="at least one"):
+        build_fields("login", {"username": "   "})
     with pytest.raises(VaultError, match="longer"):
-        build_fields("note", {"text": "x" * 5000})
+        build_fields("secure_note", {"notes": "x" * 5000})
     with pytest.raises(VaultError):
-        build_fields("rocket", {"text": "y"})
+        build_fields("rocket", {"notes": "y"})
+
+
+def test_custom_fields_are_private_and_named_for_agents():
+    fields = build_fields("login", {"password": SECRET}, [("VAT ID", "PT999"), ("  ", ""), ("Recovery codes", "a\nb")])
+    custom = [(f.key, f.label, f.value, f.sensitive, f.multiline) for f in fields[1:]]
+    assert custom == [
+        ("vat_id", "VAT ID", "PT999", True, False),
+        ("recovery_codes", "Recovery codes", "a\nb", True, True),
+    ]
+    assert [f.key for f in build_fields("login", {"password": SECRET}, [("Empty", "")])] == ["password"]
+
+
+@pytest.mark.parametrize(
+    "custom,error",
+    [
+        ([("Password", "x")], "rename"),
+        ([("PIN", "1"), ("pin", "2")], "rename"),
+        ([("", "x")], "name"),
+        ([("!!", "x")], "name"),
+        ([("x" * 41, "x")], "name"),
+        ([(f"f{i}", "x") for i in range(21)], "at most"),
+    ],
+)
+def test_custom_field_rules(custom, error):
+    with pytest.raises(VaultError, match=error):
+        build_fields("login", {"password": SECRET}, custom)
+
+
+def test_secrets_of_an_older_format_are_deleted_on_unlock(vault, vault_path, clock):
+    kept = add_address(vault)
+    vault._x("DELETE FROM vault_meta WHERE k = 'format'")  # a vault made before Bitwarden's types
+    vault.lock()
+    assert len(vault._q("SELECT id FROM secrets")) == 1  # nothing happens while locked
+    vault.unlock(PASSPHRASE)
+    assert vault.secrets() == [] and vault.secret(kept) is None
+    assert vault._meta("format") == FORMAT
+    assert [(e.actor, e.action) for e in vault.audit_log()][0] == ("vault", "deleted 1 secrets of an older format")
+    add_address(vault)
+    vault.lock()
+    vault.unlock(PASSPHRASE)
+    assert len(vault.secrets()) == 1  # deleted once, not on every unlock
+
+
+def test_a_new_or_erased_vault_has_the_current_format(vault, vault_path, clock):
+    assert vault._meta("format") == FORMAT
+    vault.reset()
+    vault.setup(PASSPHRASE)
+    assert vault._meta("format") == FORMAT
 
 
 def test_audit_is_encrypted_and_readable_when_unlocked(vault):

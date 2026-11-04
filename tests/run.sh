@@ -2364,7 +2364,7 @@ test_skills_ships_the_repo_skills() {
   cp -r "$ROOT/agent-skills" "$H/"
   ctl skills alfred
   ok_rc
-  for f in using-vault-secrets/SKILL.md using-vault-secrets/vault-run; do
+  for f in using-vault-secrets/SKILL.md using-vault-secrets/vault-run using-vault-secrets/vault-fill; do
     tar -tf "$T/exec-stdin.log" | grep -qx "$f" || fail "$f not shipped"
   done
   grep -qx "name: using-vault-secrets" "$ROOT/agent-skills/using-vault-secrets/SKILL.md" || fail "SKILL.md name mismatch"
