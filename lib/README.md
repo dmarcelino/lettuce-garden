@@ -12,6 +12,7 @@ An interactive version, [lettucectl-architecture.html](../docs/diagrams/lettucec
 | `common.sh` | Messages (`info`, `warn`, `die`); the env-file helpers (`env_get`, `env_set`, `env_unset`, `cfg`); paths; validation of names, emails and profiles; the `compose`, `compose_env`, `compose_shared` and `host_docker` wrappers; doc-tools names and tags; VAPID key and executor token generation; `stale_services`; and `check_stack` with its `check_*` helpers |
 | `cloudflare.sh` | Cloudflare API v4: `cf_api` (curl + jq) and one `cf_*` helper per resource (zone, Zero Trust team, Google login method, DNS lookup, Access policy and applications, tunnel, tunnel token, tunnel ingress, DNS CNAME); `PROFILE_ROUTES`, the garden host's routes per profile |
 | `mcp-servers.mjs` | Adds or removes one group of lettucectl's servers (`doc-tools` or `vault`) in the stack's shared MCP list. Node, no dependencies; never run on the host |
+| `DESIGN.md` | Design record: installing without a clone (a published `lettucectl` image, published garden images, the data directory, `stacks.conf` and `apply`). Not started |
 
 `lettucectl` sources `common.sh`, then `cloudflare.sh`; both expect `LETTUCE_HOME` to be set and define functions only.
 

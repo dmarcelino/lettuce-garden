@@ -140,7 +140,7 @@ A new page on the garden host, `garden-<page>` at `/<page>/`. Each step is a rul
   | [backup/](backup/README.md) | the image `lettucectl backup` copies with |
   | [tests/](tests/README.md) | the CLI's offline tests: the stubs and helpers |
 
-- **Design records**, kept as written, with a note where the build later differed: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md), [garden/DESIGN.md](garden/DESIGN.md) (the garden host and the garden-wide executor).
+- **Design records**, kept as written, with a note where the build later differed: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md), [garden/DESIGN.md](garden/DESIGN.md) (the garden host and the garden-wide executor), [lib/DESIGN.md](lib/DESIGN.md) (installing without a clone; not started).
 - **The user and admin guides** in [docs/](docs/): each feature's security model (what it guarantees and what it does not) is there; the folder README says how it is enforced.
 
 ## Building and testing
