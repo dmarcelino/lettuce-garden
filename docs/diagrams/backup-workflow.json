@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "884e5c7b5c9b9062a6810b912814523effdbecd4"
     },
     "legend": {
       "entries": {
@@ -90,8 +90,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1630,
-          "end_line": 1662,
+          "line": 1648,
+          "end_line": 1680,
           "label": "cmd_backup"
         }
       ]
@@ -111,8 +111,8 @@
         },
         {
           "path": "lettucectl",
-          "line": 1451,
-          "end_line": 1466,
+          "line": 1466,
+          "end_line": 1481,
           "label": "build and run options"
         }
       ]
@@ -127,20 +127,20 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1663,
-          "end_line": 1680,
+          "line": 1681,
+          "end_line": 1698,
           "label": "one subshell per stack"
         },
         {
           "path": "lettucectl",
-          "line": 1559,
-          "end_line": 1591,
+          "line": 1576,
+          "end_line": 1609,
           "label": "lock, mounts, excludes"
         },
         {
           "path": "lettucectl",
-          "line": 1593,
-          "end_line": 1597,
+          "line": 1611,
+          "end_line": 1615,
           "label": "old .partial-* removed"
         }
       ],
@@ -156,8 +156,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1568,
-          "end_line": 1570,
+          "line": 1583,
+          "end_line": 1585,
           "label": "flock -n"
         }
       ]
@@ -172,13 +172,13 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1598,
-          "end_line": 1602
+          "line": 1616,
+          "end_line": 1620
         },
         {
           "path": "lettucectl",
-          "line": 1526,
-          "end_line": 1544,
+          "line": 1541,
+          "end_line": 1559,
           "label": "backup_choice"
         }
       ]
@@ -193,8 +193,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1534,
-          "end_line": 1543,
+          "line": 1549,
+          "end_line": 1558,
           "label": "no --pause, --live or answer"
         }
       ]
@@ -209,13 +209,13 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1603,
-          "end_line": 1610,
+          "line": 1621,
+          "end_line": 1628,
           "label": "trap, then pause"
         },
         {
           "path": "lettucectl",
-          "line": 1625,
+          "line": 1643,
           "label": "subshell exit"
         }
       ]
@@ -231,20 +231,20 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1452,
-          "end_line": 1456,
+          "line": 1467,
+          "end_line": 1471,
           "label": "BACKUP_RUN"
         },
         {
           "path": "lettucectl",
-          "line": 1478,
-          "end_line": 1503,
+          "line": 1493,
+          "end_line": 1518,
           "label": "BACKUP_COPY"
         },
         {
           "path": "lettucectl",
-          "line": 1618,
-          "end_line": 1622
+          "line": 1636,
+          "end_line": 1640
         }
       ]
     },
@@ -258,8 +258,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1619,
-          "end_line": 1622,
+          "line": 1637,
+          "end_line": 1640,
           "label": "prev snapshot, partial name"
         }
       ]
@@ -274,13 +274,13 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1623,
+          "line": 1641,
           "label": "mv"
         },
         {
           "path": "lettucectl",
-          "line": 1468,
-          "end_line": 1469,
+          "line": 1483,
+          "end_line": 1484,
           "label": "UTC timestamp names"
         }
       ]
@@ -295,14 +295,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1546,
-          "end_line": 1557,
+          "line": 1561,
+          "end_line": 1572,
           "label": "backup_prune"
         },
         {
           "path": "lettucectl",
-          "line": 1626,
-          "end_line": 1627
+          "line": 1644,
+          "end_line": 1645
         }
       ]
     }
@@ -398,7 +398,7 @@
       "items": [
         "--init, --network none, --read-only, --tmpfs /tmp, no-new-privileges",
         "cap_drop ALL, then CHOWN, DAC_OVERRIDE and FOWNER only",
-        "state, stack.env, vault-data and pipelock-data (when the volume exists) read-only; only <dir>/<name> is writable",
+        "state, stack.env, vault-data, pipelock-data and monitors-data (when the volume exists) read-only; only <dir>/<name> is writable",
         "Old .partial-* entries and pruned snapshots are deleted through the same container"
       ]
     },

@@ -2,6 +2,10 @@
 
 The monitors sidecar: sources agents configure (feeds, JSON APIs, pages, schema.org data, calendars), fetched on a timer without a model; monitors that say what an agent wants from them and when; and a report queue that the garden executor in the app-server turns into one-off letta-code tasks, only when something is new. It is Python (Starlette, httpx, lxml), runs as the `garden-monitors` service behind the `garden-monitors` profile, serves its MCP server to agents at `http://garden-monitors:8000/mcp` and its page at `/monitors/` on the stack's garden host. For users and admins (using it, running it, the security model): [docs/monitors.md](../docs/monitors.md); the design record is [DESIGN.md](DESIGN.md).
 
+![The monitors' containers, boundaries and reports](../docs/diagrams/monitors-architecture.svg)
+
+An interactive version, [monitors-architecture.html](../docs/diagrams/monitors-architecture.html), opens in a browser from a clone of this repo.
+
 ## Files
 | Path | What it does |
 |---|---|

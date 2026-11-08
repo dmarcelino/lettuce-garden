@@ -2,6 +2,10 @@
 
 Each stack can have monitors: ask an agent, in plain words, to keep an eye on something and report on a schedule. "Tell me which films open soon at my cinema", "let me know when these promoters announce a concert", "give me the major international news at 9am, Monday to Friday". The agent finds the sources and sets the monitor up once; from then on a small service checks the sources without a model, and the agent reports at the chosen times only when something is new. It is opt-in, behind the `garden-monitors` profile.
 
+![From a request in chat to a report when something is new: you, your agent, monitors, websites, the garden executor, Lettuce's scheduler](diagrams/monitors-flow.svg)
+
+An interactive version, [monitors-flow.html](diagrams/monitors-flow.html), opens in a browser from a clone of this repo.
+
 How monitors are built and wired, for developers: [monitors/README.md](../monitors/README.md); the design record is [monitors/DESIGN.md](../monitors/DESIGN.md).
 
 ## Using it
