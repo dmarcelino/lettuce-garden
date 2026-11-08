@@ -191,7 +191,7 @@ test("run as lettucectl runs it: a JSON summary, or exit 3 and a message", () =>
   assert.equal(usage.status, 2);
   const noGroup = runScript("add", file, "everything");
   assert.equal(noGroup.status, 2);
-  assert.match(noGroup.stderr, /usage: .* add\|remove FILE doc-tools\|vault/);
+  assert.match(noGroup.stderr, /usage: .* add\|remove FILE doc-tools\|vault\|monitors/);
 });
 
 test("adds the vault after the existing ones and keeps everything else as it was", async () => {
@@ -277,4 +277,17 @@ test("run as lettucectl runs it for the vault", () => {
   assert.equal(gone.status, 0, gone.stderr);
   assert.deepEqual(JSON.parse(gone.stdout).removed, ["vault"]);
   assert.deepEqual(serversIn(file), [OFFICE]);
+});
+
+test("monitors and the vault each own only their exact HTTP entry", async () => {
+  const monitors = { name: "monitors", transport: "http", url: "http://garden-monitors:8000/mcp" };
+  const file = tmpFile(render(settings([GOOGLE, OUR_VAULT])));
+  const added = await update(file, "add", "monitors", { settleMs: 0 });
+  assert.deepEqual(added.added, ["monitors"]);
+  assert.deepEqual(serversIn(file), [GOOGLE, OUR_VAULT, monitors]);
+  const again = await update(file, "add", "monitors", { settleMs: 0 });
+  assert.deepEqual(again.added, []);
+  const removed = await update(file, "remove", "monitors", { settleMs: 0 });
+  assert.deepEqual(removed.removed, ["monitors"]);
+  assert.deepEqual(serversIn(file), [GOOGLE, OUR_VAULT]);
 });

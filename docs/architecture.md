@@ -19,7 +19,7 @@ Within one stack there is no such separation: agents run as root in the same con
 | Address | What is there | Who may sign in |
 |---|---|---|
 | `https://<name>.<your-domain>` | Lettuce: the web app (a PWA) and the agents | the stack's people, through Lettuce's Access application |
-| `https://<name>-garden.<your-domain>` | the garden pages that are on: a landing page at `/`, the vault at `/vault/`, Gmail triggers at `/gmail-triggers/`, the code editor at `/code-server/` | the same people, through the garden's own Access application |
+| `https://<name>-garden.<your-domain>` | the garden pages that are on: a landing page at `/`, the vault at `/vault/`, Gmail triggers at `/gmail-triggers/`, monitors at `/monitors/`, the code editor at `/code-server/` | the same people, through the garden's own Access application |
 
 Both Access applications share the stack's one Access policy, so `lettucectl users` changes who may sign in to both. The garden pages accept only the garden's sign-in, never Lettuce's, which agents could catch inside their own container. Anything else on the garden address gets a 404. When that name is already taken in the zone, `add` picks a numbered one (`-garden-2` to `-garden-9`); `lettucectl list` shows each stack's addresses.
 
@@ -38,14 +38,15 @@ An interactive version, [lettuce-garden-overview.html](diagrams/lettuce-garden-o
 | `channel-gateway` | the Telegram channel | `telegram` |
 | `searxng`, `ddg-mcp` | web search and the page reader for the agents | `search` |
 | `google-mcp` | Gmail, Calendar, Tasks and Contacts for the agents | `google` |
-| `garden` | the garden's landing page | any of `garden-vault`, `garden-gmail-triggers`, `garden-code-server` |
+| `garden` | the garden's landing page | any of `garden-vault`, `garden-gmail-triggers`, `garden-monitors`, `garden-code-server` |
 | `garden-vault` | the vault | `garden-vault` |
 | `garden-gmail-triggers` | Gmail triggers | `garden-gmail-triggers` |
+| `garden-monitors` | monitors | `garden-monitors` |
 | `garden-pipelock` | the egress proxy | `garden-pipelock` |
 | `garden-code-server`, `garden-code-server-editor`, `garden-code-server-exec` | the code editor's gate, the editor, and the shell its terminals run in | `garden-code-server` |
 | `gotenberg` | document conversions, **one per host** for every stack (Compose project `lettuce_shared`) | `garden-doc-tools` |
 
-Every service runs with `no-new-privileges` and a memory cap. The memory caps are 8 GiB for each app-server and for the code editor's shell, 2 GiB for the editor and for Gotenberg, 1 GiB for upstream's other services, 512 MiB for the vault, 256 MiB for cloudflared, Gmail triggers, pipelock and the code editor's gate, and 128 MiB for the landing page. These are caps, not reservations; measure idle use with `docker stats`. The garden's services, pipelock, and the code editor's gate and editor also run read-only with every capability dropped. The code editor's shell is the exception: it is as strong as an agent, so it keeps Docker's default capabilities except `NET_RAW`, and a writable root. Profiles are global: all stacks share one app-server image, whose contents depend on `PROFILES`, so `lettucectl profiles` changes the list for every stack at once.
+Every service runs with `no-new-privileges` and a memory cap. The memory caps are 8 GiB for each app-server and for the code editor's shell, 2 GiB for the editor and for Gotenberg, 1 GiB for upstream's other services, 512 MiB for the vault, 384 MiB for monitors, 256 MiB for cloudflared, Gmail triggers, pipelock and the code editor's gate, and 128 MiB for the landing page. These are caps, not reservations; measure idle use with `docker stats`. The garden's services, pipelock, and the code editor's gate and editor also run read-only with every capability dropped. The code editor's shell is the exception: it is as strong as an agent, so it keeps Docker's default capabilities except `NET_RAW`, and a writable root. Profiles are global: all stacks share one app-server image, whose contents depend on `PROFILES`, so `lettucectl profiles` changes the list for every stack at once.
 
 ## Where the data lives
 | Data | Where | `backup` | Deleted by |
@@ -58,6 +59,7 @@ Every service runs with `no-new-privileges` and a memory cap. The memory caps ar
 | the stack's secrets and Cloudflare ids | `stacks/<name>/stack.env` | yes | `remove --purge` |
 | the vault, encrypted | Docker volume `lettuce-<name>_vault-data` | yes, whenever it exists | `remove` |
 | pipelock's receipts and signing key | Docker volume `lettuce-<name>_pipelock-data` | yes, whenever it exists | `remove` |
+| monitors, their sources and what they found | Docker volume `lettuce-<name>_monitors-data` | yes, whenever it exists | `remove` |
 | Lettuce's Google client and tokens | Docker volumes `lettuce-<name>_google-policy`, `lettuce-<name>_google-creds` | no | `remove` |
 | push subscriptions and pinned-agent lists | Docker volume `lettuce-<name>_bff-data` | no; losing it is harmless | `remove` |
 | the code editor's settings | Docker volume `lettuce-<name>_code-server-data` | no; nothing in it is needed to restore a stack | `remove` |
@@ -71,7 +73,7 @@ Every service runs with `no-new-privileges` and a memory cap. The memory caps ar
 - **Agent web apps.** Upstream's agent-served apps on ports 3000-3099 are not exposed: they are unauthenticated, and one host cannot publish the same range twice.
 - **Data on disk.** A stack's data is only as private as the host. Whoever has root on it can read every stack.
 
-Each feature's own guarantees and limits are in its guide: [vault](vault.md#security-model), [Gmail triggers](gmail-triggers.md#security-model), [code editor](code-server.md#security-model), [document tools](doc-tools.md#security-model), [egress proxy](egress-firewall.md#what-it-does-not-do). [operations.md](operations.md#security-notes) has the operator's security notes.
+Each feature's own guarantees and limits are in its guide: [vault](vault.md#security-model), [Gmail triggers](gmail-triggers.md#security-model), [monitors](monitors.md#security-model), [code editor](code-server.md#security-model), [document tools](doc-tools.md#security-model), [egress proxy](egress-firewall.md#what-it-does-not-do). [operations.md](operations.md#security-notes) has the operator's security notes.
 
 ## Glossary
 | Term | Meaning |
@@ -82,7 +84,7 @@ Each feature's own guarantees and limits are in its guide: [vault](vault.md#secu
 | app-server | The container that runs letta-code: the agents, their shell, memory and workspaces. Agents are root in it. |
 | BFF | "Backend for frontend": Lettuce's own server, which serves the web app, checks the sign-in and holds the only connection to the agents. |
 | profile | An optional feature, named in `PROFILES` (for example `search`, `google`, `garden-vault`). It is on for every stack or for none. |
-| garden, garden pages | lettuce-garden's own extras with a page of their own (the vault, Gmail triggers, the code editor), on each stack's second address, `<name>-garden.<domain>`. |
+| garden, garden pages | lettuce-garden's own extras with a page of their own (the vault, Gmail triggers, monitors, the code editor), on each stack's second address, `<name>-garden.<domain>`. |
 | sidecar | A small extra container next to the app-server, such as the vault or `google-mcp`, which agents use but which is not part of their container. |
 | MCP | Model Context Protocol: how agents call tools that run outside their own code, such as the vault or the document tools. Listed in Lettuce under **Settings -> MCP**. |
 | Cloudflare Tunnel | An outbound connection from the stack's `cloudflared` to Cloudflare, which carries the stack's traffic, so the host opens no port. |

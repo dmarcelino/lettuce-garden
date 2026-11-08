@@ -3,7 +3,7 @@
 This file provides guidance to agents when working with code in this repository. It is the short version: directives and commands. The rules themselves, with their reasons and how each is enforced, live in the developer docs; every directive links to its rule.
 
 ## What this is
-Lettuce Garden is an opinionated, batteries-included way to run [Lettuce](https://github.com/dmarchevsky/lettuce) for several people on one host: one isolated stack per person behind Cloudflare Access, plus extras such as a secrets vault, Gmail triggers, a code editor, an egress proxy, MCP servers and agent skills. `lettucectl`, a Bash CLI, runs the single-user stacks, one per person. Each stack is its own Docker Compose project behind its own Cloudflare Tunnel and two Cloudflare Access applications (Google login), one for Lettuce and one for the garden pages. There is no multi-user code: isolation comes from separate stacks, authentication from Cloudflare.
+Lettuce Garden is an opinionated, batteries-included way to run [Lettuce](https://github.com/dmarchevsky/lettuce) for several people on one host: one isolated stack per person behind Cloudflare Access, plus extras such as a secrets vault, Gmail triggers, monitors, a code editor, an egress proxy, MCP servers and agent skills. `lettucectl`, a Bash CLI, runs the single-user stacks, one per person. Each stack is its own Docker Compose project behind its own Cloudflare Tunnel and two Cloudflare Access applications (Google login), one for Lettuce and one for the garden pages. There is no multi-user code: isolation comes from separate stacks, authentication from Cloudflare.
 
 ## Read before you change
 - **Before editing a folder, read its README's "Rules" section, and before you finish run every command in its "Build and test".** Each folder with a README has an `AGENTS.md` pointer to it (Claude Code loads its `CLAUDE.md` symlink when it works there). Before a cross-cutting change (an upstream seam, `check_stack`, a new profile or garden sidecar, a Lettuce upgrade), read the matching section of [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -18,10 +18,11 @@ The "Build and test" sections are the one list of checks; this table only links 
 | `compose/` | [compose/README.md](compose/README.md#rules) | [compose](compose/README.md#build-and-test) |
 | `vault/` | [vault/README.md](vault/README.md#rules) | [vault](vault/README.md#build-and-test) |
 | `gmail-triggers/` | [gmail-triggers/README.md](gmail-triggers/README.md#rules) | [gmail-triggers](gmail-triggers/README.md#build-and-test) |
+| `monitors/` | [monitors/README.md](monitors/README.md#rules) | [monitors](monitors/README.md#build-and-test) |
 | `code-server/` | [code-server/README.md](code-server/README.md#rules) | [code-server](code-server/README.md#build-and-test) |
 | `garden/` | [garden/README.md](garden/README.md#rules) | [garden](garden/README.md#build-and-test) |
 | `garden/executor/` | [install](garden/executor/README.md#install), [trust](garden/executor/README.md#trust) | [executor](garden/executor/README.md#build-and-test) |
-| `garden-common/` | [garden-common/README.md](garden-common/README.md#rules) | [garden-common](garden-common/README.md#build-and-test) (the four suites that use it) |
+| `garden-common/` | [garden-common/README.md](garden-common/README.md#rules) | [garden-common](garden-common/README.md#build-and-test) (the five suites that use it) |
 | `pipelock/` | [pipelock/README.md](pipelock/README.md#rules) | [pipelock](pipelock/README.md#build-and-test) |
 | `doc-tools/` | [doc-tools/README.md](doc-tools/README.md#rules) | [doc-tools](doc-tools/README.md#build-and-test) |
 | `agent-skills/` | [agent-skills/README.md](agent-skills/README.md#rules) | [agent-skills](agent-skills/README.md#build-and-test) |
@@ -35,8 +36,8 @@ The "Build and test" sections are the one list of checks; this table only links 
 - Never modify Lettuce without an explicit request: neither the `upstream/` clone nor the upstream repository (code, issues, PRs). Say when a change would fit better upstream, and stop there.
 - Plug in only through the supported seams. A new dependency on a Lettuce internal is redesigned away, or adds a row to the upstream seams named today in [CONTRIBUTING.md](CONTRIBUTING.md#upstream-seams).
 - Overlays restrict, never redefine: never replace an upstream service's image, entrypoint, command or internal env. The written exceptions are `pipelock-proxy.yml` (proxy variables on three upstream services) and `doc-tools.yml` (a mount and a network on the app-server); leave them be. A new one needs a written reason in [compose/README.md](compose/README.md#rules) first, then a mention here.
-- No second way into an agent: no command or sidecar opens a connection to the app-server or starts a turn; `compose exec` for files and read-only CLI calls is the limit. Gmail triggers through letta-code's scheduler is the only exception. Another sidecar starting turns, or a new way around the BFF, needs a written reason in CONTRIBUTING first, and goes under `/<sidecar>/` on the garden host, never on Lettuce's.
-- Don't write into what Lettuce manages (settings, MCP list, memory, workspaces). Where we must write, we own a namespace: `skills` its manifest, the executor install its own files; the one write into the MCP list is `mcp`, with its two kinds of entries. Never turn an upstream feature on by editing its files.
+- No second way into an agent: no command or sidecar opens a connection to the app-server or starts a turn; `compose exec` for files and read-only CLI calls is the limit. Gmail triggers and monitors, through the garden executor and letta-code's scheduler, are the only exceptions. Another sidecar starting turns, or a new way around the BFF, needs a written reason in CONTRIBUTING first, and goes under `/<sidecar>/` on the garden host, never on Lettuce's.
+- Don't write into what Lettuce manages (settings, MCP list, memory, workspaces). Where we must write, we own a namespace: `skills` its manifest, the executor install its own files; the one write into the MCP list is `mcp`, with its three kinds of entries. Never turn an upstream feature on by editing its files.
 - Keep upstream's defences on: strictest auth settings, no disabled boot check, nothing secret under `stacks/<name>/state/`, never shorten the BFF's `stop_grace_period`.
 - Name new profiles `garden-<name>`. Move `LETTUCE_REF` only with `lettucectl upgrade <tag>`, and walk [the upgrade checklist](CONTRIBUTING.md#upgrading-lettuce_ref).
 
@@ -58,6 +59,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 - **Code editor** ([rules](code-server/README.md#rules)): nothing an agent wrote may run in the editor's container. Never add an extension, setting or flag that runs code, trusts a workspace or opens a port.
 - **Garden pages** ([garden-common rules](garden-common/README.md#rules), [garden rules](garden/README.md#rules)): every page checks Fetch Metadata (`check_fetch`) and sets COOP; the landing page has no script; every garden service accepts only `CF_GARDEN_AUD` and `GARDEN_ORIGIN`.
 - **Executor** ([install](garden/executor/README.md#install), [trust](garden/executor/README.md#trust)): only `sync_executor` installs or removes it (from `up`, `add` and `profiles`), through `compose exec`, replacing only its own files; its token is never rotated automatically. The executor runs `letta` from an argument array, never a shell. It and the sidecars share no directory and treat each other's data as untrusted.
+- **Monitors** ([rules](monitors/README.md#rules)): a monitor starts a turn only at its schedule, when something is new, within the daily cap; the service never creates `letta cron` tasks; specs are data, never code, and no page script runs; the fetcher reaches public addresses only and honours robots.txt; no model in the service.
 - **Pipelock** ([rules](pipelock/README.md#rules)): it is advisory; never describe it as a boundary. A service agents or the executor call inside the stack goes in `NO_PROXY`.
 - **Doc-tools** ([rules](doc-tools/README.md#rules)): lettucectl owns the image, volume and networks; Compose only uses them. Only the app-server mounts the tools.
 - **Skills** ([rules](agent-skills/README.md#rules)): only `skills` installs them, replacing only its own; names never match upstream's; text stays generic.
@@ -85,6 +87,7 @@ shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.
 tests/run-sidecar.sh vault            # vault tests (pytest in its image's `test` stage; needs Docker)
 tests/run-sidecar.sh vault -k vault   # extra args go to pytest
 tests/run-sidecar.sh gmail-triggers    # Gmail triggers' tests (pytest; the executor's run with garden)
+tests/run-sidecar.sh monitors          # the monitors' tests (pytest: schedules, fetcher, extractors, reports, page)
 tests/run-sidecar.sh code-server       # the code editor's gate (pytest), plus the editor image's tests when no args are given
 node --test 'garden/executor/tests/*.test.mjs'         # garden executor tests on the host
 tests/run-pipelock.sh                  # the pipelock image and config against a real pipelock (needs Docker, not the internet)

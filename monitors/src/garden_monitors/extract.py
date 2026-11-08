@@ -1,0 +1,408 @@
+"""From a fetched page to items, one function per kind, then the same clean-up for
+all: text made one line and capped, URLs absolute and canonical, dates parsed, a
+stable key. Nothing here runs code from the page."""
+
+from __future__ import annotations
+
+import calendar
+import hashlib
+import json
+import re
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
+from typing import Any
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+
+import feedparser
+import icalendar
+import jmespath
+import lxml.html
+from garden_common.text import one_line
+from lxml import etree
+
+from .config import MAX_FIELD, MAX_SUMMARY, MAX_URL
+from .fetch import Page
+from .spec import ITEM_FIELDS, Spec, split_selector
+
+# Query parameters that only track a click.
+TRACKING = re.compile(r"(utm_[a-z]+|fbclid|gclid|mc_cid|mc_eid|_hsenc|_hsmi|igshid)")
+URL_FIELDS = ("url", "image")
+DATE_FIELDS = ("start", "end", "published")
+ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?")
+OUTLET_SUFFIX = re.compile(r"\s+[-|\u2013\u2014]\s+([^-|\u2013\u2014]{2,60})$")
+
+
+class ExtractError(Exception):
+    pass
+
+
+@dataclass
+class Item:
+    key: str
+    fields: dict[str, str]
+    extra: dict[str, str] = field(default_factory=dict)
+
+    def watched(self, names: tuple[str, ...]) -> str:
+        """The watched fields, as one string to compare across runs."""
+        values = {n: self.fields.get(n) or self.extra.get(n, "") for n in names}
+        return json.dumps(values, sort_keys=True)
+
+    def as_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {k: v for k, v in self.fields.items() if v}
+        if self.extra:
+            out["extra"] = {k: v for k, v in self.extra.items() if v}
+        return out
+
+
+# -- values ---------------------------------------------------------------------
+def _scalar(value: Any) -> str:
+    if isinstance(value, bool) or value is None:
+        return ""
+    if isinstance(value, str | int | float):
+        return str(value)
+    if isinstance(value, dict):
+        # A schema.org object (a Place, an ImageObject...): its name or URL.
+        for k in ("name", "url", "@id", "text"):
+            if isinstance(value.get(k), str):
+                return value[k]
+        return ""
+    if isinstance(value, list):
+        return next((s for s in (_scalar(v) for v in value) if s), "")
+    return ""
+
+
+def canonical_url(href: str, base: str) -> str:
+    """Absolute, without fragment or tracking parameters; "" unless http(s)."""
+    try:
+        parts = urlsplit(urljoin(base, href.strip()))
+    except ValueError:
+        return ""
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return ""
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if not TRACKING.fullmatch(k)])
+    url = urlunsplit((parts.scheme, parts.netloc.lower(), parts.path or "/", query, ""))
+    return url if len(url) <= MAX_URL else ""
+
+
+def parse_date(value: str, languages: tuple[str, ...]) -> str:
+    """ISO 8601 ("2026-11-08" or "2026-11-08T21:00", with the offset when given),
+    or "" when the text is not a date this can read."""
+    text = value.strip()
+    if not text:
+        return ""
+    if ISO_DATE.fullmatch(text):
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            if len(text) == 10:
+                return parsed.date().isoformat()
+            return parsed.isoformat(timespec="minutes")
+    import dateparser  # slow to import; only text dates need it
+
+    settings = {"RETURN_AS_TIMEZONE_AWARE": False, "PREFER_DAY_OF_MONTH": "first"}
+    parsed = dateparser.parse(text[:120], languages=list(languages) or None, settings=settings)
+    if parsed is None:
+        return ""
+    if parsed.hour == 0 and parsed.minute == 0 and not re.search(r"\d:\d", text):
+        return parsed.date().isoformat()
+    return parsed.isoformat(timespec="minutes")
+
+
+def _date_value(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="minutes")
+    if isinstance(value, date):
+        return value.isoformat()
+    return _scalar(value)
+
+
+def outlet_of(title: str) -> tuple[str, str]:
+    """A news title "Headline - Outlet" as (headline, outlet); outlet "" when there is none."""
+    m = OUTLET_SUFFIX.search(title)
+    if not m:
+        return title, ""
+    return title[: m.start()].strip(), m.group(1).strip()
+
+
+def normalize(raw: dict[str, Any], extra: dict[str, Any], spec: Spec, base: str) -> Item | None:
+    """One item, cleaned; None without a title."""
+    fields: dict[str, str] = {}
+    for name in ITEM_FIELDS:
+        value = raw.get(name)
+        if name in DATE_FIELDS:
+            text = _date_value(value)
+            fields[name] = parse_date(text, spec.languages) if text else ""
+        elif name in URL_FIELDS:
+            fields[name] = canonical_url(_scalar(value), base) if _scalar(value) else ""
+        else:
+            fields[name] = one_line(_scalar(value), MAX_SUMMARY if name == "summary" else MAX_FIELD)
+    if not fields["title"]:
+        return None
+    if spec.item_kind == "article" and not fields["outlet"]:
+        headline, outlet = outlet_of(fields["title"])
+        if outlet:
+            fields["outlet"] = outlet
+            fields["title"] = headline
+    extra_out = {k: one_line(_scalar(v), MAX_FIELD) for k, v in extra.items()}
+    key_raw = raw.get("_key")
+    if spec.key:
+        parts = [fields.get(k) or extra_out.get(k, "") for k in spec.key]
+        key_text = "\x1f".join(parts)
+    elif isinstance(key_raw, str) and key_raw.strip():
+        key_text = key_raw.strip()
+    elif fields["url"]:
+        key_text = fields["url"]
+    else:
+        key_text = fields["title"] + "\x1f" + fields["start"]
+    key = hashlib.sha256(key_text.encode("utf-8", errors="replace")).hexdigest()[:32]
+    return Item(key, fields, extra_out)
+
+
+# -- kinds ----------------------------------------------------------------------
+def _json(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    try:
+        data = json.loads(page.body)
+    except (ValueError, RecursionError) as e:
+        raise ExtractError("the response is not JSON (a challenge page, or the wrong URL?)") from e
+    found = jmespath.search(spec.extract["items"], data)
+    if found is None:
+        return []
+    if not isinstance(found, list):
+        raise ExtractError("extract.items did not select a list")
+    out = []
+    for entry in found:
+        raw = {name: jmespath.search(expr, entry) for name, expr in spec.extract["fields"].items()}
+        extra = {name: jmespath.search(expr, entry) for name, expr in spec.extract["extra"].items()}
+        out.append((raw, extra))
+    return out
+
+
+def _html_root(page: Page) -> Any:
+    if not page.body.strip():
+        raise ExtractError("the page is empty")
+    try:
+        return lxml.html.document_fromstring(page.body, base_url=page.url)
+    except (etree.ParserError, ValueError) as e:
+        raise ExtractError("the page is not HTML") from e
+
+
+def _select(element: Any, selector: str) -> str:
+    css, attr = split_selector(selector)
+    targets = element.cssselect(css) if css else [element]
+    if not targets:
+        return ""
+    target = targets[0]
+    if attr:
+        return target.get(attr, "") or ""
+    return " ".join(target.text_content().split())
+
+
+def _html(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    root = _html_root(page)
+    out = []
+    for element in root.cssselect(spec.extract["items"]):
+        raw = {name: _select(element, sel) for name, sel in spec.extract["fields"].items()}
+        extra = {name: _select(element, sel) for name, sel in spec.extract["extra"].items()}
+        out.append((raw, extra))
+    return out
+
+
+def _types(node: dict[str, Any]) -> list[str]:
+    t = node.get("@type")
+    names = t if isinstance(t, list) else [t]
+    return [n.rsplit("/", 1)[-1] for n in names if isinstance(n, str)]
+
+
+def _walk_jsonld(node: Any, depth: int = 0) -> list[dict[str, Any]]:
+    if depth > 6:
+        return []
+    if isinstance(node, list):
+        return [n for child in node for n in _walk_jsonld(child, depth + 1)]
+    if not isinstance(node, dict):
+        return []
+    out = [node] if _types(node) else []
+    for key in ("@graph", "itemListElement", "item", "subEvent", "mainEntity"):
+        if key in node:
+            out += _walk_jsonld(node[key], depth + 1)
+    return out
+
+
+def _schema_fields(node: dict[str, Any]) -> dict[str, Any]:
+    location = node.get("location")
+    if isinstance(location, dict) and not location.get("name") and isinstance(location.get("address"), dict | str):
+        location = location["address"]
+    url = node.get("url") or (node.get("@id") if str(node.get("@id", "")).startswith("http") else "")
+    return {
+        "title": node.get("name") or node.get("headline"),
+        "url": url,
+        "start": node.get("startDate") or node.get("releaseDate"),
+        "end": node.get("endDate"),
+        "venue": location,
+        "summary": node.get("description"),
+        "image": node.get("image"),
+        "published": node.get("datePublished"),
+        "outlet": node.get("publisher"),
+        "_key": node.get("@id") if isinstance(node.get("@id"), str) else None,
+    }
+
+
+def _jsonld_nodes(root: Any) -> list[dict[str, Any]]:
+    nodes: list[dict[str, Any]] = []
+    for script in root.xpath('//script[@type="application/ld+json"]'):
+        text = (script.text or "").strip()
+        text = re.sub(r"^\s*(<!--|<!\[CDATA\[)|(-->|\]\]>)\s*$", "", text)
+        try:
+            data = json.loads(text)
+        except (ValueError, RecursionError):
+            continue
+        nodes += _walk_jsonld(data)
+    return nodes
+
+
+def _microdata_nodes(root: Any) -> list[dict[str, Any]]:
+    nodes = []
+    for scope in root.xpath("//*[@itemscope][@itemtype]"):
+        node: dict[str, Any] = {"@type": scope.get("itemtype", "").split()[0] if scope.get("itemtype") else ""}
+        for prop in scope.xpath(".//*[@itemprop]"):
+            # Only the properties of this scope, not of one nested in it.
+            owner = prop.getparent()
+            while owner is not None and owner is not scope and owner.get("itemscope") is None:
+                owner = owner.getparent()
+            if owner is not scope:
+                continue
+            tag = prop.tag if isinstance(prop.tag, str) else ""
+            if prop.get("itemscope") is not None:
+                value: Any = {"name": " ".join(prop.text_content().split())}
+            elif prop.get("content") is not None:
+                value = prop.get("content")
+            elif tag in ("a", "link", "area"):
+                value = prop.get("href", "")
+            elif tag in ("img", "audio", "video", "source", "iframe", "embed"):
+                value = prop.get("src", "")
+            elif tag == "time":
+                value = prop.get("datetime") or prop.text_content()
+            elif tag in ("meta", "data", "meter"):
+                value = prop.get("value", "")
+            else:
+                value = " ".join(prop.text_content().split())
+            for name in (prop.get("itemprop") or "").split():
+                node.setdefault(name, value)
+        nodes.append(node)
+    return nodes
+
+
+def schema_items(root: Any, types: list[str]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    wanted = set(types)
+    out = []
+    for node in _jsonld_nodes(root) + _microdata_nodes(root):
+        if wanted & set(_types(node)):
+            out.append((_schema_fields(node), {}))
+    return out
+
+
+def schema_types(root: Any) -> list[str]:
+    """Every schema.org type a page describes (for source_inspect)."""
+    found: dict[str, None] = {}
+    for node in _jsonld_nodes(root) + _microdata_nodes(root):
+        for t in _types(node):
+            found[t] = None
+    return list(found)
+
+
+def _schema_org(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    return schema_items(_html_root(page), spec.extract["types"])
+
+
+def follow_links(spec: Spec, page: Page) -> list[str]:
+    """For schema_org with follow: the item pages a listing links to, in order."""
+    assert spec.follow is not None
+    css, attr = split_selector(spec.follow["links"])
+    root = _html_root(page)
+    urls: dict[str, None] = {}
+    for element in root.cssselect(css):
+        url = canonical_url(element.get(attr or "href", ""), page.url)
+        if url:
+            urls[url] = None
+    return list(urls)
+
+
+def _struct_time(value: Any) -> str:
+    if not value:
+        return ""
+    return datetime.fromtimestamp(calendar.timegm(value), tz=UTC).isoformat(timespec="minutes")
+
+
+def _rss(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    feed = feedparser.parse(page.body, sanitize_html=True, resolve_relative_uris=False)
+    if feed.bozo and not feed.entries:
+        raise ExtractError("the response is not an RSS or Atom feed")
+    out = []
+    for entry in feed.entries:
+        summary = entry.get("summary", "")
+        if summary and "<" in summary:
+            try:
+                summary = lxml.html.fromstring(summary).text_content()
+            except (etree.ParserError, ValueError):
+                summary = ""
+        source = entry.get("source") or {}
+        raw = {
+            "title": entry.get("title", ""),
+            "url": entry.get("link", ""),
+            "summary": summary,
+            "published": _struct_time(entry.get("published_parsed") or entry.get("updated_parsed")),
+            "outlet": source.get("title", "") if isinstance(source, dict) else "",
+            "_key": entry.get("id") or entry.get("guid"),
+        }
+        if spec.item_kind == "event":
+            raw["start"] = raw["published"]
+        out.append((raw, {}))
+    return out
+
+
+def _ical_time(value: Any) -> Any:
+    return getattr(value, "dt", value) if value is not None else None
+
+
+def _ical(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    try:
+        cal = icalendar.Calendar.from_ical(page.body)
+    except ValueError as e:
+        raise ExtractError("the response is not an iCalendar feed") from e
+    out = []
+    for event in cal.walk("VEVENT"):
+        raw = {
+            "title": str(event.get("SUMMARY", "")),
+            "url": str(event.get("URL", "")),
+            "start": _ical_time(event.get("DTSTART")),
+            "end": _ical_time(event.get("DTEND")),
+            "venue": str(event.get("LOCATION", "")),
+            "summary": str(event.get("DESCRIPTION", "")),
+            "_key": str(event.get("UID", "")) or None,
+        }
+        out.append((raw, {}))
+    return out
+
+
+KIND_EXTRACTORS = {"json": _json, "html": _html, "schema_org": _schema_org, "rss": _rss, "ical": _ical}
+
+
+def extract(spec: Spec, page: Page) -> list[Item]:
+    """Items of one page, in page order; a repeated key counts once."""
+    items: dict[str, Item] = {}
+    for raw, extra in KIND_EXTRACTORS[spec.kind](spec, page):
+        item = normalize(raw, extra, spec, page.url)
+        if item is not None and item.key not in items:
+            items[item.key] = item
+    return list(items.values())
+
+
+def fill_rates(items: list[Item], spec: Spec) -> dict[str, float]:
+    """For each field the spec yields, the share of items that have it."""
+    names = [n for n in ITEM_FIELDS if any(i.fields.get(n) for i in items)]
+    if spec.kind in ("json", "html"):
+        names = list(dict.fromkeys([*spec.extract["fields"], *spec.extra_names]))
+    if not items:
+        return {n: 0.0 for n in names}
+    return {n: round(sum(1 for i in items if i.fields.get(n) or i.extra.get(n)) / len(items), 2) for n in names}

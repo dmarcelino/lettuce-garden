@@ -50,6 +50,7 @@ SECURITY_HEADERS = {
 LABELS = {
     "garden-vault": ("Vault", "Your personal data, shared with your agents only when you say so"),
     "garden-gmail-triggers": ("Gmail triggers", "Ask an agent to act when mail arrives"),
+    "garden-monitors": ("Monitors", "What your agents keep an eye on, and when they report"),
     "garden-code-server": ("Code editor", "Your agents' files in VS Code"),
 }
 

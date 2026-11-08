@@ -114,6 +114,15 @@ triggers_config() {
   garden_config
 }
 
+# monitors_config -> the rendered config also holds the monitors service
+# compose/monitors.yml renders, and the garden service
+monitors_config() {
+  config_edit '.services["garden-monitors"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
+      "environment":'"$GARDEN_ENV"',"networks":{"default":null},
+      "volumes":[{"type":"volume","source":"monitors-data","target":"/data","volume":{}}]}'
+  garden_config
+}
+
 run_test() {
   local name=$1
   [[ -z $FILTER || $name == *"$FILTER"* ]] || return 0
@@ -758,7 +767,7 @@ test_check_refuses_the_vault_profile_without_the_vault() {
 # proxy settings from compose/pipelock-proxy.yml
 pipelock_config() {
   local svc=${1:-'{"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"volumes":[{"type":"volume","source":"pipelock-data","target":"/data"}]}'}
-  local np=localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden,searxng,ddg-mcp,google-mcp,host.docker.internal
+  local np=localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-monitors,garden,searxng,ddg-mcp,google-mcp,host.docker.internal
   config_edit '.services["garden-pipelock"] = '"$svc"'
     | .services["app-server"].environment += {"HTTPS_PROXY":"http://garden-pipelock:8888","HTTP_PROXY":"http://garden-pipelock:8888",
       "https_proxy":"http://garden-pipelock:8888","http_proxy":"http://garden-pipelock:8888","NO_PROXY":"'"$np"'","no_proxy":"'"$np"'",
@@ -997,7 +1006,7 @@ test_check_refuses_another_service_on_a_symlink_to_the_rules() {
 }
 
 test_check_refuses_volumes_from_gmail_triggers() {
-  triggers_refused ".services.bff.volumes_from = [\"garden-gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor (bff from garden-gmail-triggers)"
+  triggers_refused ".services.bff.volumes_from = [\"garden-gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, the monitors or the code editor (bff from garden-gmail-triggers)"
 }
 
 test_check_refuses_a_volume_bound_to_the_rules() {
@@ -1058,7 +1067,7 @@ test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
     | .services.searxng = {"volumes_from":["service:bff"]}'
   ctl check alfred
   bad_rc
-  out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor (searxng from bff)"
+  out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, the monitors or the code editor (searxng from bff)"
 }
 
 test_check_refuses_volumes_from_the_vault() {
@@ -1153,7 +1162,7 @@ exec_args() { tr '\0' '\n' <"$T/exec-args"; }
 
 # executor_cron_text [FLAGS] -> the cron file the executor is installed with
 executor_cron_text() {
-  printf '%s\n' '# Installed by lettucectl (garden-gmail-triggers or garden-code-server profile). Removed with the last of them.' \
+  printf '%s\n' '# Installed by lettucectl (garden-gmail-triggers, garden-monitors or garden-code-server profile). Removed with the last of them.' \
     'PATH=/usr/local/bin:/usr/bin:/bin' 'MAILTO=""'
   printf '%s' "* * * * * root /usr/local/bin/agent-env node /root/.letta/garden/executor/bin/run.mjs${1:+ $1} >> /root/.letta/garden/executor/executor.log 2>&1"
 }
@@ -1173,6 +1182,95 @@ test_up_installs_the_gmail_triggers_executor() {
   mapfile -d '' a <"$T/exec-args"
   eq "${a[7]}" "$GT_CRON_TEXT"
   eq "${#a[@]}" 8
+}
+
+# with_monitors -> alfred runs the garden-monitors profile, and the rendered
+# config holds the hardened service
+with_monitors() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-monitors/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-monitors/' "$H/stacks/alfred/stack.env"
+  monitors_config
+}
+
+# monitors_refused JQ EXPECTED -> with alfred's hardened monitors edited by the
+# jq filter JQ, `check` fails and says EXPECTED (on a fresh fixture)
+monitors_refused() {
+  teardown
+  setup
+  added
+  with_monitors
+  config_edit "$1"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: $2"
+}
+MS='.services["garden-monitors"]'
+
+test_check_accepts_the_hardened_monitors() {
+  added
+  with_monitors
+  ctl check alfred
+  ok_rc
+}
+
+test_check_refuses_monitors_that_lose_their_isolation() {
+  monitors_refused "del($MS)" "the garden-monitors profile is on but garden-monitors is not in the rendered config"
+  monitors_refused "del($MS.read_only)" "garden-monitors must have read_only: true"
+  monitors_refused "$MS.cap_drop = [\"NET_RAW\"]" "garden-monitors must drop all capabilities"
+  monitors_refused "$MS.network_mode = \"service:app-server\"" "garden-monitors must not set network_mode"
+  monitors_refused "$MS.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden-monitors must not mount host paths"
+  monitors_refused "$MS.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "garden-monitors may mount only its volume monitors-data"
+  monitors_refused "$MS.networks = {\"default\":null,\"code-egress\":null}" "garden-monitors must be on the default network only"
+  monitors_refused "$MS.environment.CF_ACCESS_AUD = \"\${CF_ACCESS_AUD}\"" "garden-monitors must accept only the garden's Access application"
+}
+
+test_check_refuses_another_service_on_the_monitors_volume_whatever_the_profiles() {
+  added
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"monitors-data","target":"/x"}]'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: bff mount(s) the monitors' volume; only garden-monitors may"
+  teardown
+  setup
+  added
+  config_edit '.services.searxng.volumes_from = ["garden-monitors"]'
+  ctl check alfred
+  bad_rc
+  out_has "searxng from garden-monitors"
+}
+
+test_up_installs_the_executor_with_monitors() {
+  added
+  with_monitors
+  ctl up alfred
+  ok_rc
+  local a=()
+  mapfile -d '' a <"$T/exec-args"
+  eq "${a[7]}" "$(executor_cron_text --monitors)"
+}
+
+test_up_gives_the_executor_every_queue_that_is_on() {
+  added
+  with_all_gardens
+  ctl up alfred
+  ok_rc
+  local a=()
+  mapfile -d '' a <"$T/exec-args"
+  eq "${a[7]}" "$(executor_cron_text "--gmail-triggers --monitors")"
+}
+
+test_up_copies_the_monitors_settings_from_config_env() {
+  added
+  sed -i '/^MONITORS_/d' "$H/config.env"
+  printf '%s\n' MONITORS_DEFAULT_TIMES=07:30,19:00 MONITORS_MAX_REPORTS_PER_DAY=4 >>"$H/config.env"
+  ctl up alfred
+  ok_rc
+  eq "$(grep '^MONITORS_' "$H/stacks/alfred/stack.env" | sort | paste -sd' ')" \
+    "MONITORS_DEFAULT_TIMES=07:30,19:00 MONITORS_MAX_REPORTS_PER_DAY=4"
+  sed -i '/^MONITORS_MAX_REPORTS_PER_DAY=/d' "$H/config.env"
+  ctl up alfred
+  ok_rc
+  eq "$(grep '^MONITORS_' "$H/stacks/alfred/stack.env" | paste -sd' ')" "MONITORS_DEFAULT_TIMES=07:30,19:00"
 }
 
 # The executor feeds the garden's agent list, which only the code editor uses,
@@ -1200,7 +1298,7 @@ test_up_with_only_the_vault_has_no_executor() {
   ctl up alfred
   ok_rc
   eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
-  out_has "alfred: removed the garden executor (neither garden-gmail-triggers nor garden-code-server is on)"
+  out_has "alfred: removed the garden executor (none of garden-gmail-triggers, garden-monitors and garden-code-server is on)"
 }
 
 test_up_passes_the_executor_token_only_on_stdin() {
@@ -1295,7 +1393,7 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/monitors.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $H/stacks/alfred/stack.env"
   log_lacks "pipelock-proxy.yml"
 }
 
@@ -2763,7 +2861,7 @@ test_backup_skips_a_vault_that_does_not_exist() {
 
 test_backup_includes_the_receipts() {
   backed
-  stub STUB_VOLUMES_MISSING=lettuce-alfred_vault-data
+  stub "STUB_VOLUMES_MISSING='lettuce-alfred_vault-data lettuce-alfred_monitors-data'"
   ctl backup alfred "$B"
   ok_rc
   log_has "docker volume inspect lettuce-alfred_pipelock-data"
@@ -2773,11 +2871,28 @@ test_backup_includes_the_receipts() {
 
 test_backup_skips_receipts_that_do_not_exist() {
   backed
-  stub STUB_VOLUMES_MISSING=lettuce-alfred_pipelock-data
+  stub "STUB_VOLUMES_MISSING='lettuce-alfred_pipelock-data lettuce-alfred_monitors-data'"
   ctl backup alfred "$B"
   ok_rc
   log_has "-v lettuce-alfred_vault-data:/src/vault:ro -v $B/alfred:/dst"
   log_lacks "/src/pipelock"
+}
+
+test_backup_includes_the_monitors() {
+  backed
+  stub "STUB_VOLUMES_MISSING='lettuce-alfred_vault-data lettuce-alfred_pipelock-data'"
+  ctl backup alfred "$B"
+  ok_rc
+  log_has "docker volume inspect lettuce-alfred_monitors-data"
+  log_has "-v lettuce-alfred_monitors-data:/src/monitors:ro -v $B/alfred:/dst"
+}
+
+test_backup_skips_monitors_that_do_not_exist() {
+  backed
+  stub STUB_VOLUMES_MISSING=lettuce-alfred_monitors-data
+  ctl backup alfred "$B"
+  ok_rc
+  log_lacks "/src/monitors"
 }
 
 test_backup_pauses_a_running_stack_when_asked() {
@@ -3033,7 +3148,7 @@ test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
   log_has "docker network create --internal --label lettuce.doc-tools.stack=alfred lettuce-doc-tools-alfred"
   log_has "docker network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
   # The network exists before the app-server joins it, and Gotenberg joins after.
-  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
+  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/monitors.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
     fail "the network was created after compose up"
   (($(line_of "-p lettuce_shared") > $(line_of "up -d --build --remove-orphans"))) || fail "gotenberg started before the stack"
 }
@@ -3614,7 +3729,7 @@ test_mcp_needs_the_doc_tools_or_the_vault_profile() {
   added
   ctl mcp alfred
   bad_rc
-  out_has "the garden-doc-tools and garden-vault profiles are both off"
+  out_has "the garden-doc-tools, garden-vault and garden-monitors profiles are all off"
   log_lacks "node --input-type=module"
 }
 
@@ -4132,10 +4247,11 @@ test_only_the_garden_overlay_passes_the_garden_profiles() {
 
 # with_all_gardens -> alfred runs every garden page profile, with every garden service rendered
 with_all_gardens() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-monitors,garden-vault,garden-code-server/' "$H/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-monitors,garden-vault,garden-code-server/' "$H/stacks/alfred/stack.env"
   vault_config
   triggers_config
+  monitors_config
   code_config
 }
 

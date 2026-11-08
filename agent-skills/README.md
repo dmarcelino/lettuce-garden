@@ -12,6 +12,7 @@ An interactive version, [agent-skills-architecture.html](../docs/diagrams/agent-
 | `using-vault-secrets/SKILL.md` | How to wait for the person's approval of a vault request (`get_result` as a background command through the `mcp-servers` wrapper), and how to use opaque values in a command without reading them (`delivery: "env"`). Applies with the `garden-vault` profile. [docs/vault.md](../docs/vault.md) |
 | `using-vault-secrets/vault-run` | The vault's helper (Python, standard library only): redeems a single-use handle at `http://garden-vault:8000/redeem` with no proxy, runs one command with the values as `VAULT_<FIELD>` variables, and scrubs them from its output. |
 | `fetching-web-pages/SKILL.md` | Read untrusted pages through pipelock's `http://garden-pipelock:8888/fetch`, so the URL and the page text are checked, and report a block instead of retrying another way. Applies only when `HTTPS_PROXY` is `http://garden-pipelock:8888` (the `garden-pipelock` profile). [docs/egress-firewall.md](../docs/egress-firewall.md) |
+| `monitoring-sources/SKILL.md` | How to set up a monitor (find the source, prefer feeds, schema.org data and JSON over HTML, `source_inspect`, `source_test` before `source_put`, a schedule in the stack's timezone, never a `letta cron` task), follow news on a topic, and write and repair from a report. Applies when Settings -> MCP lists `monitors` (the `garden-monitors` profile). [docs/monitors.md](../docs/monitors.md) |
 | `working-with-documents/SKILL.md` | Which of the `office` and `pdf` MCP servers does what, how to call them through the `mcp-servers` wrapper from the agent's workspace, and how to check a result before reporting it. Applies when Settings -> MCP lists them (the `garden-doc-tools` profile). [docs/doc-tools.md](../docs/doc-tools.md) |
 
 Only directories that contain a `SKILL.md` are shipped (`agent-skills/*/SKILL.md`), so this README is never installed.
@@ -21,7 +22,7 @@ Only directories that contain a `SKILL.md` are shipped (`agent-skills/*/SKILL.md
 - **The manifest:** `SKILLS_INSTALL` unpacks into a dot directory first, so a broken stream changes nothing; then it removes the skills listed in `.lettucectl-skills`, moves the new ones in and rewrites the manifest. Upstream's skills and those enabled in Settings stay, and a skill deleted from this directory is removed from the stack on the next run.
 - **Not automatic:** `up` and `add` do not install skills; run `skills` after setting up a stack or changing a skill. The stack must be up.
 - **`backup`** leaves out the skills listed in the manifest and upstream's, since `skills` and the BFF reinstall them.
-- **What each skill talks to:** `using-vault-secrets` calls the vault's MCP server through the `mcp-servers` wrapper and `vault-run` posts to its `/redeem`; `fetching-web-pages` sends `curl` to pipelock's `/fetch`; `working-with-documents` calls `office` and `pdf` through the wrapper (`letta mcp call`). None of them needs a tunnel route, a network or a volume of its own.
+- **What each skill talks to:** `using-vault-secrets` calls the vault's MCP server through the `mcp-servers` wrapper and `vault-run` posts to its `/redeem`; `fetching-web-pages` sends `curl` to pipelock's `/fetch`; `working-with-documents` calls `office` and `pdf` through the wrapper (`letta mcp call`); `monitoring-sources` calls the monitors' MCP server through the wrapper. None of them needs a tunnel route, a network or a volume of its own.
 - No `check_stack` rule is specific to skills; the features they use have theirs ([CONTRIBUTING.md](../CONTRIBUTING.md#what-check_stack-enforces)).
 
 ## Rules
@@ -40,5 +41,5 @@ There is no build step: `lettucectl skills all` pushes a changed skill to the ru
 ## Upstream seams
 Listed in [CONTRIBUTING.md](../CONTRIBUTING.md#upstream-seams):
 - the global skills directory `/root/.letta/skills`, and the BFF rewriting upstream's `docker/agent-skills` there on every connect (why a shared name is refused);
-- the `mcp-servers` skill's wrapper, `/root/.letta/skills/mcp-servers/scripts/mcp.sh`, named in `working-with-documents` and `using-vault-secrets`;
+- the `mcp-servers` skill's wrapper, `/root/.letta/skills/mcp-servers/scripts/mcp.sh`, named in `working-with-documents`, `using-vault-secrets` and `monitoring-sources`;
 - letta-code telling the agent when a background command finishes, which is how an agent waiting for a vault approval gets a new turn (`using-vault-secrets`).

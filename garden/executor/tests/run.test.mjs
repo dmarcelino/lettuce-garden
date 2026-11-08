@@ -71,10 +71,10 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()();
 });
 
-// A sidecar: `t[name]` says how to answer. For gmail-triggers, `requests` is the requests
-// GET's list; for both, `agentsWanted` is the GET's agents_wanted (left out when
-// undefined); `respond[route]` overrides an answer with { status, body, hang };
-// `onResult(body)` runs before a result is answered.
+// A sidecar: `t[name]` says how to answer. For the request queues (gmail-triggers,
+// monitors), `requests` is the requests GET's list; for all, `agentsWanted` is the GET's
+// agents_wanted (left out when undefined); `respond[route]` overrides an answer with
+// { status, body, hang }; `onResult(body)` runs before a result is answered.
 function startSidecar(t, name) {
   const server = http.createServer((req, res) => {
     const chunks = [];
@@ -110,7 +110,7 @@ function startSidecar(t, name) {
         res.end(override.body ?? "");
         return;
       }
-      if (route === "gmail-triggers GET /executor/v1/requests") {
+      if (name !== "garden" && route === `${name} GET /executor/v1/requests`) {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ v: 1, requests: side.requests, agents_wanted: side.agentsWanted }));
         return;
@@ -120,7 +120,7 @@ function startSidecar(t, name) {
         res.end(JSON.stringify({ v: 1, agents_wanted: side.agentsWanted }));
         return;
       }
-      if (route === "gmail-triggers POST /executor/v1/results") side.onResult?.(body);
+      if (route === `${name} POST /executor/v1/results`) side.onResult?.(body);
       res.writeHead(204).end();
     });
   });
@@ -151,6 +151,7 @@ async function setup(envExtra = {}) {
     lock: path.join(root, ".executor.lock"),
     "gmail-triggers": { requests: [], respond: {}, agentsWanted: true },
     garden: { respond: {}, agentsWanted: false },
+    monitors: { requests: [], respond: {}, agentsWanted: false },
     args: ["--gmail-triggers"],
   };
   t.sidecar = t["gmail-triggers"];
@@ -161,6 +162,7 @@ async function setup(envExtra = {}) {
   t.env = { PATH: `${t.bin}:/usr/bin:/bin`, HOME: root, TMPDIR: t.tmp, FAKE_CALLS: t.calls, ...envExtra };
   t.url = await startSidecar(t, "gmail-triggers");
   t.gardenUrl = await startSidecar(t, "garden");
+  t.monUrl = await startSidecar(t, "monitors");
   return t;
 }
 
@@ -172,6 +174,7 @@ function run(t) {
         ...t.env,
         GARDEN_URL: t.gardenUrl,
         GT_URL: t.url,
+        MON_URL: t.monUrl,
         GT_TOKEN_FILE: t.tokenFile,
         GT_LOCK: t.lock,
         GT_LOG: t.log,
@@ -700,14 +703,14 @@ test("without --gmail-triggers a missing letta is logged and nothing is called",
   assert.match(r.stdout, /error: letta not found on the PATH/);
 });
 
-for (const args of [["--gmail"], ["--gmail-triggers", "x"], ["--gmail-triggers=1"]]) {
+for (const args of [["--gmail"], ["--gmail-triggers", "x"], ["--gmail-triggers=1"], ["--monitors", "--monitors"]]) {
   test(`an unknown argument (${args.join(" ")}) stops the run before any call`, async () => {
     const t = await setup();
     t.args = args;
     const r = await run(t);
     assert.equal(r.status, 0);
     assert.deepEqual(calls(t), []);
-    assert.match(r.stdout, /usage: run.mjs \[--gmail-triggers\]/);
+    assert.match(r.stdout, /usage: run.mjs \[--gmail-triggers\] \[--monitors\]/);
     assert.ok(!fs.existsSync(t.lock));
   });
 }
@@ -850,4 +853,80 @@ test("a symlinked log is not truncated through the link", async () => {
   fs.symlinkSync(target, t.log);
   assert.equal((await run(t)).status, 0);
   assert.equal(fs.statSync(target).size, 300 * 1024);
+});
+
+// --- several request queues -------------------------------------------------------
+
+test("with --monitors only, monitors' requests run and gmail-triggers is never called", async () => {
+  const t = await setup();
+  t.args = ["--monitors"];
+  t.sidecar.requests = [request()];
+  t.monitors.requests = [request({ name: "Monitors: 08:00", description: "Monitor report" }, ID2)];
+  const r = await run(t);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(sequence(t), [
+    "garden GET /executor/v1/status",
+    "monitors GET /executor/v1/requests",
+    "letta cron add",
+    "monitors POST /executor/v1/results",
+    "monitors POST /executor/v1/heartbeat",
+  ]);
+  assert.deepEqual(cronCalls(t)[0].argv, cronArgv(t.monitors.requests[0]));
+  const [res] = posted(t, "monitors POST /executor/v1/results");
+  assert.equal(res.id, ID2);
+  assert.equal(res.ok, true);
+  assert.match(res.task_id, /^task-\d+$/);
+});
+
+test("both queues run in order, each gets its own results, the list and a heartbeat", async () => {
+  const t = await setup();
+  t.args = ["--monitors", "--gmail-triggers"];
+  t.sidecar.agentsWanted = false;
+  t.monitors.agentsWanted = true;
+  t.sidecar.requests = [request()];
+  t.monitors.requests = [request({}, ID2)];
+  const r = await run(t);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(sequence(t), [
+    "garden GET /executor/v1/status",
+    "gmail-triggers GET /executor/v1/requests",
+    "letta cron add",
+    "gmail-triggers POST /executor/v1/results",
+    "monitors GET /executor/v1/requests",
+    "letta cron add",
+    "monitors POST /executor/v1/results",
+    "letta agents list",
+    "garden PUT /executor/v1/agents",
+    "gmail-triggers PUT /executor/v1/agents",
+    "monitors PUT /executor/v1/agents",
+    "gmail-triggers POST /executor/v1/heartbeat",
+    "monitors POST /executor/v1/heartbeat",
+  ]);
+  assert.deepEqual(results(t).map((x) => x.id), [ID1]);
+  assert.deepEqual(posted(t, "monitors POST /executor/v1/results").map((x) => x.id), [ID2]);
+  assert.deepEqual(posted(t, "monitors POST /executor/v1/heartbeat"), [{ v: 1, letta_ok: true }]);
+});
+
+test("an unreachable monitors doesn't stop gmail-triggers", async () => {
+  const t = await setup();
+  t.args = ["--gmail-triggers", "--monitors"];
+  t.monUrl = await closedUrl();
+  t.sidecar.requests = [request()];
+  const r = await run(t);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /monitors unreachable: ECONNREFUSED/);
+  assert.equal(results(t)[0].ok, true);
+  assert.deepEqual(heartbeats(t), [{ v: 1, letta_ok: true }]);
+});
+
+test("a missing letta sends each queue a heartbeat and claims nothing", async () => {
+  const t = await setup();
+  t.args = ["--gmail-triggers", "--monitors"];
+  t.env.PATH = "/nonexistent";
+  const r = await run(t);
+  assert.equal(r.status, 0);
+  assert.deepEqual(routes(t), ["gmail-triggers POST /executor/v1/heartbeat", "monitors POST /executor/v1/heartbeat"]);
+  for (const route of ["gmail-triggers POST /executor/v1/heartbeat", "monitors POST /executor/v1/heartbeat"]) {
+    assert.deepEqual(posted(t, route), [{ v: 1, letta_ok: false, error: "letta not found on the PATH" }]);
+  }
 });

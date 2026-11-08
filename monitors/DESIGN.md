@@ -1,6 +1,12 @@
 # Monitors: design
 
-Status: proposed (2026-11-08). Nothing is built yet. This record is the plan to review before any code.
+Status: implemented (2026-11-08), except the spikes against a running stack (Plan, step 0) and the end-to-end run (step 5). The record below is the plan as reviewed; where the build differs:
+- `follow` is for `schema_org` only: a listing whose events are described on their own pages.
+- Requests to one host are at least 2 seconds apart (or robots.txt's `Crawl-delay`), not 5; a 429 or 503 pauses the host. GDELT's limit is met by a long `every`.
+- Only the monitor tools take `agent_id`; sources belong to the stack. `source_put` brings back an earlier spec with `name` and `revert`. The memory cap is 384 MB, for lxml and dateparser.
+- The executor's queue protocol is `garden_common.executor.request_routes`, over each sidecar's own store.
+- A review added: a call fails rather than wait out a pause over 60 s (10 s in a tool call, which ends after 90 s); a report's items are those changed before the second it was built; followed item pages are read again once their item is a week old; a raised `MONITORS_MIN_INTERVAL` applies to saved sources too; a source or schedule that no longer validates is skipped, not fatal.
+- The developer reference is [README.md](README.md); the guide for users and admins is [docs/monitors.md](../docs/monitors.md).
 
 ## Goal
 

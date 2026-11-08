@@ -1,16 +1,16 @@
 // The garden executor: runs as root in the Lettuce app-server, from system cron every
-// minute, whenever it has work (garden-gmail-triggers or garden-code-server on; the vault
-// alone gives it none). Over HTTP on the stack network, with one
-// bearer token for both sidecars, it:
+// minute, whenever it has work (garden-gmail-triggers, garden-monitors or
+// garden-code-server on; the vault alone gives it none). Over HTTP on the stack network,
+// with one bearer token for every sidecar, it:
 // - asks the garden service whether it wants the agent list (for the landing page);
-// - with --gmail-triggers (the stack has that profile), claims the requests the
-//   gmail-triggers sidecar has queued, turns each into a one-off letta-code task
-//   (`letta cron add --once`) and posts the outcome back;
-// - when either wants it, runs `letta agents list` once and sends the list to each
+// - for each request queue its flags name (--gmail-triggers, --monitors: the stack has
+//   that profile), claims the requests that sidecar has queued, turns each into a
+//   one-off letta-code task (`letta cron add --once`) and posts the outcome back;
+// - when any of them wants it, runs `letta agents list` once and sends the list to each
 //   that answered;
-// - when it claimed gmail-triggers' requests, sends it a heartbeat for its page.
-// Without --gmail-triggers it never calls gmail-triggers. One sidecar being unreachable
-// never stops what the run does for the other.
+// - sends each queue whose requests it claimed a heartbeat for its page.
+// Without a queue's flag it never calls that sidecar. One sidecar being unreachable
+// never stops what the run does for the others.
 //
 // Every response is untrusted: agents are root in this container and can read the token,
 // so they can answer in a sidecar's place. So `letta` runs from an argument array (never
@@ -19,7 +19,7 @@
 //
 // Cron starts it through upstream's agent-env, so its environment (and letta's) is PID 1's.
 //
-// Overrides (tests only): GARDEN_URL, GT_URL, GT_TOKEN_FILE, GT_LOCK, GT_LOG.
+// Overrides (tests only): GARDEN_URL, GT_URL, MON_URL, GT_TOKEN_FILE, GT_LOCK, GT_LOG.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -29,7 +29,12 @@ import path from "node:path";
 const HOME = "/root/.letta/garden/executor";
 const base = (url) => url.replace(/\/+$/, "");
 const GARDEN = { name: "garden", url: base(process.env.GARDEN_URL || "http://garden:8000") };
-const GMAIL = { name: "gmail-triggers", url: base(process.env.GT_URL || "http://garden-gmail-triggers:8000") };
+// The sidecars whose requests the executor runs, each behind its own flag, in run order.
+const QUEUES = [
+  { flag: "--gmail-triggers", name: "gmail-triggers", url: base(process.env.GT_URL || "http://garden-gmail-triggers:8000") },
+  { flag: "--monitors", name: "monitors", url: base(process.env.MON_URL || "http://garden-monitors:8000") },
+];
+const USAGE = `usage: run.mjs ${QUEUES.map((q) => `[${q.flag}]`).join(" ")}`;
 const TOKEN_FILE = process.env.GT_TOKEN_FILE || "/etc/lettuce-garden/executor-token";
 const LOCK = process.env.GT_LOCK || `${HOME}/.executor.lock`;
 const LOG = process.env.GT_LOG || `${HOME}/executor.log`;
@@ -348,11 +353,11 @@ async function gardenStatus(ctx) {
 }
 
 // Returns { requests, agentsWanted }, or null after logging why there are none.
-async function claimRequests(ctx) {
-  const out = await getJson(ctx, GMAIL, "/executor/v1/requests", "requests");
+async function claimRequests(ctx, queue) {
+  const out = await getJson(ctx, queue, "/executor/v1/requests", "requests");
   if (out === null) return null;
   if (!Array.isArray(out.requests)) {
-    log("requests: gmail-triggers sent an unexpected answer");
+    log(`requests: ${queue.name} sent an unexpected answer`);
     return null;
   }
   return { requests: out.requests, agentsWanted: out.agents_wanted === true };
@@ -383,7 +388,7 @@ function validate(req) {
   );
 }
 
-async function handle(ctx, req, seen) {
+async function handle(ctx, queue, req, seen) {
   const isObject = typeof req === "object" && req !== null && !Array.isArray(req);
   if (!isObject || typeof req.id !== "string" || !ID.test(req.id)) {
     log("request without a valid id skipped");
@@ -411,7 +416,7 @@ async function handle(ctx, req, seen) {
     result = { ok: false, error: executorError(err) };
     log(`request ${id}: ${result.error}`);
   }
-  await send(ctx, GMAIL, "POST", "/executor/v1/results", { v: 1, id, ...result }, `result ${id}`);
+  await send(ctx, queue, "POST", "/executor/v1/results", { v: 1, id, ...result }, `result ${id}`);
 }
 
 async function addTask(ctx, req) {
@@ -476,27 +481,33 @@ async function refreshAgents(ctx, sidecars) {
 
 // --- main ------------------------------------------------------------------------
 
-async function heartbeat(ctx, lettaOk, errors) {
+// One heartbeat to each queue in `queues`; errors are logged once.
+async function heartbeat(ctx, queues, lettaOk, errors) {
   for (const e of errors) log(`error: ${e}`);
   const body = { v: 1, letta_ok: lettaOk };
   if (errors.length) body.error = errorText(errors.join("; "));
-  await send(ctx, GMAIL, "POST", "/executor/v1/heartbeat", body, "heartbeat");
+  for (const queue of queues) await send(ctx, queue, "POST", "/executor/v1/heartbeat", body, "heartbeat");
 }
 
-// The one argument cron may pass; anything else stops the run before any call.
+// The queues the flags name, in QUEUES order: each flag at most once, nothing else.
+// Anything else stops the run before any call.
 function parseArgs(argv) {
-  if (argv.length === 0) return { gmail: false };
-  if (argv.length === 1 && argv[0] === "--gmail-triggers") return { gmail: true };
-  return null;
+  const known = new Map(QUEUES.map((q) => [q.flag, q]));
+  const picked = new Set();
+  for (const arg of argv) {
+    if (!known.has(arg) || picked.has(arg)) return null;
+    picked.add(arg);
+  }
+  return QUEUES.filter((q) => picked.has(q.flag));
 }
 
 async function run() {
   if (!lock(LOCK)) return;
   try {
     truncateLog(LOG);
-    const args = parseArgs(process.argv.slice(2));
-    if (!args) {
-      log("usage: run.mjs [--gmail-triggers]");
+    const queues = parseArgs(process.argv.slice(2));
+    if (!queues) {
+      log(USAGE);
       return;
     }
     const { token, error } = readToken(TOKEN_FILE);
@@ -510,7 +521,7 @@ async function run() {
     ctx.letta = findLetta(process.env);
     if (!ctx.letta) {
       const why = "letta not found on the PATH";
-      if (args.gmail) await heartbeat(ctx, false, [why]);
+      if (queues.length) await heartbeat(ctx, queues, false, [why]);
       else log(`error: ${why}`);
       return;
     }
@@ -519,24 +530,29 @@ async function run() {
     ctx.cwd = homeDir?.isDirectory() ? home : "/";
 
     const garden = await gardenStatus(ctx);
-    const claimed = args.gmail ? await claimRequests(ctx) : null;
-    if (claimed) {
+    // The queues whose requests were claimed, each with its answer.
+    const claimed = [];
+    for (const queue of queues) {
+      const answer = await claimRequests(ctx, queue);
+      if (!answer) continue;
+      claimed.push({ queue, ...answer });
       const seen = new Set();
-      for (const req of claimed.requests) await handle(ctx, req, seen);
+      for (const req of answer.requests) await handle(ctx, queue, req, seen);
     }
 
     // The list goes to each sidecar that answered, whichever of them asked for it.
     let agentsError = null;
-    if (garden?.agentsWanted || claimed?.agentsWanted) {
-      const to = [garden && GARDEN, claimed && GMAIL].filter(Boolean);
+    if (garden?.agentsWanted || claimed.some((c) => c.agentsWanted)) {
+      const to = [...(garden ? [GARDEN] : []), ...claimed.map((c) => c.queue)];
       try {
         agentsError = await refreshAgents(ctx, to);
       } catch (err) {
         agentsError = `letta agents list: ${executorError(err)}`;
       }
     }
-    if (claimed) await heartbeat(ctx, !agentsError, agentsError ? [agentsError] : []);
-    else if (agentsError) log(`error: ${agentsError}`);
+    if (claimed.length) {
+      await heartbeat(ctx, claimed.map((c) => c.queue), !agentsError, agentsError ? [agentsError] : []);
+    } else if (agentsError) log(`error: ${agentsError}`);
   } finally {
     fs.rmSync(LOCK, { recursive: true, force: true });
   }
