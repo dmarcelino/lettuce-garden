@@ -5,26 +5,38 @@
 # account acc1, zone zone1, policy pol1, app app1 (aud aud1), tunnel tun1
 # (token tuntok1), DNS record rec1; for the garden host (a name ending in
 # -garden), app app2 (aud aud2) and DNS record rec2.
+# Downloads from github.com (Lettuce's source archive, a release's files) are
+# logged as "curl-get URL" and answered from $STUB_ROOT/github/<file name>.
 # stub.env settings:
 #   STUB_CF_FAIL="METHOD /path"   that call returns success:false
 #   STUB_CF_TAKEN="host ..."      DNS names that already exist in the zone
+#   STUB_CF_ZONE_STATUS=pending   the zone's status (default active)
+#   STUB_CF_DNSSEC=active         the zone's DNSSEC status (default disabled)
 # Settings come from $STUB_ROOT/stub.env, not the environment: lettucectl runs
 # docker under `env -i`. Tests copy the stubs to $STUB_ROOT/bin.
 STUB_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=/dev/null
 [[ -f $STUB_ROOT/stub.env ]] && . "$STUB_ROOT/stub.env"
 STUB_LOG=$STUB_ROOT/calls.log STUB_ARGV=$STUB_ROOT/argv.log STUB_STDIN=$STUB_ROOT/stdin.log
-method=GET url="" body=""
+method=GET url="" body="" out=""
 printf '%s\n' "$*" >>"$STUB_ARGV"
 cat >>"$STUB_STDIN"
 while (($#)); do
   case $1 in
     -X) method=$2; shift ;;
     --data-binary | --data | -d) body=$2; shift ;;
+    -o) out=$2; shift ;;
     https://*) url=$1 ;;
   esac
   shift
 done
+if [[ $url == https://github.com/* ]]; then
+  printf 'curl-get %s\n' "$url" >>"$STUB_LOG"
+  f=$STUB_ROOT/github/${url##*/}
+  [[ -f $f ]] || exit 22
+  if [[ -n $out ]]; then cp "$f" "$out"; else cat "$f"; fi
+  exit 0
+fi
 path=${url#https://api.cloudflare.com/client/v4}
 printf 'curl %s %s %s\n' "$method" "$path" "$body" >>"$STUB_LOG"
 
@@ -35,7 +47,11 @@ if [[ -n ${STUB_CF_FAIL:-} && "$method ${path%%\?*}" == "$STUB_CF_FAIL" ]]; then
 fi
 case "$method ${path%%\?*}" in
   "GET /zones")
-    if [[ -n ${STUB_CF_NO_ZONE:-} ]]; then ok '[]'; else ok '[{"id":"zone1","name":"example.org","account":{"id":"acc1"}}]'; fi ;;
+    if [[ -n ${STUB_CF_NO_ZONE:-} ]]; then ok '[]'
+    else ok '[{"id":"zone1","name":"example.org","status":"'"${STUB_CF_ZONE_STATUS:-active}"'","account":{"id":"acc1"}}]'; fi ;;
+  "GET /zones/zone1/dnssec") ok '{"status":"'"${STUB_CF_DNSSEC:-disabled}"'"}' ;;
+  "GET /accounts/acc1/cfd_tunnel") ok '[]' ;;
+  "GET /accounts/acc1/access/apps") ok '[]' ;;
   "GET /accounts/acc1/access/organizations") ok '{"auth_domain":"team.cloudflareaccess.com"}' ;;
   "GET /accounts/acc1/access/identity_providers")
     if [[ -n ${STUB_CF_NO_GOOGLE:-} ]]; then ok '[{"id":"idp-gh","type":"github"}]'

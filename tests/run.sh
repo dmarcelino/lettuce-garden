@@ -9,33 +9,40 @@ FILTER=${1:-}
 PASS=0 FAILED=()
 
 # ── fixture ──────────────────────────────────────────────────────────────────
-# Each test gets a fresh copy of the repo in $T/home and the stubs in $T/bin.
+# Each test gets a fresh copy of the repo in $T/home (the code, LETTUCE_HOME),
+# its data in $T/home/data ($D: a clone's default LETTUCE_DATA), Lettuce's
+# source at the example's tag in $U, and the stubs in $T/bin.
+REF=$(sed -n 's/^LETTUCE_REF=//p' "$ROOT/config.env.example")
 setup() {
   T=$(mktemp -d)
   H=$T/home
-  mkdir -p "$H/upstream/docker" "$H/.secrets" "$T/bin"
-  cp -r "$ROOT/lettucectl" "$ROOT/lib" "$ROOT/compose" "$ROOT/backup" "$ROOT/config.env.example" "$H/"
+  D=$H/data
+  U=$D/upstream/$REF
+  mkdir -p "$U/docker" "$D/.secrets" "$T/bin"
+  cp -r "$ROOT/lettucectl" "$ROOT/lib" "$ROOT/compose" "$ROOT/backup" "$ROOT/release" "$ROOT/config.env.example" "$H/"
   cp "$ROOT"/tests/stubs/* "$T/bin/"
-  touch "$H/upstream/docker/compose.yml"
-  printf 'secret-api-token-123\n' >"$H/.secrets/cloudflare-api-token"
-  chmod 600 "$H/.secrets/cloudflare-api-token"
+  touch "$U/docker/compose.yml"
+  printf 'secret-api-token-123\n' >"$D/.secrets/cloudflare-api-token"
+  chmod 600 "$D/.secrets/cloudflare-api-token"
   sed -e 's/^DOMAIN=.*/DOMAIN=example.org/' -e 's/^PROFILES=.*/PROFILES=cloudflared,search/' \
     -e 's/^CF_ACCOUNT_ID=.*/CF_ACCOUNT_ID=acc1/' -e 's/^CF_ZONE_ID=.*/CF_ZONE_ID=zone1/' \
     -e 's/^CF_TEAM_DOMAIN=.*/CF_TEAM_DOMAIN=team/' -e 's/^CF_GOOGLE_IDP_ID=.*/CF_GOOGLE_IDP_ID=idp-g/' \
     -e 's/^PUSH_CONTACT_EMAIL=.*/PUSH_CONTACT_EMAIL=ops@example.org/' \
-    "$ROOT/config.env.example" >"$H/config.env"
-  chmod 600 "$H/config.env"
-  echo '{"services":{"app-server":{"ports":[],"cap_drop":["NET_RAW"],"environment":{"DISABLE_AUTOUPDATER":"1"}},"bff":{"network_mode":"service:app-server","cap_drop":["NET_RAW"]}}}' >"$T/compose-config.json"
+    "$ROOT/config.env.example" >"$D/config.env"
+  chmod 600 "$D/config.env"
+  echo '{"services":{"app-server":{"image":"lettuce-app-server:'"$REF"'","ports":[],"cap_drop":["NET_RAW"],"environment":{"DISABLE_AUTOUPDATER":"1"}},"bff":{"network_mode":"service:app-server","cap_drop":["NET_RAW"]}}}' >"$T/compose-config.json"
   touch "$T/calls.log" "$T/argv.log" "$T/stdin.log" "$T/stub.env" "$T/containers.txt"
   OUT=$T/out
 }
 
 teardown() { rm -rf "$T"; }
 
-# ctl ARGS... -> runs lettucectl with the stubs first on PATH; output in $OUT, status in $RC
+# ctl ARGS... -> runs lettucectl with the stubs first on PATH; output in $OUT,
+# status in $RC. LETTUCE_DATA is CTL_DATA: empty (a clone's default, $D) unless
+# a test sets it, so the tester's own environment never reaches lettucectl.
 ctl() {
   RC=0
-  PATH="$T/bin:$PATH" "$H/lettucectl" "$@" >"$OUT" 2>&1 || RC=$?
+  LETTUCE_DATA=${CTL_DATA:-} PATH="$T/bin:$PATH" "$H/lettucectl" "$@" >"$OUT" 2>&1 || RC=$?
 }
 
 stub() { printf '%s\n' "$*" >>"$T/stub.env"; }
@@ -51,7 +58,7 @@ LANDING='{"hostname":"alfred-garden.example.org","path":"^/(assets/[^/]+)?$","se
 GARDEN_404='{"hostname":"alfred-garden.example.org","service":"http_status:404"}'
 LETTUCE_TAIL='{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}'
 
-senv() { awk -v k="$2" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) } END { printf "%s", v }' "$H/stacks/$1/stack.env"; }
+senv() { awk -v k="$2" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) } END { printf "%s", v }' "$D/stacks/$1/stack.env"; }
 
 fail() {
   printf '    %s\n' "$*"
@@ -106,7 +113,7 @@ config_edit() {
 triggers_config() {
   config_edit '.services["garden-gmail-triggers"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
       "environment":'"$GARDEN_ENV"',"volumes":[
-      {"type":"bind","source":"'"$H"'/stacks/alfred/state/garden/gmail-triggers","target":"/data"},
+      {"type":"bind","source":"'"$D"'/stacks/alfred/state/garden/gmail-triggers","target":"/data"},
       {"type":"volume","source":"google-creds","target":"/creds","read_only":true},
       {"type":"volume","source":"google-policy","target":"/policy","read_only":true}]}
     | .services.bff.volumes = [{"type":"volume","source":"google-creds","target":"/app/google/creds"}]
@@ -148,53 +155,146 @@ test_add_rejects_bad_email() {
   ctl add alfred not-an-email
   bad_rc
   out_has "invalid email address"
-  [[ ! -e $H/stacks/alfred ]] || fail "stack dir created for a rejected add"
+  [[ ! -e $D/stacks/alfred ]] || fail "stack dir created for a rejected add"
 }
 
 test_add_requires_init() {
-  sed -i 's/^CF_ZONE_ID=.*/CF_ZONE_ID=/' "$H/config.env"
+  sed -i 's/^CF_ZONE_ID=.*/CF_ZONE_ID=/' "$D/config.env"
   ctl add alfred a@b.com
   bad_rc
   out_has "lettucectl init"
 }
 
 # ── init ─────────────────────────────────────────────────────────────────────
-make_upstream_repo() {
-  local src=$T/src
-  git init -q "$src"
-  mkdir -p "$src/docker"
-  touch "$src/docker/compose.yml"
-  git -C "$src" add -A
-  git -C "$src" -c user.name=t -c user.email=t@t commit -qm init
-  git -C "$src" tag v-test
-  rm -rf "$H/upstream"
-  sed -i -e "s|^LETTUCE_REPO=.*|LETTUCE_REPO=$src|" -e 's/^LETTUCE_REF=.*/LETTUCE_REF=v-test/' "$H/config.env"
+# make_upstream_archive [TAG] -> Lettuce's source at TAG (default v-test) as
+# GitHub's archive of the tag, which the curl stub serves, and config.env
+# pointing at it
+make_upstream_archive() {
+  local tag=${1:-v-test} src=$T/src/lettuce-${1:-v-test}
+  mkdir -p "$src/docker/agent-skills/upstream-skill" "$T/github"
+  printf 'name: lettuce\n' >"$src/docker/compose.yml"
+  tar -czf "$T/github/$tag.tar.gz" -C "$T/src" "lettuce-$tag"
+  rm -rf "$D/upstream"
+  sed -i -e 's|^LETTUCE_REPO=.*|LETTUCE_REPO=https://github.com/Example/lettuce.git|' \
+    -e "s/^LETTUCE_REF=.*/LETTUCE_REF=$tag/" "$D/config.env"
 }
 
 test_init_creates_config_from_example() {
-  rm "$H/config.env"
+  rm "$D/config.env"
   ctl init
   bad_rc
   out_has "edit"
-  [[ -f $H/config.env ]] || fail "config.env not created"
-  eq "$(stat -c %a "$H/config.env")" 600
+  [[ -f $D/config.env ]] || fail "config.env not created"
+  eq "$(stat -c %a "$D/config.env")" 600
 }
 
-test_init_clones_and_caches_cloudflare_ids() {
-  make_upstream_repo
-  sed -i -e 's/^CF_\([A-Z_]*\)=.*/CF_\1=/' "$H/config.env"
+test_init_in_a_fresh_clone_creates_its_data_directory() {
+  rm -rf "$D"
+  ctl init
+  bad_rc
+  [[ -f $D/config.env ]] || fail "config.env not created in the clone's data/"
+  eq "$(stat -c %a "$D")" 700
+}
+
+test_init_downloads_lettuce_and_caches_cloudflare_ids() {
+  make_upstream_archive
+  sed -i -e 's/^CF_\([A-Z_]*\)=.*/CF_\1=/' "$D/config.env"
   ctl init
   ok_rc
-  [[ -f $H/upstream/docker/compose.yml ]] || fail "upstream not cloned"
-  eq "$(git -C "$H/upstream" describe --tags)" v-test
-  eq "$(grep ^CF_ACCOUNT_ID= "$H/config.env")" CF_ACCOUNT_ID=acc1
-  eq "$(grep ^CF_ZONE_ID= "$H/config.env")" CF_ZONE_ID=zone1
-  eq "$(grep ^CF_TEAM_DOMAIN= "$H/config.env")" CF_TEAM_DOMAIN=team
-  eq "$(grep ^CF_GOOGLE_IDP_ID= "$H/config.env")" CF_GOOGLE_IDP_ID=idp-g
+  [[ -f $D/upstream/v-test/docker/compose.yml ]] || fail "Lettuce not unpacked"
+  [[ -d $D/upstream/v-test/docker/agent-skills/upstream-skill ]] || fail "the whole source is not kept"
+  [[ ! -e $D/upstream/v-test.partial && ! -e $D/upstream/.v-test.tar.gz ]] || fail "download leftovers"
+  log_has "curl-get https://github.com/Example/lettuce/archive/refs/tags/v-test.tar.gz"
+  eq "$(grep ^CF_ACCOUNT_ID= "$D/config.env")" CF_ACCOUNT_ID=acc1
+  eq "$(grep ^CF_ZONE_ID= "$D/config.env")" CF_ZONE_ID=zone1
+  eq "$(grep ^CF_TEAM_DOMAIN= "$D/config.env")" CF_TEAM_DOMAIN=team
+  eq "$(grep ^CF_GOOGLE_IDP_ID= "$D/config.env")" CF_GOOGLE_IDP_ID=idp-g
+  [[ -f $D/stacks.conf ]] || fail "no stacks.conf"
+  eq "$(stat -c %a "$D/stacks.conf")" 600
+  out_has "lettucectl apply"
+}
+
+test_init_keeps_a_downloaded_tag() {
+  make_upstream_archive
+  ctl init
+  ok_rc
+  : >"$T/calls.log"
+  ctl init
+  ok_rc
+  log_lacks "curl-get"
+}
+
+test_init_replaces_a_partial_download() {
+  make_upstream_archive
+  mkdir -p "$D/upstream/v-test.partial/docker"
+  touch "$D/upstream/v-test.partial/half-written"
+  ctl init
+  ok_rc
+  [[ ! -e $D/upstream/v-test.partial ]] || fail "the partial download stayed"
+  [[ ! -e $D/upstream/v-test/half-written ]] || fail "the partial download was kept"
+  [[ -f $D/upstream/v-test/docker/compose.yml ]] || fail "Lettuce not unpacked"
+}
+
+test_init_fails_on_a_missing_tag() {
+  make_upstream_archive
+  rm "$T/github/v-test.tar.gz"
+  ctl init
+  bad_rc
+  out_has "could not download Lettuce v-test"
+  [[ ! -e $D/upstream/v-test ]] || fail "a directory for a failed download"
+}
+
+test_init_refuses_a_repo_not_on_github() {
+  make_upstream_archive
+  sed -i 's|^LETTUCE_REPO=.*|LETTUCE_REPO=https://gitlab.example.org/x/lettuce|' "$D/config.env"
+  ctl init
+  bad_rc
+  out_has "LETTUCE_REPO must be https://github.com/"
+}
+
+test_init_pulls_upstreams_images_when_published_for_the_host() {
+  make_upstream_archive
+  stub STUB_MANIFEST_PLATFORMS="linux/amd64"
+  ctl init
+  ok_rc
+  # The namespace is the repo owner's, lower-cased, so a fork's come from the fork.
+  eq "$(grep ^LETTA_IMAGE_NS= "$D/config.env")" LETTA_IMAGE_NS=ghcr.io/example/
+  log_has "manifest inspect -v ghcr.io/example/lettuce-app-server:v-test"
+  out_has "pulled from ghcr.io/example"
+}
+
+test_init_builds_upstreams_images_when_none_are_published_for_the_host() {
+  make_upstream_archive
+  stub STUB_MANIFEST_PLATFORMS="linux/amd64"
+  stub STUB_PLATFORM=linux/arm64
+  ctl init
+  ok_rc
+  eq "$(grep ^LETTA_IMAGE_NS= "$D/config.env")" LETTA_IMAGE_NS=
+  out_has "they are built here"
+}
+
+test_init_names_the_missing_token_scope() {
+  make_upstream_archive
+  stub 'STUB_CF_FAIL="GET /accounts/acc1/cfd_tunnel"'
+  ctl init
+  bad_rc
+  out_has "the API token lacks: Account, Cloudflare Tunnel, Edit"
+  out_has "step 5"
+}
+
+test_init_warns_about_a_pending_zone_and_dnssec() {
+  make_upstream_archive
+  stub STUB_CF_ZONE_STATUS=pending
+  stub STUB_CF_DNSSEC=active
+  ctl init
+  ok_rc
+  out_has "is pending, not active"
+  out_has "steps 2.7 and 2.8"
+  out_has "DNSSEC is on"
 }
 
 test_init_never_puts_the_api_token_in_argv() {
-  make_upstream_repo
+  make_upstream_archive
   ctl init
   ok_rc
   ! grep -q secret-api-token-123 "$T/argv.log" || fail "API token found in curl argv"
@@ -202,7 +302,7 @@ test_init_never_puts_the_api_token_in_argv() {
 }
 
 test_init_fails_without_google_login_method() {
-  make_upstream_repo
+  make_upstream_archive
   stub STUB_CF_NO_GOOGLE=1
   ctl init
   bad_rc
@@ -210,7 +310,7 @@ test_init_fails_without_google_login_method() {
 }
 
 test_init_fails_when_zone_not_found() {
-  make_upstream_repo
+  make_upstream_archive
   stub STUB_CF_NO_ZONE=1
   ctl init
   bad_rc
@@ -218,15 +318,15 @@ test_init_fails_when_zone_not_found() {
 }
 
 test_init_rejects_world_readable_token() {
-  make_upstream_repo
-  chmod 644 "$H/.secrets/cloudflare-api-token"
+  make_upstream_archive
+  chmod 644 "$D/.secrets/cloudflare-api-token"
   ctl init
   bad_rc
   out_has "600"
 }
 
 test_init_rejects_old_compose() {
-  make_upstream_repo
+  make_upstream_archive
   stub STUB_COMPOSE_VERSION=2.20.0
   ctl init
   bad_rc
@@ -243,7 +343,7 @@ test_add_creates_everything_in_order() {
   eq "$(grep '^curl POST /accounts/acc1/access/apps ' "$T/calls.log" | cut -d' ' -f4- | jq -r .name | paste -sd' ')" "lettuce-alfred lettuce-alfred-garden"
   eq "$(grep '^curl POST /zones/zone1/dns_records ' "$T/calls.log" | cut -d' ' -f4- | jq -r .name | paste -sd' ')" "alfred-garden.example.org alfred.example.org"
   log_has "compose -p lettuce-alfred"
-  log_has "up -d --build"
+  log_has "up -d --no-build"
   out_has "https://alfred.example.org"
 }
 
@@ -276,12 +376,12 @@ test_add_payloads() {
 test_add_writes_private_stack_env() {
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(stat -c %a "$H/stacks/alfred/stack.env")" 600
-  eq "$(stat -c %a "$H/stacks/alfred")" 700
+  eq "$(stat -c %a "$D/stacks/alfred/stack.env")" 600
+  eq "$(stat -c %a "$D/stacks/alfred")" 700
   eq "$(senv alfred PUBLIC_ORIGIN)" https://alfred.example.org
   eq "$(senv alfred ALLOWED_USERS)" alfred@example.com
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
-  eq "$(senv alfred LETTA_STATE_DIR)" "$H/stacks/alfred/state"
+  eq "$(senv alfred LETTA_STATE_DIR)" "$D/stacks/alfred/state"
   eq "$(senv alfred CF_ACCESS_TEAM_DOMAIN)" team
   eq "$(senv alfred CF_ACCESS_AUD)" aud1
   eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden.example.org
@@ -305,7 +405,7 @@ test_add_writes_private_stack_env() {
   s=$(senv alfred VAULT_VAPID_PRIVATE_KEY)
   ((${#s} == 43)) || fail "VAULT_VAPID_PRIVATE_KEY length ${#s}"
   [[ $(senv alfred VAULT_VAPID_PRIVATE_KEY) != "$(senv alfred PUSH_VAPID_PRIVATE_KEY)" ]] || fail "the vault shares the BFF's VAPID key"
-  ! grep -q '^DEV_BYPASS' "$H/stacks/alfred/stack.env" || fail "DEV_BYPASS in stack.env"
+  ! grep -q '^DEV_BYPASS' "$D/stacks/alfred/stack.env" || fail "DEV_BYPASS in stack.env"
 }
 
 test_add_secrets_differ_between_stacks() {
@@ -317,7 +417,7 @@ test_add_secrets_differ_between_stacks() {
 }
 
 test_add_routes_the_vault_path_with_the_profile() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
   vault_config
   ctl add alfred alfred@example.com
   ok_rc
@@ -326,7 +426,7 @@ test_add_routes_the_vault_path_with_the_profile() {
 }
 
 test_add_routes_gmail_triggers_with_the_profile() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$D/config.env"
   vault_config
   triggers_config
   ctl add alfred alfred@example.com
@@ -355,13 +455,13 @@ test_up_gives_the_sidecars_only_the_garden_profiles() {
   eq "$(senv alfred GARDEN_PROFILES)" ""
   with_triggers
   vault_config
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$D/stacks/alfred/stack.env"
   ctl up alfred
   ok_rc
   # In PROFILE_ROUTES order, which is the landing page's.
   eq "$(senv alfred GARDEN_PROFILES)" garden-vault,garden-gmail-triggers
-  eq "$(stat -c %a "$H/stacks/alfred/stack.env")" 600
+  eq "$(stat -c %a "$D/stacks/alfred/stack.env")" 600
 }
 
 # A profile that adds no garden page leaves GARDEN_PROFILES, and so the
@@ -415,7 +515,7 @@ test_add_fails_when_every_garden_name_is_taken() {
   ctl add alfred alfred@example.com
   bad_rc
   out_has "every garden name from alfred-garden.example.org to alfred-garden-9.example.org is taken"
-  [[ ! -e $H/stacks/alfred ]] || fail "stack dir left behind"
+  [[ ! -e $D/stacks/alfred ]] || fail "stack dir left behind"
   log_lacks "curl POST"
 }
 
@@ -425,12 +525,12 @@ test_add_refuses_a_name_ending_in_garden() {
   bad_rc
   out_has "invalid stack name 'alfred-garden': it may not end in -garden"
   log_lacks "curl "
-  [[ ! -e $H/stacks/alfred-garden ]] || fail "stack dir created for a refused name"
+  [[ ! -e $D/stacks/alfred-garden ]] || fail "stack dir created for a refused name"
 }
 
 test_an_existing_stack_ending_in_garden_keeps_working() {
   added
-  mv "$H/stacks/alfred" "$H/stacks/hal-garden"
+  mv "$D/stacks/alfred" "$D/stacks/hal-garden"
   ctl up hal-garden
   ok_rc
   log_has "-p lettuce-hal-garden"
@@ -450,7 +550,7 @@ test_add_fails_when_both_names_taken() {
   ctl add mail a@b.com
   bad_rc
   out_has "lettuce-mail.example.org"
-  [[ ! -e $H/stacks/mail ]] || fail "stack dir left behind"
+  [[ ! -e $D/stacks/mail ]] || fail "stack dir left behind"
 }
 
 test_add_warns_about_wildcard_records() {
@@ -506,7 +606,7 @@ test_add_resumes_after_a_failed_garden_dns_record() {
 }
 
 test_add_prints_the_google_redirect_uri() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$D/config.env"
   ctl add alfred alfred@example.com
   ok_rc
   out_has "https://alfred.example.org/api/google/oauth/callback"
@@ -514,7 +614,7 @@ test_add_prints_the_google_redirect_uri() {
 
 test_add_keeps_the_google_hint_when_the_executor_cannot_be_installed() {
   triggers_config
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
   stub STUB_EXEC_RC=1
   ctl add alfred alfred@example.com
   bad_rc
@@ -547,7 +647,7 @@ added() {
 
 test_up_refuses_dev_bypass() {
   added
-  echo "DEV_BYPASS_EMAIL=x@y.com" >>"$H/stacks/alfred/stack.env"
+  echo "DEV_BYPASS_EMAIL=x@y.com" >>"$D/stacks/alfred/stack.env"
   ctl up alfred
   bad_rc
   out_has "DEV_BYPASS"
@@ -556,7 +656,7 @@ test_up_refuses_dev_bypass() {
 
 test_up_refuses_empty_tunnel_token() {
   added
-  sed -i 's/^CLOUDFLARE_TUNNEL_TOKEN=.*/CLOUDFLARE_TUNNEL_TOKEN=/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^CLOUDFLARE_TUNNEL_TOKEN=.*/CLOUDFLARE_TUNNEL_TOKEN=/' "$D/stacks/alfred/stack.env"
   ctl up alfred
   bad_rc
   out_has "CLOUDFLARE_TUNNEL_TOKEN"
@@ -565,7 +665,7 @@ test_up_refuses_empty_tunnel_token() {
 
 test_up_refuses_profile_drift() {
   added
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,search,codex/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,search,codex/' "$D/config.env"
   ctl up alfred
   bad_rc
   out_has "differs"
@@ -601,7 +701,7 @@ test_up_refuses_auto_update_in_channel_gateway() {
 
 test_up_adds_push_keys_to_existing_stack() {
   added
-  sed -i '/^PUSH_VAPID_/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^PUSH_VAPID_/d' "$D/stacks/alfred/stack.env"
   ctl up alfred
   ok_rc
   [[ -n $(senv alfred PUSH_VAPID_PUBLIC_KEY) ]] || fail "no PUSH_VAPID_PUBLIC_KEY"
@@ -614,7 +714,7 @@ test_up_adds_vault_push_keys_to_existing_stack() {
   added
   local pub
   pub=$(senv alfred PUSH_VAPID_PUBLIC_KEY)
-  sed -i '/^VAULT_VAPID_/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^VAULT_VAPID_/d' "$D/stacks/alfred/stack.env"
   ctl up alfred
   ok_rc
   [[ -n $(senv alfred VAULT_VAPID_PUBLIC_KEY) ]] || fail "no VAULT_VAPID_PUBLIC_KEY"
@@ -635,7 +735,7 @@ test_up_keeps_existing_push_keys() {
 
 test_up_refuses_missing_push_contact() {
   added
-  sed -i 's/^PUSH_CONTACT_EMAIL=.*/PUSH_CONTACT_EMAIL=/' "$H/config.env"
+  sed -i 's/^PUSH_CONTACT_EMAIL=.*/PUSH_CONTACT_EMAIL=/' "$D/config.env"
   ctl up alfred
   bad_rc
   out_has "PUSH_CONTACT_EMAIL"
@@ -644,7 +744,7 @@ test_up_refuses_missing_push_contact() {
 
 test_check_refuses_missing_push_keys() {
   added
-  sed -i '/^PUSH_VAPID_PRIVATE_KEY=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^PUSH_VAPID_PRIVATE_KEY=/d' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
   out_has "PUSH_VAPID_PRIVATE_KEY"
@@ -679,8 +779,8 @@ test_check_accepts_dropping_every_capability() {
 # with_vault [VAULT_JSON] -> alfred runs the `garden-vault` profile and the
 # rendered config holds this vault (default: the hardened one)
 with_vault() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-vault/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-vault/' "$D/stacks/alfred/stack.env"
   vault_config "$@"
 }
 
@@ -693,7 +793,7 @@ test_check_accepts_the_hardened_vault() {
 
 test_check_refuses_missing_vault_keys() {
   added
-  sed -i '/^VAULT_VAPID_PRIVATE_KEY=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^VAULT_VAPID_PRIVATE_KEY=/d' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
   out_has "VAULT_VAPID_PRIVATE_KEY"
@@ -768,8 +868,8 @@ pipelock_config() {
 # with_pipelock [PIPELOCK_JSON] -> alfred runs the `garden-pipelock` profile and the
 # rendered config holds this pipelock (default: the hardened one)
 with_pipelock() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-pipelock/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-pipelock/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-pipelock/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-pipelock/' "$D/stacks/alfred/stack.env"
   pipelock_config "$@"
 }
 
@@ -872,8 +972,8 @@ test_check_ignores_proxy_settings_without_pipelock() {
 # with_triggers -> alfred runs the garden-gmail-triggers profile (with google), and the
 # rendered config holds the hardened service
 with_triggers() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/stacks/alfred/stack.env"
   triggers_config
 }
 
@@ -887,8 +987,8 @@ test_check_accepts_the_hardened_gmail_triggers() {
 test_check_refuses_gmail_triggers_without_google() {
   added
   with_triggers
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-gmail-triggers/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-gmail-triggers/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-gmail-triggers/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-gmail-triggers/' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
   out_has "alfred: the garden-gmail-triggers profile needs google"
@@ -956,7 +1056,7 @@ test_check_refuses_gmail_triggers_without_its_state() {
 }
 
 test_check_refuses_gmail_triggers_on_a_parent_of_its_state() {
-  triggers_refused "$GT.volumes[0].source = \"$H/stacks/alfred/state/garden\"" "garden-gmail-triggers may mount from the host only"
+  triggers_refused "$GT.volumes[0].source = \"$D/stacks/alfred/state/garden\"" "garden-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_with_its_state_elsewhere() {
@@ -964,7 +1064,7 @@ test_check_refuses_gmail_triggers_with_its_state_elsewhere() {
 }
 
 test_check_refuses_gmail_triggers_the_old_spool() {
-  triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/letta-home/garden/gmail-triggers/spool\",\"target\":\"/spool\"}]" \
+  triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state/letta-home/garden/gmail-triggers/spool\",\"target\":\"/spool\"}]" \
     "garden-gmail-triggers may mount from the host only"
 }
 
@@ -981,17 +1081,17 @@ test_check_refuses_gmail_triggers_other_volumes() {
 }
 
 test_check_refuses_another_service_on_the_rules() {
-  triggers_refused ".services[\"app-server\"].volumes = [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/garden/gmail-triggers\",\"target\":\"/x\"}]" \
-    "app-server mounts $H/stacks/alfred/state/garden/gmail-triggers, which reaches $H/stacks/alfred/state/garden"
+  triggers_refused ".services[\"app-server\"].volumes = [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state/garden/gmail-triggers\",\"target\":\"/x\"}]" \
+    "app-server mounts $D/stacks/alfred/state/garden/gmail-triggers, which reaches $D/stacks/alfred/state/garden"
 }
 
 test_check_refuses_another_service_on_a_parent_of_the_rules() {
-  triggers_refused ".services.bff.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state\",\"target\":\"/x\"}]" \
-    "bff mounts $H/stacks/alfred/state, which reaches"
+  triggers_refused ".services.bff.volumes += [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state\",\"target\":\"/x\"}]" \
+    "bff mounts $D/stacks/alfred/state, which reaches"
 }
 
 test_check_refuses_another_service_on_a_symlink_to_the_rules() {
-  ln -s "$H/stacks/alfred/state/garden" "$T/link"
+  ln -s "$D/stacks/alfred/state/garden" "$T/link"
   triggers_refused ".services.bff.volumes += [{\"type\":\"bind\",\"source\":\"$T/link/gmail-triggers\",\"target\":\"/x\"}]" \
     "bff mounts $T/link/gmail-triggers, which reaches"
 }
@@ -1001,13 +1101,13 @@ test_check_refuses_volumes_from_gmail_triggers() {
 }
 
 test_check_refuses_a_volume_bound_to_the_rules() {
-  triggers_refused ".volumes = {\"rules\":{\"driver\":\"local\",\"driver_opts\":{\"type\":\"none\",\"o\":\"bind\",\"device\":\"$H/stacks/alfred/state/garden/\"}}}" \
-    "volume rules is bound to $H/stacks/alfred/state/garden/, which reaches"
+  triggers_refused ".volumes = {\"rules\":{\"driver\":\"local\",\"driver_opts\":{\"type\":\"none\",\"o\":\"bind\",\"device\":\"$D/stacks/alfred/state/garden/\"}}}" \
+    "volume rules is bound to $D/stacks/alfred/state/garden/, which reaches"
 }
 
 test_check_refuses_a_volume_bound_to_a_parent_of_the_rules() {
-  triggers_refused ".volumes = {\"st\":{\"driver_opts\":{\"type\":\"none\",\"o\":\"bind\",\"device\":\"$H/stacks\"}}}" \
-    "volume st is bound to $H/stacks, which reaches"
+  triggers_refused ".volumes = {\"st\":{\"driver_opts\":{\"type\":\"none\",\"o\":\"bind\",\"device\":\"$D/stacks\"}}}" \
+    "volume st is bound to $D/stacks, which reaches"
 }
 
 test_check_refuses_a_volume_bound_to_a_relative_path() {
@@ -1024,32 +1124,32 @@ test_check_accepts_volumes_bound_elsewhere() {
 
 test_check_refuses_a_symlinked_state_dir() {
   added
-  mv "$H/stacks/alfred/state" "$H/stacks/alfred/real-state"
-  ln -s real-state "$H/stacks/alfred/state"
+  mv "$D/stacks/alfred/state" "$D/stacks/alfred/real-state"
+  ln -s real-state "$D/stacks/alfred/state"
   with_triggers
   ctl check alfred
   bad_rc
-  out_has "alfred: $H/stacks/alfred/state is a symlink"
+  out_has "alfred: $D/stacks/alfred/state is a symlink"
 }
 
 test_check_refuses_a_symlinked_garden() {
   added
   mkdir -p "$T/elsewhere"
-  ln -s "$T/elsewhere" "$H/stacks/alfred/state/garden"
+  ln -s "$T/elsewhere" "$D/stacks/alfred/state/garden"
   with_triggers
   ctl check alfred
   bad_rc
-  out_has "alfred: $H/stacks/alfred/state/garden is a symlink"
+  out_has "alfred: $D/stacks/alfred/state/garden is a symlink"
 }
 
 test_check_refuses_a_symlinked_rules_dir() {
   added
-  mkdir -p "$T/elsewhere" "$H/stacks/alfred/state/garden"
-  ln -s "$T/elsewhere" "$H/stacks/alfred/state/garden/gmail-triggers"
+  mkdir -p "$T/elsewhere" "$D/stacks/alfred/state/garden"
+  ln -s "$T/elsewhere" "$D/stacks/alfred/state/garden/gmail-triggers"
   with_triggers
   ctl check alfred
   bad_rc
-  out_has "alfred: $H/stacks/alfred/state/garden/gmail-triggers is a symlink"
+  out_has "alfred: $D/stacks/alfred/state/garden/gmail-triggers is a symlink"
 }
 
 test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
@@ -1079,7 +1179,7 @@ test_check_accepts_volumes_from_elsewhere() {
 test_check_refuses_a_missing_executor_token() {
   added
   with_triggers
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
   out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
@@ -1088,7 +1188,7 @@ test_check_refuses_a_missing_executor_token() {
 test_check_refuses_a_malformed_executor_token() {
   added
   with_triggers
-  sed -i 's/^GARDEN_EXECUTOR_TOKEN=.*/GARDEN_EXECUTOR_TOKEN=ABCDEF/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^GARDEN_EXECUTOR_TOKEN=.*/GARDEN_EXECUTOR_TOKEN=ABCDEF/' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
   out_has "GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
@@ -1097,7 +1197,7 @@ test_check_refuses_a_malformed_executor_token() {
 test_check_refuses_a_missing_executor_token_with_any_garden_profile() {
   added
   with_vault
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
   out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
@@ -1105,7 +1205,7 @@ test_check_refuses_a_missing_executor_token_with_any_garden_profile() {
 
 test_check_needs_no_executor_token_without_the_profile() {
   added
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   ctl check alfred
   ok_rc
 }
@@ -1118,8 +1218,8 @@ test_up_creates_the_executor_token_once() {
   ctl up alfred
   ok_rc
   eq "$(senv alfred GARDEN_EXECUTOR_TOKEN)" "$tok"
-  eq "$(stat -c %a "$H/stacks/alfred/stack.env")" 600
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  eq "$(stat -c %a "$D/stacks/alfred/stack.env")" 600
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   ctl up alfred
   ok_rc
   [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "token not recreated"
@@ -1196,7 +1296,7 @@ test_up_with_only_the_vault_has_no_executor() {
   ctl up alfred
   ok_rc
   log_lacks " exec "
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl up alfred
   ok_rc
   eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
@@ -1234,15 +1334,15 @@ test_up_all_continues_past_a_failed_executor_install() {
   ok_rc
   # One rendered config serves both stacks in the stub, so hal shares alfred's
   # state path to pass the bind-mount check.
-  sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$H/stacks/alfred/state|" "$H/stacks/hal/stack.env"
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/stacks/alfred/stack.env" "$H/stacks/hal/stack.env"
+  sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$D/stacks/alfred/state|" "$D/stacks/hal/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/stacks/alfred/stack.env" "$D/stacks/hal/stack.env"
   : >"$T/calls.log"
   stub STUB_EXEC_RC=1
   ctl up all
   bad_rc
   log_has "-p lettuce-alfred"
-  grep -q '^docker compose -p lettuce-hal .* up -d --build' "$T/calls.log" || fail "hal not started after alfred's failed install"
+  grep -q '^docker compose -p lettuce-hal .* up -d --no-build' "$T/calls.log" || fail "hal not started after alfred's failed install"
   out_has "the garden executor is out of step on: alfred hal; fix the cause, then run: lettucectl up <name>"
 }
 
@@ -1255,7 +1355,7 @@ test_up_without_a_garden_profile_runs_no_exec() {
 
 test_up_removes_the_executor_when_the_profile_is_off() {
   added
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl up alfred
   ok_rc
   log_has "exec -T app-server sh -c"
@@ -1265,8 +1365,8 @@ test_up_removes_the_executor_when_the_profile_is_off() {
 
 test_up_removes_an_executor_known_by_its_cron_file() {
   added
-  mkdir -p "$H/stacks/alfred/state/letta-home/system-cron"
-  touch "$H/stacks/alfred/state/letta-home/system-cron/lettuce-garden-executor"
+  mkdir -p "$D/stacks/alfred/state/letta-home/system-cron"
+  touch "$D/stacks/alfred/state/letta-home/system-cron/lettuce-garden-executor"
   ctl up alfred
   ok_rc
   log_has "sh uninstall $EXECUTOR_ARGS"
@@ -1274,8 +1374,8 @@ test_up_removes_an_executor_known_by_its_cron_file() {
 
 test_up_fails_clearly_when_the_executor_cannot_be_removed() {
   added
-  mkdir -p "$H/stacks/alfred/state/letta-home/system-cron"
-  touch "$H/stacks/alfred/state/letta-home/system-cron/lettuce-garden-executor"
+  mkdir -p "$D/stacks/alfred/state/letta-home/system-cron"
+  touch "$D/stacks/alfred/state/letta-home/system-cron/lettuce-garden-executor"
   stub STUB_EXEC_RC=1
   ctl up alfred
   bad_rc
@@ -1284,7 +1384,7 @@ test_up_fails_clearly_when_the_executor_cannot_be_removed() {
 
 test_up_refuses_readable_stack_env() {
   added
-  chmod 644 "$H/stacks/alfred/stack.env"
+  chmod 644 "$D/stacks/alfred/stack.env"
   ctl up alfred
   bad_rc
   out_has "600"
@@ -1295,7 +1395,7 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "--project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $D/stacks/alfred/stack.env"
   log_lacks "pipelock-proxy.yml"
 }
 
@@ -1304,7 +1404,7 @@ test_compose_adds_the_proxy_overlay_only_with_pipelock() {
   with_pipelock
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/pipelock-proxy.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/pipelock-proxy.yml --env-file $D/stacks/alfred/stack.env"
 }
 
 test_up_all_starts_every_stack() {
@@ -1342,7 +1442,7 @@ test_remove_deletes_cloudflare_resources_and_keeps_data() {
   ok_rc
   log_has "down -v"
   eq "$(calls | tr '\n' ';')" "DELETE /zones/zone1/dns_records/rec1;DELETE /zones/zone1/dns_records/rec2;DELETE /accounts/acc1/cfd_tunnel/tun1/connections;DELETE /accounts/acc1/cfd_tunnel/tun1;DELETE /accounts/acc1/access/apps/app2;DELETE /accounts/acc1/access/apps/app1;DELETE /accounts/acc1/access/policies/pol1;"
-  [[ -d $H/stacks/alfred/state ]] || fail "state deleted without --purge"
+  [[ -d $D/stacks/alfred/state ]] || fail "state deleted without --purge"
   local k
   for k in CF_TUNNEL_ID CF_DNS_RECORD_ID CF_GARDEN_DNS_RECORD_ID CF_GARDEN_APP_ID CF_GARDEN_AUD CF_ACCESS_APP_ID CF_ACCESS_POLICY_ID; do
     eq "$(senv alfred "$k")" ""
@@ -1372,13 +1472,13 @@ test_remove_purge_deletes_the_stack_directory() {
   log_has "run --rm --no-deps"
   # `compose run` recreates the project network; a final `down` must remove it again.
   eq "$(grep '^docker compose' "$T/calls.log" | tail -1 | grep -o ' down$')" " down"
-  [[ ! -e $H/stacks/alfred ]] || fail "stack directory still exists"
+  [[ ! -e $D/stacks/alfred ]] || fail "stack directory still exists"
 }
 
 # state_elsewhere -> alfred's LETTA_STATE_DIR is $T/state, not stacks/alfred/state
 state_elsewhere() {
   mkdir -p "$T/state"
-  sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$T/state|" "$H/stacks/alfred/stack.env"
+  sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$T/state|" "$D/stacks/alfred/stack.env"
 }
 
 test_remove_purge_empties_the_gmail_trigger_rules_too() {
@@ -1387,18 +1487,18 @@ test_remove_purge_empties_the_gmail_trigger_rules_too() {
   # They live under stack.env's LETTA_STATE_DIR, like every other mount.
   added
   state_elsewhere
-  mkdir -p "$T/state/garden/gmail-triggers" "$H/stacks/alfred/state/garden/gmail-triggers"
+  mkdir -p "$T/state/garden/gmail-triggers" "$D/stacks/alfred/state/garden/gmail-triggers"
   ctl remove alfred --purge <<<"alfred"
   ok_rc
   log_has "-v $T/state/garden:/garden"
-  log_lacks "-v $H/stacks/alfred/state/garden:/garden"
+  log_lacks "-v $D/stacks/alfred/state/garden:/garden"
   log_has "/root/.letta /data /work /garden -mindepth 1 -delete"
 }
 
 test_remove_purge_mounts_no_garden_when_there_is_none() {
   added
   state_elsewhere
-  mkdir -p "$H/stacks/alfred/state/garden/gmail-triggers"
+  mkdir -p "$D/stacks/alfred/state/garden/gmail-triggers"
   ctl remove alfred --purge <<<"alfred"
   ok_rc
   log_lacks ":/garden"
@@ -1409,10 +1509,10 @@ test_remove_purge_refuses_a_symlinked_garden() {
   added
   mkdir -p "$T/elsewhere"
   touch "$T/elsewhere/keep"
-  ln -s "$T/elsewhere" "$H/stacks/alfred/state/garden"
+  ln -s "$T/elsewhere" "$D/stacks/alfred/state/garden"
   ctl remove alfred --purge <<<"alfred"
   bad_rc
-  out_has "$H/stacks/alfred/state/garden is a symlink"
+  out_has "$D/stacks/alfred/state/garden is a symlink"
   log_lacks ":/garden"
   log_lacks "run --rm --no-deps"
 }
@@ -1427,7 +1527,7 @@ test_remove_continues_past_already_deleted_resources() {
 }
 
 test_remove_reminds_to_delete_the_google_redirect_uri() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$D/config.env"
   added
   ctl remove alfred --purge <<<"alfred"
   ok_rc
@@ -1435,7 +1535,7 @@ test_remove_reminds_to_delete_the_google_redirect_uri() {
 }
 
 test_remove_says_the_vault_goes_too() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
   vault_config
   added
   ctl remove alfred <<<"alfred"
@@ -1453,7 +1553,7 @@ test_remove_warns_about_a_vault_whose_profile_is_off() {
 }
 
 test_remove_says_where_the_gmail_triggers_are() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
   triggers_config
   added
   ctl remove alfred <<<"alfred"
@@ -1473,7 +1573,7 @@ test_remove_finds_gmail_triggers_under_the_state_dir() {
 test_remove_says_nothing_of_gmail_triggers_outside_the_state_dir() {
   added
   state_elsewhere
-  mkdir -p "$H/stacks/alfred/state/garden/gmail-triggers"
+  mkdir -p "$D/stacks/alfred/state/garden/gmail-triggers"
   ctl remove alfred <<<"alfred"
   ok_rc
   out_lacks "Gmail triggers"
@@ -1504,7 +1604,7 @@ test_remove_says_nothing_of_receipts_never_written() {
 }
 
 test_remove_says_nothing_of_a_vault_that_was_never_created() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
   vault_config
   added
   stub STUB_VOLUME_RC=1
@@ -1520,13 +1620,13 @@ test_profiles_sets_config_and_every_stack() {
   : >"$T/calls.log"
   ctl profiles "cloudflared, search,google"
   ok_rc
-  eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search,google
+  eq "$(grep ^PROFILES= "$D/config.env")" PROFILES=cloudflared,search,google
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search,google
   eq "$(senv hal COMPOSE_PROFILES)" cloudflared,search,google
-  eq "$(stat -c %a "$H/stacks/hal/stack.env")" 600
+  eq "$(stat -c %a "$D/stacks/hal/stack.env")" 600
   log_has "-p lettuce-alfred"
   log_has "-p lettuce-hal"
-  log_has "up -d --build"
+  log_has "up -d --no-build"
   log_lacks " rm -sf"
   out_has "https://alfred.example.org/api/google/oauth/callback"
   out_has "https://hal.example.org/api/google/oauth/callback"
@@ -1546,7 +1646,7 @@ test_profiles_removes_services_of_dropped_profiles() {
   containers alfred app-server bff cloudflared searxng ddg-mcp
   ctl profiles cloudflared
   ok_rc
-  log_has "up -d --build"
+  log_has "up -d --no-build"
   grep -q '^docker compose -p lettuce-alfred .* rm -sf ddg-mcp searxng$' "$T/calls.log" || fail "dropped services not removed"
   out_lacks "oauth/callback"
 }
@@ -1582,7 +1682,7 @@ test_profiles_same_list_restarts_nothing() {
 }
 
 test_profiles_prints_redirect_uris_whenever_google_is_on() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$D/config.env"
   added
   ctl profiles cloudflared,google
   ok_rc
@@ -1594,22 +1694,22 @@ test_profiles_checks_every_stack_before_writing() {
   ctl add alfred alfred@example.com
   ctl add hal hal@example.com
   : >"$T/calls.log"
-  sed -i 's/^CLOUDFLARE_TUNNEL_TOKEN=.*/CLOUDFLARE_TUNNEL_TOKEN=/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^CLOUDFLARE_TUNNEL_TOKEN=.*/CLOUDFLARE_TUNNEL_TOKEN=/' "$D/stacks/alfred/stack.env"
   ctl profiles cloudflared,search,google
   bad_rc
   out_has "CLOUDFLARE_TUNNEL_TOKEN"
-  eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search
+  eq "$(grep ^PROFILES= "$D/config.env")" PROFILES=cloudflared,search
   eq "$(senv hal COMPOSE_PROFILES)" cloudflared,search
   log_lacks "up -d"
 }
 
 test_profiles_repairs_drift() {
   added
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared/' "$D/stacks/alfred/stack.env"
   ctl profiles cloudflared,search
   ok_rc
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
-  log_has "up -d --build"
+  log_has "up -d --no-build"
 }
 
 test_profiles_routes_the_vault_for_every_stack() {
@@ -1623,7 +1723,7 @@ test_profiles_routes_the_vault_for_every_stack() {
   grep '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log" | grep -qF '"hostname":"hal-garden.example.org","path":"^/vault(/|$)"' ||
     fail "hal's garden host has no /vault route"
   # The route is in place before the stacks start.
-  [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
+  [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --no-build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stacks started before their route"
 }
 
@@ -1648,7 +1748,7 @@ test_profiles_reapplies_every_stacks_access_application() {
     "$(jq -c 'del(.name, .domain, .destinations)' <<<"$created")"
   grep '^curl PUT /accounts/acc1/access/apps/app2 ' "$T/calls.log" | grep -qF '"name":"lettuce-hal-garden","domain":"hal-garden.example.org"' ||
     fail "hal's garden application was not re-applied with its own name and host"
-  [[ $(grep -n '^curl PUT /accounts/acc1/access/apps' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
+  [[ $(grep -n '^curl PUT /accounts/acc1/access/apps' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --no-build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stacks started before their Access application was updated"
 }
 
@@ -1666,7 +1766,7 @@ test_profiles_reports_a_failed_access_application_update() {
 }
 
 test_profiles_dropping_the_vault_removes_the_route() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
   vault_config
   added
   ctl profiles cloudflared
@@ -1688,22 +1788,22 @@ test_profiles_routes_gmail_triggers_and_installs_the_executor() {
   triggers_config
   added
   containers alfred app-server
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   ctl profiles cloudflared,search,google,garden-gmail-triggers
   ok_rc
   [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "profiles gave no executor token"
   eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://garden-gmail-triggers:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
   log_has "sh install $EXECUTOR_ARGS"
-  [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
+  [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --no-build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stack started before its route"
 }
 
 test_profiles_dropping_gmail_triggers_removes_route_container_and_executor() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
   triggers_config
   added
   containers alfred app-server bff cloudflared google-mcp garden-gmail-triggers garden
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl profiles cloudflared,google
   ok_rc
   log_has "curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations"
@@ -1716,12 +1816,12 @@ test_profiles_dropping_gmail_triggers_removes_route_container_and_executor() {
 }
 
 test_profiles_dropping_gmail_triggers_keeps_the_garden_for_the_vault_but_not_the_executor() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$D/config.env"
   triggers_config
   vault_config
   added
   containers alfred app-server bff cloudflared google-mcp garden-gmail-triggers garden-vault garden
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
   : >"$T/calls.log"
   ctl profiles cloudflared,google,garden-vault
   ok_rc
@@ -1734,7 +1834,7 @@ test_profiles_dropping_gmail_triggers_keeps_the_garden_for_the_vault_but_not_the
 test_profiles_rerun_removes_a_leftover_executor() {
   added
   containers alfred app-server
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl profiles cloudflared,search
   ok_rc
   out_has "nothing to change"
@@ -1744,7 +1844,7 @@ test_profiles_rerun_removes_a_leftover_executor() {
 test_profiles_reports_an_executor_it_could_not_remove() {
   added
   containers alfred app-server
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
   stub STUB_EXEC_RC=1
   ctl profiles cloudflared,search
   bad_rc
@@ -1755,7 +1855,7 @@ test_profiles_reports_an_executor_it_could_not_remove() {
 
 test_profiles_skips_a_stopped_stack_when_removing_the_executor() {
   added
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl profiles cloudflared,search
   ok_rc
   out_has "alfred: not running; its executor is removed at its next up"
@@ -1763,7 +1863,7 @@ test_profiles_skips_a_stopped_stack_when_removing_the_executor() {
 }
 
 test_profiles_rerun_repairs_a_failed_executor_install() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
   triggers_config
   added
   containers alfred app-server
@@ -1780,14 +1880,14 @@ test_profiles_continues_past_a_failed_executor_install() {
   ok_rc
   # One rendered config serves both stacks in the stub, so hal shares alfred's
   # state path to pass the bind-mount check.
-  sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$H/stacks/alfred/state|" "$H/stacks/hal/stack.env"
+  sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$D/stacks/alfred/state|" "$D/stacks/hal/stack.env"
   containers alfred app-server
   containers hal app-server
   : >"$T/calls.log"
   stub STUB_EXEC_RC=1
   ctl profiles cloudflared,search,google,garden-gmail-triggers
   bad_rc
-  grep -q '^docker compose -p lettuce-hal .* up -d --build' "$T/calls.log" || fail "hal not started"
+  grep -q '^docker compose -p lettuce-hal .* up -d --no-build' "$T/calls.log" || fail "hal not started"
   out_has "alfred: could not install the garden executor"
   out_has "hal: could not install the garden executor"
   out_has "could not sync the garden executor of: alfred hal"
@@ -1801,7 +1901,7 @@ test_profiles_checks_gmail_triggers_under_the_new_list_before_writing() {
   ctl profiles cloudflared,search,google,garden-gmail-triggers
   bad_rc
   out_has "alfred: the garden-gmail-triggers profile is on but garden-gmail-triggers is not in the rendered config"
-  eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search
+  eq "$(grep ^PROFILES= "$D/config.env")" PROFILES=cloudflared,search
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
   log_lacks "up -d"
 }
@@ -1809,7 +1909,7 @@ test_profiles_checks_gmail_triggers_under_the_new_list_before_writing() {
 test_profiles_checks_the_executor_token_before_writing() {
   triggers_config
   added
-  sed -i 's/^GARDEN_EXECUTOR_TOKEN=.*/GARDEN_EXECUTOR_TOKEN=not-hex/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^GARDEN_EXECUTOR_TOKEN=.*/GARDEN_EXECUTOR_TOKEN=not-hex/' "$D/stacks/alfred/stack.env"
   ctl profiles cloudflared,search,google,garden-gmail-triggers
   bad_rc
   out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
@@ -1821,10 +1921,10 @@ test_profiles_checks_symlinks_under_the_new_list_before_writing() {
   triggers_config
   added
   mkdir -p "$T/elsewhere"
-  ln -s "$T/elsewhere" "$H/stacks/alfred/state/garden"
+  ln -s "$T/elsewhere" "$D/stacks/alfred/state/garden"
   ctl profiles cloudflared,search,google,garden-gmail-triggers
   bad_rc
-  out_has "alfred: $H/stacks/alfred/state/garden is a symlink"
+  out_has "alfred: $D/stacks/alfred/state/garden is a symlink"
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
 }
 
@@ -1837,7 +1937,7 @@ test_profiles_renders_the_new_list_for_the_check() {
   eq "$(grep '^docker-env-file ' "$T/calls.log" | head -1)" "docker-env-file COMPOSE_PROFILES=cloudflared,search,google,garden-gmail-triggers"
   eq "$(grep -c '^docker-env-file COMPOSE_PROFILES=cloudflared,search$' "$T/calls.log")" 0
   # The rendering's temp env file is gone.
-  eq "$(find "$H/stacks/alfred" -maxdepth 1 -name 'stack.env.*' | wc -l)" 0
+  eq "$(find "$D/stacks/alfred" -maxdepth 1 -name 'stack.env.*' | wc -l)" 0
 }
 
 test_profiles_refuses_gmail_triggers_without_google() {
@@ -1845,7 +1945,7 @@ test_profiles_refuses_gmail_triggers_without_google() {
   ctl profiles cloudflared,garden-gmail-triggers
   bad_rc
   out_has "the garden-gmail-triggers profile needs google"
-  eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search
+  eq "$(grep ^PROFILES= "$D/config.env")" PROFILES=cloudflared,search
   log_lacks "up -d"
 }
 
@@ -1856,7 +1956,7 @@ test_profiles_refuses_a_bad_list() {
     ctl profiles "$l"
     bad_rc
   done
-  eq "$(grep ^PROFILES= "$H/config.env")" PROFILES=cloudflared,search
+  eq "$(grep ^PROFILES= "$D/config.env")" PROFILES=cloudflared,search
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
   log_lacks "up -d"
 }
@@ -1872,7 +1972,7 @@ test_profiles_without_arguments_shows_them() {
 
 test_profiles_view_needs_only_config() {
   added
-  sed -i 's/^CF_ZONE_ID=.*/CF_ZONE_ID=/' "$H/config.env"
+  sed -i 's/^CF_ZONE_ID=.*/CF_ZONE_ID=/' "$D/config.env"
   ctl profiles
   ok_rc
   out_has "cloudflared,search"
@@ -1912,7 +2012,7 @@ test_shell_without_agent_opens_work() {
 # workspaces ID... -> alfred's agents with these ids have a workspace
 workspaces() {
   local id
-  for id in "$@"; do mkdir -p "$H/stacks/alfred/state/workspaces/$id"; done
+  for id in "$@"; do mkdir -p "$D/stacks/alfred/state/workspaces/$id"; done
 }
 
 test_shell_opens_the_agents_workspace() {
@@ -1959,7 +2059,7 @@ test_shell_refuses_an_agent_without_a_workspace() {
   agents Alfred Lucius
   ctl shell alfred lucius </dev/null
   bad_rc
-  out_has "alfred: no workspace for Lucius at $H/stacks/alfred/state/workspaces/agent-2"
+  out_has "alfred: no workspace for Lucius at $D/stacks/alfred/state/workspaces/agent-2"
   log_lacks "-w /work"
 }
 
@@ -2003,7 +2103,7 @@ toolbox_ready() {
   agents Alfred Lucius
   jq -c '.services["app-server"].image = "lettuce-app-server:test"' "$T/compose-config.json" >"$T/c.json"
   mv "$T/c.json" "$T/compose-config.json"
-  mkdir -p "$H/stacks/alfred/state/workspaces/agent-2" "$T/u"
+  mkdir -p "$D/stacks/alfred/state/workspaces/agent-2" "$T/u"
 }
 
 # tb [--OPTION...] ARGS... -> `toolbox --OPTION... alfred ARGS...` with $T/u as home,
@@ -2043,7 +2143,7 @@ test_toolbox_opens_the_agents_workspace() {
   ok_rc
   out_has "alfred: Lucius (agent-2)"
   log_has "--hostname toolbox-alfred --label lettucectl.toolbox=alfred --label lettucectl.agent=agent-2 --security-opt no-new-privileges --memory 8g --pids-limit 4096 --tmpfs /root:mode=700,exec --tmpfs /tmp:exec"
-  log_has "-v $H/stacks/alfred/state/workspaces/agent-2:/work/agent-2 -w /work/agent-2"
+  log_has "-v $D/stacks/alfred/state/workspaces/agent-2:/work/agent-2 -w /work/agent-2"
   log_has "-e AGENT_ID=agent-2 -e LETTA_AGENT_ID=agent-2 -e AGENT_NAME=Lucius -e USER_CWD=/work/agent-2"
   log_has "-e PATH=/opt/claude-code/bin:/usr/local/bin:/usr/bin:/bin"
   log_has " lettuce-app-server:test bash"
@@ -2206,7 +2306,7 @@ test_toolbox_needs_the_stack_image() {
 
 test_toolbox_needs_the_agents_workspace() {
   toolbox_ready
-  rmdir "$H/stacks/alfred/state/workspaces/agent-2"
+  rmdir "$D/stacks/alfred/state/workspaces/agent-2"
   tb lucius
   bad_rc
   out_has "no workspace"
@@ -2230,7 +2330,7 @@ test_toolbox_requires_an_agent() {
 
 test_toolbox_leaves_out_agent_tools_by_default() {
   toolbox_ready
-  mkdir -p "$H/stacks/alfred/state/tools"
+  mkdir -p "$D/stacks/alfred/state/tools"
   tb lucius
   ok_rc
   log_lacks "/opt/agent-tools"
@@ -2239,25 +2339,25 @@ test_toolbox_leaves_out_agent_tools_by_default() {
 
 test_toolbox_mounts_agent_tools_read_only() {
   toolbox_ready
-  mkdir -p "$H/stacks/alfred/state/tools"
+  mkdir -p "$D/stacks/alfred/state/tools"
   tb --tools lucius
   ok_rc
-  log_has "-v $H/stacks/alfred/state/tools:/opt/agent-tools:ro"
+  log_has "-v $D/stacks/alfred/state/tools:/opt/agent-tools:ro"
   out_has "toolbox: agent tools (read-only)"
 }
 
 test_toolbox_mounts_agent_tools_writable() {
   toolbox_ready
-  mkdir -p "$H/stacks/alfred/state/tools"
+  mkdir -p "$D/stacks/alfred/state/tools"
   tb --tools=rw lucius
   ok_rc
-  log_has "-v $H/stacks/alfred/state/tools:/opt/agent-tools:rw"
+  log_has "-v $D/stacks/alfred/state/tools:/opt/agent-tools:rw"
   out_has "toolbox: agent tools (writable)"
 }
 
 test_toolbox_tools_flag_keeps_the_command() {
   toolbox_ready
-  mkdir -p "$H/stacks/alfred/state/tools"
+  mkdir -p "$D/stacks/alfred/state/tools"
   tb --tools lucius claude --resume
   ok_rc
   log_has " lettuce-app-server:test claude --resume"
@@ -2273,7 +2373,7 @@ test_toolbox_tools_needs_the_tools_dir() {
 
 test_toolbox_refuses_an_unknown_tools_mode() {
   toolbox_ready
-  mkdir -p "$H/stacks/alfred/state/tools"
+  mkdir -p "$D/stacks/alfred/state/tools"
   tb --tools=wx lucius
   bad_rc
   out_has "usage: lettucectl toolbox"
@@ -2327,7 +2427,7 @@ test_skills_removes_all_when_the_repo_has_none() {
 
 test_skills_refuses_upstream_names() {
   added
-  mkdir -p "$H/upstream/docker/agent-skills/serving-web-apps"
+  mkdir -p "$U/docker/agent-skills/serving-web-apps"
   skill serving-web-apps
   ctl skills alfred
   bad_rc
@@ -2493,9 +2593,9 @@ test_executor_script_uninstall_removes_executor_token_and_both_cron_files() {
   local r=$T/root
   run_exec_script "$r"
   touch "$r/letta/garden/executor/executor.log"
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$H/stacks/alfred/stack.env"
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$D/stacks/alfred/stack.env"
+  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl up alfred
   ok_rc
   run_exec_script "$r" /dev/null
@@ -2509,9 +2609,9 @@ test_executor_script_uninstall_keeps_a_token_dir_in_use() {
   local r=$T/root
   run_exec_script "$r"
   touch "$r/etc/lettuce-garden/other"
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$H/stacks/alfred/stack.env"
-  mkdir -p "$H/stacks/alfred/state/letta-home/garden/executor/bin"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$D/stacks/alfred/stack.env"
+  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
   ctl up alfred
   ok_rc
   run_exec_script "$r" /dev/null
@@ -2666,7 +2766,7 @@ test_backup_rejects_bad_destinations() {
   ctl backup alfred backup-host:/srv/backups
   bad_rc
   out_has "cannot contain ':' or ','"
-  ctl backup alfred "$H/stacks/alfred"
+  ctl backup alfred "$D/stacks/alfred"
   bad_rc
   out_has "cannot be inside"
   # The repo is public, and a backup holds stack.env and logins.
@@ -2700,7 +2800,7 @@ test_backup_copies_a_stopped_stack_without_asking() {
   log_has "docker build -q -t lettuce-backup:local $H/backup"
   # --init: sh as PID 1 would ignore the signal docker forwards on Ctrl-C.
   log_has "docker run --rm --init --network none --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --label lettucectl.backup=alfred"
-  log_has "-v $H/stacks/alfred/state:/src/state:ro -v $H/stacks/alfred/stack.env:/src/stack.env:ro -v $B/alfred:/dst lettuce-backup:local"
+  log_has "-v $D/stacks/alfred/state:/src/state:ro -v $D/stacks/alfred/stack.env:/src/stack.env:ro -v $B/alfred:/dst lettuce-backup:local"
   log_has "sh rsync /src /dst $(id -u):$(id -g)  .partial-"
   log_has "state/letta-home/mod-cache state/letta-home/claude/paste-cache state/letta-home/claude/backups"
   log_lacks "state/tools"
@@ -2712,7 +2812,7 @@ test_backup_copies_a_stopped_stack_without_asking() {
 
 test_backup_leaves_out_upstream_skills_and_tools() {
   backed
-  mkdir -p "$H/upstream/docker/agent-skills/serving-web-apps"
+  mkdir -p "$U/docker/agent-skills/serving-web-apps"
   ctl backup alfred "$B" --no-tools
   ok_rc
   log_has "state/letta-home/skills/serving-web-apps state/tools"
@@ -2919,7 +3019,7 @@ test_backup_all_covers_every_stack() {
 test_backup_script_copies_what_matters() {
   command -v rsync >/dev/null || return 0
   backed
-  mkdir -p "$H/upstream/docker/agent-skills/serving-web-apps"
+  mkdir -p "$U/docker/agent-skills/serving-web-apps"
   ctl backup alfred "$B" --no-tools
   ok_rc
   local src=$T/src dst=$T/dst args got
@@ -2973,8 +3073,8 @@ docs_config() {
 
 # with_docs -> alfred runs the garden-doc-tools profile (docs_config)
 with_docs() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$D/stacks/alfred/stack.env"
   docs_config
 }
 
@@ -3017,9 +3117,9 @@ test_compose_adds_the_doc_tools_overlay_and_its_values_only_with_the_profile() {
   with_docs
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $D/stacks/alfred/stack.env"
   log_has "docker-env DOC_TOOLS_NETWORK=lettuce-doc-tools-alfred DOC_TOOLS_VOLUME=lettuce-doc-tools-$(docs_tag)"
-  grep -q '^DOC_TOOLS' "$H/stacks/alfred/stack.env" && fail "doc-tools values written to stack.env"
+  grep -q '^DOC_TOOLS' "$D/stacks/alfred/stack.env" && fail "doc-tools values written to stack.env"
   true
 }
 
@@ -3033,9 +3133,9 @@ test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
   log_has "docker network create --internal --label lettuce.doc-tools.stack=alfred lettuce-doc-tools-alfred"
   log_has "docker network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
   # The network exists before the app-server joins it, and Gotenberg joins after.
-  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
+  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $D/stacks/alfred/stack.env up -d"))) ||
     fail "the network was created after compose up"
-  (($(line_of "-p lettuce_shared") > $(line_of "up -d --build --remove-orphans"))) || fail "gotenberg started before the stack"
+  (($(line_of "-p lettuce_shared") > $(line_of "up -d --no-build --pull missing --remove-orphans"))) || fail "gotenberg started before the stack"
 }
 
 test_up_with_doc_tools_fills_the_tools_volume_before_starting() {
@@ -3057,7 +3157,7 @@ test_up_with_doc_tools_fills_the_tools_volume_before_starting() {
   grep -q '/dst/.lettuce-doc-tools-complete' "$T/run-script" || fail "the fill writes no marker"
   # image -> volume -> fill -> compose up, and the volume is complete.
   (($(line_of "docker build -q -t lettuce-doc-tools") < $(line_of "volume create"))) || fail "volume made before the image"
-  (($(line_of "docker rm -f doc-tools-cid") < $(line_of "up -d --build --remove-orphans"))) || fail "the stack started before the fill"
+  (($(line_of "docker rm -f doc-tools-cid") < $(line_of "up -d --no-build --pull missing --remove-orphans"))) || fail "the stack started before the fill"
   grep -qx "$vol $tag true false" "$T/volumes" || fail "the volume is not complete: $(cat "$T/volumes")"
 }
 
@@ -3094,7 +3194,7 @@ test_up_stops_when_the_tools_volume_cannot_be_filled() {
   bad_rc
   out_has "could not fill the volume lettuce-doc-tools-$(docs_tag)"
   log_has "docker rm -f doc-tools-cid"
-  log_lacks "up -d --build"
+  log_lacks "up -d --no-build"
   # An incomplete volume in use is not removed under a running app-server.
   sed -i '/^STUB_RUN_FAIL=/d' "$T/stub.env"
   : >"$T/volumes"
@@ -3102,7 +3202,7 @@ test_up_stops_when_the_tools_volume_cannot_be_filled() {
   ctl up alfred
   bad_rc
   out_has "lettuce-doc-tools-$(docs_tag) is incomplete and in use; stop every stack with doc-tools (lettucectl down all), then run: lettucectl up all"
-  log_lacks "up -d --build"
+  log_lacks "up -d --no-build"
 }
 
 test_up_refuses_a_tools_volume_lettucectl_did_not_make() {
@@ -3115,7 +3215,7 @@ test_up_refuses_a_tools_volume_lettucectl_did_not_make() {
   ctl up alfred
   bad_rc
   out_has "$vol was not made by lettucectl"
-  log_lacks "up -d --build"
+  log_lacks "up -d --no-build"
   log_lacks "volume rm $vol"
   # Labelled, but a bind to a host directory (driver options).
   : >"$T/volumes"
@@ -3154,9 +3254,9 @@ test_up_removes_containers_an_interrupted_fill_left() {
 test_up_fills_the_tools_volume_under_a_lock() {
   added
   with_docs
-  mkdir -p "$H/stacks"
+  mkdir -p "$D/stacks"
   # Another lettucectl holds the lock for a moment: this one waits, then fills.
-  flock "$H/stacks/.doc-tools.lock" sleep 2 &
+  flock "$D/stacks/.doc-tools.lock" sleep 2 &
   sleep 0.3
   local t0=$SECONDS
   ctl up alfred
@@ -3324,7 +3424,7 @@ test_up_fails_at_the_end_when_gotenberg_cannot_start() {
   stub STUB_SHARED_UP_RC=1
   ctl up alfred
   bad_rc
-  log_has "up -d --build --remove-orphans"
+  log_has "up -d --no-build --pull missing --remove-orphans"
   out_has "the document tools (shared Gotenberg, networks) are out of step"
 }
 
@@ -3345,7 +3445,7 @@ test_sync_connects_gotenberg_only_to_networks_lettucectl_made() {
   ctl add hal hal@example.com
   ok_rc
   with_docs
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$H/stacks/hal/stack.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$D/stacks/hal/stack.env"
   # hal's name is taken by a network with a route out, made by someone else.
   echo "lettuce-doc-tools-hal - false -" >>"$T/networks"
   : >"$T/calls.log"
@@ -3397,13 +3497,13 @@ test_remove_purge_renders_the_stack_without_doc_tools() {
   ok_rc
   grep 'run --rm --no-deps' "$T/calls.log" | grep -q doc-tools.yml && fail "the purge run mounts the doc-tools image"
   eq "$(grep '^docker compose' "$T/calls.log" | tail -1 | grep -o ' down$')" " down"
-  [[ ! -e $H/stacks/alfred ]] || fail "stack directory still exists"
+  [[ ! -e $D/stacks/alfred ]] || fail "stack directory still exists"
   true
 }
 
 test_restart_stops_nothing_on_an_uninitialised_checkout() {
   added
-  sed -i 's/^CF_TEAM_DOMAIN=.*/CF_TEAM_DOMAIN=/' "$H/config.env"
+  sed -i 's/^CF_TEAM_DOMAIN=.*/CF_TEAM_DOMAIN=/' "$D/config.env"
   : >"$T/calls.log"
   ctl restart alfred
   bad_rc
@@ -3458,7 +3558,7 @@ test_profiles_adding_doc_tools_prints_the_mcp_entries_and_registers_nothing() {
 }
 
 test_add_with_doc_tools_registers_the_mcp_servers() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
   docs_config
   mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
   ctl add alfred alfred@example.com
@@ -3473,7 +3573,7 @@ test_add_with_doc_tools_registers_the_mcp_servers() {
 }
 
 test_add_with_the_vault_and_doc_tools_registers_both() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$D/config.env"
   docs_config
   vault_config
   mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}' doc-tools
@@ -3491,7 +3591,7 @@ test_add_with_the_vault_and_doc_tools_registers_both() {
 }
 
 test_add_still_succeeds_when_registering_the_vault_fails() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
   vault_config
   stub STUB_EXEC_RC=3
   ctl add alfred alfred@example.com
@@ -3516,7 +3616,7 @@ test_profiles_adding_the_vault_prints_its_entry_and_registers_nothing() {
 }
 
 test_add_still_succeeds_when_registering_the_mcp_servers_fails() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
   docs_config
   stub STUB_EXEC_RC=3
   ctl add alfred alfred@example.com
@@ -3537,8 +3637,8 @@ mcp_answer() { printf '%s\n' "$1" >"$T/exec-stdout${2:+-$2}"; }
 
 # with_docs_and_vault -> alfred runs the garden-doc-tools and garden-vault profiles
 with_docs_and_vault() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$D/stacks/alfred/stack.env"
   docs_config
   vault_config
 }
@@ -3558,7 +3658,7 @@ test_mcp_adds_the_document_tools_to_settings() {
   out_has "alfred: added office, pdf to Settings -> MCP"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
   # The BFF re-renders the mcp-servers skill, the agents' list of servers, when it reconnects.
-  log_has "--env-file $H/stacks/alfred/stack.env restart --no-deps bff"
+  log_has "--env-file $D/stacks/alfred/stack.env restart --no-deps bff"
   (($(line_of "restart --no-deps bff") > $(line_of "$MCP_ADD"))) || fail "the BFF restarted before the change"
   out_has "alfred: restarting its BFF so agents see the change"
 }
@@ -3587,7 +3687,7 @@ test_mcp_still_succeeds_when_the_bff_cannot_restart() {
 test_mcp_runs_once_per_stack_unless_forced() {
   added
   with_docs
-  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$D/stacks/alfred/stack.env"
   ctl mcp alfred
   ok_rc
   log_lacks "node --input-type=module"
@@ -3652,7 +3752,7 @@ test_mcp_registers_both_and_restarts_the_bff_once() {
 test_mcp_runs_once_per_group_unless_forced() {
   added
   with_docs_and_vault
-  echo "VAULT_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  echo "VAULT_MCP_REGISTERED=1" >>"$D/stacks/alfred/stack.env"
   mcp_answer '{"added":[],"present":["office","pdf"],"conflicts":[],"removed":[],"attempts":1}' doc-tools
   ctl mcp alfred
   ok_rc
@@ -3707,7 +3807,7 @@ test_profiles_dropping_the_vault_removes_its_registered_entry() {
   with_docs_and_vault
   ctl up alfred
   ok_rc
-  printf '%s\n' DOC_TOOLS_MCP_REGISTERED=1 VAULT_MCP_REGISTERED=1 >>"$H/stacks/alfred/stack.env"
+  printf '%s\n' DOC_TOOLS_MCP_REGISTERED=1 VAULT_MCP_REGISTERED=1 >>"$D/stacks/alfred/stack.env"
   : >"$T/calls.log"
   mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["vault"],"attempts":1}' vault
   ctl profiles cloudflared,garden-doc-tools
@@ -3722,7 +3822,7 @@ test_profiles_dropping_the_vault_removes_its_registered_entry() {
 
 test_up_removes_both_groups_with_one_bff_restart() {
   added
-  printf '%s\n' DOC_TOOLS_MCP_REGISTERED=1 VAULT_MCP_REGISTERED=1 >>"$H/stacks/alfred/stack.env"
+  printf '%s\n' DOC_TOOLS_MCP_REGISTERED=1 VAULT_MCP_REGISTERED=1 >>"$D/stacks/alfred/stack.env"
   mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["office","pdf"],"attempts":1}' doc-tools
   mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["vault"],"attempts":1}' vault
   ctl up alfred
@@ -3736,7 +3836,7 @@ test_up_removes_both_groups_with_one_bff_restart() {
 
 test_up_retries_a_vault_removal_that_failed() {
   added
-  echo "VAULT_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  echo "VAULT_MCP_REGISTERED=1" >>"$D/stacks/alfred/stack.env"
   stub STUB_EXEC_FAIL_GROUP=vault
   ctl up alfred
   bad_rc
@@ -3765,7 +3865,7 @@ test_profiles_dropping_doc_tools_removes_the_registered_servers() {
   with_docs
   ctl up alfred
   ok_rc
-  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$D/stacks/alfred/stack.env"
   : >"$T/calls.log"
   mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["office","pdf"],"attempts":1}'
   ctl profiles cloudflared
@@ -3778,7 +3878,7 @@ test_profiles_dropping_doc_tools_removes_the_registered_servers() {
 
 test_up_restarts_no_bff_when_a_removal_finds_nothing() {
   added
-  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$D/stacks/alfred/stack.env"
   mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":[],"attempts":1}'
   ctl up alfred
   ok_rc
@@ -3788,7 +3888,7 @@ test_up_restarts_no_bff_when_a_removal_finds_nothing() {
 
 test_up_retries_a_removal_that_failed_and_skips_unregistered_stacks() {
   added
-  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$H/stacks/alfred/stack.env"
+  echo "DOC_TOOLS_MCP_REGISTERED=1" >>"$D/stacks/alfred/stack.env"
   stub STUB_EXEC_RC=1
   ctl up alfred
   bad_rc
@@ -3807,11 +3907,11 @@ test_up_retries_a_removal_that_failed_and_skips_unregistered_stacks() {
 }
 
 test_shared_project_is_not_a_stack_named_shared() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
   docs_config shared
   ctl add shared shared@example.com
   ok_rc
-  log_has "-p lettuce-shared --project-directory $H/upstream/docker"
+  log_has "-p lettuce-shared --project-directory $U/docker"
   # The stack's files never go to the shared project, nor the other way round.
   grep -- '-p lettuce_shared ' "$T/calls.log" | grep -q upstream && fail "the shared project got a stack's files"
   grep -- '-p lettuce-shared ' "$T/calls.log" | grep -q compose/shared && fail "the stack got the shared project's files"
@@ -3823,7 +3923,7 @@ test_shared_project_is_not_a_stack_named_shared() {
 # compose/code-server.yml renders for alfred (taken from a real render), and
 # the garden service
 code_config() {
-  local st=$H/stacks/alfred/state
+  local st=$D/stacks/alfred/state
   config_edit '.services["garden-code-server"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
       "environment":'"$GARDEN_ENV"',"networks":{"default":null},
       "volumes":[{"type":"volume","source":"code-server-sock","target":"/run/code-server","read_only":true,"volume":{}}]}
@@ -3849,8 +3949,8 @@ code_config() {
 
 # with_code -> alfred runs the garden-code-server profile, with the services it renders
 with_code() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-code-server/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-code-server/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-code-server/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-code-server/' "$D/stacks/alfred/stack.env"
   code_config
 }
 
@@ -3910,8 +4010,8 @@ test_check_refuses_an_editor_without_its_hardening() {
 }
 
 test_check_refuses_an_editor_with_other_mounts() {
-  code_refused "$CE.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/tools\",\"target\":\"/opt/agent-tools\"}]" \
-    "garden-code-server-editor may mount from the host only $H/stacks/alfred/state/workspaces (at /work)"
+  code_refused "$CE.volumes += [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state/tools\",\"target\":\"/opt/agent-tools\"}]" \
+    "garden-code-server-editor may mount from the host only $D/stacks/alfred/state/workspaces (at /work)"
   teardown; setup
   local m="garden-code-server-editor may mount only the volumes code-server-data (at /data), code-exec-keys (at /keys) and code-server-sock (at /run/code-server)"
   code_refused "$CE.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "$m"
@@ -3965,7 +4065,7 @@ test_check_refuses_a_shell_with_more_reach() {
   teardown; setup
   code_refused "$CX.network_mode = \"service:app-server\"" "garden-code-server-exec must not set network_mode"
   teardown; setup
-  code_refused "$CX.volumes += [{\"type\":\"bind\",\"source\":\"$H/stacks/alfred/state/letta-home\",\"target\":\"/root/.letta\"}]" \
+  code_refused "$CX.volumes += [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state/letta-home\",\"target\":\"/root/.letta\"}]" \
     "garden-code-server-exec may mount from the host only"
   teardown; setup
   code_refused "$CX.volumes[2].read_only = false" "garden-code-server-exec may mount only the volume code-exec-keys, read-only"
@@ -3985,11 +4085,11 @@ test_check_refuses_a_symlinked_workspace_for_the_code_editor() {
   added
   with_code
   mkdir -p "$T/elsewhere"
-  rm -rf "$H/stacks/alfred/state/workspaces"
-  ln -s "$T/elsewhere" "$H/stacks/alfred/state/workspaces"
+  rm -rf "$D/stacks/alfred/state/workspaces"
+  ln -s "$T/elsewhere" "$D/stacks/alfred/state/workspaces"
   ctl check alfred
   bad_rc
-  out_has "alfred: $H/stacks/alfred/state/workspaces is a symlink"
+  out_has "alfred: $D/stacks/alfred/state/workspaces is a symlink"
 }
 
 test_check_guards_the_code_editor_volumes_whatever_the_profiles() {
@@ -4047,7 +4147,7 @@ test_profiles_routes_the_code_editor_and_lists_it_on_the_landing_page() {
 }
 
 test_profiles_dropping_the_code_editor_removes_its_containers() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-code-server/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-code-server/' "$D/config.env"
   code_config
   added
   containers alfred app-server bff cloudflared garden-code-server garden-code-server-editor garden-code-server-exec
@@ -4064,7 +4164,7 @@ test_up_makes_no_cloudflare_call() {
   ctl up alfred
   ok_rc
   log_lacks "curl "
-  log_has "up -d --build"
+  log_has "up -d --no-build"
 }
 
 test_up_leaves_an_unfinished_stack_to_add() {
@@ -4080,7 +4180,7 @@ test_up_leaves_an_unfinished_stack_to_add() {
 test_profiles_gives_a_stack_back_its_deleted_executor_token() {
   added
   with_triggers
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   containers alfred app-server garden-gmail-triggers
   ctl profiles "$(senv alfred COMPOSE_PROFILES)"
   ok_rc
@@ -4090,10 +4190,10 @@ test_profiles_gives_a_stack_back_its_deleted_executor_token() {
 test_the_executor_is_never_installed_without_a_token() {
   added
   with_triggers
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$H/stacks/alfred/stack.env"
+  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   containers alfred app-server garden-gmail-triggers
   # profiles syncs the executor on a running stack even when the list is unchanged.
-  sed -i "s/^PROFILES=.*/PROFILES=$(senv alfred COMPOSE_PROFILES)/" "$H/config.env"
+  sed -i "s/^PROFILES=.*/PROFILES=$(senv alfred COMPOSE_PROFILES)/" "$D/config.env"
   : >"$T/exec-stdin.log"
   ctl profiles "$(senv alfred COMPOSE_PROFILES)"
   if [[ -s $T/exec-stdin.log ]] && tar -tf "$T/exec-stdin.log" token >/dev/null 2>&1; then
@@ -4115,7 +4215,7 @@ test_garden_landing_path_routes_only_the_root_and_its_assets() {
 }
 
 test_tunnel_routes_every_garden_page_on_the_garden_host_only() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$D/config.env"
   vault_config
   triggers_config
   code_config
@@ -4132,8 +4232,8 @@ test_only_the_garden_overlay_passes_the_garden_profiles() {
 
 # with_all_gardens -> alfred runs every garden page profile, with every garden service rendered
 with_all_gardens() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$H/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$D/stacks/alfred/stack.env"
   vault_config
   triggers_config
   code_config
@@ -4190,7 +4290,7 @@ test_check_refuses_a_garden_profile_without_its_host_or_audience() {
     teardown; setup
     added
     with_vault
-    sed -i "/^$k=/d" "$H/stacks/alfred/stack.env"
+    sed -i "/^$k=/d" "$D/stacks/alfred/stack.env"
     ctl check alfred
     bad_rc
     out_has "alfred: $k is empty"
@@ -4211,7 +4311,7 @@ test_check_refuses_a_garden_service_that_accepts_lettuces_token() {
 test_check_refuses_a_garden_audience_that_is_lettuces() {
   added
   with_all_gardens
-  sed -i 's/^CF_GARDEN_AUD=.*/CF_GARDEN_AUD=aud1/' "$H/stacks/alfred/stack.env"
+  sed -i 's/^CF_GARDEN_AUD=.*/CF_GARDEN_AUD=aud1/' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
   out_has "must accept only the garden's Access application"
@@ -4228,7 +4328,7 @@ test_check_refuses_a_garden_service_with_lettuces_token_whatever_the_profiles() 
 }
 
 test_profiles_dropping_every_garden_profile_removes_the_garden() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-code-server/' "$H/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-code-server/' "$D/config.env"
   vault_config
   code_config
   added
@@ -4272,6 +4372,683 @@ test_the_garden_overlay_has_exactly_the_garden_profiles() {
 # Only the garden service links back to Lettuce; the vault would relock on a change.
 test_only_the_garden_overlay_passes_lettuces_origin() {
   eq "$(grep -l 'LETTUCE_ORIGIN' "$ROOT"/compose/*.yml | xargs -n1 basename | paste -sd' ')" garden.yml
+}
+
+# ── images built on this host (build_local_images) ──────────────────────────
+# builds_config -> the rendered config gives upstream's app-server and bff, the
+# vault and the code editor's shell a build section, as their compose files do
+builds_config() {
+  vault_config
+  config_edit '.services["app-server"].build = {"context":"x"} | .services.bff.build = {"context":"x"}
+    | .services["garden-vault"].build = {"context":"x"}
+    | .services["garden-code-server-exec"] = {"build":{"context":"x"},"image":"lettuce-code-server-exec:local"}'
+}
+
+test_up_builds_upstreams_images_then_the_gardens_from_a_clone() {
+  added
+  builds_config
+  ctl up alfred
+  ok_rc
+  local up gd st
+  up=$(grep -n "compose .* build app-server bff$" "$T/calls.log" | cut -d: -f1)
+  gd=$(grep -n "compose .* build garden-vault garden-code-server-exec$" "$T/calls.log" | cut -d: -f1)
+  st=$(grep -n "compose .* up -d --no-build --pull missing --remove-orphans$" "$T/calls.log" | cut -d: -f1)
+  [[ -n $up && -n $gd && -n $st ]] || fail "builds or up missing"
+  ((up < gd && gd < st)) || fail "expected upstream's build, then the garden's, then up"
+  log_lacks "up -d --build"
+}
+
+test_up_pulls_upstreams_images_when_published() {
+  added
+  builds_config
+  sed -i 's|^LETTA_IMAGE_NS=.*||' "$D/config.env"
+  echo LETTA_IMAGE_NS=ghcr.io/example/ >>"$D/config.env"
+  # The render names upstream's image in the namespace, as upstream's compose.yml does.
+  config_edit '.services["app-server"].image = "ghcr.io/example/lettuce-app-server:'"$REF"'"'
+  ctl up alfred
+  ok_rc
+  log_lacks "build app-server"
+  log_has "build garden-vault garden-code-server-exec"
+  log_has "APP_SERVER_IMAGE=ghcr.io/example/lettuce-app-server:$REF"
+}
+
+test_compose_passes_the_code_and_the_shells_base() {
+  added
+  ctl up alfred
+  ok_rc
+  log_has "docker-env-images LETTUCE_HOME=$H APP_SERVER_IMAGE=lettuce-app-server:$REF LETTA_IMAGE_NS= GARDEN_IMAGE_VAULT="
+}
+
+test_check_refuses_a_shell_built_on_another_app_server_image() {
+  added
+  builds_config
+  config_edit '.services["app-server"].image = "renamed-app-server:x"'
+  ctl check alfred
+  bad_rc
+  out_has "upstream's image naming changed"
+}
+
+test_check_refuses_doc_tools_on_an_arm64_host() {
+  added
+  stub STUB_PLATFORM=linux/arm64
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$D/stacks/alfred/stack.env"
+  ctl check alfred
+  bad_rc
+  out_has "garden-doc-tools needs a linux/amd64 host"
+}
+
+# ── release mode ────────────────────────────────────────────────────────────
+# release_on -> the copy of the repo is a released lettucectl: a RELEASE, its
+# data directory passed as the wrapper passes it, and its container's mounts
+# (mounts.json) holding that directory at the same path
+release_on() {
+  local img _rest
+  {
+    echo VERSION=1.2.3
+    echo "LETTUCE_REF=$REF"
+    echo REPOSITORY=example/lettuce-garden
+    while read -r img _rest; do
+      echo "GARDEN_IMAGE_$(tr 'a-z-' 'A-Z_' <<<"$img")=ghcr.io/example/lettuce-$img:c0ffee@sha256:$(printf '%064d' 0)"
+    done < <(awk '!/^[[:space:]]*(#|$)/' "$H/release/images")
+  } >"$H/RELEASE"
+  CTL_DATA=$D
+  mounts "$D"
+}
+
+# mounts PATH... -> lettucectl's container has PATHs bound at the same path
+mounts() {
+  local p
+  for p in "$@"; do printf '{"Type":"bind","Source":"%s","Destination":"%s"}\n' "$p" "$p"; done | jq -s . >"$T/mounts.json"
+}
+
+vault_image() { printf 'ghcr.io/example/lettuce-vault:c0ffee@sha256:%064d' 0; }
+
+test_release_mode_names_the_published_images() {
+  added
+  release_on
+  vault_config
+  config_edit '.services["garden-vault"].image = "'"$(vault_image)"'"'
+  ctl up alfred
+  ok_rc
+  log_has "GARDEN_IMAGE_VAULT=$(vault_image)"
+}
+
+test_release_mode_builds_only_the_shell() {
+  added
+  release_on
+  builds_config
+  config_edit '.services["garden-vault"].image = "'"$(vault_image)"'"'
+  echo LETTA_IMAGE_NS=ghcr.io/example/ >>"$D/config.env"
+  config_edit '.services["app-server"].image = "ghcr.io/example/lettuce-app-server:'"$REF"'"'
+  ctl up alfred
+  ok_rc
+  log_has "build garden-code-server-exec"
+  log_lacks "build garden-vault"
+  log_lacks "build app-server"
+  log_has "up -d --no-build --pull missing --remove-orphans"
+}
+
+test_release_mode_builds_upstreams_images_where_none_are_published() {
+  added
+  release_on
+  builds_config
+  config_edit '.services["garden-vault"].image = "'"$(vault_image)"'"'
+  ctl up alfred
+  ok_rc
+  log_has "build app-server bff"
+  log_has "build garden-code-server-exec"
+}
+
+test_check_release_images() {
+  added
+  release_on
+  vault_config
+  config_edit '.services["garden-vault"].image = "ghcr.io/evil/lettuce-vault:latest"'
+  ctl check alfred
+  bad_rc
+  out_has "garden-vault runs ghcr.io/evil/lettuce-vault:latest, not the release's"
+}
+
+test_release_mode_needs_the_data_directory_from_the_wrapper() {
+  release_on
+  CTL_DATA=""
+  ctl list
+  bad_rc
+  out_has "run lettucectl through its wrapper"
+}
+
+test_release_mode_needs_the_same_path_inside_and_outside() {
+  release_on
+  printf '[{"Type":"bind","Source":"%s","Destination":"/data"}]' "$D" >"$T/mounts.json"
+  ctl list
+  bad_rc
+  out_has "must be mounted at the same path"
+}
+
+test_release_mode_needs_the_data_directory_mounted() {
+  release_on
+  mounts /somewhere/else
+  ctl list
+  bad_rc
+  out_has "is not mounted"
+}
+
+test_release_mode_fails_closed_without_its_own_container() {
+  release_on
+  rm "$T/mounts.json"
+  ctl list
+  bad_rc
+  out_has "could not read this container's mounts"
+}
+
+test_release_mode_backup_needs_a_mounted_destination() {
+  added
+  release_on
+  mkdir -p "$T/backups"
+  ctl backup alfred "$T/backups" --live
+  bad_rc
+  out_has "is not mounted into lettucectl's container"
+  mounts "$D" "$T/backups"
+  stub STUB_IMAGES_MISSING=ghcr.io/example/lettuce-backup
+  ctl backup alfred "$T/backups" --live
+  ok_rc
+  log_has "pull -q ghcr.io/example/lettuce-backup:c0ffee"
+  log_lacks "docker build -q -t lettuce-backup"
+}
+
+test_backup_refuses_the_data_directory() {
+  added
+  mkdir -p "$D/backups"
+  ctl backup alfred "$D/backups"
+  bad_rc
+  out_has "cannot be inside"
+}
+
+test_init_in_release_mode_starts_on_the_tested_lettuce() {
+  release_on
+  sed -i "s/^LETTUCE_REF=.*/LETTUCE_REF=v-tested/" "$H/RELEASE"
+  rm "$D/config.env"
+  ctl init
+  bad_rc
+  eq "$(grep ^LETTUCE_REF= "$D/config.env")" LETTUCE_REF=v-tested
+}
+
+test_a_clone_refuses_a_released_data_directory() {
+  mkdir -p "$D/bin"
+  touch "$D/bin/lettucectl"
+  ctl list
+  bad_rc
+  out_has "a clone may not use it"
+}
+
+test_a_clone_uses_lettuce_data_when_set() {
+  local other=$T/other
+  mkdir -p "$other"
+  cp -a "$D/." "$other/"
+  rm -rf "$D"
+  CTL_DATA=$other
+  ctl add alfred alfred@example.com
+  ok_rc
+  [[ -f $other/stacks/alfred/stack.env ]] || fail "stack not in LETTUCE_DATA"
+  eq "$(senv_in "$other" alfred LETTA_STATE_DIR)" "$other/stacks/alfred/state"
+}
+senv_in() { awk -v k="$3" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) } END { printf "%s", v }' "$1/stacks/$2/stack.env"; }
+
+test_version_names_the_release() {
+  release_on
+  ctl version
+  ok_rc
+  out_has "lettuce-garden 1.2.3"
+  CTL_DATA=""
+  rm "$H/RELEASE"
+  ctl version
+  ok_rc
+  out_has "from a clone: $H"
+}
+
+# ── upgrade ─────────────────────────────────────────────────────────────────
+test_upgrade_downloads_the_tag_and_drops_the_old_one() {
+  added
+  make_upstream_archive v-new
+  mkdir -p "$D/upstream/v-old/docker"
+  sed -i 's/^LETTUCE_REF=.*/LETTUCE_REF=v-old/' "$D/config.env"
+  touch "$D/upstream/v-old/docker/compose.yml"
+  ctl upgrade v-new
+  ok_rc
+  eq "$(grep ^LETTUCE_REF= "$D/config.env")" LETTUCE_REF=v-new
+  [[ -f $D/upstream/v-new/docker/compose.yml ]] || fail "v-new not unpacked"
+  [[ ! -e $D/upstream/v-old ]] || fail "the old tag stayed"
+  log_has "up -d --no-build --pull missing"
+}
+
+test_upgrade_keeps_everything_when_the_download_fails() {
+  added
+  make_upstream_archive v-new
+  rm "$T/github/v-new.tar.gz"
+  mkdir -p "$U/docker" && touch "$U/docker/compose.yml"
+  sed -i "s/^LETTUCE_REF=.*/LETTUCE_REF=$REF/" "$D/config.env"
+  ctl upgrade v-new
+  bad_rc
+  eq "$(grep ^LETTUCE_REF= "$D/config.env")" "LETTUCE_REF=$REF"
+  [[ -f $U/docker/compose.yml ]] || fail "the current tag was removed"
+}
+
+test_upgrade_warns_about_an_untested_tag_in_release_mode() {
+  added
+  release_on
+  make_upstream_archive v-new
+  mkdir -p "$U/docker" && touch "$U/docker/compose.yml"
+  sed -i "s/^LETTUCE_REF=.*/LETTUCE_REF=$REF/" "$D/config.env"
+  ctl upgrade v-new
+  out_has "is not the version lettuce-garden 1.2.3 was tested with"
+}
+
+test_after_upgrade_moves_lettuce_forward_only() {
+  added
+  release_on
+  sed -i "s/^LETTUCE_REF=.*/LETTUCE_REF=v9.9.9/" "$D/config.env"
+  mkdir -p "$D/upstream/v9.9.9/docker" && touch "$D/upstream/v9.9.9/docker/compose.yml"
+  ctl _after-upgrade
+  ok_rc
+  eq "$(grep ^LETTUCE_REF= "$D/config.env")" LETTUCE_REF=v9.9.9
+  log_lacks "curl-get"
+  log_has "up -d --no-build"
+}
+
+test_after_upgrade_moves_lettuce_to_the_tested_tag() {
+  added
+  release_on
+  make_upstream_archive v0.99.0
+  sed -i 's/^LETTUCE_REF=.*/LETTUCE_REF=v0.99.0/' "$H/RELEASE"
+  sed -i "s/^LETTUCE_REF=.*/LETTUCE_REF=$REF/" "$D/config.env"
+  mkdir -p "$U/docker" && touch "$U/docker/compose.yml"
+  ctl _after-upgrade
+  ok_rc
+  eq "$(grep ^LETTUCE_REF= "$D/config.env")" LETTUCE_REF=v0.99.0
+}
+
+# ── stacks.conf and apply ───────────────────────────────────────────────────
+conf_line() { grep -E "^$1[[:space:]]" "$D/stacks.conf" | awk '{ print $2 }'; }
+
+test_add_records_the_stack_in_stacks_conf() {
+  ctl add alfred Alfred@Example.com
+  ok_rc
+  eq "$(conf_line alfred)" alfred@example.com
+  eq "$(stat -c %a "$D/stacks.conf")" 600
+}
+
+test_an_add_that_stops_part_way_is_in_stacks_conf() {
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/cfd_tunnel"'
+  ctl add alfred alfred@example.com
+  bad_rc
+  eq "$(conf_line alfred)" alfred@example.com
+}
+
+test_users_rewrites_stacks_conf() {
+  added
+  ctl users alfred alfred@example.com,hal@example.com
+  ok_rc
+  eq "$(conf_line alfred)" alfred@example.com,hal@example.com
+  eq "$(grep -c '^alfred' "$D/stacks.conf")" 1
+}
+
+test_remove_drops_the_stack_from_stacks_conf() {
+  added
+  ctl add hal hal@example.com
+  ctl remove alfred <<<"alfred"
+  ok_rc
+  eq "$(conf_line alfred)" ""
+  eq "$(conf_line hal)" hal@example.com
+}
+
+test_apply_dry_run_changes_nothing() {
+  printf 'alfred  alfred@example.com\n' >>"$D/stacks.conf"
+  ctl apply --dry-run
+  ok_rc
+  out_has "add alfred: alfred@example.com can sign in"
+  log_lacks "curl POST"
+  log_lacks "compose"
+  [[ ! -e $D/stacks/alfred ]] || fail "dry run created a stack"
+}
+
+test_apply_adds_stacks_and_changes_addresses() {
+  ctl add hal hal@example.com,lucius@example.com
+  ok_rc
+  : >"$T/calls.log"
+  cat >"$D/stacks.conf" <<'EOF'
+# people
+alfred   alfred@example.com
+hal      hal@example.com,hal@work.example.com
+EOF
+  ctl apply --yes
+  ok_rc
+  out_has "users hal: gains hal@work.example.com loses lucius@example.com"
+  log_has "curl POST /accounts/acc1/access/policies"
+  log_has "curl PUT /accounts/acc1/access/policies/pol1"
+  eq "$(senv alfred ALLOWED_USERS)" alfred@example.com
+  eq "$(senv hal ALLOWED_USERS)" hal@example.com,hal@work.example.com
+  log_has "up -d --no-build"
+  log_has "/root/.letta/skills"
+}
+
+test_apply_keeps_an_address_revoked_with_users() {
+  ctl add hal hal@example.com,lucius@example.com
+  ctl users hal hal@example.com
+  ok_rc
+  : >"$T/calls.log"
+  ctl apply --yes
+  ok_rc
+  log_lacks "curl PUT /accounts/acc1/access/policies"
+  eq "$(senv hal ALLOWED_USERS)" hal@example.com
+}
+
+test_apply_reports_an_unlisted_stack_and_never_removes_it() {
+  added
+  sed -i '/^alfred/d' "$D/stacks.conf"
+  ctl apply --yes
+  ok_rc
+  out_has "'alfred' is not in stacks.conf"
+  out_has "lettucectl remove alfred"
+  log_lacks "curl DELETE"
+  [[ -f $D/stacks/alfred/stack.env ]] || fail "the stack went"
+}
+
+test_apply_reports_out_of_step_profiles_and_never_changes_them() {
+  added
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared/' "$D/stacks/alfred/stack.env"
+  ctl apply --dry-run
+  ok_rc
+  out_has "run: lettucectl profiles cloudflared,search"
+  eq "$(senv alfred COMPOSE_PROFILES)" cloudflared
+}
+
+test_apply_needs_yes_without_a_terminal() {
+  printf 'alfred  alfred@example.com\n' >>"$D/stacks.conf"
+  ctl apply </dev/null
+  bad_rc
+  out_has "--yes"
+  log_lacks "curl POST"
+}
+
+test_apply_refuses_a_malformed_stacks_conf() {
+  printf 'alfred\n' >>"$D/stacks.conf"
+  ctl apply --dry-run
+  bad_rc
+  out_has "expected '<name> <email>"
+  printf 'alfred a@example.com\nalfred b@example.com\n' >"$D/stacks.conf"
+  ctl apply --dry-run
+  bad_rc
+  out_has "listed twice"
+  printf 'alfred not-an-address\n' >"$D/stacks.conf"
+  ctl apply --dry-run
+  bad_rc
+  out_has "bad email address"
+}
+
+# ── content tags (release/content-tag) ──────────────────────────────────────
+# content_repo -> a copy of what the content tags read, in $T/repo
+content_repo() {
+  mkdir -p "$T/repo"
+  cp -r "$ROOT/release" "$ROOT/REBUILD" "$ROOT/vault" "$ROOT/garden-common" "$ROOT/pipelock" "$ROOT/code-server" "$T/repo/"
+}
+ctag() { "$T/repo/release/content-tag" "$1"; }
+
+test_content_tags_follow_what_goes_into_each_image() {
+  content_repo
+  local v p c
+  v=$(ctag vault) p=$(ctag pipelock) c=$(ctag code-server)
+  [[ $v =~ ^[0-9a-f]{12}$ ]] || fail "not a tag: $v"
+  eq "$(ctag vault)" "$v"
+  # Docs, tests and caches are not in the image.
+  echo more >>"$T/repo/vault/README.md"
+  mkdir -p "$T/repo/vault/tests" "$T/repo/vault/src/__pycache__"
+  touch "$T/repo/vault/tests/test_new.py" "$T/repo/vault/src/__pycache__/x.pyc"
+  eq "$(ctag vault)" "$v"
+  # The code editor's own images are not the gate's.
+  echo more >>"$T/repo/code-server/editor/settings.json"
+  eq "$(ctag code-server)" "$c"
+  # The context, the shared context and REBUILD are.
+  echo '# x' >>"$T/repo/vault/pyproject.toml"
+  [[ $(ctag vault) != "$v" ]] || fail "a context change kept the tag"
+  v=$(ctag vault)
+  echo '# x' >>"$T/repo/garden-common/pyproject.toml"
+  [[ $(ctag vault) != "$v" ]] || fail "a garden-common change kept the vault's tag"
+  eq "$(ctag pipelock)" "$p"
+  echo 2027-01-01 >"$T/repo/REBUILD"
+  [[ $(ctag pipelock) != "$p" ]] || fail "REBUILD kept the tag"
+}
+
+test_every_published_image_has_an_overlay_variable() {
+  local img _c _s svc k
+  while read -r img _c _s svc; do
+    [[ $svc != - ]] || continue
+    k=$(tr 'a-z-' 'A-Z_' <<<"$img")
+    grep -qF "\${GARDEN_IMAGE_$k:-lettuce-$img:local}" "$ROOT"/compose/*.yml || fail "no overlay names GARDEN_IMAGE_$k"
+  done < <(awk '!/^[[:space:]]*(#|$)/' "$ROOT/release/images")
+}
+
+# ── the wrapper (release/lettucectl-wrapper.sh) ─────────────────────────────
+# wrapper_in DIR -> the wrapper, filled in as publish.yml fills it, in DIR/bin,
+# and a socket for it to find
+WIMAGE=ghcr.io/example/lettucectl:v1.2.3@sha256:0000000000000000000000000000000000000000000000000000000000000001
+wrapper_in() {
+  mkdir -p "$1/bin"
+  sed -e 's|@VERSION@|v1.2.3|' -e "s|@IMAGE@|$WIMAGE|" -e 's|@REPOSITORY@|example/lettuce-garden|' \
+    "$ROOT/release/lettucectl-wrapper.sh" >"$1/bin/lettucectl"
+  chmod 755 "$1/bin/lettucectl"
+  python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1])' "$T/docker.sock"
+}
+# wctl DIR ARGS... -> runs DIR's wrapper with the stubs; like ctl
+wctl() {
+  local dir=$1
+  shift
+  RC=0
+  DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$dir/bin/lettucectl" "$@" >"$OUT" 2>&1 || RC=$?
+}
+
+test_wrapper_runs_the_pinned_image_with_the_data_directory_at_the_same_path() {
+  wrapper_in "$T/srv"
+  wctl "$T/srv" list
+  ok_rc
+  local run
+  run=$(grep '^docker run ' "$T/calls.log")
+  [[ $run == *" --init "* ]] || fail "no --init: $run"
+  [[ $run == *" --user $(id -u):$(id -g) "* ]] || fail "not as the operator: $run"
+  [[ $run == *" -e HOME=/tmp "* ]] || fail "no writable HOME: $run"
+  [[ $run == *" -v $T/srv:$T/srv "* ]] || fail "data not at the same path: $run"
+  [[ $run == *" -e LETTUCE_DATA=$T/srv "* ]] || fail "LETTUCE_DATA not passed: $run"
+  [[ $run == *" -v $T/docker.sock:$T/docker.sock "* ]] || fail "socket not at the same path: $run"
+  [[ $run == *" $WIMAGE list" ]] || fail "not the pinned image: $run"
+}
+
+test_wrapper_refuses_to_run_outside_a_data_directory() {
+  mkdir -p "$T/elsewhere"
+  wrapper_in "$T/srv"
+  mv "$T/srv/bin/lettucectl" "$T/elsewhere/lettucectl"
+  RC=0
+  DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/elsewhere/lettucectl" list >"$OUT" 2>&1 || RC=$?
+  bad_rc
+  out_has "sudo install -d"
+  log_lacks "docker run"
+}
+
+test_wrapper_mounts_the_backup_destination_at_the_same_path() {
+  wrapper_in "$T/srv"
+  mkdir -p "$T/nas"
+  wctl "$T/srv" backup all "$T/nas" --keep 3 --compress
+  ok_rc
+  log_has "-v $T/nas:$T/nas"
+}
+
+test_wrapper_passes_toolbox_tokens_by_name_only() {
+  wrapper_in "$T/srv"
+  stub STUB_GH_TOKEN=gh-token-123
+  stub STUB_SECRET_TOOL=claude-token-456
+  mkdir -p "$T/home-op/.config/lettucectl"
+  printf 'secret NPM_TOKEN echo npm-token-789\n' >"$T/home-op/.config/lettucectl/toolbox"
+  chmod 600 "$T/home-op/.config/lettucectl/toolbox"
+  RC=0
+  HOME=$T/home-op DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
+  ok_rc
+  log_lacks "gh-token-123"
+  log_lacks "claude-token-456"
+  log_lacks "npm-token-789"
+  log_has "-e LETTUCECTL_GH_TOKEN"
+  log_has "-e LETTUCECTL_CLAUDE_TOKEN"
+  log_has "-e LETTUCECTL_SECRET_NPM_TOKEN"
+  log_has "-v $T/home-op:$T/home-op:ro -e LETTUCECTL_HOST_HOME=$T/home-op"
+  grep -qx 'LETTUCECTL_GH_TOKEN=gh-token-123' "$T/run-env.log" || fail "the gh token did not reach the container"
+}
+
+test_wrapper_self_upgrade_swaps_only_after_the_new_image_is_pulled() {
+  wrapper_in "$T/srv"
+  local before
+  before=$(sha256sum <"$T/srv/bin/lettucectl")
+  # What the current image's _fetch-wrapper leaves: a new wrapper whose image
+  # cannot be pulled.
+  # shellcheck disable=SC2016 # a script for the new wrapper, expanded when it runs
+  printf '#!/usr/bin/env bash\n[[ $1 == _pull ]] && exit 1\necho new "$@"\n' >"$T/srv/bin/.lettucectl.new"
+  wctl "$T/srv" self-upgrade v1.2.4
+  bad_rc
+  out_has "this install is unchanged"
+  eq "$(sha256sum <"$T/srv/bin/lettucectl")" "$before"
+  [[ ! -e $T/srv/bin/.lettucectl.new ]] || fail "the new wrapper stayed"
+  log_has "$WIMAGE _fetch-wrapper v1.2.4"
+  # Now one whose image pulls.
+  # shellcheck disable=SC2016 # a script for the new wrapper, expanded when it runs
+  printf '#!/usr/bin/env bash\n[[ $1 == _pull ]] && exit 0\necho new "$@"\n' >"$T/srv/bin/.lettucectl.new"
+  wctl "$T/srv" self-upgrade v1.2.4
+  ok_rc
+  out_has "new _after-upgrade"
+  [[ $(sha256sum <"$T/srv/bin/lettucectl.previous") == "$before" ]] || fail "the previous wrapper was not kept"
+  grep -q 'echo new' "$T/srv/bin/lettucectl" || fail "the new wrapper is not in place"
+}
+
+# ── review fixes ────────────────────────────────────────────────────────────
+test_wrapper_refuses_a_toolbox_file_others_can_write() {
+  wrapper_in "$T/srv"
+  mkdir -p "$T/home-op/.config/lettucectl"
+  printf 'secret X touch %s\n' "$T/ran" >"$T/home-op/.config/lettucectl/toolbox"
+  chmod 664 "$T/home-op/.config/lettucectl/toolbox"
+  RC=0
+  HOME=$T/home-op DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
+  bad_rc
+  out_has "writable by others"
+  [[ ! -e $T/ran ]] || fail "the wrapper ran a secret command from a file others can write"
+  log_lacks "docker run"
+}
+
+test_apply_resuming_an_add_takes_the_addresses_in_stacks_conf() {
+  stub 'STUB_CF_FAIL="POST /accounts/acc1/cfd_tunnel"'
+  ctl add alfred alfred@example.com
+  bad_rc
+  sed -i '/^STUB_CF_FAIL=/d' "$T/stub.env"
+  sed -i 's/^alfred .*/alfred  alfred@example.com,hal@example.com/' "$D/stacks.conf"
+  : >"$T/calls.log"
+  ctl apply --yes
+  ok_rc
+  log_has "curl PUT /accounts/acc1/access/policies/pol1"
+  eq "$(senv alfred ALLOWED_USERS)" alfred@example.com,hal@example.com
+  eq "$(conf_line alfred)" alfred@example.com,hal@example.com
+}
+
+test_init_stops_when_the_registry_cannot_be_reached() {
+  make_upstream_archive
+  echo LETTA_IMAGE_NS=ghcr.io/example/ >>"$D/config.env"
+  stub 'STUB_MANIFEST_ERROR="dial tcp: i/o timeout"'
+  ctl init
+  bad_rc
+  out_has "could not ask ghcr.io/example"
+  out_has "i/o timeout"
+  eq "$(grep ^LETTA_IMAGE_NS= "$D/config.env" | tail -1)" LETTA_IMAGE_NS=ghcr.io/example/
+}
+
+test_init_builds_upstreams_images_when_the_registry_denies_them() {
+  make_upstream_archive
+  stub 'STUB_MANIFEST_ERROR="denied"'
+  ctl init
+  ok_rc
+  eq "$(grep ^LETTA_IMAGE_NS= "$D/config.env" | tail -1)" LETTA_IMAGE_NS=
+}
+
+test_apply_carries_on_past_a_stack_that_fails() {
+  printf 'alfred  alfred@example.com\nhal  hal@example.com\n' >>"$D/stacks.conf"
+  # alfred's add gets through Cloudflare, then its check refuses it.
+  mkdir -p "$D/stacks/alfred"
+  printf 'LETTUCE_HOSTNAME=alfred.example.org\nGARDEN_HOSTNAME=alfred-garden.example.org\nALLOWED_USERS=alfred@example.com\n' >"$D/stacks/alfred/stack.env"
+  chmod 644 "$D/stacks/alfred/stack.env"
+  ctl apply --yes
+  bad_rc
+  out_has "apply did not finish: add alfred"
+  [[ -n $(senv hal CF_DNS_RECORD_ID) ]] || fail "hal was not added after alfred failed"
+  grep -q '^docker compose -p lettuce-hal .* up -d --no-build' "$T/calls.log" || fail "hal was not started"
+  log_has "/root/.letta/skills"
+}
+
+# ── each stack rendered and started once ────────────────────────────────────
+# starts NAME -> how many times the stack was started
+starts() { grep -c "^docker compose -p lettuce-$1 .* up -d --no-build" "$T/calls.log" || true; }
+
+test_up_renders_the_stack_config_once() {
+  added
+  builds_config
+  ctl up alfred
+  ok_rc
+  eq "$(grep -c '^docker compose -p lettuce-alfred .* config --format json$' "$T/calls.log")" 1
+  log_has "build garden-vault garden-code-server-exec"
+}
+
+test_apply_starts_each_stack_once() {
+  ctl add hal hal@example.com
+  ctl add lucius lucius@example.com
+  ok_rc
+  : >"$T/calls.log"
+  cat >"$D/stacks.conf" <<'EOF'
+alfred   alfred@example.com
+hal      hal@example.com,hal@work.example.com
+lucius   lucius@example.com
+EOF
+  ctl apply --yes
+  ok_rc
+  eq "$(starts alfred)" 1
+  eq "$(starts hal)" 1
+  eq "$(starts lucius)" 1
+  log_has "curl PUT /accounts/acc1/access/policies/pol1"
+}
+
+# LETTA_IMAGE_NS reaches Compose from config.env on every call, never as a
+# copy in stack.env that would go stale until the next up.
+test_compose_takes_the_upstream_namespace_from_config_env() {
+  added
+  echo LETTA_IMAGE_NS=ghcr.io/example/ >>"$D/config.env"
+  echo LETTA_IMAGE_NS=ghcr.io/stale/ >>"$D/stacks/alfred/stack.env"
+  config_edit '.services["app-server"].image = "ghcr.io/example/lettuce-app-server:'"$REF"'"'
+  builds_config
+  config_edit '.services["app-server"].image = "ghcr.io/example/lettuce-app-server:'"$REF"'"'
+  ctl check alfred
+  ok_rc
+  log_has "APP_SERVER_IMAGE=ghcr.io/example/lettuce-app-server:$REF LETTA_IMAGE_NS=ghcr.io/example/"
+  ctl up alfred
+  ok_rc
+  log_lacks "build app-server"
+  eq "$(senv alfred LETTA_IMAGE_NS)" ghcr.io/stale/
+}
+
+# A toolbox file or Claude config outside the home is mounted too, read-only at
+# the same path, or lettucectl would skip it without a word.
+test_wrapper_mounts_toolbox_config_outside_the_home() {
+  wrapper_in "$T/srv"
+  mkdir -p "$T/home-op" "$T/cfg/lettucectl" "$T/claude-cfg"
+  printf 'env FOO=bar\n' >"$T/cfg/lettucectl/toolbox"
+  chmod 600 "$T/cfg/lettucectl/toolbox"
+  RC=0
+  HOME=$T/home-op XDG_CONFIG_HOME=$T/cfg CLAUDE_CONFIG_DIR=$T/claude-cfg DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" \
+    "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
+  ok_rc
+  log_has "-v $T/cfg/lettucectl/toolbox:$T/cfg/lettucectl/toolbox:ro"
+  log_has "-v $T/claude-cfg:$T/claude-cfg:ro"
+  log_lacks "-v $T/cfg:"
 }
 
 for t in $(declare -F | awk '$3 ~ /^test_/ { print $3 }'); do

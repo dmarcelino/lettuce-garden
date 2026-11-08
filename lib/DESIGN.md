@@ -1,7 +1,41 @@
 # Installing without a clone: design
 
-Status: design, not started (2026-11-07). The checks under [Verified so far](#verified-so-far) ran
-on 2026-11-07; the items under [To verify in the spike](#to-verify-in-the-spike) are still open.
+Status: implemented on branch `install-without-clone` (2026-11-07), apart from the steps noted
+below; nothing is published yet, and the existing install has not been moved. The plan below stays
+as the design record. Where the build differs from it:
+
+- **The shell builds on the app-server's image by name, not `service:app-server`.** The spike
+  showed that building a service with `additional_contexts: base: service:app-server` makes Compose
+  build the app-server too, over a pulled image. `compose/code-server.yml` names it instead
+  (`docker-image://${APP_SERVER_IMAGE}`, which BuildKit took from the local store without a
+  registry), lettucectl passes the name (`app_server_image`), and `check_images` compares it with
+  the render. `up` builds upstream's services first, when they are built here, in a call of their
+  own.
+- **The Docker CLI, Compose and Buildx come from Docker's `docker:<version>-cli` image**, pinned by
+  digest, rather than three static downloads with their own sums: one pin, both platforms. It
+  carries CLI 29.9.3, Compose 5.7.0 and Buildx 0.38.2. The README asks for Docker Engine 25 (API
+  1.44); it was run against Engine 29.1 only.
+- **`publish.yml` builds one image per job**, from a matrix it reads from `release/images`, since
+  GitHub's attestation action takes one image per step; the last job collects their names into
+  `RELEASE`. One `docker buildx build` per image, no `bake`.
+- **`toolbox` in release mode:** the wrapper runs the toolbox file's `secret` lines on the host
+  too, and passes their values by name; a toolbox mount outside the operator's home is refused,
+  since only the home is mounted.
+- **`lettucectl dns-preflight`** runs `scripts/dns-preflight.sh` (step 2.6 of the Cloudflare guide),
+  which the image carries, so a release install needs no clone for it either.
+- **`LETTA_IMAGE_NS` stays in `config.env`.** Rather than copied into every `stack.env` (which
+  would go stale until the next `up`), `compose_env` passes it on every call, as it passes
+  `LETTUCE_HOME`; Compose prefers it to the `--env-file`'s.
+- **`lettucectl version`** names the release, its tested Lettuce tag, and the backup image the
+  restore steps use.
+- **Not done:** moving the existing install ([below](#moving-the-existing-install); the operator's
+  to do), and `init` creating the Google login method through the API (unverified, optional).
+  `init` checks the other scopes by reads, which cannot tell a read scope from an edit one.
+
+The checks under [Verified so far](#verified-so-far) ran on 2026-11-07, and so did the spike's
+first two items, `service:app-server` (above) and a tag-and-digest `image:` under `--pull missing
+--no-build` (it pulled and ran). The others under [To verify in the spike](#to-verify-in-the-spike)
+are still open.
 
 ## Goal
 

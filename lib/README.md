@@ -1,6 +1,6 @@
 # lib
 
-The code behind `lettucectl`, the Bash CLI at the repo root. `lettucectl` holds argument handling and one `cmd_*` function per subcommand, dispatched from `main`; it sources the two shell libraries here, and streams the Node script into a stack's app-server when it needs to change Settings -> MCP. No profile: the CLI runs on the host for every stack. The operator's guides are [docs/operations.md](../docs/operations.md) and [docs/cloudflare-setup.md](../docs/cloudflare-setup.md).
+The code behind `lettucectl`, the Bash CLI at the repo root. Admins run it from its published image, through a wrapper ([release/](../release/README.md)); developers run it from a clone. [DESIGN.md](DESIGN.md) is the design record of that split. `lettucectl` holds argument handling and one `cmd_*` function per subcommand, dispatched from `main`; it sources the two shell libraries here, and streams the Node script into a stack's app-server when it needs to change Settings -> MCP. No profile: the CLI runs on the host for every stack. The operator's guides are [docs/operations.md](../docs/operations.md) and [docs/cloudflare-setup.md](../docs/cloudflare-setup.md).
 
 ![lettucectl, its libraries and what they reach](../docs/diagrams/lettucectl-architecture.svg)
 
@@ -9,20 +9,35 @@ An interactive version, [lettucectl-architecture.html](../docs/diagrams/lettucec
 ## Files
 | File | What it does |
 |---|---|
-| `common.sh` | Messages (`info`, `warn`, `die`); the env-file helpers (`env_get`, `env_set`, `env_unset`, `cfg`); paths; validation of names, emails and profiles; the `compose`, `compose_env`, `compose_shared` and `host_docker` wrappers; doc-tools names and tags; VAPID key and executor token generation; `stale_services`; and `check_stack` with its `check_*` helpers |
-| `cloudflare.sh` | Cloudflare API v4: `cf_api` (curl + jq) and one `cf_*` helper per resource (zone, Zero Trust team, Google login method, DNS lookup, Access policy and applications, tunnel, tunnel token, tunnel ingress, DNS CNAME); `PROFILE_ROUTES`, the garden host's routes per profile |
+| `common.sh` | Messages (`info`, `warn`, `die`); the env-file helpers (`env_get`, `env_set`, `env_unset`, `cfg`); release mode (`release_mode`, `image_name`); paths and the data directory (`resolve_data_dir`); Lettuce's source and images (`fetch_upstream`, `upstream_image_ns`); the same-path check (`check_mounts`, `require_mounted`); `stacks.conf` (`conf_entries`, `conf_set`, `conf_unset`); validation of names, emails and profiles; the `compose`, `compose_env`, `compose_shared` and `host_docker` wrappers; doc-tools names and tags; VAPID key and executor token generation; `stale_services`; and `check_stack` with its `check_*` helpers |
+| `cloudflare.sh` | Cloudflare API v4: `cf_api` (curl + jq) and one `cf_*` helper per resource (Zero Trust team, Google login method, DNS lookup, Access policy and applications, tunnel, tunnel token, tunnel ingress, DNS CNAME); `PROFILE_ROUTES`, the garden host's routes per profile |
 | `mcp-servers.mjs` | Adds or removes one group of lettucectl's servers (`doc-tools` or `vault`) in the stack's shared MCP list. Node, no dependencies; never run on the host |
-| `DESIGN.md` | Design record: installing without a clone (a published `lettucectl` image, published garden images, the data directory, `stacks.conf` and `apply`). Not started |
+| `DESIGN.md` | Design record: installing without a clone (a published `lettucectl` image, published garden images, the data directory, `stacks.conf` and `apply`) |
 
-`lettucectl` sources `common.sh`, then `cloudflare.sh`; both expect `LETTUCE_HOME` to be set and define functions only.
+`lettucectl` sources `common.sh`, then `cloudflare.sh`; both expect `LETTUCE_HOME` (the code) to be set and define functions only. `main` then sets `LETTUCE_DATA` (`resolve_data_dir`) and, in release mode, runs `check_mounts` before any command.
 
 ## How it plugs in
 - **`check_stack` gates every `up`.** It reads `stack.env`, renders the merged config and dies on the first unsafe setting. What it refuses, and which profile turns each check on: [CONTRIBUTING.md](../CONTRIBUTING.md#what-check_stack-enforces).
 - **Cloudflare.** `cf_api METHOD PATH [BODY]` prints `.result`, or the API's errors and returns 1. `init`, `add`, `users`, `remove` and `profiles` call it; `up` never does.
 - **The MCP list.** `mcp_servers` in `lettucectl` runs `compose NAME exec -T app-server node --input-type=module - add|remove FILE GROUP` with `mcp-servers.mjs` on stdin (the rules below).
-- **Other writers of `stack.env`:** `up` (VAPID keys, the executor token, `GARDEN_PROFILES`), `users` (`ALLOWED_USERS`, after the Access policy), `profiles` (`COMPOSE_PROFILES`, together with `config.env` `PROFILES`), and `mcp`, `add` and `up` (the MCP groups' markers). `init` writes `config.env`: the zone, account, Zero Trust team and Google login method ids.
+- **Other writers of `stack.env`:** `up` (VAPID keys, the executor token, `GARDEN_PROFILES`), `users` (`ALLOWED_USERS`, after the Access policy), `profiles` (`COMPOSE_PROFILES`, together with `config.env` `PROFILES`), and `mcp`, `add` and `up` (the MCP groups' markers). `init` writes `config.env`: the zone, account, Zero Trust team and Google login method ids, and `LETTA_IMAGE_NS` (as `upgrade` does). `add`, `users` and `remove` write `stacks.conf`.
 
 ## Rules
+
+### Code and data are apart
+`LETTUCE_HOME` is the code: a clone, or `/opt/lettuce-garden` in the image. `LETTUCE_DATA` is the instance: `config.env`, `stacks.conf`, `.secrets/`, `upstream/<tag>/` and `stacks/`. Every path to the instance goes through `config_file`, `token_file`, `stack_dir`, `stack_env`, `stacks_conf` and `upstream_dir`; every path to the code through `LETTUCE_HOME`. In release mode the wrapper passes `LETTUCE_DATA`; from a clone it defaults to the clone's `data/`, so no clone or worktree reaches the real stacks by default, and a clone refuses a data directory a release runs (`bin/lettucectl` in it). `backup` and `receipts` refuse a destination inside either.
+
+### Release mode is a file, not a setting
+`$LETTUCE_HOME/RELEASE` exists only in the published image (`publish.yml` writes it), so an admin cannot point a clone at published images by mistake. In release mode the overlays get each published image's name from it (`GARDEN_IMAGE_*`, through `compose_env`), `backup` and `receipts` use its names, and `check_images` refuses a garden service that runs any other. From a clone, the same variables are unset and the overlays name the local builds, `lettuce-<image>:local`.
+
+### `up` builds only what is built on this host
+`build_local_images` builds upstream's services when `config.env`'s `LETTA_IMAGE_NS` is empty (Lettuce publishes no images for this host), then the garden's: from a clone all of them, in release mode only the code editor's shell. Two calls, in that order: the shell is built `FROM` the app-server's image by name (`APP_SERVER_IMAGE`, `docker-image://`), never `service:app-server`, which would rebuild a pulled app-server. Then `up -d --no-build --pull missing`: a published image that is missing fails rather than building from a context the image does not carry. Whether `LETTA_IMAGE_NS` is set is looked up by `init` and `upgrade` (`upstream_image_ns`), never by `up`. Only the registry's "manifest unknown" or "denied" means not published; any other failure stops the command and leaves `LETTA_IMAGE_NS` as it was, so an outage never switches every stack to building upstream's images.
+
+### Every host path is the same inside lettucectl's container
+Docker reads the paths lettucectl gives it on the host. A path mounted elsewhere in lettucectl's container would make Docker create an empty, root-owned directory in its place, and a stack would start without its data. In release mode `check_mounts` reads the container's own mounts (`docker inspect "$HOSTNAME"`) and refuses any bind mount whose source and destination differ, and a `LETTUCE_DATA` that is not one of them; it fails closed when it cannot find its container. `require_mounted` refuses a `backup` or `receipts` destination that the wrapper did not mount.
+
+### `stacks.conf` is kept in step, and `apply` never removes
+`apply` makes the stacks match `stacks.conf` through `add` and `users` (its update, `users_update`, without its `up`), then one `up` for every stack `add` did not just start, so none starts twice, and `skills all`. It never removes a stack and never changes a profile: it reports both, with the command to run. So that it never undoes them, `add` writes the stack's line as it starts (an interrupted add is resumed by `apply`), `users` rewrites it after the Access policy, and `remove` drops it once the name is confirmed (a stack Cloudflare could not fully delete is then reported, not set up again). A write that fails fails the command. An `add` that resumes takes the addresses it is given, updating the Access policy with `ALLOWED_USERS` if the policy exists, so an edit to `stacks.conf` between two tries is kept. `apply` runs each step in a subshell: one stack that fails does not keep the others from being set up and started, and `apply` fails at the end, naming the steps that did not finish. `stacks.conf` is parsed (`conf_entries`), never sourced.
 
 ### Env files are parsed, never sourced
 `config.env` (global settings plus cached Cloudflare ids) and `stacks/<name>/stack.env` (that stack's secrets and Cloudflare ids) are plain `KEY=value` files that Docker Compose also reads. Sourcing one would run whatever it holds. Read and write them only with `env_get`, `env_set`, `env_unset` and `cfg`. `env_get` reads a key with awk (the last occurrence wins). `env_set` and `env_unset` rewrite the file through a temp file and `mv`, so the change is atomic and the file keeps mode 600. No quotes or inline comments in these files.
@@ -78,7 +93,7 @@ Google has no API for an OAuth client's redirect URIs. So with the `google` prof
 `ensure_push_keys` generates them on the first `up` and never rotates them: a new keypair invalidates every browser's push subscription. The BFF (`PUSH_VAPID_*`) and the vault (`VAULT_VAPID_*`) each have their own pair.
 
 ### Upstream's version moves only through `upgrade`
-`lettucectl upgrade <tag>` is the only way to move `LETTUCE_REF`: Lettuce tags pin the letta-code server version the UI was compiled against. What to check on every upgrade: [CONTRIBUTING.md](../CONTRIBUTING.md#upgrading-lettuce_ref).
+`lettucectl upgrade <tag>` is the only way to move `LETTUCE_REF` (and `self-upgrade`, through it, to the tag a release was tested with, never back): Lettuce tags pin the letta-code server version the UI was compiled against. `fetch_upstream` downloads GitHub's archive of the tag into `upstream/<tag>.partial/` and renames it when complete, so `upstream/<tag>/` is always whole; `upgrade` removes the other tags once every stack is up. What to check on every upgrade: [CONTRIBUTING.md](../CONTRIBUTING.md#upgrading-lettuce_ref).
 
 ### `restart`, never a single-service restart
 The BFF shares the app-server's network namespace and dies when the app-server is recreated on its own, so `up` and `restart` act on the whole stack. The one exception is the BFF alone (`refresh_mcp_skill`), which leaves that namespace as it is.
@@ -89,6 +104,7 @@ The BFF shares the app-server's network namespace and dies when the app-server i
 - The image's inherited `com.docker.compose.*` labels are emptied, or Compose and `stale_services` would count the toolbox as a stack container.
 - `~/.config/lettucectl/toolbox` is parsed, never sourced.
 - The agents' tools (`state/tools`) are mounted at `/opt/agent-tools` only with `--tools`, read-only unless `--tools=rw`. A missing directory is refused rather than created by Docker.
+- In release mode the operator's home is `LETTUCECTL_HOST_HOME` (the wrapper mounts it read-only at the same path), and what only the host's commands can give (`gh auth token`, `secret-tool`, the toolbox file's `secret` lines) the wrapper runs on the host and passes as `LETTUCECTL_*` variables, by name.
 
 ### `mcp` registers the document tools and the vault once per stack, and only those
 There is no supported way to set Settings -> MCP across stacks, so `lettucectl mcp` is the one write into Lettuce's MCP list. It owns two kinds of entries and touches nothing else:
@@ -116,3 +132,5 @@ No build step. Before changing the CLI, run `tests/run.sh` (or `tests/run.sh <pa
 - `common.sh`: `google_redirect_uri` assumes the BFF route `/api/google/oauth/callback`.
 - `lettucectl`: `cmd_shell` assumes letta-code's memory path, `$LETTA_LOCAL_BACKEND_DIR/memfs/$AGENT_ID/memory`; `toolbox` the app-server image layout, `/opt/claude-code/bin`; `find_agent` the JSON shape of `letta agents list` (`.items[]`).
 - `check_stack` reads upstream's service names and volumes from the rendered config (`app-server`, `bff`, `channel-gateway`, `google-mcp`, `google-creds`).
+- `app_server_image` assumes upstream names the app-server's image `${LETTA_IMAGE_NS}lettuce-app-server:<its release tag>`; `check_images` compares it with the render whenever the code editor's shell is built from it. `upstream_image_ns` assumes upstream publishes to `ghcr.io/<owner>/` and that `LETTA_IMAGE_NS` is its switch.
+- `fetch_upstream` assumes GitHub's tag archives (`/archive/refs/tags/<tag>.tar.gz`, one top-level directory).

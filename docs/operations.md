@@ -2,12 +2,12 @@
 
 ## Everyday
 ```bash
-./lettucectl list                 # stacks, hostnames (Lettuce's and the garden's), allowed users
-./lettucectl status               # containers and health per stack
-./lettucectl logs alfred          # follow all services; or: logs alfred cloudflared
-./lettucectl up all               # check + build + start (idempotent; also applies config changes)
-./lettucectl restart alfred       # down + up
-./lettucectl compose alfred ps    # any docker compose command for one stack
+lettucectl list                 # stacks, hostnames (Lettuce's and the garden's), allowed users
+lettucectl status               # containers and health per stack
+lettucectl logs alfred          # follow all services; or: logs alfred cloudflared
+lettucectl up all               # check, build what is built here, start (idempotent; also applies config changes)
+lettucectl restart alfred       # down + up
+lettucectl compose alfred ps    # any docker compose command for one stack
 ```
 
 - Use `restart`, never `compose <name> restart app-server`. The BFF shares the app-server's network namespace and dies when the app-server is recreated on its own. `up` and `restart` always act on the whole stack. (`mcp` restarts the BFF alone, which is safe: the app-server keeps its namespace.)
@@ -15,16 +15,31 @@
 - `up` is offline: no Cloudflare call, no DNS lookup.
 
 ## People
+Who has a stack, and who may sign in to it, is `stacks.conf` in the data directory, one line per stack:
+```
+# name   emails (comma-separated)
+alfred   alfred@gmail.com
+hal      hal@example.com,hal@work.example.com
+```
+```bash
+lettucectl apply --dry-run      # what would change: stacks to add, each address gained or lost
+lettucectl apply                # shows the same plan, asks, then does it, then up all and skills all
+lettucectl apply --yes          # without asking, for scripts
+```
+`apply` adds each stack that is in the file but not set up (one that stopped half-way is resumed, with the file's addresses), changes the addresses of each stack whose list differs, then runs `up all` and `skills all`. A stack that fails does not stop the others: `apply` carries on, then fails at the end naming what did not finish, and running it again picks up from there. It never removes a stack: one that is not in the file is reported, with the command to remove it. It never changes the profiles either ([below](#optional-features)).
+
+The single commands do the same for one stack, and keep `stacks.conf` in step, so a later `apply` never undoes them:
+
 | Task | Command |
 |---|---|
-| Add a person | `./lettucectl add <name> <email>`. One stack per person; extra addresses are comma-separated. |
-| Change who may sign in to a stack | `./lettucectl users <name> a@x.com,b@y.com`. This replaces the list. |
-| Remove a stack, keep its data | `./lettucectl remove <name>` |
-| Remove a stack and its data | `./lettucectl remove <name> --purge` |
+| Add a person | `lettucectl add <name> <email>`. One stack per person; extra addresses are comma-separated. |
+| Change who may sign in to a stack | `lettucectl users <name> a@x.com,b@y.com`. This replaces the list. |
+| Remove a stack, keep its data | `lettucectl remove <name>` |
+| Remove a stack and its data | `lettucectl remove <name> --purge` |
 
-`remove` asks you to type the name. It stops the stack, then deletes its DNS record, tunnel, Access application and policy. Anything it cannot delete stays recorded in `stack.env`, so you can run `remove` again.
+`remove` asks you to type the name, and drops the stack from `stacks.conf`. It stops the stack, then deletes its DNS record, tunnel, Access application and policy. Anything it cannot delete stays recorded in `stack.env`, so you can run `remove` again; until then `apply` reports the stack.
 
-When `add` stops half-way (a network error, a missing token permission), run the same command again. It resumes from the ids recorded in `stacks/<name>/stack.env`.
+When `add` stops half-way (a network error, a missing token permission), run the same command again, or `apply`. It resumes from the ids recorded in `stacks/<name>/stack.env`.
 
 ## Model providers and agents
 Each person sets up their own stack in the Lettuce UI:
@@ -35,15 +50,15 @@ Provider keys live in that stack's `state/letta-data`, never in this repo.
 
 To look around as an agent does, open a shell in its workspace:
 ```bash
-./lettucectl shell alfred lucius   # agent name (any case) or id; without one, /work
+lettucectl shell alfred lucius   # agent name (any case) or id; without one, /work
 ```
-Agents run their Bash tool as root in the app-server with no sandbox. Each agent's tool starts in `/work/<agent-id>` with `AGENT_ID`, `AGENT_NAME` and `MEMORY_DIR` set, and `shell` sets the same. Like an agent, the shell can read every agent's workspace, memory and conversations in that stack, plus `/root/.letta` (provider and Claude/Codex credentials). It is close to what the agent sees but not identical: letta-code also sets the conversation id, the agent's secrets and a few `PATH` entries. Commands can be piped in: `./lettucectl shell alfred lucius <<<'ls'`.
+Agents run their Bash tool as root in the app-server with no sandbox. Each agent's tool starts in `/work/<agent-id>` with `AGENT_ID`, `AGENT_NAME` and `MEMORY_DIR` set, and `shell` sets the same. Like an agent, the shell can read every agent's workspace, memory and conversations in that stack, plus `/root/.letta` (provider and Claude/Codex credentials). It is close to what the agent sees but not identical: letta-code also sets the conversation id, the agent's secrets and a few `PATH` entries. Commands can be piped in: `lettucectl shell alfred lucius <<<'ls'`.
 
 ### Working on an agent's workspace with your own tools
 `shell` is the wrong place for your own credentials: agents share that container as root, so they could read anything you bring in while the shell is open. `toolbox` instead starts a throwaway container from the stack's app-server image with only that agent's workspace mounted:
 ```bash
-./lettucectl toolbox alfred lucius          # bash in /work/<agent-id>
-./lettucectl toolbox alfred lucius claude   # straight into Claude Code
+lettucectl toolbox alfred lucius          # bash in /work/<agent-id>
+lettucectl toolbox alfred lucius claude   # straight into Claude Code
 ```
 It brings in whatever of these the host has, read-only, and says which:
 - your ssh-agent (`SSH_AUTH_SOCK`; the key itself never enters) and `~/.ssh/known_hosts`;
@@ -65,10 +80,10 @@ env AWS_PROFILE=dev
 
 The tools agents installed (`/opt/agent-tools`: `npm i -g`, `go install`, `uv tool install`, downloaded binaries) are left out unless you ask for them, before the stack name:
 ```bash
-./lettucectl toolbox --tools alfred lucius      # the agents' tools, read-only: what `shell` has
-./lettucectl toolbox --tools=rw alfred lucius   # installs land there, for every agent of the stack
+lettucectl toolbox --tools alfred lucius      # the agents' tools, read-only: what `shell` has
+lettucectl toolbox --tools=rw alfred lucius   # installs land there, for every agent of the stack
 ```
-Without `--tools=rw`, an install inside the toolbox is gone on exit. To install something that needs none of your credentials, `./lettucectl shell alfred` is the better place: your tokens never meet what agents wrote.
+Without `--tools=rw`, an install inside the toolbox is gone on exit. To install something that needs none of your credentials, `lettucectl shell alfred` is the better place: your tokens never meet what agents wrote.
 
 Three limits:
 - Only someone with Docker access on the host can run `toolbox`. Docker access is root on the host, so a stack's web-only users cannot, by design.
@@ -78,7 +93,7 @@ Three limits:
 ### Agent skills
 `agent-skills/` holds skills this repo gives every agent, for example `using-vault-secrets` (the vault's `vault-run` helper). Scheduled jobs that survive restarts are upstream's, in its `installing-tools` skill. After adding or changing one, push them to the running stacks:
 ```bash
-./lettucectl skills all           # or one stack: skills alfred
+lettucectl skills all           # or one stack: skills alfred
 ```
 They go into each stack's global skills (`/root/.letta/skills`), which every agent of that stack loads. `skills` replaces or removes only what it installed before (listed in `.lettucectl-skills` there; a skill deleted from `agent-skills/` is removed from the stack on the next run), so upstream's skills and the ones enabled in Settings stay. A name upstream Lettuce also ships is refused, because its BFF would overwrite ours. `up` does not install skills; run `skills` after setting up a new stack. Writing a skill: [agent-skills/README.md](../agent-skills/README.md).
 
@@ -91,48 +106,65 @@ Optional features are compose profiles, the same list for **all** stacks. Upstre
 | `claude`, `codex` | Claude Code CLI workers; `codex` does the same for Codex | | upstream |
 | `google` | Gmail/Calendar/Tasks/Contacts sidecar | It needs a Google OAuth client, and each person connects their own account. | **[google-setup.md](google-setup.md)** |
 | `telegram` | Telegram channel gateway | | upstream |
-| `garden-vault` | A personal vault per stack, at `https://<name>-garden.<domain>/vault/` | Run `./lettucectl skills all` for the `using-vault-secrets` skill (`vault-run`, and how to wait for an approval). Agents reach it as the `vault` server in Settings -> MCP: `add` registers it for new stacks; for existing ones run `./lettucectl mcp all` (once per stack, restarting the BFF of each stack it changed). | **[vault.md](vault.md)** |
+| `garden-vault` | A personal vault per stack, at `https://<name>-garden.<domain>/vault/` | Run `lettucectl skills all` for the `using-vault-secrets` skill (`vault-run`, and how to wait for an approval). Agents reach it as the `vault` server in Settings -> MCP: `add` registers it for new stacks; for existing ones run `lettucectl mcp all` (once per stack, restarting the BFF of each stack it changed). | **[vault.md](vault.md)** |
 | `garden-gmail-triggers` | Gmail rules each person sets up at `https://<name>-garden.<domain>/gmail-triggers/` | Needs `google` (`profiles` and `check` refuse it otherwise) and each person's Google account connected in Lettuce. `up` installs a small executor in the app-server; dropping the profile removes it and keeps the rules. | **[gmail-triggers.md](gmail-triggers.md)** |
-| `garden-doc-tools` | Office and PDF tools for the agents: two stdio MCP servers mounted read-only into every app-server from one shared volume, plus one shared Gotenberg per host | Run `./lettucectl skills all`, then `./lettucectl mcp all`, which adds the two servers to each stack's Settings -> MCP (once per stack; `add` does it for new stacks) and restarts the BFF of each stack it changed, so agents see them. | **[doc-tools.md](doc-tools.md)** |
+| `garden-doc-tools` | Office and PDF tools for the agents: two stdio MCP servers mounted read-only into every app-server from one shared volume, plus one shared Gotenberg per host | Run `lettucectl skills all`, then `lettucectl mcp all`, which adds the two servers to each stack's Settings -> MCP (once per stack; `add` does it for new stacks) and restarts the BFF of each stack it changed, so agents see them. | **[doc-tools.md](doc-tools.md)** |
 | `garden-code-server` | VS Code in the browser at `https://<name>-garden.<domain>/code-server/`, on that stack's agent workspaces, with a terminal in a separate container that has the agents' tools | Every `profiles` run keeps each stack's Access cookies HttpOnly (it re-applies every stack's Access applications). | **[code-server.md](code-server.md)** |
-| `garden-pipelock` | An egress proxy per stack for the agents' shell tools, subagents, SearXNG and the DuckDuckGo reader, with a signed receipt for every request (`lettucectl receipts`). Advisory for now. | Run `./lettucectl skills all` for the `fetching-web-pages` skill. | **[egress-firewall.md](egress-firewall.md)** |
+| `garden-pipelock` | An egress proxy per stack for the agents' shell tools, subagents, SearXNG and the DuckDuckGo reader, with a signed receipt for every request (`lettucectl receipts`). Advisory for now. | Run `lettucectl skills all` for the `fetching-web-pages` skill. | **[egress-firewall.md](egress-firewall.md)** |
 
 ```bash
-./lettucectl profiles                              # show config.env and every stack
-./lettucectl profiles cloudflared,search,google    # set the list everywhere, then up all
+lettucectl profiles                              # show config.env and every stack
+lettucectl profiles cloudflared,search,google    # set the list everywhere, then up all
 ```
 `profiles` first checks every stack, so one broken stack stops the change before anything is written. It then writes `PROFILES` in `config.env` and `COMPOSE_PROFILES` in every `stack.env` together, and runs `up` on every stack. It also removes the containers of profiles that are off, which Compose would leave running. That last step runs every time, so a re-run cleans up after an interrupted one. When the list is already set everywhere, it changes and restarts nothing. The garden features live on each stack's garden address, `https://<name>-garden.<domain>/` (`<garden>` below), under their own Access application with the stack's list of people; Lettuce's address serves only Lettuce. Every run also re-applies each stack's tunnel routes (`<garden>/vault/` goes to the vault only with `garden-vault`, `<garden>/gmail-triggers/` to Gmail triggers only with `garden-gmail-triggers`, `<garden>/code-server/` to the code editor only with `garden-code-server`, and `<garden>/`, a page linking to the ones that are on, to the garden's own service) and both Access applications as lettucectl defines them (HttpOnly, SameSite=Lax cookies), before any stack starts; if that fails, the stacks still start and the command asks you to run it again. The garden address is named after Lettuce's (`lettuce-<name>-garden` for a stack on its fallback name); when that name is taken in DNS, `add` uses `<...>-garden-2` up to `-9`. `codex` and `claude` change the app-server image, and `up` rebuilds it. The list must contain `cloudflared`.
 
 ## Config changes
-`config.env` values are copied into each `stack.env` when the stack is created. Use `profiles` for the profile list. To change `TZ` for existing stacks, edit `config.env` and every `stack.env`, then run `./lettucectl up all`.
+`config.env` values are copied into each `stack.env` when the stack is created. Use `profiles` for the profile list. To change `TZ` for existing stacks, edit `config.env` and every `stack.env`, then run `lettucectl up all`.
 
 `check` (run by every `up`) refuses a stack whose profiles differ from `config.env`.
 
 ## Files on the host
-These live in your clone of this repo and are never tracked by git. Keep them private: they hold every secret of the installation.
+Everything lettucectl keeps is in one data directory: `/srv/lettuce-garden` for a release install (the directory above the wrapper's `bin/`), or `data/` in a clone. Keep it private, mode 700: it holds every secret of the installation.
 
 | Path | What |
 |---|---|
+| `bin/lettucectl` | the wrapper: this release's lettucectl, pinned by digest; `bin/lettucectl.previous` is the one before the last `self-upgrade` |
 | `config.env` | your settings plus cached Cloudflare ids (mode 600) |
+| `stacks.conf` | who has a stack, and with which addresses (mode 600) |
 | `.secrets/cloudflare-api-token` | Cloudflare API token (mode 600) |
-| `upstream/` | Lettuce, cloned at `LETTUCE_REF` |
+| `upstream/<tag>/` | Lettuce's source at `LETTUCE_REF`, downloaded by `init` and `upgrade` |
 | `stacks/<name>/stack.env` | that stack's secrets and Cloudflare ids (mode 600) |
 | `stacks/<name>/state/` | that stack's data: `letta-home/`, `letta-data/`, `workspaces/`, `tools/` (the tools agents installed), and `garden/` for Gmail trigger rules |
 
 Named Docker volumes hold the rest (the vault, pipelock's receipts, Lettuce's Google tokens): [architecture.md](architecture.md) lists them.
 
-## Upgrading Lettuce
-Lettuce tags look like `vX.Y.Z-letta_<letta-code version>`. Each one pins the server version its UI was compiled against. Never change versions any other way.
+## Installing and upgrading
+A release install is a wrapper script, `/srv/lettuce-garden/bin/lettucectl`, which runs lettucectl from its published image, pinned by digest, with the data directory mounted at the same path. Every image a stack runs is published too, except two that are built on the host: the document tools (their PDF library, PyMuPDF, is AGPL-3.0, so they are not published) and the code editor's shell (it is built on the app-server's image). The [README's quickstart](../README.md#quickstart) installs it.
+
+The wrapper needs the data directory to exist and be yours, and refuses to run from anywhere but its `bin/`. lettucectl refuses to start unless the data directory, and the backup directory you name, are mounted at the same path inside its container: Docker reads every path lettucectl gives it on the host, and a path that differed would start a stack with an empty, root-owned directory in place of its data.
+
+Each release's page lists the images that changed. A changed image restarts its containers; **a changed vault image locks every vault**, and each person unlocks theirs again. An unchanged image keeps its name, so most releases restart only some sidecars.
 ```bash
-git -C upstream fetch --tags && git -C upstream tag --sort=-creatordate | head
-./lettucectl upgrade vX.Y.Z-letta_A.B.C     # checkout, record in config.env, rebuild + restart all
+lettucectl version                    # this release, and the Lettuce tag it was tested with
+lettucectl self-upgrade vX.Y.Z        # fetch that release's wrapper, pull its image, swap, then up all
+/srv/lettuce-garden/bin/lettucectl.previous version   # the previous release, kept to go back to
 ```
+`self-upgrade` checks the new wrapper against its release's `SHA256SUMS` and pulls its image before it replaces anything, so a typo or a failed download leaves the install as it was. It then moves Lettuce forward to the tag the new release was tested with, never back. To go back, run `bin/lettucectl.previous`, or move it to `bin/lettucectl`. To check where a wrapper comes from: `gh attestation verify /srv/lettuce-garden/bin/lettucectl --repo <owner>/lettuce-garden`.
+
+In release mode, `toolbox` sees your home read-only, plus your toolbox file and Claude Code config (`CLAUDE_CONFIG_DIR`) wherever they are; a `mount` line in the toolbox file must name something under your home. The toolbox file's `secret` commands run on the host, in the wrapper, which first checks that the file is yours and that nobody else can write it.
+
+## Upgrading Lettuce
+Lettuce tags look like `vX.Y.Z-letta_<letta-code version>`. Each one pins the server version its UI was compiled against. Never change versions any other way. Each lettuce-garden release is tested with one of them, and `self-upgrade` moves to it; `upgrade` to another tag warns that it was not tested.
+```bash
+lettucectl upgrade vX.Y.Z-letta_A.B.C     # download it, record in config.env, update every stack
+```
+Lettuce's tags are on its GitHub releases page. `init` and `upgrade` also look up whether Lettuce publishes its images for this host (it does for `amd64`): if so the stacks pull them, else they are built here, which takes longer. When the registry cannot be reached, they stop and change nothing; run them again.
 Back up first (below), and read upstream's CHANGELOG.md.
 
 ## Backups
 ```bash
-./lettucectl backup alfred /mnt/backup             # a snapshot in /mnt/backup/alfred/<UTC time>/
-./lettucectl backup all /mnt/backup --compress     # a .tar.gz per stack instead
+lettucectl backup alfred /mnt/backup             # a snapshot in /mnt/backup/alfred/<UTC time>/
+lettucectl backup all /mnt/backup --compress     # a .tar.gz per stack instead
 ```
 `backup` copies what the images cannot recreate:
 - agents, conversations and memory (`state/letta-data`);
@@ -142,9 +174,9 @@ Back up first (below), and read upstream's CHANGELOG.md.
 - pipelock's receipts and their signing key, whenever their volume exists (`garden-pipelock` profile);
 - Gmail trigger rules (`state/garden`).
 
-It leaves out caches and the skills that come back by themselves: upstream's, which the BFF reinstalls on every connect, and those from `agent-skills/`, which `lettucectl skills` reinstalls. The state is root-owned, so `backup` reads it from a container of a small image it builds (`backup/Dockerfile`, `lettuce-backup:local`), with no network and read-only mounts. No sudo is needed.
+It leaves out caches and the skills that come back by themselves: upstream's, which the BFF reinstalls on every connect, and those from `agent-skills/`, which `lettucectl skills` reinstalls. The state is root-owned, so `backup` reads it from a container of a small image (`backup/Dockerfile`: pulled by a release install, built from a clone; `lettucectl version` names it), with no network and read-only mounts. No sudo is needed.
 
-- **Snapshots (the default).** Each run writes `<dir>/<name>/<UTC time>/`, owned by you with the original file modes. The original owners are not kept: a restore makes the state root's again, which is what nearly all of it is, so a file an agent gave to another user (say, a database directory owned by uid 999) comes back owned by root. Use `--compress` when those owners matter. Files unchanged since the previous snapshot are hard links to it, so a run costs only what changed, and each snapshot is still a complete copy. Hard links need a Linux filesystem at the destination (ext4, xfs, btrfs; not FAT or exFAT). `<dir>` is a local directory outside this repo: for another machine, mount it (NAS, USB disk) or copy the snapshots onward with your own tools.
+- **Snapshots (the default).** Each run writes `<dir>/<name>/<UTC time>/`, owned by you with the original file modes. The original owners are not kept: a restore makes the state root's again, which is what nearly all of it is, so a file an agent gave to another user (say, a database directory owned by uid 999) comes back owned by root. Use `--compress` when those owners matter. Files unchanged since the previous snapshot are hard links to it, so a run costs only what changed, and each snapshot is still a complete copy. Hard links need a Linux filesystem at the destination (ext4, xfs, btrfs; not FAT or exFAT). `<dir>` is a local directory outside the data directory: for another machine, mount it (NAS, USB disk) or copy the snapshots onward with your own tools.
 - **`--compress`.** Writes `<dir>/<name>/<UTC time>.tar.gz` instead, mode 600. Inside the archive, files keep their real owners. Each archive holds everything again, so this suits one-off copies and moving to another host better than regular backups.
 - **A running stack.** Copying while agents write can catch memory, conversations or the vault mid-write and leave a corrupt backup. `backup` asks whether to pause the stack while it copies (agents and the UI freeze until it finishes; recommended), copy live anyway, or abort. `--pause` or `--live` answers ahead of time; without either and without anyone to answer, it aborts. A stopped stack is copied without asking.
 - **`--keep N`.** After a successful run, removes all but the newest N snapshots (or, with `--compress`, archives) of each stack. Snapshots can hold read-only directories, such as Go's module cache, so to delete one by hand use `chmod -R u+w <snapshot>` first.
@@ -153,38 +185,40 @@ It leaves out caches and the skills that come back by themselves: upstream's, wh
 
 A nightly cron job (`crontab -e`) for every stack that keeps two weeks:
 ```
-30 3 * * * /path/to/lettucectl backup all /mnt/backup --pause --keep 14
+30 3 * * * /srv/lettuce-garden/bin/lettucectl backup all /mnt/backup --pause --keep 14
 ```
-A backup holds credentials: provider keys, Claude/Codex/gh logins and `stack.env`. Keep the destination private, and encrypt any copy that leaves the host. The vault inside it stays encrypted with the person's passphrase, which is stored nowhere, so nobody (you included) can recover a vault whose passphrase is forgotten. `config.env` and `.secrets/` are not included; keep a copy of them too.
+A backup holds credentials: provider keys, Claude/Codex/gh logins and `stack.env`. Keep the destination private, and encrypt any copy that leaves the host. The vault inside it stays encrypted with the person's passphrase, which is stored nowhere, so nobody (you included) can recover a vault whose passphrase is forgotten. `config.env`, `stacks.conf` and `.secrets/` are not included; keep a copy of them too.
 
-To restore, stop the stack (`./lettucectl down alfred`), or on a new host create its directory: `(umask 077 && mkdir -p stacks/alfred/state)`. Then, from a snapshot `S` (the state goes back to root, the vault to its uid 10001, and `state/` itself stays yours):
+To restore, work in the data directory, with `B` the backup image. Stop the stack (`lettucectl down alfred`), or on a new host create its directory: `(umask 077 && mkdir -p stacks/alfred/state)`. Then, from a snapshot `S` (the state goes back to root, the vault to its uid 10001, and `state/` itself stays yours):
 ```bash
+cd /srv/lettuce-garden
+B=$(lettucectl version | sed -n 's/^backup image: //p')
 S=/mnt/backup/alfred/20261018T033000Z
 install -m 600 "$S/stack.env" stacks/alfred/stack.env
-docker run --rm -v "$S/state:/b:ro" -v "$PWD/stacks/alfred/state:/d" lettuce-backup:local \
+docker run --rm -v "$S/state:/b:ro" -v "$PWD/stacks/alfred/state:/d" "$B" \
   sh -c "rsync -aH --numeric-ids --delete --chown=0:0 /b/ /d/ && chown $(id -u):$(id -g) /d"
 # if the vault is in the snapshot:
-docker run --rm -v "$S/vault:/b:ro" -v lettuce-alfred_vault-data:/d lettuce-backup:local \
+docker run --rm -v "$S/vault:/b:ro" -v lettuce-alfred_vault-data:/d "$B" \
   rsync -a --numeric-ids --delete --chown=10001:10001 /b/ /d/
 # if pipelock's receipts are in the snapshot:
-docker run --rm -v "$S/pipelock:/b:ro" -v lettuce-alfred_pipelock-data:/d lettuce-backup:local \
+docker run --rm -v "$S/pipelock:/b:ro" -v lettuce-alfred_pipelock-data:/d "$B" \
   rsync -a --numeric-ids --delete --chown=65532:65532 /b/ /d/
-./lettucectl up alfred
+lettucectl up alfred
 ```
 `--delete` makes the state match the snapshot, so it also deletes what the backup left out. The caches and skills come back by themselves, but for a snapshot taken with `--no-tools`, add `--exclude=/tools/` to the first `rsync` to keep the tools already there.
 
 From an archive `A`, extract the same parts in the same image instead (the archive keeps the owners), then `up`:
 ```bash
-docker run --rm -v "$A:/a.tar.gz:ro" -v "$PWD/stacks/alfred/state:/d" lettuce-backup:local \
+docker run --rm -v "$A:/a.tar.gz:ro" -v "$PWD/stacks/alfred/state:/d" "$B" \
   tar -xzpf /a.tar.gz --numeric-owner -C /d --strip-components=2 ./state
-docker run --rm -v "$A:/a.tar.gz:ro" -v lettuce-alfred_vault-data:/d lettuce-backup:local \
+docker run --rm -v "$A:/a.tar.gz:ro" -v lettuce-alfred_vault-data:/d "$B" \
   sh -c 'tar -xzpf /a.tar.gz --numeric-owner -C /d --strip-components=2 ./vault && chown 10001:10001 /d && chmod 700 /d'
 # if pipelock's receipts are in the archive:
-docker run --rm -v "$A:/a.tar.gz:ro" -v lettuce-alfred_pipelock-data:/d lettuce-backup:local \
+docker run --rm -v "$A:/a.tar.gz:ro" -v lettuce-alfred_pipelock-data:/d "$B" \
   sh -c 'tar -xzpf /a.tar.gz --numeric-owner -C /d --strip-components=2 ./pipelock && chown 65532:65532 /d && chmod 700 /d'
 (umask 077 && tar -xzOf "$A" ./stack.env >stacks/alfred/stack.env)
 ```
-On another host, first clone this repo, copy `config.env` and `.secrets/`, run `./lettucectl init`, and build the image: `docker build -t lettuce-backup:local backup`. If the repo is at a different path there, fix `LETTA_STATE_DIR` in the restored `stack.env`. Cloudflare needs no change: the tunnel token travels inside `stack.env`. Never run the same stack on two hosts at once.
+On another host, first install the same release's wrapper ([README](../README.md#quickstart)), copy `config.env`, `stacks.conf` and `.secrets/` into its data directory, and run `lettucectl init`. If the data directory is at a different path there, fix `LETTA_STATE_DIR` in the restored `stack.env`. Cloudflare needs no change: the tunnel token travels inside `stack.env`. Never run the same stack on two hosts at once.
 
 The named volume `lettuce-<name>_bff-data` holds push-notification subscriptions and pinned-agent lists. It is not backed up; losing it is harmless. `remove` deletes the vault's volume and pipelock's receipts along with the stack.
 
@@ -193,29 +227,29 @@ Each stack's push-notification keypairs (`PUSH_VAPID_*` for Lettuce, `VAULT_VAPI
 ## Troubleshooting
 | Symptom | Look at |
 |---|---|
-| Cloudflare error 1033 / "tunnel not connected" | `./lettucectl logs <name> cloudflared`. The stack must be up; the token must match the tunnel (`stack.env`). |
-| 502 / 504 after sign-in | The app-server is still starting or unhealthy: `./lettucectl status`, `./lettucectl logs <name> app-server`. |
+| Cloudflare error 1033 / "tunnel not connected" | `lettucectl logs <name> cloudflared`. The stack must be up; the token must match the tunnel (`stack.env`). |
+| 502 / 504 after sign-in | The app-server is still starting or unhealthy: `lettucectl status`, `lettucectl logs <name> app-server`. |
 | Signed in, Lettuce says forbidden or unknown user | The email isn't in `ALLOWED_USERS`. Use `lettucectl users`, which updates both places. |
 | Google sign-in error at Cloudflare | Zero Trust -> Integrations -> Identity providers -> Google -> Test. Check the redirect URI in Google Cloud. |
 | `add`: "both ... are taken" | Choose another stack name, or set `HOSTNAME_FALLBACK` (e.g. `ai-%s`). |
 | `add`: Cloudflare API error 10000 / authentication | The token lacks a permission listed in cloudflare-setup.md step 5. |
 | `init`: zone not found | The domain isn't on this Cloudflare account yet, or the token lacks Zone Read for it. |
 | `check`: profiles differ | See "Config changes". |
-| Image attachment fails: "the image processing worker is missing from this installation" | letta-code's self-updater ran `npm install -g` inside the app-server and moved the install aside. `compose/hardening.yml` sets `DISABLE_AUTOUPDATER=1` and `check` enforces it; recreate the stack with `./lettucectl up <name>`. Do not reinstall letta-code inside the container. |
-| Enabling notifications fails: "Could not load the push public key" | The stack has no VAPID keypair, so the BFF turns push off. Set `PUSH_CONTACT_EMAIL` in `config.env` and run `./lettucectl up <name>`, which generates the keys. `check` reports a stack without them. |
-| `<garden>/vault/` gives a 404 | The `garden-vault` profile is off, or the route update failed: run `./lettucectl profiles <list>` again. |
-| An old `https://<stack>/garden/...` link shows Lettuce | The garden pages moved to `https://<name>-garden.<domain>/` (`./lettucectl list` shows it). |
-| `<garden>/vault/` gives 502 | The vault is not running: `./lettucectl status`, `./lettucectl logs <name> garden-vault`. |
-| Someone forgot their vault passphrase | It cannot be recovered. They can erase the vault in Settings after unlocking; if they cannot unlock, stop the service and delete its volume: `./lettucectl compose <name> rm -sf garden-vault`, `docker volume rm lettuce-<name>_vault-data`, `./lettucectl up <name>`. |
-| `<garden>/gmail-triggers/` gives a 404 | The `garden-gmail-triggers` profile is off, or the route update failed: run `./lettucectl profiles <list>` again. |
-| `<garden>/code-server/` gives a 404 | The `garden-code-server` profile is off, or the route update failed: run `./lettucectl profiles <list>` again. |
-| The code editor says "The editor isn't running right now" | `./lettucectl status`, `./lettucectl logs <name> garden-code-server-editor`. The first `up` with the profile downloads code-server and builds two images. |
-| The code editor's terminal closes at once, or says "Permission denied (publickey)" | The shell container is down or its keys are out of step: `./lettucectl logs <name> garden-code-server-exec`, then `./lettucectl up <name>` (the editor rewrites the keys at every start). |
-| `<garden>/` gives a 404, or lacks a feature that is on | No garden page profile is on (the page exists only with one), or the route update failed: run `./lettucectl profiles <list>` again. The page lists the garden page profiles of the last `up`; `profiles` runs it. |
-| `<garden>/` says the agent list is on its way, for minutes | The garden executor in the app-server sends it; it runs every minute. Run `./lettucectl up <name>` to reinstall it; read `/root/.letta/garden/executor/executor.log` with `./lettucectl shell <name> <agent>`. |
-| Gmail triggers page says Lettuce is not picking up requests | The executor has not run for 3 minutes. Run `./lettucectl up <name>` to reinstall it; read `/root/.letta/garden/executor/executor.log` with `./lettucectl shell <name> <agent>`. |
-| The garden executor's token leaked outside the stack (you suspect) | Delete the `GARDEN_EXECUTOR_TOKEN` line from `stack.env` and run `./lettucectl up <name>`: a new one is generated and installed. Agents in the stack can always read it; that is by design (see gmail-triggers.md). |
-| `add`, `up` or `profiles`: "the garden executor is out of step" / "could not sync the garden executor" | Installing or removing the executor in the app-server failed; the stacks still came up. Check `./lettucectl logs <name> app-server`, then run `./lettucectl up <name>` (after `profiles`, running it again also works). |
+| Image attachment fails: "the image processing worker is missing from this installation" | letta-code's self-updater ran `npm install -g` inside the app-server and moved the install aside. `compose/hardening.yml` sets `DISABLE_AUTOUPDATER=1` and `check` enforces it; recreate the stack with `lettucectl up <name>`. Do not reinstall letta-code inside the container. |
+| Enabling notifications fails: "Could not load the push public key" | The stack has no VAPID keypair, so the BFF turns push off. Set `PUSH_CONTACT_EMAIL` in `config.env` and run `lettucectl up <name>`, which generates the keys. `check` reports a stack without them. |
+| `<garden>/vault/` gives a 404 | The `garden-vault` profile is off, or the route update failed: run `lettucectl profiles <list>` again. |
+| An old `https://<stack>/garden/...` link shows Lettuce | The garden pages moved to `https://<name>-garden.<domain>/` (`lettucectl list` shows it). |
+| `<garden>/vault/` gives 502 | The vault is not running: `lettucectl status`, `lettucectl logs <name> garden-vault`. |
+| Someone forgot their vault passphrase | It cannot be recovered. They can erase the vault in Settings after unlocking; if they cannot unlock, stop the service and delete its volume: `lettucectl compose <name> rm -sf garden-vault`, `docker volume rm lettuce-<name>_vault-data`, `lettucectl up <name>`. |
+| `<garden>/gmail-triggers/` gives a 404 | The `garden-gmail-triggers` profile is off, or the route update failed: run `lettucectl profiles <list>` again. |
+| `<garden>/code-server/` gives a 404 | The `garden-code-server` profile is off, or the route update failed: run `lettucectl profiles <list>` again. |
+| The code editor says "The editor isn't running right now" | `lettucectl status`, `lettucectl logs <name> garden-code-server-editor`. The first `up` with the profile downloads code-server and builds two images. |
+| The code editor's terminal closes at once, or says "Permission denied (publickey)" | The shell container is down or its keys are out of step: `lettucectl logs <name> garden-code-server-exec`, then `lettucectl up <name>` (the editor rewrites the keys at every start). |
+| `<garden>/` gives a 404, or lacks a feature that is on | No garden page profile is on (the page exists only with one), or the route update failed: run `lettucectl profiles <list>` again. The page lists the garden page profiles of the last `up`; `profiles` runs it. |
+| `<garden>/` says the agent list is on its way, for minutes | The garden executor in the app-server sends it; it runs every minute. Run `lettucectl up <name>` to reinstall it; read `/root/.letta/garden/executor/executor.log` with `lettucectl shell <name> <agent>`. |
+| Gmail triggers page says Lettuce is not picking up requests | The executor has not run for 3 minutes. Run `lettucectl up <name>` to reinstall it; read `/root/.letta/garden/executor/executor.log` with `lettucectl shell <name> <agent>`. |
+| The garden executor's token leaked outside the stack (you suspect) | Delete the `GARDEN_EXECUTOR_TOKEN` line from `stack.env` and run `lettucectl up <name>`: a new one is generated and installed. Agents in the stack can always read it; that is by design (see gmail-triggers.md). |
+| `add`, `up` or `profiles`: "the garden executor is out of step" / "could not sync the garden executor" | Installing or removing the executor in the app-server failed; the stacks still came up. Check `lettucectl logs <name> app-server`, then run `lettucectl up <name>` (after `profiles`, running it again also works). |
 | `remove --purge` refuses: garden is a symlink | `stacks/<name>/state/garden` (or under `LETTA_STATE_DIR`) points elsewhere, and emptying it would empty the target. Look at where it points before removing it by hand. |
 | `<garden>/vault/` says "direct access is not allowed" or "may not use this stack" | The request did not come through Cloudflare Access, or the email is not in `ALLOWED_USERS`. |
 | A wildcard warning during `add` | The domain has a `*` record, so public DNS can't show which names are free. Only the Cloudflare zone is checked. |
