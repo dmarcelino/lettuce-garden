@@ -22,9 +22,13 @@ Only directories that contain a `SKILL.md` are shipped (`agent-skills/*/SKILL.md
 - **Not automatic:** `up` and `add` do not install skills; run `skills` after setting up a stack or changing a skill. The stack must be up.
 - **`backup`** leaves out the skills listed in the manifest and upstream's, since `skills` and the BFF reinstall them.
 - **What each skill talks to:** `using-vault-secrets` calls the vault's MCP server through the `mcp-servers` wrapper and `vault-run` posts to its `/redeem`; `fetching-web-pages` sends `curl` to pipelock's `/fetch`; `working-with-documents` calls `office` and `pdf` through the wrapper (`letta mcp call`). None of them needs a tunnel route, a network or a volume of its own.
-- No `check_stack` rule is specific to skills; the features they use have theirs (see [Key invariants](../AGENTS.md#key-invariants)).
+- No `check_stack` rule is specific to skills; the features they use have theirs ([CONTRIBUTING.md](../CONTRIBUTING.md#what-check_stack-enforces)).
 
-Skills are instructions, not boundaries: agents are root in the app-server and can ignore them. Skill text is public and lands in every operator's stacks: keep it generic, with no names, domains or values of a real deployment.
+## Rules
+- **Only `skills` installs agent skills, and it replaces only its own.** `SKILLS_INSTALL` removes what its manifest (`.lettucectl-skills`) lists and leaves upstream's and Settings' skills alone. `up` does not sync skills.
+- **Names must not match upstream's `docker/agent-skills`.** The BFF rewrites those on every connect, so a shared name would be overwritten. `skills` refuses one.
+- **Skills are instructions, not boundaries.** Agents are root in the app-server and can ignore them; docs never present a skill as a protection.
+- **Skill text is public** and lands in every operator's stacks: keep it generic, with no names, domains or values of a real deployment.
 
 ## Build and test
 ```bash
@@ -34,7 +38,7 @@ tests/run-sidecar.sh vault -k vault_run     # vault-run against a loopback /rede
 There is no build step: `lettucectl skills all` pushes a changed skill to the running stacks.
 
 ## Upstream seams
-Named in [AGENTS.md](../AGENTS.md):
+Listed in [CONTRIBUTING.md](../CONTRIBUTING.md#upstream-seams):
 - the global skills directory `/root/.letta/skills`, and the BFF rewriting upstream's `docker/agent-skills` there on every connect (why a shared name is refused);
 - the `mcp-servers` skill's wrapper, `/root/.letta/skills/mcp-servers/scripts/mcp.sh`, named in `working-with-documents` and `using-vault-secrets`;
 - letta-code telling the agent when a background command finishes, which is how an agent waiting for a vault approval gets a new turn (`using-vault-secrets`).

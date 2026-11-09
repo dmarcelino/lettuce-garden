@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end test of the code editor (docs/code-server.md). Opt-in and never run
+# End-to-end test of the code editor (code-server/README.md). Opt-in and never run
 # by tests/run.sh: it needs Docker, the stack's app-server image and, for the
 # first build, the internet (code-server's release, Debian packages).
 #
