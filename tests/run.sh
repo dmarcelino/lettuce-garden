@@ -4889,7 +4889,8 @@ test_wrapper_passes_toolbox_tokens_by_name_only() {
   printf 'secret NPM_TOKEN echo npm-token-789\n' >"$T/home-op/.config/lettucectl/toolbox"
   chmod 600 "$T/home-op/.config/lettucectl/toolbox"
   RC=0
-  HOME=$T/home-op DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
+  HOME=$T/home-op XDG_CONFIG_HOME="" CLAUDE_CONFIG_DIR="" CLAUDE_CODE_OAUTH_TOKEN="" \
+    DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
   ok_rc
   log_lacks "gh-token-123"
   log_lacks "claude-token-456"
@@ -4932,7 +4933,8 @@ test_wrapper_refuses_a_toolbox_file_others_can_write() {
   printf 'secret X touch %s\n' "$T/ran" >"$T/home-op/.config/lettucectl/toolbox"
   chmod 664 "$T/home-op/.config/lettucectl/toolbox"
   RC=0
-  HOME=$T/home-op DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
+  HOME=$T/home-op XDG_CONFIG_HOME="" CLAUDE_CONFIG_DIR="" CLAUDE_CODE_OAUTH_TOKEN="" \
+    DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
   bad_rc
   out_has "writable by others"
   [[ ! -e $T/ran ]] || fail "the wrapper ran a secret command from a file others can write"
