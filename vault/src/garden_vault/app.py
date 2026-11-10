@@ -28,7 +28,7 @@ from starlette.routing import Mount, Route
 from . import icons
 from .bitwarden import MAX_IMPORT_BYTES, read_export
 from .config import ERASE_REQUESTS_PER_HOUR, PREFIX, UNLOCK_ATTEMPTS_PER_MINUTE
-from .kinds import KINDS, MAX_CUSTOM_FIELDS, may_share_without_asking, preview
+from .kinds import KINDS, MAX_CUSTOM_FIELDS, group_fields, may_share_without_asking, preview
 from .mcp_tools import build_server
 from .service import ERASE_DELAY, Service, hours
 from .vault import ASK, AUTO, Field, Locked, Secret, Vault, VaultError, build_fields
@@ -321,6 +321,7 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
             "secret.html",
             email,
             secret=secret,
+            groups=group_fields(secret.kind, secret.fields),
             revealed=revealed,
             preview=preview(secret.kind, list(secret.fields)),
             auto_labels=auto,

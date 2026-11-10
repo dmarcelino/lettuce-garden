@@ -475,6 +475,45 @@ def test_custom_fields_are_kept_renamed_and_removed(env):
     assert [f.key for f in vault.secret(secret).custom_fields] == ["branch"]
 
 
+def legends(html: str) -> list[str]:
+    return re.findall(r'<fieldset class="group">\s*<legend>([^<]+)</legend>', html)
+
+
+def test_the_form_groups_fields_like_bitwarden(env):
+    client = env[0]
+    setup_vault(client)
+    form = client.get(f"{B}/secrets/new?kind=identity").text
+    assert legends(form) == [
+        "Item details",
+        "Personal details",
+        "Identification",
+        "Contact info",
+        "Address",
+        "Additional options",
+        "Custom fields",
+        "Agent access",
+    ]
+    personal = form.split("<legend>Personal details</legend>")[1].split("</fieldset>")[0]
+    assert 'name="f_first_name"' in personal and 'name="f_passport_number"' not in personal
+    secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321"})
+    edit = client.get(f"{B}/secrets/{secret}/edit").text
+    assert legends(edit)[1:3] == ["Card details", "Additional options"]
+    custom = edit.split("<legend>Custom fields</legend>")[1].split("</fieldset>")[0]
+    assert 'value="PIN"' in custom and "4321" not in edit
+
+
+def test_the_secret_page_groups_fields_like_the_form(env):
+    client = env[0]
+    setup_vault(client)
+    secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321"})
+    page = client.get(f"{B}/secrets/{secret}").text
+    headings = re.findall(r'<h2 class="group-title">([^<]+)</h2>', page)
+    assert headings == ["Card details", "Additional options", "Custom fields", "Agent access"]
+    assert CARD not in page and SECRET not in page and "4321" not in page
+    shown = post(client, f"{B}/secrets/{secret}/show", {}).text
+    assert CARD in shown and "4321" in shown and 'data-copy="v-pin"' in shown
+
+
 def test_the_secret_page_names_what_agents_may_use_without_asking(env):
     client = env[0]
     setup_vault(client)

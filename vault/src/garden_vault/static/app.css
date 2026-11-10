@@ -78,6 +78,26 @@ blockquote {
 
 /* -- A secret's fields ------------------------------------------------------ */
 
+/* Titled cards, like Bitwarden's sections: on the form and the secret's page. */
+.stack.groups {
+  gap: 20px;
+}
+.group > legend,
+.group-title {
+  margin: 0 0 8px;
+  padding: 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.group > .panel {
+  padding: 16px;
+}
+.custom-row + .custom-row {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 dl.fields {
   display: grid;
   grid-template-columns: max-content 1fr;

@@ -4,7 +4,7 @@ import pytest
 
 from garden_vault import crypto
 from garden_vault.config import ERASE_DELAY_SECONDS
-from garden_vault.kinds import KINDS
+from garden_vault.kinds import KINDS, group_fields
 from garden_vault.vault import AUTO, FORMAT, Locked, Vault, VaultError, build_fields
 
 from .conftest import CARD, FAST_KDF, PASSPHRASE, SECRET, STREET, add_address, add_card
@@ -206,6 +206,33 @@ def test_types_are_bitwardens_with_private_fields_where_it_matters():
         ("public_key", public, False),
         ("key_fingerprint", public, False),
         ("notes", private, False),
+    ]
+
+
+def test_fields_are_grouped_like_bitwardens_form():
+    titles = {key: [title for title, _ in kind.groups] for key, kind in KINDS.items()}
+    assert titles == {
+        "login": ["Login credentials", "Additional options"],
+        "card": ["Card details", "Additional options"],
+        "identity": ["Personal details", "Identification", "Contact info", "Address", "Additional options"],
+        "secure_note": ["Additional options"],
+        "ssh_key": ["SSH key", "Additional options"],
+    }
+    for kind in KINDS.values():
+        assert [f for _, specs in kind.groups for f in specs] == list(kind.fields)
+    identity = dict(KINDS["identity"].groups)
+    assert [f.key for f in identity["Identification"]] == ["ssn", "passport_number", "license_number"]
+    assert [f.key for f in identity["Contact info"]] == ["email", "phone"]
+
+
+def test_a_secrets_fields_group_like_its_form_with_custom_fields_last():
+    fields = build_fields("identity", {"first_name": "Alfred", "city": "Lisboa", "notes": SECRET}, [("PIN", "1")])
+    grouped = [(title, [f.key for f in fs]) for title, fs in group_fields("identity", fields)]
+    assert grouped == [
+        ("Personal details", ["first_name"]),
+        ("Address", ["city"]),
+        ("Additional options", ["notes"]),
+        ("Custom fields", ["pin"]),
     ]
 
 
