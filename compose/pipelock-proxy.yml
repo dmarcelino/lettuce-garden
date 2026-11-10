@@ -5,8 +5,8 @@
 # searches and page fetches, and searxng's queries to its search engines.
 # searxng documents only its own `outgoing.proxies` (in upstream's
 # settings.yml, which is not ours); it follows these variables because its
-# HTTP client (curl_cffi) does by default (a named upstream dependency in
-# CLAUDE.md, to check on every upgrade).
+# HTTP client (curl_cffi) does by default (an upstream seam listed in
+# CONTRIBUTING.md, to check on every upgrade).
 #
 # Both spellings: curl reads only the lowercase http_proxy, other tools only
 # the uppercase. NODE_USE_ENV_PROXY makes Node's fetch and https follow them,

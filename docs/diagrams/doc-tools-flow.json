@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Document tools: an agent makes a Word file and its PDF",
+    "output": "docs/diagrams/doc-tools-flow.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "c9d5094283236533ca0c8bdd6b405640ea5dab5a"
+    }
+  },
+  "participants": [
+    { "id": "you", "type": "external", "icon": "person", "label": "You", "sublabel": "in Lettuce" },
+    { "id": "agent", "type": "backend", "label": "Your agent", "sublabel": "working-with-documents skill",
+      "sources": [{ "path": "docs/doc-tools.md", "line": 104, "end_line": 110, "label": "what agents do with it" }] },
+    { "id": "tools", "type": "backend", "label": "office / pdf", "sublabel": "started for each call",
+      "sources": [{ "path": "docs/doc-tools.md", "line": 3, "end_line": 17, "label": "the two MCP servers" }] },
+    { "id": "workspace", "type": "database", "label": "Agent's workspace", "sublabel": "/work/<agent-id>",
+      "sources": [{ "path": "docs/doc-tools.md", "line": 131, "end_line": 136, "label": "confined to the workspace" }] },
+    { "id": "gotenberg", "type": "cloud", "label": "Gotenberg", "sublabel": "one per host, no way out",
+      "sources": [{ "path": "docs/doc-tools.md", "line": 141, "end_line": 148, "label": "sees only uploads" }] }
+  ],
+  "segments": [
+    { "from": 155, "to": 260, "label": "Create" },
+    { "from": 270, "to": 430, "label": "Convert" },
+    { "from": 440, "to": 545, "label": "Check and report" }
+  ],
+  "messages": [
+    { "id": "ask", "from": "you", "to": "agent", "y": 175, "label": "draft the report as Word and PDF", "variant": "emphasis" },
+    { "id": "create", "from": "agent", "to": "tools", "y": 205, "label": "office: create report.docx" },
+    { "id": "write-docx", "from": "tools", "to": "workspace", "y": 235, "label": "report.docx" },
+    { "id": "convert", "from": "agent", "to": "tools", "y": 290, "label": "pdf: convert to PDF" },
+    { "id": "upload", "from": "tools", "to": "gotenberg", "y": 320, "label": "upload the file", "variant": "security", "note": "files only, never a URL; it keeps nothing" },
+    { "id": "pdf", "from": "gotenberg", "to": "tools", "y": 375, "label": "the PDF", "variant": "return" },
+    { "id": "write-pdf", "from": "tools", "to": "workspace", "y": 405, "label": "report.pdf" },
+    { "id": "render", "from": "agent", "to": "tools", "y": 460, "label": "pdf: render pages to check" },
+    { "id": "done", "from": "agent", "to": "you", "y": 510, "label": "done: report.docx and report.pdf", "variant": "return" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "What agents can do", "items": ["Create and edit .docx, .pptx and .xlsx, with tracked changes and comments in Word", "Read, convert, merge, split, rotate, watermark, annotate, redact, fill and encrypt PDFs", "Not included: OCR, editing a PDF's text in place"] },
+    { "dot": "rose", "title": "Limits", "items": ["The path checks stop mistakes, not the agent: it is root in its stack and can read every workspace there", "Gotenberg is the one container on every stack's network"] }
+  ]
+}

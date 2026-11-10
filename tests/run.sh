@@ -3005,6 +3005,9 @@ test_doc_tools_tag_follows_what_goes_into_the_image() {
   eq "$(docs_tag)" "$a"
   printf '# docs\n' >"$H/doc-tools/README.md"
   eq "$(docs_tag)" "$a"
+  printf '# agents\n' >"$H/doc-tools/AGENTS.md"
+  ln -s AGENTS.md "$H/doc-tools/CLAUDE.md"
+  eq "$(docs_tag)" "$a"
   printf 'RUN true\n' >>"$H/doc-tools/Dockerfile"
   [[ $(docs_tag) != "$a" ]] || fail "the tag did not change with the Dockerfile"
 }

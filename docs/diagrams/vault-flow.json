@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Vault: an agent asks, you decide",
+    "output": "docs/diagrams/vault-flow.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "c9d5094283236533ca0c8bdd6b405640ea5dab5a"
+    }
+  },
+  "participants": [
+    {
+      "id": "you",
+      "type": "external",
+      "icon": "person",
+      "label": "You",
+      "sublabel": "phone or browser",
+      "sources": [
+        {
+          "path": "docs/vault.md",
+          "line": 18,
+          "end_line": 41,
+          "label": "using the vault"
+        }
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "security",
+      "label": "Your vault",
+      "sublabel": "<garden>/vault/",
+      "sources": [
+        {
+          "path": "docs/vault.md",
+          "line": 47,
+          "end_line": 60,
+          "label": "what is protected"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "An agent",
+      "sublabel": "in your stack",
+      "sources": [
+        {
+          "path": "docs/vault.md",
+          "line": 5,
+          "end_line": 12,
+          "label": "the request flow"
+        }
+      ]
+    },
+    {
+      "id": "vault-run",
+      "type": "backend",
+      "label": "vault-run",
+      "sublabel": "runs one command",
+      "sources": [
+        {
+          "path": "docs/vault.md",
+          "line": 42,
+          "end_line": 45,
+          "label": "values without reading them"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 155,
+      "to": 365,
+      "label": "Ask and approve"
+    },
+    {
+      "from": 375,
+      "to": 470,
+      "label": "Values as text"
+    },
+    {
+      "from": 480,
+      "to": 655,
+      "label": "Or values for a command"
+    }
+  ],
+  "messages": [
+    {
+      "id": "list",
+      "from": "agent",
+      "to": "vault",
+      "y": 175,
+      "label": "list_secrets",
+      "note": "names, types and public fields only; never private values"
+    },
+    {
+      "id": "request",
+      "from": "agent",
+      "to": "vault",
+      "y": 235,
+      "label": "request_secret(secret, why)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "notify",
+      "from": "vault",
+      "to": "you",
+      "y": 265,
+      "label": "push notification",
+      "variant": "default",
+      "note": "the agent also posts the request's link in the chat"
+    },
+    {
+      "id": "decide",
+      "from": "you",
+      "to": "vault",
+      "y": 335,
+      "label": "Share once / Deny",
+      "variant": "security",
+      "note": "signed in; untick any field it doesn't need"
+    },
+    {
+      "id": "collect",
+      "from": "agent",
+      "to": "vault",
+      "y": 395,
+      "label": "get_result"
+    },
+    {
+      "id": "values",
+      "from": "vault",
+      "to": "agent",
+      "y": 425,
+      "label": "the values you shared, once",
+      "variant": "return",
+      "note": "with rules: the approved purpose only, never repeated"
+    },
+    {
+      "id": "handle",
+      "from": "vault",
+      "to": "agent",
+      "y": 500,
+      "label": "a one-time handle instead",
+      "variant": "return"
+    },
+    {
+      "id": "run",
+      "from": "agent",
+      "to": "vault-run",
+      "y": 530,
+      "label": "vault-run <command>"
+    },
+    {
+      "id": "redeem",
+      "from": "vault-run",
+      "to": "vault",
+      "y": 560,
+      "label": "redeem the handle",
+      "variant": "security"
+    },
+    {
+      "id": "env",
+      "from": "vault",
+      "to": "vault-run",
+      "y": 590,
+      "label": "values into that command's environment",
+      "variant": "return",
+      "note": "scrubbed from its output; works once, within 5 minutes"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "You decide",
+      "items": [
+        "ID documents, payment cards and logins always ask",
+        "Notes, addresses, companies and memberships ask unless you allow that secret to be used without asking",
+        "Agents can't add, change or delete secrets"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "What it does not stop",
+      "items": [
+        "A value shared as text is in the conversation: your AI provider sees it and the server stores it",
+        "The rules are instructions to the agent, not something the vault can enforce",
+        "vault-run keeps values out of the conversation, but a misled agent can still redeem the handle itself"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Limits",
+      "items": [
+        "At most 5 requests wait at once; each expires after 10 minutes",
+        "Locking the vault cancels every handle and uncollected value"
+      ]
+    }
+  ]
+}

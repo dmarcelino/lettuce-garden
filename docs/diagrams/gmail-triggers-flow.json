@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Gmail triggers: from a new email to an agent at work",
+    "output": "docs/diagrams/gmail-triggers-flow.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "c9d5094283236533ca0c8bdd6b405640ea5dab5a"
+    }
+  },
+  "participants": [
+    {
+      "id": "you",
+      "type": "external",
+      "icon": "person",
+      "label": "You",
+      "sublabel": "<garden>/gmail-triggers/",
+      "sources": [
+        {
+          "path": "docs/gmail-triggers.md",
+          "line": 17,
+          "end_line": 27,
+          "label": "making a trigger"
+        }
+      ]
+    },
+    {
+      "id": "gmail",
+      "type": "external",
+      "label": "Gmail",
+      "sublabel": "your account",
+      "sources": [
+        {
+          "path": "docs/gmail-triggers.md",
+          "line": 6,
+          "label": "polled every 2 minutes"
+        }
+      ]
+    },
+    {
+      "id": "triggers",
+      "type": "backend",
+      "label": "Gmail triggers",
+      "sublabel": "your rules",
+      "sources": [
+        {
+          "path": "docs/gmail-triggers.md",
+          "line": 5,
+          "end_line": 11,
+          "label": "the flow"
+        }
+      ]
+    },
+    {
+      "id": "executor",
+      "type": "backend",
+      "label": "Garden executor",
+      "sublabel": "every minute",
+      "sources": [
+        {
+          "path": "docs/gmail-triggers.md",
+          "line": 47,
+          "label": "no second way in"
+        }
+      ]
+    },
+    {
+      "id": "scheduler",
+      "type": "backend",
+      "label": "Lettuce scheduler",
+      "sublabel": "Tasks tab",
+      "sources": [
+        {
+          "path": "docs/gmail-triggers.md",
+          "line": 9,
+          "label": "letta cron add --once"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Your agent",
+      "sublabel": "reads the mail itself",
+      "sources": [
+        {
+          "path": "docs/gmail-triggers.md",
+          "line": 33,
+          "label": "what the agent gets"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 155,
+      "to": 225,
+      "label": "Once"
+    },
+    {
+      "from": 235,
+      "to": 395,
+      "label": "Every 2 minutes"
+    },
+    {
+      "from": 405,
+      "to": 585,
+      "label": "Within a minute or two"
+    }
+  ],
+  "messages": [
+    {
+      "id": "rule",
+      "from": "you",
+      "to": "triggers",
+      "y": 175,
+      "label": "rule: labels, senders, agent, what to do",
+      "variant": "security",
+      "note": "signed in; agents can't change rules"
+    },
+    {
+      "id": "poll",
+      "from": "triggers",
+      "to": "gmail",
+      "y": 255,
+      "label": "what arrived?",
+      "note": "read-only: ids, labels, senders and subjects; never bodies"
+    },
+    {
+      "id": "arrived",
+      "from": "gmail",
+      "to": "triggers",
+      "y": 330,
+      "label": "new mail",
+      "variant": "return",
+      "note": "matched against your rules, within each hourly limit"
+    },
+    {
+      "id": "claim",
+      "from": "executor",
+      "to": "triggers",
+      "y": 420,
+      "label": "anything pending?"
+    },
+    {
+      "id": "request",
+      "from": "triggers",
+      "to": "executor",
+      "y": 450,
+      "label": "agent, instructions, mail ids",
+      "variant": "return"
+    },
+    {
+      "id": "schedule",
+      "from": "executor",
+      "to": "scheduler",
+      "y": 480,
+      "label": "one-off task",
+      "variant": "emphasis",
+      "note": "letta cron add --once"
+    },
+    {
+      "id": "start",
+      "from": "scheduler",
+      "to": "agent",
+      "y": 525,
+      "label": "\"Gmail: <rule>\"",
+      "variant": "emphasis",
+      "note": "act only on these emails"
+    },
+    {
+      "id": "report",
+      "from": "executor",
+      "to": "triggers",
+      "y": 565,
+      "label": "result, for the trigger's History",
+      "variant": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "What you see",
+      "items": [
+        "Each trigger's History: Waiting, Sent to Lettuce, the task, an error or Lost",
+        "The runs in Lettuce's Tasks tab as \"Gmail: <trigger name>\"",
+        "A matching email reaches the agent within about five minutes"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "What it does not stop",
+      "items": [
+        "The agent reads the email, so a hostile email can still try to steer it",
+        "\"Act only on these emails\" is guidance in the prompt, not a boundary",
+        "Agents can see what the executor sees, but can't create requests"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Never twice",
+      "items": [
+        "A request is never handed out twice: a lost turn beats a duplicate",
+        "Your own sent mail, Spam and Trash never set off a trigger"
+      ]
+    }
+  ]
+}

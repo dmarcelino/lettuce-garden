@@ -1,6 +1,6 @@
 # One-time Cloudflare and Google setup
 
-You do this once per installation. Afterwards each person is one `lettucectl add`.
+You do this once per installation. Afterwards each person is one `lettucectl add`. Work from a clone of this repo on the host: steps 2.6 and 5 use it.
 
 Placeholders used below:
 - `example.com`: your domain.
@@ -216,8 +216,9 @@ This is a *user* token. An account-owned token (**Manage Account -> Account API 
 
 ## 6. Initialise and add people
 ```bash
-./lettucectl init        # first run creates config.env: set DOMAIN, PROFILES, TZ; then run init again
+./lettucectl init        # first run creates config.env: set DOMAIN, PUSH_CONTACT_EMAIL, TZ, PROFILES; then run init again
 ./lettucectl add alfred alfred@gmail.com
+./lettucectl skills all  # the agent skills; `up` doesn't install them
 ```
 `add` uses `<name>.example.com` for Lettuce and `<name>-garden.example.com` for the garden extras (the vault, Gmail triggers, the code editor), each with its own Access application; both use the stack's one list of people. When Lettuce's name already exists in DNS, it uses `lettuce-<name>.example.com` instead (`HOSTNAME_FALLBACK`); the garden's name always follows Lettuce's (`lettuce-<name>-garden.example.com` then), and when that one is taken, `add` uses the first free of `<...>-garden-2` to `<...>-garden-9`. Stack names are a single DNS label on purpose, and may not end in `-garden`: Cloudflare's free certificate covers `*.example.com` but not `a.b.example.com`.
 

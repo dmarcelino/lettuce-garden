@@ -324,7 +324,8 @@ def wait_for_pushes(sender, count):
         if len(sender.calls) >= count:
             break
         time.sleep(0.02)
-    return [json.loads(c["data"])["title"] for c in sender.calls]
+    # Sorted: each push is sent from its own worker thread, so they finish in any order.
+    return sorted(json.loads(c["data"])["title"] for c in sender.calls)
 
 
 def test_a_locked_vault_can_be_erased_after_24_hours(env, clock):
@@ -351,7 +352,7 @@ def test_a_locked_vault_can_be_erased_after_24_hours(env, clock):
     # Cancelling needs no passphrase.
     assert post(client, f"{B}/erase/cancel", {}).status_code == 303
     assert vault.pending_erase() is None and vault.is_setup() and not vault.is_unlocked()
-    assert wait_for_pushes(sender, 2) == ["Vault erase scheduled", "Vault erase cancelled"]
+    assert wait_for_pushes(sender, 2) == sorted(["Vault erase scheduled", "Vault erase cancelled"])
 
 
 def test_unlocking_cancels_a_scheduled_erase(env):
@@ -362,7 +363,7 @@ def test_unlocking_cancels_a_scheduled_erase(env):
     post(client, f"{B}/erase", {"confirm": "DELETE"})
     assert post(client, f"{B}/unlock", {"passphrase": PASSPHRASE}).status_code == 303
     assert vault.pending_erase() is None and vault.is_unlocked()
-    assert wait_for_pushes(sender, 2) == ["Vault erase scheduled", "Vault erase cancelled"]
+    assert wait_for_pushes(sender, 2) == sorted(["Vault erase scheduled", "Vault erase cancelled"])
     assert [e.action for e in vault.audit_log()][:2] == ["cancelled the scheduled erase by unlocking", "unlocked"]
 
 

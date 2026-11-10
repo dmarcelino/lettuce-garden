@@ -80,19 +80,22 @@ Three limits:
 ```bash
 ./lettucectl skills all           # or one stack: skills alfred
 ```
-They go into each stack's global skills (`/root/.letta/skills`), which every agent of that stack loads. `skills` replaces or removes only what it installed before (listed in `.lettucectl-skills` there; a skill deleted from `agent-skills/` is removed from the stack on the next run), so upstream's skills and the ones enabled in Settings stay. A name upstream Lettuce also ships is refused, because its BFF would overwrite ours. `up` does not install skills; run `skills` after setting up a new stack. Skill text reaches every operator's stacks, so keep it generic.
+They go into each stack's global skills (`/root/.letta/skills`), which every agent of that stack loads. `skills` replaces or removes only what it installed before (listed in `.lettucectl-skills` there; a skill deleted from `agent-skills/` is removed from the stack on the next run), so upstream's skills and the ones enabled in Settings stay. A name upstream Lettuce also ships is refused, because its BFF would overwrite ours. `up` does not install skills; run `skills` after setting up a new stack. Writing a skill: [agent-skills/README.md](../agent-skills/README.md).
 
 ## Optional features
-Optional features are compose profiles, the same list for **all** stacks (upstream `docs/CONFIGURATION.md` lists them):
-- `search`: SearXNG + DuckDuckGo page reader for the agents' web tools.
-- `claude`: Claude Code CLI workers. `codex` does the same for Codex.
-- `google`: Gmail/Calendar/Tasks/Contacts sidecar. It needs a Google OAuth client and each person connects their own account: see **[google-setup.md](google-setup.md)**.
-- `telegram`: Telegram channel gateway.
-- `garden-vault`: a personal vault per stack (identities with addresses and ID numbers, cards, logins...), encrypted with the person's own passphrase and shared with agents only when they agree. Each person uses it at `https://<name>-garden.<domain>/vault/`. Agents reach it as the `vault` server in Settings -> MCP: `add` registers it for new stacks, and after turning the profile on, `./lettucectl mcp all` registers it in the existing ones (once per stack, restarting the BFF of each stack it changed). See **[vault.md](vault.md)**.
-- `garden-gmail-triggers`: rules like "when mail arrives in this label, ask this agent to do that", which each person sets up at `https://<name>-garden.<domain>/gmail-triggers/`. Needs `google` (`profiles` and `check` refuse it otherwise) and each person's Google account connected in Lettuce. `up` installs a small executor in the app-server; dropping the profile removes it and keeps the rules. See **[gmail-triggers.md](gmail-triggers.md)**.
-- `garden-doc-tools`: Office and PDF tools for the agents (create, edit and convert .docx, .pptx, .xlsx and PDFs), as two stdio MCP servers mounted read-only into every app-server from one shared volume, plus one shared Gotenberg per host for conversions. After turning it on, `./lettucectl mcp all` adds the two servers to each stack's Settings -> MCP (once per stack; `add` does it for new stacks) and restarts the BFF of each stack it changed, so agents see them. See **[doc-tools.md](doc-tools.md)**.
-- `garden-code-server`: VS Code in the browser at `https://<name>-garden.<domain>/code-server/`, on that stack's agent workspaces, with a terminal that has the agents' tools. The editor itself runs nothing from the workspaces (Restricted Mode, no extensions to install, no debugger); terminals run in a separate container built on the app-server image. Every `profiles` run keeps each stack's Access cookies HttpOnly (it re-applies every stack's Access applications), and the editor sits on the garden's address, not Lettuce's. See **[code-server.md](code-server.md)**.
-- `garden-pipelock`: an egress proxy per stack that the agents' shell tools, subagents, SearXNG and the DuckDuckGo reader go through. It checks each destination, blocks a few known exfiltration sites and private addresses, and signs a receipt for every request (`lettucectl receipts`). Advisory for now: letta-code itself and anything that ignores `HTTPS_PROXY` go around it. See **[egress-firewall.md](egress-firewall.md)**.
+Optional features are compose profiles, the same list for **all** stacks. Upstream's are described in its `docs/CONFIGURATION.md`; lettuce-garden's start with `garden-`, and each has a guide.
+
+| Profile | What it adds | When you turn it on | Guide |
+|---|---|---|---|
+| `search` | SearXNG + DuckDuckGo page reader for the agents' web tools | | upstream |
+| `claude`, `codex` | Claude Code CLI workers; `codex` does the same for Codex | | upstream |
+| `google` | Gmail/Calendar/Tasks/Contacts sidecar | It needs a Google OAuth client, and each person connects their own account. | **[google-setup.md](google-setup.md)** |
+| `telegram` | Telegram channel gateway | | upstream |
+| `garden-vault` | A personal vault per stack, at `https://<name>-garden.<domain>/vault/` | Run `./lettucectl skills all` for the `using-vault-secrets` skill (`vault-run`, `vault-fill`, and how to wait for an approval). Agents reach it as the `vault` server in Settings -> MCP: `add` registers it for new stacks; for existing ones run `./lettucectl mcp all` (once per stack, restarting the BFF of each stack it changed). | **[vault.md](vault.md)** |
+| `garden-gmail-triggers` | Gmail rules each person sets up at `https://<name>-garden.<domain>/gmail-triggers/` | Needs `google` (`profiles` and `check` refuse it otherwise) and each person's Google account connected in Lettuce. `up` installs a small executor in the app-server; dropping the profile removes it and keeps the rules. | **[gmail-triggers.md](gmail-triggers.md)** |
+| `garden-doc-tools` | Office and PDF tools for the agents: two stdio MCP servers mounted read-only into every app-server from one shared volume, plus one shared Gotenberg per host | Run `./lettucectl skills all`, then `./lettucectl mcp all`, which adds the two servers to each stack's Settings -> MCP (once per stack; `add` does it for new stacks) and restarts the BFF of each stack it changed, so agents see them. | **[doc-tools.md](doc-tools.md)** |
+| `garden-code-server` | VS Code in the browser at `https://<name>-garden.<domain>/code-server/`, on that stack's agent workspaces, with a terminal in a separate container that has the agents' tools | Every `profiles` run keeps each stack's Access cookies HttpOnly (it re-applies every stack's Access applications). | **[code-server.md](code-server.md)** |
+| `garden-pipelock` | An egress proxy per stack for the agents' shell tools, subagents, SearXNG and the DuckDuckGo reader, with a signed receipt for every request (`lettucectl receipts`). Advisory for now. | Run `./lettucectl skills all` for the `fetching-web-pages` skill. | **[egress-firewall.md](egress-firewall.md)** |
 
 ```bash
 ./lettucectl profiles                              # show config.env and every stack
@@ -104,6 +107,19 @@ Optional features are compose profiles, the same list for **all** stacks (upstre
 `config.env` values are copied into each `stack.env` when the stack is created. Use `profiles` for the profile list. To change `TZ` for existing stacks, edit `config.env` and every `stack.env`, then run `./lettucectl up all`.
 
 `check` (run by every `up`) refuses a stack whose profiles differ from `config.env`.
+
+## Files on the host
+These live in your clone of this repo and are never tracked by git. Keep them private: they hold every secret of the installation.
+
+| Path | What |
+|---|---|
+| `config.env` | your settings plus cached Cloudflare ids (mode 600) |
+| `.secrets/cloudflare-api-token` | Cloudflare API token (mode 600) |
+| `upstream/` | Lettuce, cloned at `LETTUCE_REF` |
+| `stacks/<name>/stack.env` | that stack's secrets and Cloudflare ids (mode 600) |
+| `stacks/<name>/state/` | that stack's data: `letta-home/`, `letta-data/`, `workspaces/`, `tools/` (the tools agents installed), and `garden/` for Gmail trigger rules |
+
+Named Docker volumes hold the rest (the vault, pipelock's receipts, Lettuce's Google tokens): [architecture.md](architecture.md) lists them.
 
 ## Upgrading Lettuce
 Lettuce tags look like `vX.Y.Z-letta_<letta-code version>`. Each one pins the server version its UI was compiled against. Never change versions any other way.
@@ -172,7 +188,7 @@ On another host, first clone this repo, copy `config.env` and `.secrets/`, run `
 
 The named volume `lettuce-<name>_bff-data` holds push-notification subscriptions and pinned-agent lists. It is not backed up; losing it is harmless. `remove` deletes the vault's volume and pipelock's receipts along with the stack.
 
-Each stack's push-notification keypairs (`PUSH_VAPID_*` for Lettuce, `VAULT_VAPID_*` for the vault, in `stack.env`) are generated by the first `up` and kept from then on. Do not change or delete it: every device that enabled notifications would have to enable them again.
+Each stack's push-notification keypairs (`PUSH_VAPID_*` for Lettuce, `VAULT_VAPID_*` for the vault, in `stack.env`) are generated by the first `up` and kept from then on. Do not change or delete them: every device that enabled notifications would have to enable them again.
 
 ## Troubleshooting
 | Symptom | Look at |
@@ -211,6 +227,5 @@ Each stack's push-notification keypairs (`PUSH_VAPID_*` for Lettuce, `VAULT_VAPI
 - The Cloudflare API token can change your DNS. Scope it to one zone and one account, and consider an IP restriction.
 - Agents in one stack can read everything else in that stack, including its provider keys. That is why each person gets their own stack. The vault is the exception: it lives on a volume only the vault service mounts (`check` enforces that), encrypted with each person's passphrase. Root on the host can still read the vault service's memory while it is unlocked, and anything a person shares with an agent is stored in that conversation like the rest of it.
 - The app-server, and the containers sharing its network (BFF, channel-gateway), drop `NET_RAW`, so agents can't capture the Access token on its way to the BFF and use it on the vault. `check` refuses a stack that keeps it. The cost is raw sockets in agent shells, including the image's `ping` (see Troubleshooting).
-- The code editor shares an origin with Lettuce and the vault, so nothing agents write may run in it: it stays in Restricted Mode, has no marketplace, debugger or task providers, and sends every terminal to a separate container that is exactly as strong as an agent (see [code-server.md](code-server.md)). Never trust a folder in it.
+- The code editor shares an address with the vault and Gmail triggers (the stack's garden address), so nothing agents write may run in it: it stays in Restricted Mode, has no marketplace, debugger or task providers, and sends every terminal to a separate container that is exactly as strong as an agent (see [code-server.md](code-server.md)). Never trust a folder in it.
 - Gmail triggers start agents without the person typing anything, but only for rules they made on their Access-protected page, and only through Lettuce's own scheduler: see the security model in [gmail-triggers.md](gmail-triggers.md). The sidecar reads Lettuce's Google token (read-only); `check` refuses any other service mounting it.
-- Run `tests/run.sh` and `shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/* code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh` before changing the CLI, `tests/run-sidecar.sh <vault|gmail-triggers|code-server>` before changing a sidecar or `garden-common/`, and `tests/run-pipelock.sh` before changing `pipelock/`.
