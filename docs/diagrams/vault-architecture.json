@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "f8563bfc55ffeeada10efbe046a47c964413bb38"
     }
   },
   "components": [
@@ -21,7 +21,7 @@
       "sublabel": "garden host /vault/",
       "pos": [40, 300],
       "size": [130, 62],
-      "sources": [{ "path": "docs/vault.md", "line": 18, "end_line": 41, "label": "using the vault" }]
+      "sources": [{ "path": "docs/vault.md", "line": 11, "end_line": 40, "label": "using the vault" }]
     },
     {
       "id": "edge",
@@ -77,8 +77,8 @@
       "pos": [730, 130],
       "size": [170, 62],
       "sources": [
-        { "path": "AGENTS.md", "line": 75, "label": "shares the app-server's network namespace" },
-        { "path": "vault/src/garden_vault/app.py", "line": 423, "end_line": 434, "label": "the bridge calls /mcp" }
+        { "path": "lib/README.md", "line": 82, "end_line": 83, "label": "shares the app-server's network namespace" },
+        { "path": "vault/src/garden_vault/app.py", "line": 507, "end_line": 518, "label": "the bridge calls /mcp" }
       ]
     },
     {
@@ -89,20 +89,20 @@
       "pos": [1050, 130],
       "size": [170, 62],
       "sources": [
-        { "path": "AGENTS.md", "line": 73, "label": "agents share the namespace" },
+        { "path": "vault/README.md", "line": 52, "end_line": 55, "label": "agents share the namespace" },
         { "path": "compose/hardening.yml", "line": 13, "end_line": 29, "label": "NET_RAW dropped" }
       ]
     },
     {
       "id": "vaultrun",
       "type": "backend",
-      "label": "vault-run",
-      "sublabel": "redeem, run, scrub",
+      "label": "vault-run + vault-fill",
+      "sublabel": "redeem, fill, run, scrub",
       "pos": [1050, 300],
       "size": [170, 62],
       "sources": [
-        { "path": "agent-skills/using-vault-secrets/vault-run", "line": 107, "end_line": 125, "label": "main" },
-        { "path": "agent-skills/using-vault-secrets/vault-run", "line": 41, "end_line": 63, "label": "POST /redeem" },
+        { "path": "agent-skills/using-vault-secrets/vault-run", "line": 42, "end_line": 70, "label": "POST /redeem, all or none" },
+        { "path": "agent-skills/using-vault-secrets/vault-fill", "line": 2, "end_line": 15, "label": "vault-fill: a template, filled" },
         { "path": "lettucectl", "line": 227, "end_line": 248, "label": "installed by lettucectl skills" }
       ]
     },
@@ -115,8 +115,8 @@
       "size": [150, 62],
       "sources": [
         { "path": "compose/vault.yml", "line": 20, "end_line": 50, "label": "service and hardening" },
-        { "path": "vault/src/garden_vault/app.py", "line": 456, "end_line": 466, "label": "routes" },
-        { "path": "vault/src/garden_vault/app.py", "line": 110, "end_line": 148, "label": "Access JWT, Fetch Metadata, CSRF" }
+        { "path": "vault/src/garden_vault/app.py", "line": 542, "end_line": 552, "label": "routes" },
+        { "path": "vault/src/garden_vault/app.py", "line": 125, "end_line": 168, "label": "Access JWT, Fetch Metadata, CSRF" }
       ]
     },
     {
@@ -129,7 +129,7 @@
       "sources": [
         { "path": "compose/vault.yml", "line": 52, "end_line": 56, "label": "named volume" },
         { "path": "vault/src/garden_vault/vault.py", "line": 1, "end_line": 7, "label": "what is encrypted" },
-        { "path": "lib/common.sh", "line": 436, "end_line": 438, "label": "only the vault mounts it" }
+        { "path": "lib/common.sh", "line": 437, "end_line": 439, "label": "only the vault mounts it" }
       ]
     },
     {
@@ -169,7 +169,7 @@
     { "from": "appserver", "to": "bff", "label": "mcp_call (vault tool)", "fromSide": "top", "toSide": "top" },
     { "from": "bff", "to": "vault", "label": "POST /mcp, Host garden-vault" },
     { "from": "appserver", "to": "vaultrun", "label": "agent shell runs" },
-    { "from": "vaultrun", "to": "vault", "label": "POST /redeem (handle)", "variant": "security" },
+    { "from": "vaultrun", "to": "vault", "label": "POST /redeem (handles)", "variant": "security" },
     { "from": "vault", "to": "jwks", "label": "JWKS", "variant": "dashed" },
     { "from": "vault", "to": "volume", "label": "encrypted SQLite" },
     { "from": "vault", "to": "push", "label": "Web Push (VAPID)", "variant": "dashed" },
@@ -193,7 +193,7 @@
       "items": [
         "BFF and app-server share one network namespace; agents run as root in the app-server",
         "Agents can call /mcp and /redeem themselves, so approval is the gate",
-        "vault-run keeps values out of the conversation, but an agent could redeem a handle directly"
+        "Placeholders keep values out of the conversation, but an agent could redeem a handle directly or open the filled file"
       ]
     },
     {
@@ -202,7 +202,7 @@
       "items": [
         "Other garden pages on the same host (gmail-triggers, the code editor) and Lettuce's opt-in services",
         "The LLM provider that the app-server calls",
-        "lettucectl on the host: builds and checks each stack, registers the vault in Settings -> MCP (lettucectl mcp), installs vault-run (lettucectl skills)"
+        "lettucectl on the host: builds and checks each stack, registers the vault in Settings -> MCP (lettucectl mcp), installs vault-run and vault-fill (lettucectl skills)"
       ]
     }
   ]
