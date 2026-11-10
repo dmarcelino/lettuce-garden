@@ -430,7 +430,11 @@ script that is not committed, at a quiet time:
 3. Create `/srv/lettuce-garden/bin`, owned by the admin, mode 700.
 4. Move `config.env`, `.secrets/` and `stacks/` into `/srv/lettuce-garden`. Delete `upstream/`;
    `init` downloads it.
-5. In each `stacks/<name>/stack.env`, rewrite `LETTA_STATE_DIR` to the new path (it is absolute).
+5. In each `stacks/<name>/stack.env`, rewrite `LETTA_STATE_DIR` to the new path (it is absolute),
+   and delete any `LETTA_IMAGE_TAG` set by hand (a test stack may have one, to keep its builds of
+   upstream's images apart). Upstream's images are then named by `LETTUCE_REF` (`app_server_image`),
+   and pulled when `LETTA_IMAGE_NS` is set, where no such tag exists; `check` refuses a stack whose
+   app-server's image is named otherwise.
 6. Write `stacks.conf` from `lettucectl list`.
 7. Install the wrapper, then run `lettucectl init` and `lettucectl apply --dry-run`. The plan should
    show no Cloudflare change and no address gained or lost.
