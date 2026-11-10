@@ -18,7 +18,7 @@ Each extra is a Compose profile whose name starts with `garden-`. Profiles are g
 
 | Profile | What each person gets | Guide |
 |---|---|---|
-| `garden-vault` | An encrypted vault for addresses, cards, documents and logins. Agents ask for a secret over MCP, and the person approves each request on the vault's page or by push notification, unless they let an everyday secret (an address, a note) be used without asking. | [Vault](docs/vault.md) |
+| `garden-vault` | An encrypted vault with Bitwarden's item types (logins, cards, identities, notes, SSH keys), importable from a Bitwarden export. Agents ask for a secret over MCP, and the person approves each request on the vault's page or by push notification, unless they let an everyday detail (an address, a note) be used without asking. Agents fill values in with placeholders, so they don't reach the AI provider. | [Vault](docs/vault.md) |
 | `garden-gmail-triggers` | Rules such as "when an email arrives in label X, ask agent Y to do Z". The garden polls Gmail read-only and starts each agent through Lettuce's own scheduler. Needs `google`. | [Gmail triggers](docs/gmail-triggers.md) |
 | `garden-code-server` | VS Code in the browser on the agents' workspaces. Its terminals run in a separate container that has the agents' tools and is no stronger than an agent. | [Code editor](docs/code-server.md) |
 | `garden-pipelock` | An egress proxy for the agents' tools, which checks where they connect, scans pages fetched through it and signs a receipt for every decision. Advisory for now: the stack keeps its direct route out. | [Egress proxy](docs/egress-firewall.md) |

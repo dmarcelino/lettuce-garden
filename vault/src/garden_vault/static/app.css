@@ -78,6 +78,57 @@ blockquote {
 
 /* -- A secret's fields ------------------------------------------------------ */
 
+/* Titled cards, like Bitwarden's sections, on the form and the secret's page.
+   Each folds away under its title (_group.html). */
+.stack.groups {
+  gap: 20px;
+}
+.group > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 2px;
+  list-style: none;
+  cursor: pointer;
+}
+.group > summary::-webkit-details-marker {
+  display: none;
+}
+/* A chevron: right when closed, down when open. */
+.group > summary::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+}
+.group[open] > summary::before {
+  transform: rotate(45deg);
+}
+.group:not([open]) > summary {
+  margin-bottom: 0;
+}
+.group-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.group > summary:hover .group-title {
+  color: var(--text);
+}
+.group > .panel {
+  padding: 16px;
+}
+.custom-row + .custom-row {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 dl.fields {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -129,4 +180,19 @@ dl.fields dd {
   dl.fields dd {
     margin-bottom: 8px;
   }
+}
+
+/* A masked box (Bitwarden's password-type fields) with its Show button beside it. */
+.masked-box {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.masked-box > input,
+.masked-box > textarea {
+  flex: 1;
+  min-width: 0;
+}
+textarea.masked {
+  -webkit-text-security: disc;
 }

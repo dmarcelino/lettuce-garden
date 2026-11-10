@@ -1,0 +1,10 @@
+{# A titled card, like Bitwarden's sections, that folds away. app.js remembers
+   which ones this browser keeps closed (by `id`, never a value). #}
+{% macro group(id, title, panel="panel") -%}
+<details class="group" data-group="{{ id }}" open>
+  <summary><h2 class="group-title">{{ title }}</h2></summary>
+  <div class="{{ panel }}">
+    {{ caller() }}
+  </div>
+</details>
+{%- endmacro %}

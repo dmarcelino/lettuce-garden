@@ -2,6 +2,9 @@
 {% block title %}Unlock{% endblock %}
 {% block content %}
 <h1>Your vault is locked</h1>
+{% if erase %}
+<div class="banner warn" role="status"><p><strong>This vault will be erased on {{ erase.when }} (in about {{ erase.left }}),</strong> as {{ erase.by }} asked. Unlocking it cancels the erase.</p></div>
+{% endif %}
 <p>Enter your passphrase to open it. It locks again when the server restarts, after 12 hours without use, or when you press Lock.</p>
 {% if problem %}<div class="banner bad" role="alert"><p>{{ problem }}</p></div>{% endif %}
 <form method="post" action="{{ base }}/unlock" class="panel stack" autocomplete="off">
@@ -12,5 +15,21 @@
   </label>
   <button class="button">Unlock</button>
 </form>
-<p class="muted">Forgot it? It cannot be recovered. You can erase the vault from Settings after unlocking, or ask whoever runs the server to remove its data.</p>
+{% if erase %}
+<form method="post" action="{{ base }}/erase/cancel" class="stack">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p>Changed your mind, or remembered the passphrase? Cancelling keeps everything as it is.</p>
+  <button class="button ghost">Cancel the erase</button>
+</form>
+{% else %}
+<section class="panel danger">
+  <h2>Forgot your passphrase?</h2>
+  <form method="post" action="{{ base }}/erase" class="stack" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <p>Nobody can recover it. You can erase the vault and start again: every secret and the history are deleted for good {{ erase_delay }} from now. Every device with notifications on is told, and unlocking the vault before then cancels the erase.</p>
+    <label class="field">Type DELETE to confirm <input name="confirm" required></label>
+    <button class="button danger outline">Erase in {{ erase_delay }}</button>
+  </form>
+</section>
+{% endif %}
 {% endblock %}

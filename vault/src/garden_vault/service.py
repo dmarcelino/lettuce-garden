@@ -2,16 +2,19 @@
 
 An agent lists secrets (names, types and public fields; never private values),
 asks for the private fields of one secret with a purpose, and gets them once
-the user has approved, or straight away for secrets the user set to "share
-without asking". With "env" delivery the agent gets a single-use handle instead
-of the values, and `vault-run` (agent-skills/using-vault-secrets) redeems it to
-pass them to one command. Requests, results and handles live only in memory: a
+the user has approved, or straight away for the fields the user set to "share
+without asking". By default ("placeholders" delivery) the agent gets a
+single-use handle instead of the values, and `vault-run`
+(agent-skills/using-vault-secrets) redeems it to pass them to one command, which
+may be `vault-fill` putting them into a file in place of {{VAULT_<FIELD>}}. The
+values themselves ("text" delivery) need a reason the user reads. Requests, results and handles live only in memory: a
 restart locks the vault anyway.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from secrets import token_urlsafe
 from typing import Any
@@ -19,6 +22,8 @@ from typing import Any
 import anyio
 
 from .config import (
+    ERASE_DELAY_SECONDS,
+    ERASE_GRACE_SECONDS,
     HANDLE_TTL_SECONDS,
     MAX_HANDLES,
     MAX_PENDING,
@@ -28,7 +33,7 @@ from .config import (
     REQUEST_TTL_SECONDS,
     RESULT_TTL_SECONDS,
 )
-from .kinds import preview
+from .kinds import may_share_without_asking, preview
 from .logs import SECRET_FILTER
 from .push import Pusher
 from .vault import AUTO, Locked, Secret, Vault, VaultError
@@ -36,8 +41,13 @@ from .vault import AUTO, Locked, Secret, Vault, VaultError
 log = logging.getLogger("garden_vault")
 
 PENDING, DONE, DENIED, EXPIRED = "pending", "done", "denied", "expired"
-TEXT, ENV = "text", "env"
-VAULT_RUN = "python3 /root/.letta/skills/using-vault-secrets/vault-run"
+PLACEHOLDERS, TEXT = "placeholders", "text"
+SKILL_DIR = "/root/.letta/skills/using-vault-secrets"
+VAULT_RUN = f"python3 {SKILL_DIR}/vault-run"
+VAULT_FILL = f"python3 {SKILL_DIR}/vault-fill"
+# Prefixes the variable names, so two secrets with the same fields (two
+# addresses) can go into one command: VAULT_HOME_CITY, VAULT_WORK_CITY.
+ALIAS = re.compile(r"[A-Za-z][A-Za-z0-9]{0,19}")
 
 # Pushes asking to unlock are sent at most this often.
 UNLOCK_NOTICE_SECONDS = 300
@@ -79,7 +89,9 @@ class Request:
     preview: str
     created_at: int
     expires_at: int
-    delivery: str = TEXT
+    delivery: str = PLACEHOLDERS
+    reason: str = ""  # why the agent must read the values (text delivery)
+    alias: str = ""
     status: str = PENDING
     decided_by: str | None = None
     decided_at: int | None = None
@@ -96,11 +108,20 @@ class Handle:
     labels: str
     purpose: str
     expires_at: int
-    env: dict[str, str] = field(repr=False)  # VAULT_<FIELD> -> value
+    env: dict[str, str] = field(repr=False)  # VAULT_[<ALIAS>_]<FIELD> -> value
 
 
-def env_name(key: str) -> str:
-    return f"VAULT_{key.upper()}"
+def hours(seconds: int) -> str:
+    n = seconds // 3600
+    return f"{n} hour" if n == 1 else f"{n} hours"
+
+
+ERASE_DELAY = hours(ERASE_DELAY_SECONDS)
+ERASE_GRACE = hours(ERASE_GRACE_SECONDS)
+
+
+def env_name(key: str, alias: str = "") -> str:
+    return f"VAULT_{alias.upper()}_{key.upper()}" if alias else f"VAULT_{key.upper()}"
 
 
 class Service:
@@ -112,6 +133,8 @@ class Service:
         self._handles: dict[str, Handle] = {}
         self._tasks: anyio.abc.TaskGroup | None = None
         self._last_unlock_notice = -UNLOCK_NOTICE_SECONDS
+        # An erase that came due while the server was down still waits this long.
+        self._erase_not_before = vault.now() + ERASE_GRACE_SECONDS
 
     def bind_task_group(self, tg: anyio.abc.TaskGroup | None) -> None:
         self._tasks = tg
@@ -147,6 +170,67 @@ class Service:
             "message": "The user's vault is locked. Send them this link in your reply now, since they may not "
             f"get a notification, and ask them to unlock it: {self.url('')} Then try again.",
         }
+
+    # ── erase without the passphrase ─────────────────────────────────────────
+    # Every step is announced on every device, so whoever has the passphrase
+    # hears of an erase they did not ask for while there is time to stop it.
+    def _erase_notice(self, tag: str, title: str, body: str) -> None:
+        # A tag per kind of notice: the same tag would silently replace one still on screen.
+        self._spawn_push({"title": title, "body": body, "url": f"{PREFIX}/", "tag": f"vault-erase-{tag}"})
+
+    def pending_erase(self) -> tuple[int, str] | None:
+        """(when it will really run, who asked), counting the wait after a restart."""
+        pending = self.vault.pending_erase()
+        return None if pending is None else (max(pending[0], self._erase_not_before), pending[1])
+
+    def announce_overdue_erase(self) -> None:
+        """At startup: an erase due within the grace period gets a last notice."""
+        pending = self.vault.pending_erase()
+        if pending is not None and pending[0] < self._erase_not_before:
+            self._erase_notice(
+                "restart",
+                f"Vault erase in {ERASE_GRACE}",
+                f"The server restarted around the time your vault's erase was due. It is erased in {ERASE_GRACE} "
+                "unless someone unlocks the vault or cancels the erase.",
+            )
+
+    def schedule_erase(self, email: str) -> int:
+        at, new = self.vault.schedule_erase(email)
+        if new:
+            self.vault.audit(email, "scheduled an erase")
+            self._erase_notice(
+                "scheduled",
+                "Vault erase scheduled",
+                f"{email} asked to erase your vault. Everything in it is deleted in {ERASE_DELAY} "
+                "unless someone unlocks the vault or cancels the erase.",
+            )
+        return at
+
+    def cancel_erase(self, email: str) -> bool:
+        if not self.vault.cancel_erase():
+            return False
+        self.erase_cancelled(email, by_unlock=False)
+        return True
+
+    def erase_cancelled(self, email: str, by_unlock: bool) -> None:
+        """After `cancel_erase`, or an unlock that cancelled one."""
+        self.vault.audit(email, "cancelled the scheduled erase" + (" by unlocking" if by_unlock else ""))
+        how = "unlocked the vault, which cancels" if by_unlock else "cancelled"
+        self._erase_notice("cancelled", "Vault erase cancelled", f"{email} {how} the erase. Nothing was deleted.")
+
+    def erase_if_due(self) -> bool:
+        """Run from housekeeping, which must go on (expiry, auto-lock) if this fails;
+        a failed erase stays scheduled and is tried again on the next pass."""
+        try:
+            by = self.vault.erase_if_due(not_before=self._erase_not_before)
+        except Exception as e:
+            log.warning("scheduled erase failed error=%s", type(e).__name__)
+            return False
+        if by is None:
+            return False
+        self.vault.audit(by, f"erased the vault (scheduled {ERASE_DELAY} earlier)")
+        self._erase_notice("done", "Vault erased", "Your vault was erased as scheduled. Open it to create a new one.")
+        return True
 
     # ── housekeeping ─────────────────────────────────────────────────────────
     def expire(self) -> None:
@@ -193,12 +277,18 @@ class Service:
                     "type": s.kind_label,
                     "use_for": s.usage,
                     "details": {f.label: f.value for f in s.public_fields},
-                    "private_fields": [{"key": f.key, "label": f.label} for f in s.private_fields],
-                    "needs_approval": s.share_mode != AUTO,
+                    "private_fields": [
+                        {"key": f.key, "label": f.label, "needs_approval": not self._auto(s, f.key)}
+                        for f in s.private_fields
+                    ],
                 }
                 for s in found
             ]
         }
+
+    @staticmethod
+    def _auto(secret: Secret, key: str) -> bool:
+        return secret.share_mode == AUTO and may_share_without_asking(secret.kind, key)
 
     @staticmethod
     def _values(secret: Secret, keys: tuple[str, ...]) -> dict[str, str]:
@@ -212,10 +302,12 @@ class Service:
         values: dict[str, str],
         delivery: str,
         purpose: str,
+        alias: str,
     ) -> dict[str, Any]:
-        """The values themselves, or for "env" a handle that vault-run redeems."""
+        """A handle that vault-run redeems, or for "text" the values themselves."""
         if delivery == TEXT:
             return {"secret": secret_name, "values": values, "rules": rules(purpose)}
+        names = {k: env_name(k, alias) for k in values}
         handle = Handle(
             id=token_urlsafe(32),
             secret_id=secret_id,
@@ -223,40 +315,89 @@ class Service:
             labels=", ".join(labels[k] for k in values),
             purpose=purpose,
             expires_at=self.vault.now() + HANDLE_TTL_SECONDS,
-            env={env_name(k): v for k, v in values.items()},
+            env={names[k]: v for k, v in values.items()},
         )
         self._handles[handle.id] = handle
         return {
             "secret": secret_name,
             "handle": handle.id,
-            "env": {env_name(k): labels[k] for k in values},
+            "placeholders": {f"{{{{{names[k]}}}}}": labels[k] for k in values},
             "expires_in": HANDLE_TTL_SECONDS,
-            "run": f"{VAULT_RUN} {handle.id} -- <command>",
+            "fill": f"{VAULT_RUN} {handle.id} -- {VAULT_FILL} <template> <output>",
+            "run": f"{VAULT_RUN} {handle.id} -- <command reading ${next(iter(names.values()))}>",
+            "message": "Put the placeholders where the values go (a template file for vault-fill, or $VAULT_... "
+            "in a command) and run it with vault-run once, within "
+            f"{HANDLE_TTL_SECONDS // 60} minutes; load the using-vault-secrets skill for how. Never open the "
+            "filled file or print the values.",
         }
 
-    def redeem(self, handle_id: str) -> dict[str, Any] | None:
-        """Called by vault-run through /redeem: the values of a handle, once, while unlocked."""
+    def redeem(self, handle_ids: Any, taken: Any = ()) -> tuple[int, dict[str, Any]]:
+        """Called by vault-run through /redeem: the values of its handles, once, while
+        unlocked. All or nothing: an unknown handle, or a variable name that two
+        handles share or that `taken` (the VAULT_ names already in vault-run's
+        environment) holds, uses up none of them, so the user's approvals survive."""
         self.expire()
-        handle = self._handles.pop(handle_id, None) if isinstance(handle_id, str) else None
-        if handle is None:
-            return None
-        detail = f"{handle.secret_name}: {handle.labels}. Purpose: {handle.purpose}"
-        with SECRET_FILTER.guarding(handle.env.values()):
-            self.vault.audit("agent", "given to a command", handle.secret_id, detail)
-            log.info("redeemed secret=%s fields=%s", handle.secret_id, ",".join(handle.env))
-        return {"secret": handle.secret_name, "env": handle.env}
+        if (
+            not isinstance(handle_ids, list)
+            or not 0 < len(handle_ids) <= MAX_HANDLES
+            or not all(isinstance(h, str) for h in handle_ids)
+            or len(set(handle_ids)) != len(handle_ids)
+        ):
+            return 400, {"error": "expected 1 to 10 different handles"}
+        handles = [self._handles.get(h) for h in handle_ids]
+        if any(h is None for h in handles):
+            return 404, {"error": "unknown or expired handle; request that secret again (the others are still valid)"}
+        names = [n for h in handles for n in h.env]  # type: ignore[union-attr]
+        twice = sorted({n for n in names if names.count(n) > 1})
+        if twice:
+            error = f"{', '.join(twice)} would come from two secrets: request one of them again with an alias"
+            return 409, {"error": error}
+        preset = sorted(set(names) & {t for t in taken if isinstance(t, str)}) if isinstance(taken, list) else []
+        if preset:
+            error = (
+                f"{', '.join(preset)} is already set in vault-run's environment (a nested vault-run, or a variable "
+                "of your own): unset it, or request the secret again with an alias"
+            )
+            return 409, {"error": error}
+        env: dict[str, str] = {}
+        for handle in handles:
+            assert handle is not None
+            del self._handles[handle.id]
+            detail = f"{handle.secret_name}: {handle.labels}. Purpose: {handle.purpose}"
+            with SECRET_FILTER.guarding(handle.env.values()):
+                self.vault.audit("agent", "given to a command", handle.secret_id, detail)
+                log.info("redeemed secret=%s fields=%s", handle.secret_id, ",".join(handle.env))
+            env.update(handle.env)
+        return 200, {"secrets": [h.secret_name for h in handles if h is not None], "env": env}
 
     async def request_secret(
-        self, secret_id: str, purpose: str, fields: list[str] | None = None, delivery: str = TEXT
+        self,
+        secret_id: str,
+        purpose: str,
+        fields: list[str] | None = None,
+        delivery: str = PLACEHOLDERS,
+        reason: str | None = None,
+        alias: str | None = None,
     ) -> dict[str, Any]:
         if not isinstance(secret_id, str) or not isinstance(purpose, str):
             return {"status": "refused", "error": "secret_id and purpose must be strings"}
         if fields is not None and not isinstance(fields, list):
             return {"status": "refused", "error": "fields must be a list of private field keys"}
-        if delivery not in (TEXT, ENV):
-            return {"status": "refused", "error": f"delivery must be '{TEXT}' or '{ENV}'"}
+        if delivery not in (PLACEHOLDERS, TEXT):
+            return {"status": "refused", "error": f"delivery must be '{PLACEHOLDERS}' or '{TEXT}'"}
+        reason = reason.strip() if isinstance(reason, str) else ""
+        if delivery == TEXT and not 0 < len(reason) <= MAX_PURPOSE_LENGTH:
+            error = (
+                f"delivery '{TEXT}' puts the values in the conversation, which the AI provider sees: use "
+                f"'{PLACEHOLDERS}' unless you must read them, and then give the reason you must "
+                f"(1-{MAX_PURPOSE_LENGTH} characters), which the user reads before approving"
+            )
+            return {"status": "refused", "error": error}
+        alias = alias if isinstance(alias, str) else ""
+        if alias and not ALIAS.fullmatch(alias):
+            return {"status": "refused", "error": "alias must be 1-20 letters or digits, starting with a letter"}
         self.expire()
-        if delivery == ENV and len(self._handles) >= MAX_HANDLES:
+        if delivery == PLACEHOLDERS and len(self._handles) >= MAX_HANDLES:
             error = "too many unused handles; run vault-run with the ones you have, or wait for them to expire"
             return {"status": "refused", "error": error}
         purpose = purpose.strip()
@@ -280,12 +421,11 @@ class Service:
         field_labels = {k: secret.field(k).label for k in keys}  # type: ignore[union-attr]
         labels = ", ".join(field_labels.values())
 
-        if secret.share_mode == AUTO:
+        why = f"Purpose: {purpose}" + (f". Reason to read them: {reason}" if delivery == TEXT else "")
+        if all(self._auto(secret, k) for k in keys):
             values = self._values(secret, keys)
             with SECRET_FILTER.guarding(values.values()):
-                self.vault.audit(
-                    "agent", "shared without asking", secret.id, f"{secret.name}: {labels}. Purpose: {purpose}"
-                )
+                self.vault.audit("agent", "shared without asking", secret.id, f"{secret.name}: {labels}. {why}")
                 log.info("shared without asking secret=%s fields=%s", secret.id, ",".join(keys))
             self._spawn_push(
                 {
@@ -295,7 +435,7 @@ class Service:
                     "tag": f"vault-shared-{secret.id}",
                 }
             )
-            delivered = self._deliver(secret.id, secret.name, field_labels, values, delivery, purpose)
+            delivered = self._deliver(secret.id, secret.name, field_labels, values, delivery, purpose, alias)
             return {"status": DONE, **delivered}
 
         if sum(1 for r in self._requests.values() if r.status == PENDING) >= MAX_PENDING:
@@ -314,6 +454,8 @@ class Service:
             created_at=now,
             expires_at=now + REQUEST_TTL_SECONDS,
             delivery=delivery,
+            reason=reason if delivery == TEXT else "",
+            alias=alias,
         )
         self._requests[req.id] = req
         log.info("pending id=%s secret=%s fields=%s", req.id, secret.id, ",".join(keys))
@@ -353,7 +495,9 @@ class Service:
         if req.values is None:
             return {"id": rid, "status": DONE, "note": "the values were already returned"}
         values, req.values = req.values, None
-        delivered = self._deliver(req.secret_id, req.secret_name, req.labels, values, req.delivery, req.purpose)
+        delivered = self._deliver(
+            req.secret_id, req.secret_name, req.labels, values, req.delivery, req.purpose, req.alias
+        )
         result: dict[str, Any] = {"id": rid, "status": DONE, **delivered}
         withheld = [req.labels[k] for k in req.fields if k not in req.shared]
         if withheld:
@@ -381,9 +525,8 @@ class Service:
             raise VaultError("that secret changed; ask the agent to request it again")
         labels = ", ".join(req.labels[k] for k in shared)
         with SECRET_FILTER.guarding(values.values()):
-            self.vault.audit(
-                email, "shared on approval", req.secret_id, f"{req.secret_name}: {labels}. Purpose: {req.purpose}"
-            )
+            why = f"Purpose: {req.purpose}" + (f". Reason to read them: {req.reason}" if req.reason else "")
+            self.vault.audit(email, "shared on approval", req.secret_id, f"{req.secret_name}: {labels}. {why}")
             log.info("approved id=%s secret=%s fields=%s by=%s", rid, req.secret_id, ",".join(shared), email)
         req.status, req.decided_by, req.decided_at, req.shared, req.values = DONE, email, now, shared, values
         return req

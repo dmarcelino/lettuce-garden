@@ -1,8 +1,12 @@
+import json
+import sqlite3
+
 import pytest
 
 from garden_vault import crypto
-from garden_vault.kinds import KINDS
-from garden_vault.vault import AUTO, Locked, Vault, VaultError, build_fields
+from garden_vault.config import ERASE_DELAY_SECONDS
+from garden_vault.kinds import KINDS, group_fields
+from garden_vault.vault import AUTO, FORMAT, Locked, Vault, VaultError, build_fields
 
 from .conftest import CARD, FAST_KDF, PASSPHRASE, SECRET, STREET, add_address, add_card
 
@@ -45,7 +49,7 @@ def test_restart_comes_back_locked(vault, vault_path, clock):
     with pytest.raises(VaultError, match="wrong passphrase"):
         again.unlock("not the passphrase at all")
     again.unlock(PASSPHRASE)
-    assert STREET in again.secret(secret_id).field("text").value
+    assert again.secret(secret_id).field("address1").value == STREET
 
 
 def test_setup_rules(vault_path, clock):
@@ -98,35 +102,152 @@ def test_reset_erases_everything(vault, vault_path):
     assert CARD.encode() not in open(vault_path, "rb").read()
 
 
-def test_types_are_short_and_private_where_it_matters():
-    shapes = {key: [(f.key, f.sensitive, f.required) for f in kind.fields] for key, kind in KINDS.items()}
-    text = [("text", True, True)]
-    assert shapes["note"] == shapes["address"] == shapes["company"] == text
-    assert shapes["membership"] == [("programme", False, False), ("member_number", True, True), ("notes", True, False)]
-    assert shapes["id_document"] == [("document_type", False, False), ("number", True, True), ("notes", True, False)]
-    assert shapes["card"] == [
-        ("cardholder", False, False),
-        ("number", True, True),
-        ("expiry", False, False),
-        ("security_code", True, False),
-        ("notes", True, False),
+def test_erase_can_be_scheduled_only_for_a_locked_vault(vault, vault_path, clock):
+    with pytest.raises(VaultError, match="unlocked"):
+        vault.schedule_erase("alfred@gmail.com")
+    assert vault.pending_erase() is None
+    empty = Vault(str(vault_path) + ".new", clock=clock, kdf=FAST_KDF)
+    with pytest.raises(VaultError, match="no vault"):
+        empty.schedule_erase("alfred@gmail.com")
+
+
+def test_scheduled_erase_runs_after_24_hours(vault, vault_path, clock):
+    add_card(vault)
+    vault.add_subscription("https://push.example/1", "k", "a", "alfred@gmail.com")
+    vault.lock()
+    at, new = vault.schedule_erase("alfred@gmail.com")
+    assert new and at == int(clock.t) + ERASE_DELAY_SECONDS
+    assert vault.pending_erase() == (at, "alfred@gmail.com")
+    clock.t += 3600
+    # Asking again neither moves the time nor counts as a new request.
+    assert vault.schedule_erase("hal@example.com") == (at, False)
+    assert vault.pending_erase() == (at, "alfred@gmail.com")
+    clock.t = at - 1
+    assert vault.erase_if_due() is None and vault.is_setup()
+    clock.t = at
+    assert vault.erase_if_due() == "alfred@gmail.com"
+    assert not vault.is_setup() and vault.pending_erase() is None
+    assert len(vault.subscriptions()) == 1
+    assert CARD.encode() not in open(vault_path, "rb").read()
+    assert vault.erase_if_due() is None
+
+
+def test_scheduled_erase_survives_a_restart(vault, vault_path, clock):
+    vault.lock()
+    at, _ = vault.schedule_erase("alfred@gmail.com")
+    again = Vault(vault_path, clock=clock, kdf=FAST_KDF)
+    assert again.pending_erase() == (at, "alfred@gmail.com")
+    clock.t = at + 1
+    assert again.erase_if_due() == "alfred@gmail.com" and not again.is_setup()
+
+
+def test_unlocking_or_cancelling_stops_the_erase(vault, clock):
+    vault.lock()
+    vault.schedule_erase("alfred@gmail.com")
+    assert vault.unlock(PASSPHRASE) is True
+    assert vault.pending_erase() is None
+    vault.lock()
+    assert vault.unlock(PASSPHRASE) is False
+    vault.lock()
+    vault.schedule_erase("alfred@gmail.com")
+    assert vault.cancel_erase() is True and vault.pending_erase() is None
+    assert vault.cancel_erase() is False
+    clock.t += 2 * ERASE_DELAY_SECONDS
+    assert vault.erase_if_due() is None and vault.is_setup()
+
+
+def test_unlock_fails_when_the_vault_was_erased_meanwhile(vault, monkeypatch):
+    vault.lock()
+    unwrap = vault._unwrap
+
+    def erase_during_kdf(passphrase):
+        key = unwrap(passphrase)
+        vault.reset()
+        return key
+
+    monkeypatch.setattr(vault, "_unwrap", erase_during_kdf)
+    with pytest.raises(VaultError, match="erased"):
+        vault.unlock(PASSPHRASE)
+    assert not vault.is_unlocked()
+
+
+def test_types_are_bitwardens_with_private_fields_where_it_matters():
+    shapes = {key: [(f.key, f.sensitive, f.auto) for f in kind.fields] for key, kind in KINDS.items()}
+    public, private, auto = False, True, True
+    assert list(shapes) == ["login", "card", "identity", "secure_note", "ssh_key"]
+    assert shapes["login"] == [
+        ("username", public, False),
+        ("password", private, False),
+        ("totp", private, False),
+        ("uris", public, False),
+        ("notes", private, False),
     ]
-    assert shapes["login"] == [("website", False, False), ("username", False, False), ("password", True, True)]
+    assert shapes["card"] == [
+        ("cardholder_name", public, False),
+        ("brand", public, False),
+        ("number", private, False),
+        ("exp_month", private, False),
+        ("exp_year", private, False),
+        ("code", private, False),
+        ("notes", private, False),
+    ]
+    identity_public = [k for k, s, _ in shapes["identity"] if not s]
+    assert identity_public == ["title", "first_name", "middle_name", "last_name", "country"]
+    assert [k for k, _, a in shapes["identity"] if a] == [
+        "address1",
+        "address2",
+        "address3",
+        "city",
+        "state",
+        "postal_code",
+    ]
+    assert shapes["secure_note"] == [("notes", private, auto)]
+    assert shapes["ssh_key"] == [
+        ("private_key", private, False),
+        ("public_key", public, False),
+        ("key_fingerprint", public, False),
+        ("notes", private, False),
+    ]
 
 
-@pytest.mark.parametrize("kind", ["note", "address", "company", "membership"])
-def test_these_types_may_share_without_asking_even_with_private_fields(vault, kind):
-    values = {"text": "x", "member_number": "123"}
+def test_fields_are_grouped_like_bitwardens_form():
+    titles = {key: [title for title, _ in kind.groups] for key, kind in KINDS.items()}
+    assert titles == {
+        "login": ["Login credentials", "Additional options"],
+        "card": ["Card details", "Additional options"],
+        "identity": ["Personal details", "Identification", "Contact info", "Address", "Additional options"],
+        "secure_note": ["Additional options"],
+        "ssh_key": ["SSH key", "Additional options"],
+    }
+    for kind in KINDS.values():
+        assert [f for _, specs in kind.groups for f in specs] == list(kind.fields)
+    identity = dict(KINDS["identity"].groups)
+    assert [f.key for f in identity["Identification"]] == ["ssn", "passport_number", "license_number"]
+    assert [f.key for f in identity["Contact info"]] == ["email", "phone"]
+
+
+def test_a_secrets_fields_group_like_its_form_with_custom_fields_last():
+    fields = build_fields("identity", {"first_name": "Alfred", "city": "Lisboa", "notes": SECRET}, [("PIN", "1", True)])
+    grouped = [(title, [f.key for f in fs]) for title, fs in group_fields("identity", fields)]
+    assert grouped == [
+        ("Personal details", ["first_name"]),
+        ("Address", ["city"]),
+        ("Additional options", ["notes"]),
+        ("Custom fields", ["pin"]),
+    ]
+
+
+@pytest.mark.parametrize("kind,values", [("identity", {"city": "Lisboa"}), ("secure_note", {"notes": SECRET})])
+def test_identities_and_notes_may_share_without_asking(vault, kind, values):
     fields = build_fields(kind, values)
-    assert any(f.sensitive for f in fields)
     assert vault.secret(vault.add_secret(kind, "s", "", fields, AUTO)).share_mode == AUTO
 
 
 @pytest.mark.parametrize(
     "kind,values",
-    [("card", {"number": CARD}), ("login", {"password": SECRET}), ("id_document", {"number": "AB123456"})],
+    [("card", {"number": CARD}), ("login", {"password": SECRET}), ("ssh_key", {"private_key": SECRET})],
 )
-def test_cards_logins_and_documents_always_ask(vault, kind, values):
+def test_cards_logins_and_keys_always_ask(vault, kind, values):
     with pytest.raises(VaultError, match="always ask"):
         vault.add_secret(kind, "s", "", build_fields(kind, values), AUTO)
 
@@ -134,14 +255,95 @@ def test_cards_logins_and_documents_always_ask(vault, kind, values):
 def test_build_fields_rules():
     fields = build_fields("login", {"username": "alfred", "password": SECRET, "unknown": "dropped"})
     assert [(f.key, f.sensitive) for f in fields] == [("username", False), ("password", True)]
-    with pytest.raises(VaultError, match="Password is required"):
-        build_fields("login", {"website": "shop.example"})
-    with pytest.raises(VaultError, match="Text is required"):
-        build_fields("address", {"text": "   "})
+    with pytest.raises(VaultError, match="at least one"):
+        build_fields("login", {"username": "   "})
     with pytest.raises(VaultError, match="longer"):
-        build_fields("note", {"text": "x" * 5000})
+        build_fields("secure_note", {"notes": "x" * 5000})
     with pytest.raises(VaultError):
-        build_fields("rocket", {"text": "y"})
+        build_fields("rocket", {"notes": "y"})
+
+
+def test_custom_fields_are_private_and_named_for_agents():
+    custom = [("VAT ID", "PT999", False), ("  ", "", True), ("Recovery codes", "a\nb", True)]
+    fields = build_fields("login", {"password": SECRET}, custom)
+    found = [(f.key, f.label, f.value, f.sensitive, f.multiline, f.masked) for f in fields[1:]]
+    assert found == [
+        ("vat_id", "VAT ID", "PT999", True, False, False),  # Bitwarden's Text field: private, not masked
+        ("recovery_codes", "Recovery codes", "a\nb", True, True, True),  # Hidden
+    ]
+    assert [f.key for f in build_fields("login", {"password": SECRET}, [("Empty", "", True)])] == ["password"]
+
+
+# Bitwarden's form masks these (type="password" with a show toggle); nothing else.
+MASKED = {
+    "login": ["password", "totp"],
+    "card": ["number", "code"],
+    "identity": ["ssn", "passport_number"],
+    "secure_note": [],
+    "ssh_key": ["private_key"],
+}
+
+
+def test_only_bitwardens_masked_fields_are_masked():
+    assert {key: [f.key for f in kind.fields if f.masked] for key, kind in KINDS.items()} == MASKED
+    for kind in KINDS.values():
+        assert all(f.sensitive for f in kind.fields if f.masked)  # masked is a kind of private
+    values = {"password": SECRET, "username": "alfred", "notes": "n"}
+    assert [(f.key, f.masked) for f in build_fields("login", values)] == [
+        ("username", False),
+        ("password", True),
+        ("notes", False),
+    ]
+
+
+def test_a_field_saved_without_the_masked_flag_stays_masked(vault):
+    secret_id = add_address(vault)
+    row = vault._q("SELECT * FROM secrets WHERE id = ?", (secret_id,))[0]
+    key = vault._key()
+    data = json.loads(crypto.open_sealed(key, bytes(row["blob"]), f"secret:{secret_id}".encode()))
+    for f in data["fields"]:
+        del f["masked"]
+    blob = crypto.seal(key, json.dumps(data).encode(), f"secret:{secret_id}".encode())
+    vault._x("UPDATE secrets SET blob = ? WHERE id = ?", (blob, secret_id))
+    assert all(f.masked for f in vault.secret(secret_id).fields)
+
+
+@pytest.mark.parametrize(
+    "custom,error",
+    [
+        ([("Password", "x", True)], "rename"),
+        ([("PIN", "1", True), ("pin", "2", False)], "rename"),
+        ([("", "x", True)], "name"),
+        ([("!!", "x", True)], "name"),
+        ([("x" * 41, "x", True)], "name"),
+        ([(f"f{i}", "x", False) for i in range(21)], "at most"),
+    ],
+)
+def test_custom_field_rules(custom, error):
+    with pytest.raises(VaultError, match=error):
+        build_fields("login", {"password": SECRET}, custom)
+
+
+def test_secrets_of_an_older_format_are_deleted_on_unlock(vault, vault_path, clock):
+    kept = add_address(vault)
+    vault._x("DELETE FROM vault_meta WHERE k = 'format'")  # a vault made before Bitwarden's types
+    vault.lock()
+    assert len(vault._q("SELECT id FROM secrets")) == 1  # nothing happens while locked
+    vault.unlock(PASSPHRASE)
+    assert vault.secrets() == [] and vault.secret(kept) is None
+    assert vault._meta("format") == FORMAT
+    assert [(e.actor, e.action) for e in vault.audit_log()][0] == ("vault", "deleted 1 secrets of an older format")
+    add_address(vault)
+    vault.lock()
+    vault.unlock(PASSPHRASE)
+    assert len(vault.secrets()) == 1  # deleted once, not on every unlock
+
+
+def test_a_new_or_erased_vault_has_the_current_format(vault, vault_path, clock):
+    assert vault._meta("format") == FORMAT
+    vault.reset()
+    vault.setup(PASSPHRASE)
+    assert vault._meta("format") == FORMAT
 
 
 def test_audit_is_encrypted_and_readable_when_unlocked(vault):
@@ -151,3 +353,26 @@ def test_audit_is_encrypted_and_readable_when_unlocked(vault):
     vault.audit("alfred@gmail.com", "failed unlock")
     with pytest.raises(Locked):
         vault.audit_log()
+
+
+def test_a_failed_cancel_leaves_the_vault_locked(vault, monkeypatch):
+    vault.lock()
+    vault.schedule_erase("alfred@gmail.com")
+
+    def broken():
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(vault, "cancel_erase", broken)
+    with pytest.raises(sqlite3.OperationalError):
+        vault.unlock(PASSPHRASE)
+    # Unlocked with the erase still scheduled, it would run after the next lock, unannounced.
+    assert not vault.is_unlocked() and vault.pending_erase() is not None
+
+
+def test_an_erase_waits_for_its_not_before(vault, clock):
+    vault.lock()
+    at, _ = vault.schedule_erase("alfred@gmail.com")
+    clock.t = at + 10
+    assert vault.erase_if_due(not_before=at + 3600) is None and vault.is_setup()
+    clock.t = at + 3600
+    assert vault.erase_if_due(not_before=at + 3600) == "alfred@gmail.com"

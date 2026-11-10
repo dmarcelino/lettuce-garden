@@ -59,7 +59,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 - A new safety rule goes into `check_stack`, with a `test_check_*` test, and into [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-rule) or its folder's "Rules". Remember that a container Docker restarts on its own is not re-checked.
 
 ### Features
-- **Vault** ([rules](vault/README.md#rules)): never add an MCP tool that edits secrets or bypasses approval; never write vault data, keys or the passphrase unencrypted or to logs; never mount `vault-data` elsewhere (only `backup`, read-only); agent activity must not extend the auto-lock.
+- **Vault** ([rules](vault/README.md#rules)): never add an MCP tool that edits secrets or bypasses approval; never write vault data, keys or the passphrase unencrypted or to logs; never mount `vault-data` elsewhere (only `backup`, read-only); agent activity must not extend the auto-lock; an erase without the passphrase always waits its delay and tells every device.
 - **Code editor** ([rules](code-server/README.md#rules)): nothing an agent wrote may run in the editor's container. Never add an extension, setting or flag that runs code, trusts a workspace or opens a port.
 - **Garden pages** ([garden-common rules](garden-common/README.md#rules), [garden rules](garden/README.md#rules)): every page checks Fetch Metadata (`check_fetch`) and sets COOP; the landing page has no script; every garden service accepts only `CF_GARDEN_AUD` and `GARDEN_ORIGIN`.
 - **Executor** ([install](garden/executor/README.md#install), [trust](garden/executor/README.md#trust)): only `sync_executor` installs or removes it (from `up`, `add` and `profiles`), through `compose exec`, replacing only its own files; its token is never rotated automatically. The executor runs `letta` from an argument array, never a shell. It and the sidecars share no directory and treat each other's data as untrusted.
@@ -72,7 +72,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 ### Docs ([CONTRIBUTING.md](CONTRIBUTING.md#writing-docs))
 - README introduces and indexes, `docs/` is for users and admins, and CONTRIBUTING, ARCHITECTURE and the folder READMEs are for developers. This file holds directives only.
 - A rule change edits its developer doc, then the directive here if its one-line form changed.
-- Never claim more than is true: pipelock advisory, `env` delivery not a boundary, never trust a folder in the code editor.
+- Never claim more than is true: pipelock advisory, the vault's placeholders not a boundary, never trust a folder in the code editor.
 - Keep the guides' file names and `docs/cloudflare-setup.md`'s step numbers: `lettucectl` messages cite them and tests assert some.
 - Never add a file other than `README.md`, `AGENTS.md` and `CLAUDE.md` to `doc-tools/` or `garden-common/` for docs: it would rebuild images.
 - A new folder README gets an `AGENTS.md` pointer and a `CLAUDE.md` symlink to it; `node scripts/check-doc-links.mjs` fails without them.
