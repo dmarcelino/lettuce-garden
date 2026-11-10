@@ -78,17 +78,48 @@ blockquote {
 
 /* -- A secret's fields ------------------------------------------------------ */
 
-/* Titled cards, like Bitwarden's sections: on the form and the secret's page. */
+/* Titled cards, like Bitwarden's sections, on the form and the secret's page.
+   Each folds away under its title (_group.html). */
 .stack.groups {
   gap: 20px;
 }
-.group > legend,
+.group > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 2px;
+  list-style: none;
+  cursor: pointer;
+}
+.group > summary::-webkit-details-marker {
+  display: none;
+}
+/* A chevron: right when closed, down when open. */
+.group > summary::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+}
+.group[open] > summary::before {
+  transform: rotate(45deg);
+}
+.group:not([open]) > summary {
+  margin-bottom: 0;
+}
 .group-title {
-  margin: 0 0 8px;
-  padding: 0 2px;
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--muted);
+}
+.group > summary:hover .group-title {
+  color: var(--text);
 }
 .group > .panel {
   padding: 16px;

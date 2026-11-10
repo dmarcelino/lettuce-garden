@@ -475,15 +475,23 @@ def test_custom_fields_are_kept_renamed_and_removed(env):
     assert [f.key for f in vault.secret(secret).custom_fields] == ["branch"]
 
 
-def legends(html: str) -> list[str]:
-    return re.findall(r'<fieldset class="group">\s*<legend>([^<]+)</legend>', html)
+def groups(html: str) -> list[str]:
+    """The titles of the page's groups; each one starts open and folds away."""
+    opening = r'<details class="group" data-group="([^"]+)" open>\s*<summary><h2 class="group-title">([^<]+)'
+    found = re.findall(opening, html)
+    assert all(key.endswith(":" + title) for key, title in found)
+    return [title for _, title in found]
+
+
+def group_body(html: str, title: str) -> str:
+    return html.split(f'<h2 class="group-title">{title}</h2>')[1].split("</details>")[0]
 
 
 def test_the_form_groups_fields_like_bitwarden(env):
     client = env[0]
     setup_vault(client)
     form = client.get(f"{B}/secrets/new?kind=identity").text
-    assert legends(form) == [
+    assert groups(form) == [
         "Item details",
         "Personal details",
         "Identification",
@@ -493,12 +501,13 @@ def test_the_form_groups_fields_like_bitwarden(env):
         "Custom fields",
         "Agent access",
     ]
-    personal = form.split("<legend>Personal details</legend>")[1].split("</fieldset>")[0]
+    assert 'data-group="form:identity:Address"' in form
+    personal = group_body(form, "Personal details")
     assert 'name="f_first_name"' in personal and 'name="f_passport_number"' not in personal
     secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321"})
     edit = client.get(f"{B}/secrets/{secret}/edit").text
-    assert legends(edit)[1:3] == ["Card details", "Additional options"]
-    custom = edit.split("<legend>Custom fields</legend>")[1].split("</fieldset>")[0]
+    assert groups(edit)[1:3] == ["Card details", "Additional options"]
+    custom = group_body(edit, "Custom fields")
     assert 'value="PIN"' in custom and "4321" not in edit
 
 
@@ -507,8 +516,8 @@ def test_the_secret_page_groups_fields_like_the_form(env):
     setup_vault(client)
     secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321"})
     page = client.get(f"{B}/secrets/{secret}").text
-    headings = re.findall(r'<h2 class="group-title">([^<]+)</h2>', page)
-    assert headings == ["Card details", "Additional options", "Custom fields", "Agent access"]
+    assert groups(page) == ["Card details", "Additional options", "Custom fields", "Agent access"]
+    assert 'data-group="page:card:Custom fields"' in page
     assert CARD not in page and SECRET not in page and "4321" not in page
     shown = post(client, f"{B}/secrets/{secret}/show", {}).text
     assert CARD in shown and "4321" in shown and 'data-copy="v-pin"' in shown

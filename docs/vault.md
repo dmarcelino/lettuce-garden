@@ -11,7 +11,7 @@ How the vault is built and wired, for developers: [vault/README.md](../vault/REA
 ## Using it
 1. **Open `https://<your garden>/vault/`** and sign in as usual; `<your garden>` is your stack's garden address, `<name>-garden.<domain>`. Its home page, `https://<your garden>/`, links to it too.
 2. **Create your vault:** choose a passphrase of at least 12 characters. Four or five unrelated words work well. **Nobody can recover it**, not even whoever runs the server. If you forget it, you have to erase the vault and start again (step 7).
-3. **Add secrets:** go to **Secrets**, then **Add a secret**, and pick a type, or **Import from Bitwarden** (below). Every secret has a name. Fields in *italics* are private; the others agents can read, like the name. Every field is optional, but a secret needs at least one. The form and the secret's page group the fields the way Bitwarden does (for an identity: Personal details, Identification, Contact info, Address), with notes under Additional options.
+3. **Add secrets:** go to **Secrets**, then **Add a secret**, and pick a type, or **Import from Bitwarden** (below). Every secret has a name. Fields in *italics* are private; the others agents can read, like the name. Every field is optional, but a secret needs at least one. The form and the secret's page group the fields the way Bitwarden does (for an identity: Personal details, Identification, Contact info, Address), with notes under Additional options. Press a group's title to fold it away; that browser keeps it folded until you open it again.
 
    | Type | Fields | Can be used without asking |
    |---|---|---|
