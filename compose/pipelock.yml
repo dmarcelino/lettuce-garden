@@ -17,8 +17,8 @@ services:
   garden-pipelock:
     profiles: ["garden-pipelock"]
     build:
-      context: ../../pipelock
-    image: lettuce-pipelock:local
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/pipelock
+    image: ${GARDEN_IMAGE_PIPELOCK:-lettuce-pipelock:local}
     environment:
       TZ: ${TZ:-UTC}
     volumes:

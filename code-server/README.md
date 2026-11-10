@@ -55,7 +55,7 @@ scripts/code-server-e2e.sh [--browser]      # the real images: the gate against 
 shellcheck -x code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh
 ```
 
-`lettucectl up` builds the images; there is no other build step. Run `tests/run-sidecar.sh code-server` before changing this folder, and `scripts/code-server-e2e.sh --browser` before keeping a new built-in extension or setting. Moving to a new code-server release is described under [Maintaining](#maintaining).
+From a clone `lettucectl up` builds the images; a release install pulls the gate and the editor, and builds only the shell (on the app-server's image). There is no other build step. Run `tests/run-sidecar.sh code-server` before changing this folder, and `scripts/code-server-e2e.sh --browser` before keeping a new built-in extension or setting. Moving to a new code-server release is described under [Maintaining](#maintaining).
 
 The gate's tests use a `FakeEditor`: an `httpx.MockTransport` for HTTP (a fresh stream per response) and an echoing fake WebSocket peer, with the vault's `make_jwt` pattern and an injectable clock for the JWT's expiry. The editor image's tests (`editor/tests/test.sh`) swap `ssh` for a fake that records the remote command, replay it with `bash -c` against fake `agent-env` and `env`, and swap code-server for a fake before running the entrypoint. `tests/e2e/` holds what `scripts/code-server-e2e.sh` runs in the gate's test image and in Chromium.
 
@@ -93,5 +93,5 @@ Moving code-server to a new release: change `CODE_SERVER_VERSION` and both `SHA2
 
 These are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#upstream-seams); every Lettuce upgrade checks them:
 
-- `exec/` is built `FROM` the app-server's image (`additional_contexts: base: service:app-server`), so it depends on that image being Debian with `apt`, `bash` as root's shell, the image `ENV` that points `PATH`, `NPM_CONFIG_PREFIX`, `CARGO_HOME`, `GOBIN` and the `UV_*` variables at `/opt/agent-tools`, and `/usr/local/bin/agent-env` reading PID 1's environment (`init: true`; its own comment says "Cron only", and the editor's terminal is its second user); and on the workspaces at `$LETTA_STATE_DIR/workspaces` and the tools at `$LETTA_STATE_DIR/tools`, mounted as the app-server mounts them.
+- `exec/` is built `FROM` the app-server's image (`additional_contexts: base: docker-image://${APP_SERVER_IMAGE}`, the name lettucectl's `app_server_image` gives it), so it depends on that image being Debian with `apt`, `bash` as root's shell, the image `ENV` that points `PATH`, `NPM_CONFIG_PREFIX`, `CARGO_HOME`, `GOBIN` and the `UV_*` variables at `/opt/agent-tools`, and `/usr/local/bin/agent-env` reading PID 1's environment (`init: true`; its own comment says "Cron only", and the editor's terminal is its second user); and on the workspaces at `$LETTA_STATE_DIR/workspaces` and the tools at `$LETTA_STATE_DIR/tools`, mounted as the app-server mounts them.
 - The landing page's agent links depend on code-server's `?folder=` query and the workspaces at `/work/<agent-id>`.

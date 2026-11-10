@@ -72,12 +72,14 @@ Named volumes of a stack are deleted with it by `lettucectl remove` (`compose do
 | The editor | the shell | SSH, for terminals and every git call |
 
 ## How a stack is assembled
-Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<name>/stack.env`: Lettuce's own `upstream/docker/compose.yml`, then this repo's overlays, merged in a fixed order by the `compose` wrapper. [compose/README.md](compose/README.md) lists each file in that order, when it is merged and what it does. With `garden-doc-tools`, the host also runs the Compose project `lettuce_shared` (one Gotenberg for every stack). [CONTRIBUTING.md](CONTRIBUTING.md) covers working on the repo.
+Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<name>/stack.env`: Lettuce's own `upstream/<LETTUCE_REF>/docker/compose.yml` (both in the data directory, below), then this repo's overlays, merged in a fixed order by the `compose` wrapper. [compose/README.md](compose/README.md) lists each file in that order, when it is merged and what it does. With `garden-doc-tools`, the host also runs the Compose project `lettuce_shared` (one Gotenberg for every stack). [CONTRIBUTING.md](CONTRIBUTING.md) covers working on the repo.
 
 ## What lives where
 | Path | What |
 |---|---|
-| `lettucectl`, [`lib/`](lib/README.md) | the CLI |
+| `lettucectl`, [`lib/`](lib/README.md) | the CLI; [lib/DESIGN.md](lib/DESIGN.md) is how it is installed without a clone |
+| [`release/`](release/README.md), `VERSION`, `REBUILD` | releases: the published images' list (`release/images`), their content tags, the lettucectl image and its wrapper; the version, and the date that rebuilds every image |
+| `.github/workflows/` | `ci.yml`, every check, on each branch push; `publish.yml`, a release on each `v*` tag, after `ci.yml` passes |
 | `compose/hardening.yml` | `no-new-privileges`, memory caps for every service, a pid cap on the app-server, no `NET_RAW` where agents run, letta-code self-update off |
 | `compose/multi.yml` | drops all published ports, so stacks never collide |
 | `compose/vault.yml`, [`vault/`](vault/README.md) | the optional vault (`garden-vault` profile) and its source |
@@ -91,11 +93,11 @@ Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<nam
 | [`backup/`](backup/README.md) | the image `lettucectl backup` copies with (it also fills the doc-tools volume) |
 | `docs/` | the guides for users and admins, and [diagrams](docs/diagrams/) (archify: `.json` source, interactive `.html`, `.svg`) for every audience |
 | `config.env.example` | template for `config.env` |
-| `scripts/dns-preflight.sh` | compares two nameservers before and after moving a domain |
+| `scripts/dns-preflight.sh` | compares two nameservers before and after moving a domain (`lettucectl dns-preflight`) |
 | `scripts/doc-tools-e2e.sh`, `scripts/code-server-e2e.sh` | end-to-end runs of the document tools and the code editor against real images |
 | `scripts/check-doc-links.mjs` | checks the Markdown's relative links and anchors, and each folder README's agents' pointer |
 | `tests/` | offline tests (`tests/run.sh`; docker, curl, dig, gh and secret-tool are stubbed), the sidecars' tests (`tests/run-sidecar.sh vault`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
 
-Untracked instance data (`config.env`, `.secrets/`, `upstream/`, `stacks/`) is listed in [docs/operations.md](docs/operations.md#files-on-the-host).
+Instance data lives in a data directory apart from the code: `/srv/lettuce-garden` for a release install, the clone's untracked `data/` for a clone (`LETTUCE_DATA` names another). [docs/operations.md](docs/operations.md#files-on-the-host) lists what is in it.
 
 What each part does, and why it is built the way it is, is in its folder's README; how to use and run it, and its security model, in its guide under `docs/`. The design records of the larger features are next to their code: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md) and [garden/DESIGN.md](garden/DESIGN.md) (the garden host).

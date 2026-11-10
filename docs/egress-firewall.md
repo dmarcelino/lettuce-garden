@@ -61,8 +61,8 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
 
 ### Turning it on
 ```bash
-./lettucectl profiles cloudflared,search,garden-pipelock   # your current list plus garden-pipelock
-./lettucectl skills all                             # installs the fetching-web-pages skill
+lettucectl profiles cloudflared,search,garden-pipelock   # your current list plus garden-pipelock
+lettucectl skills all                             # installs the fetching-web-pages skill
 ```
 `up` builds the image (`pipelock/Dockerfile`) from pipelock's source at a pinned release,
 without its separately licensed enterprise code. The first start creates the stack's receipt
@@ -71,13 +71,13 @@ receipts.
 
 ### Reading the receipts
 ```bash
-./lettucectl receipts alfred                        # verify every receipt, list the sessions
-./lettucectl receipts alfred ~/alfred-receipts.html # HTML report of the newest session
-./lettucectl receipts alfred ~/r.html proxy.run.... # ... or of a listed session
+lettucectl receipts alfred                        # verify every receipt, list the sessions
+lettucectl receipts alfred ~/alfred-receipts.html # HTML report of the newest session
+lettucectl receipts alfred ~/r.html proxy.run.... # ... or of a listed session
 ```
 Pipelock refuses to verify a file that changes while it reads it, which a running pipelock
 does with every request, so `receipts` tries three times. If it still fails while pipelock is
-running, retry when the stack is quiet, or after `./lettucectl down alfred`.
+running, retry when the stack is quiet, or after `lettucectl down alfred`.
 
 Each start of pipelock is a session. The report shows each decision with its time, destination
 and reason, and checks the signatures against the stack's public key. Both run in a one-off
@@ -95,5 +95,5 @@ roughly one line per request. `backup` copies them, and `remove` deletes them wi
 The agent gets a 403 with an `X-Pipelock-Block-Reason` header (or `blocked: true` and a
 `block_reason` from `/fetch`).
 The skill tells agents to report it rather than try another way. To see why, read the receipts
-or `./lettucectl logs alfred garden-pipelock`. The policy is the same for every stack and lives in
-`pipelock/pipelock.yaml`; after changing it, `./lettucectl up all` rebuilds the image.
+or `lettucectl logs alfred garden-pipelock`. The policy is the same for every stack and lives in
+`pipelock/pipelock.yaml`; after changing it, `lettucectl up all` rebuilds the image.

@@ -10,6 +10,11 @@ printf 'docker %s\n' "$*" >>"$STUB_LOG"
 printf 'docker-env PUBLIC_ORIGIN=%s\n' "${PUBLIC_ORIGIN:-}" >>"$STUB_LOG"
 [[ -z ${DOC_TOOLS_VOLUME:-} ]] || printf 'docker-env DOC_TOOLS_NETWORK=%s DOC_TOOLS_VOLUME=%s\n' "${DOC_TOOLS_NETWORK:-}" "$DOC_TOOLS_VOLUME" >>"$STUB_LOG"
 args=" $* "
+# What compose_env passes beside stack.env: the code, the shell's base and, in
+# release mode, the published images' names (the vault's stands for them all).
+[[ $args != *" compose "* ]] ||
+  printf 'docker-env-images LETTUCE_HOME=%s APP_SERVER_IMAGE=%s LETTA_IMAGE_NS=%s GARDEN_IMAGE_VAULT=%s\n' \
+    "${LETTUCE_HOME:-}" "${APP_SERVER_IMAGE:-}" "${LETTA_IMAGE_NS:-}" "${GARDEN_IMAGE_VAULT:-}" >>"$STUB_LOG"
 NETS=$STUB_ROOT/networks
 # The document tools' volumes, lines of "<name> <tag label or -> <complete true|false> <in use true|false>
 # [<driver> [<option count>]]" (local and 0 when left out).
@@ -18,6 +23,26 @@ VOLS=$STUB_ROOT/volumes
 last=${*: -1}
 case $args in
   " build "*) exit "${STUB_BUILD_RC:-0}" ;;
+  " pull "*) exit "${STUB_PULL_RC:-0}" ;;
+  " version --format "*) echo "${STUB_PLATFORM:-linux/amd64}" ;;
+  # The registry: STUB_MANIFEST_PLATFORMS="linux/amd64 ..." publishes the image
+  # for those platforms; unset, it is not there.
+  " manifest inspect "*)
+    # STUB_MANIFEST_ERROR: the registry's error instead (e.g. "denied", a timeout).
+    if [[ -n ${STUB_MANIFEST_ERROR:-} ]]; then
+      echo "$STUB_MANIFEST_ERROR" >&2
+      exit 1
+    fi
+    [[ -n ${STUB_MANIFEST_PLATFORMS:-} ]] || {
+      echo "manifest unknown" >&2
+      exit 1
+    }
+    for p in $STUB_MANIFEST_PLATFORMS; do
+      printf '{"Descriptor":{"platform":{"os":"%s","architecture":"%s"}}}\n' "${p%%/*}" "${p#*/}"
+    done | jq -s .
+    ;;
+  # lettucectl reading its own container's mounts (check_mounts): mounts.json.
+  " inspect --format {{json .Mounts}} "*) cat "$STUB_ROOT/mounts.json" 2>/dev/null || exit 1 ;;
   # Filling a tools volume: a container of the image, never started, copied out.
   " create "*)
     [[ ${STUB_CREATE_RC:-0} == 0 ]] || exit "$STUB_CREATE_RC"

@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "878eedd44b4bc61d399f9f66545d2ed1cd111f38"
     }
   },
   "components": [
@@ -18,50 +18,36 @@
       "id": "operator",
       "type": "external",
       "label": "Operator",
-      "sublabel": "./lettucectl <cmd>",
-      "pos": [
-        40,
-        220
-      ],
-      "size": [
-        130,
-        62
-      ],
+      "sublabel": "lettucectl <cmd>",
+      "pos": [40, 220],
+      "size": [130, 62],
       "sources": [
-        {
-          "path": "lettucectl",
-          "line": 15,
-          "end_line": 48,
-          "label": "usage"
-        }
+        { "path": "lettucectl", "line": 15, "end_line": 54, "label": "usage" }
+      ]
+    },
+    {
+      "id": "wrapper",
+      "type": "backend",
+      "label": "bin/lettucectl",
+      "sublabel": "wrapper, image by digest",
+      "pos": [230, 220],
+      "size": [170, 62],
+      "sources": [
+        { "path": "release/lettucectl-wrapper.sh", "line": 20, "end_line": 28, "label": "data directory is bin/'s parent" },
+        { "path": "release/lettucectl-wrapper.sh", "line": 43, "end_line": 52, "label": "docker run, same-path mounts" },
+        { "path": "release/lettucectl-wrapper.sh", "line": 146, "end_line": 168, "label": "self-upgrade, then run the image" }
       ]
     },
     {
       "id": "cli",
       "type": "backend",
       "label": "lettucectl",
-      "sublabel": "main -> cmd_*",
-      "pos": [
-        250,
-        220
-      ],
-      "size": [
-        150,
-        62
-      ],
+      "sublabel": "check_mounts, cmd_*",
+      "pos": [500, 220],
+      "size": [160, 62],
       "sources": [
-        {
-          "path": "lettucectl",
-          "line": 7,
-          "end_line": 11,
-          "label": "sources lib/*.sh"
-        },
-        {
-          "path": "lettucectl",
-          "line": 1799,
-          "end_line": 1812,
-          "label": "dispatch"
-        }
+        { "path": "lettucectl", "line": 7, "end_line": 11, "label": "sources lib/*.sh" },
+        { "path": "lettucectl", "line": 2073, "end_line": 2099, "label": "data directory, mounts, dispatch" }
       ]
     },
     {
@@ -69,28 +55,11 @@
       "type": "backend",
       "label": "lib/cloudflare.sh",
       "sublabel": "cf_api + cf_* helpers",
-      "tag": "token on stdin",
-      "pos": [
-        250,
-        40
-      ],
-      "size": [
-        150,
-        62
-      ],
+      "pos": [500, 40],
+      "size": [160, 62],
       "sources": [
-        {
-          "path": "lib/cloudflare.sh",
-          "line": 1,
-          "end_line": 32,
-          "label": "cf_api"
-        },
-        {
-          "path": "lib/cloudflare.sh",
-          "line": 160,
-          "end_line": 179,
-          "label": "tunnel ingress"
-        }
+        { "path": "lib/cloudflare.sh", "line": 1, "end_line": 32, "label": "cf_api" },
+        { "path": "lib/cloudflare.sh", "line": 153, "end_line": 172, "label": "tunnel ingress" }
       ]
     },
     {
@@ -98,117 +67,36 @@
       "type": "cloud",
       "label": "Cloudflare API v4",
       "sublabel": "Access, tunnel, DNS",
-      "pos": [
-        850,
-        40
-      ],
-      "size": [
-        170,
-        62
-      ],
+      "pos": [200, 40],
+      "size": [160, 62],
       "sources": [
-        {
-          "path": "lib/cloudflare.sh",
-          "line": 62,
-          "end_line": 119,
-          "label": "policy, apps, tunnel"
-        },
-        {
-          "path": "lib/cloudflare.sh",
-          "line": 181,
-          "end_line": 187,
-          "label": "DNS CNAME"
-        }
+        { "path": "lib/cloudflare.sh", "line": 55, "end_line": 112, "label": "policy, apps, tunnel" },
+        { "path": "lib/cloudflare.sh", "line": 174, "end_line": 180, "label": "DNS CNAME" }
       ]
     },
     {
       "id": "common",
       "type": "backend",
       "label": "lib/common.sh",
-      "sublabel": "env files, compose, check_stack",
-      "pos": [
-        520,
-        220
-      ],
-      "size": [
-        200,
-        62
-      ],
+      "sublabel": "data paths, compose, checks",
+      "pos": [780, 220],
+      "size": [200, 62],
       "sources": [
-        {
-          "path": "lib/common.sh",
-          "line": 1,
-          "end_line": 48,
-          "label": "env files parsed"
-        },
-        {
-          "path": "lib/common.sh",
-          "line": 170,
-          "end_line": 220,
-          "label": "compose wrappers"
-        },
-        {
-          "path": "lib/common.sh",
-          "line": 370,
-          "end_line": 485,
-          "label": "check_stack"
-        }
+        { "path": "lib/common.sh", "line": 55, "end_line": 109, "label": "release mode, data directory" },
+        { "path": "lib/common.sh", "line": 111, "end_line": 147, "label": "same-path check" },
+        { "path": "lib/common.sh", "line": 436, "end_line": 484, "label": "compose wrappers" }
       ]
     },
     {
-      "id": "config-env",
-      "type": "database",
-      "label": "config.env",
-      "sublabel": "PROFILES, cached CF ids",
-      "pos": [
-        400,
-        400
-      ],
-      "size": [
-        150,
-        62
-      ],
+      "id": "github",
+      "type": "cloud",
+      "label": "GitHub",
+      "sublabel": "Lettuce archive, ghcr.io",
+      "pos": [1100, 40],
+      "size": [170, 62],
       "sources": [
-        {
-          "path": "lib/common.sh",
-          "line": 55,
-          "end_line": 63,
-          "label": "cfg"
-        },
-        {
-          "path": "lettucectl",
-          "line": 763,
-          "end_line": 767,
-          "label": "init caches ids"
-        }
-      ]
-    },
-    {
-      "id": "stack-env",
-      "type": "database",
-      "label": "stacks/<name>/stack.env",
-      "sublabel": "secrets + CF ids, 600",
-      "pos": [
-        620,
-        400
-      ],
-      "size": [
-        170,
-        62
-      ],
-      "sources": [
-        {
-          "path": "lettucectl",
-          "line": 123,
-          "end_line": 145,
-          "label": "written by add"
-        },
-        {
-          "path": "lettucectl",
-          "line": 799,
-          "end_line": 822,
-          "label": "ids stored as they exist"
-        }
+        { "path": "lib/common.sh", "line": 256, "end_line": 287, "label": "fetch_upstream" },
+        { "path": "lib/common.sh", "line": 302, "end_line": 327, "label": "upstream_image_ns" }
       ]
     },
     {
@@ -216,27 +104,12 @@
       "type": "cloud",
       "label": "Docker / Compose",
       "sublabel": "lettuce-<name>, lettuce_shared",
-      "pos": [
-        850,
-        220
-      ],
-      "size": [
-        170,
-        62
-      ],
+      "pos": [1100, 220],
+      "size": [170, 62],
       "sources": [
-        {
-          "path": "lib/common.sh",
-          "line": 176,
-          "end_line": 220,
-          "label": "compose_env, compose_shared"
-        },
-        {
-          "path": "lib/common.sh",
-          "line": 251,
-          "end_line": 254,
-          "label": "host_docker"
-        }
+        { "path": "lib/common.sh", "line": 486, "end_line": 497, "label": "compose_shared" },
+        { "path": "lib/common.sh", "line": 529, "end_line": 532, "label": "host_docker" },
+        { "path": "lettucectl", "line": 396, "end_line": 412, "label": "up --no-build --pull missing" }
       ]
     },
     {
@@ -244,27 +117,11 @@
       "type": "backend",
       "label": "app-server",
       "sublabel": "agents run as root",
-      "pos": [
-        1100,
-        220
-      ],
-      "size": [
-        140,
-        62
-      ],
+      "pos": [1350, 220],
+      "size": [140, 62],
       "sources": [
-        {
-          "path": "lettucectl",
-          "line": 333,
-          "end_line": 361,
-          "label": "executor via exec"
-        },
-        {
-          "path": "lettucectl",
-          "line": 637,
-          "end_line": 639,
-          "label": "mcp_servers"
-        }
+        { "path": "lettucectl", "line": 347, "end_line": 367, "label": "executor via exec" },
+        { "path": "lettucectl", "line": 676, "end_line": 677, "label": "mcp_servers" }
       ]
     },
     {
@@ -272,131 +129,111 @@
       "type": "backend",
       "label": "lib/mcp-servers.mjs",
       "sublabel": "Settings -> MCP list",
-      "pos": [
-        1100,
-        400
-      ],
-      "size": [
-        140,
-        62
-      ],
+      "pos": [1350, 420],
+      "size": [140, 62],
       "sources": [
-        {
-          "path": "lib/mcp-servers.mjs",
-          "line": 1,
-          "end_line": 21,
-          "label": "what it owns"
-        },
-        {
-          "path": "lib/mcp-servers.mjs",
-          "line": 36,
-          "end_line": 53,
-          "label": "groups"
-        }
+        { "path": "lib/mcp-servers.mjs", "line": 1, "end_line": 21, "label": "what it owns" },
+        { "path": "lib/mcp-servers.mjs", "line": 36, "end_line": 53, "label": "groups" }
+      ]
+    },
+    {
+      "id": "config-env",
+      "type": "database",
+      "label": "config.env",
+      "sublabel": "PROFILES, CF ids",
+      "pos": [560, 420],
+      "size": [140, 62],
+      "sources": [
+        { "path": "lib/common.sh", "line": 219, "end_line": 220, "label": "cfg" },
+        { "path": "lettucectl", "line": 795, "end_line": 832, "label": "init caches ids" }
+      ]
+    },
+    {
+      "id": "stacks-conf",
+      "type": "database",
+      "label": "stacks.conf",
+      "sublabel": "who has a stack",
+      "pos": [720, 420],
+      "size": [130, 62],
+      "sources": [
+        { "path": "lib/common.sh", "line": 149, "end_line": 210, "label": "conf_entries, conf_set" },
+        { "path": "lettucectl", "line": 973, "end_line": 1036, "label": "apply" }
+      ]
+    },
+    {
+      "id": "upstream",
+      "type": "database",
+      "label": "upstream/<tag>/",
+      "sublabel": "Lettuce's source",
+      "pos": [870, 420],
+      "size": [150, 62],
+      "sources": [
+        { "path": "lib/common.sh", "line": 256, "end_line": 287, "label": "unpacked by fetch_upstream" },
+        { "path": "lettucectl", "line": 1277, "end_line": 1288, "label": "upgrade" }
+      ]
+    },
+    {
+      "id": "stack-env",
+      "type": "database",
+      "label": "stacks/<name>/stack.env",
+      "sublabel": "secrets + CF ids, 600",
+      "pos": [1100, 420],
+      "size": [170, 62],
+      "sources": [
+        { "path": "lettucectl", "line": 129, "end_line": 151, "label": "written by add" },
+        { "path": "lettucectl", "line": 834, "end_line": 923, "label": "ids stored as they exist" }
       ]
     }
   ],
   "boundaries": [
     {
       "kind": "region",
-      "label": "Host: this repo (config.env, stacks/ untracked)",
-      "wraps": [
-        "cloudflare-lib",
-        "cli",
-        "common",
-        "config-env",
-        "stack-env"
-      ]
+      "label": "LETTUCE_HOME: the lettucectl image, or a clone",
+      "wraps": ["cloudflare-lib", "cli", "common"]
+    },
+    {
+      "kind": "region",
+      "label": "LETTUCE_DATA: /srv/lettuce-garden, or a clone's data/",
+      "wraps": ["config-env", "stacks-conf", "upstream", "stack-env"]
     },
     {
       "kind": "security-group",
       "label": "Stack lettuce-<name>",
-      "wraps": [
-        "app-server",
-        "mcp-script"
-      ]
+      "wraps": ["app-server", "mcp-script"]
     }
   ],
   "connections": [
-    {
-      "id": "operator-cli",
-      "from": "operator",
-      "to": "cli",
-      "label": "runs",
-      "variant": "emphasis"
-    },
-    {
-      "id": "cli-cloudflare",
-      "from": "cli",
-      "to": "cloudflare-lib",
-      "label": "cf_* calls"
-    },
-    {
-      "id": "cloudflare-api",
-      "from": "cloudflare-lib",
-      "to": "cf-api",
-      "label": "curl HTTPS, token via stdin",
-      "variant": "security"
-    },
-    {
-      "id": "cli-common",
-      "from": "cli",
-      "to": "common",
-      "label": "calls helpers",
-      "variant": "emphasis"
-    },
-    {
-      "id": "common-config",
-      "from": "common",
-      "to": "config-env",
-      "label": "cfg",
-      "variant": "dashed",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "id": "common-stack",
-      "from": "common",
-      "to": "stack-env",
-      "label": "env_get / env_set",
-      "variant": "dashed"
-    },
-    {
-      "id": "common-docker",
-      "from": "common",
-      "to": "docker",
-      "label": "env -i docker",
-      "variant": "emphasis"
-    },
-    {
-      "id": "docker-stack-env",
-      "from": "docker",
-      "to": "stack-env",
-      "label": "--env-file",
-      "variant": "dashed"
-    },
-    {
-      "id": "docker-app",
-      "from": "docker",
-      "to": "app-server",
-      "label": "exec -T",
-      "variant": "emphasis"
-    },
-    {
-      "id": "script-app",
-      "from": "mcp-script",
-      "to": "app-server",
-      "label": "node, on stdin",
-      "variant": "dashed"
-    }
+    { "id": "operator-wrapper", "from": "operator", "to": "wrapper", "label": "runs", "variant": "emphasis" },
+    { "id": "wrapper-cli", "from": "wrapper", "to": "cli", "label": "docker run", "variant": "emphasis" },
+    { "id": "cli-cloudflare", "from": "cli", "to": "cloudflare-lib", "label": "cf_* calls" },
+    { "id": "cloudflare-api", "from": "cloudflare-lib", "to": "cf-api", "label": "token on stdin", "variant": "security" },
+    { "id": "cli-common", "from": "cli", "to": "common", "label": "calls helpers", "variant": "emphasis" },
+    { "id": "common-github", "from": "common", "to": "github", "label": "curl archive", "fromSide": "top", "toSide": "left" },
+    { "id": "common-config", "from": "common", "to": "config-env", "label": "cfg", "variant": "dashed" },
+    { "id": "common-conf", "from": "common", "to": "stacks-conf", "label": "conf_*", "variant": "dashed" },
+    { "id": "common-upstream", "from": "common", "to": "upstream", "label": "unpacks", "variant": "dashed" },
+    { "id": "common-stack", "from": "common", "to": "stack-env", "label": "env_get / env_set", "variant": "dashed" },
+    { "id": "common-docker", "from": "common", "to": "docker", "label": "env -i docker", "variant": "emphasis" },
+    { "id": "docker-github", "from": "docker", "to": "github", "label": "pulls images" },
+    { "id": "docker-stack-env", "from": "docker", "to": "stack-env", "label": "--env-file", "variant": "dashed" },
+    { "id": "docker-app", "from": "docker", "to": "app-server", "label": "exec -T", "variant": "emphasis" },
+    { "id": "script-app", "from": "mcp-script", "to": "app-server", "label": "node, on stdin", "variant": "dashed" }
   ],
   "cards": [
     {
       "dot": "cyan",
+      "title": "Release install or clone",
+      "items": [
+        "release: the wrapper runs the lettucectl image with the data directory and the Docker socket at the same path; RELEASE in the image names every published image",
+        "clone: ./lettucectl on the host, data in the clone's data/, every image built here"
+      ]
+    },
+    {
+      "dot": "cyan",
       "title": "add creates, in order",
       "items": [
-        "Access policy, Access app, garden Access app, tunnel, tunnel token, tunnel ingress, garden DNS, DNS",
-        "each id goes into stack.env as soon as it exists; CF_DNS_RECORD_ID last means complete"
+        "its stacks.conf line first, so apply resumes an add that stopped",
+        "Access policy, Access app, garden Access app, tunnel, tunnel token, tunnel ingress, garden DNS, DNS; each id goes into stack.env as soon as it exists"
       ]
     },
     {
@@ -411,9 +248,9 @@
       "dot": "amber",
       "title": "Never",
       "items": [
-        "source config.env or stack.env",
+        "source config.env, stack.env or stacks.conf",
         "put the Cloudflare API token in argv",
-        "call docker compose outside the compose wrappers"
+        "hand Docker a host path not mounted at the same path"
       ]
     }
   ]

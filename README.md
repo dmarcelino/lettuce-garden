@@ -2,7 +2,7 @@
 
 An opinionated, batteries-included way to run [Lettuce](https://github.com/dmarchevsky/lettuce) for several people on one host. Lettuce is a web app (a PWA) for Letta agents: assistants with their own memory, conversations and workspaces, which run on a letta-code server. It is built for one person. Lettuce Garden gives each person an isolated stack of their own, behind Cloudflare Access with Google sign-in, plus extras: a secrets vault, Gmail triggers, a code editor, an egress proxy, Office and PDF tools, and agent skills.
 
-You run it with `lettucectl`, a Bash CLI: one command adds a person, with their own Cloudflare Tunnel, sign-in and DNS record, and starts their stack.
+You run it with `lettucectl`, a CLI that runs from a published image: who has a stack is one file, and one command (`lettucectl apply`) gives each person their own Cloudflare Tunnel, sign-in and DNS records, and starts their stack. The host needs only Docker.
 
 ![Each person signs in through Cloudflare to their own stack: Lettuce and their garden pages](docs/diagrams/lettuce-garden-at-a-glance.svg)
 
@@ -27,7 +27,7 @@ Each extra is a Compose profile whose name starts with `garden-`. Profiles are g
 With any of the vault, Gmail triggers or the code editor on, the garden address has a landing page linking to the pages that are on. Upstream's own profiles (`cloudflared`, which is required, `search`, `google` and others) are described in Lettuce's `docs/CONFIGURATION.md`, and summarised in [operations.md](docs/operations.md#optional-features).
 
 ## Requirements
-- Linux host with Docker Engine and Docker Compose >= 2.24, plus `git`, `curl`, `jq`, `openssl` and `dig` (`dnsutils` / `bind-utils`).
+- A Linux host (`amd64` or `arm64`) with Docker Engine 25 or later. That is all it needs: `lettucectl` runs from its own image, which brings Docker Compose and every other tool. The document tools (`garden-doc-tools`) need an `amd64` host.
 - A domain whose DNS is on Cloudflare. The free plan is enough.
 - Cloudflare Zero Trust. The free plan covers up to 50 users; Cloudflare asks for payment details even for it, and charges nothing.
 - A Google Cloud OAuth client for the Google login method (free).
@@ -35,22 +35,27 @@ With any of the vault, Gmail triggers or the code editor on, the garden address 
 - RAM for every stack you run. Each app-server is capped at 8 GiB, upstream's other services at 1 GiB and cloudflared at 256 MiB (`compose/hardening.yml`); the garden's services at 128 MiB to 512 MiB, the code editor at 2 GiB for the editor plus 8 GiB for its shell, and the document tools' Gotenberg, one per host, at 2 GiB ([caps per service](docs/architecture.md#what-runs-in-each-stack)). These are caps, not reservations; measure idle use with `docker stats`.
 
 ## Quickstart
-1. Clone this repo on the host. The setup guide runs scripts from it, and it stores the Cloudflare token there:
+1. Do the one-time Cloudflare and Google setup: **[docs/cloudflare-setup.md](docs/cloudflare-setup.md)**. It takes about an hour of work. Moving your domain's DNS to Cloudflare then takes minutes to hours to become active, and up to 48 h; if DNSSEC is on, turning it off first adds 24-48 h. A domain you don't use for anything else avoids the risk of breaking its email.
+2. Install `lettucectl`: create its data directory, owned by you, and put the `lettucectl` file of the latest release (this repository's GitHub Releases) in its `bin/`:
    ```bash
-   git clone <this repo> ~/lettuce && cd ~/lettuce
+   sudo install -d -o "$USER" -g "$(id -gn)" -m 700 /srv/lettuce-garden /srv/lettuce-garden/bin
+   curl -fsSL -o /srv/lettuce-garden/bin/lettucectl https://github.com/<owner>/lettuce-garden/releases/download/<version>/lettucectl
+   chmod 755 /srv/lettuce-garden/bin/lettucectl
+   mkdir -p ~/.local/bin && ln -s /srv/lettuce-garden/bin/lettucectl ~/.local/bin/lettucectl
    ```
-2. Do the one-time Cloudflare and Google setup: **[docs/cloudflare-setup.md](docs/cloudflare-setup.md)**. It takes about an hour of work. Moving your domain's DNS to Cloudflare then takes minutes to hours to become active, and up to 48 h; if DNSSEC is on, turning it off first adds 24-48 h. A domain you don't use for anything else avoids the risk of breaking its email.
+   Check it against the release's `SHA256SUMS`, and with the `gh` CLI, where it comes from: `gh attestation verify /srv/lettuce-garden/bin/lettucectl --repo <owner>/lettuce-garden`. [docs/operations.md](docs/operations.md#installing-and-upgrading) says more.
 3. Configure and start:
    ```bash
-   ./lettucectl init                 # creates config.env from the example; edit it
-   $EDITOR config.env                # set DOMAIN, PUSH_CONTACT_EMAIL (required), TZ and PROFILES
-   ./lettucectl init                 # clones Lettuce, checks the token, caches Cloudflare ids
-   ./lettucectl add alfred alfred@gmail.com
-   ./lettucectl add hal hal@example.com
-   ./lettucectl skills all           # the agent skills; `up` doesn't install them
+   lettucectl init                   # creates /srv/lettuce-garden/config.env from the example; edit it
+   $EDITOR /srv/lettuce-garden/config.env   # set DOMAIN, PUSH_CONTACT_EMAIL (required), TZ and PROFILES
+   lettucectl init                   # checks the Cloudflare setup step by step, downloads Lettuce, caches ids
+   $EDITOR /srv/lettuce-garden/stacks.conf  # one line per person: alfred alfred@gmail.com
+   lettucectl apply                  # shows the plan, then creates and starts every stack
    ```
    The example's `PROFILES=cloudflared,search` is a working start (web search for the agents); add the [garden extras](#garden-extras) you want, e.g. `cloudflared,search,garden-vault`. You can change the list later with `lettucectl profiles`.
 4. Each person opens their URL, signs in with Google, and connects a model provider in Lettuce under **Settings -> Providers & models**. One API key per person keeps spending separate. Send them **[docs/user-guide.md](docs/user-guide.md)**.
+
+Developing lettuce-garden runs `./lettucectl` from a clone instead, which builds every image itself and keeps its data in the clone's `data/`: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation
 **Using a stack** (for the people you give one to)

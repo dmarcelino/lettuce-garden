@@ -9,6 +9,7 @@ The rules live in the developer docs: the cross-cutting ones on this page, and e
 - [shellcheck](https://github.com/koalaman/shellcheck) v0.11.0, the version CI pins: older releases report differently.
 - Node 22 or newer for `node --test` on the host. The sidecars' tests run in Docker and need nothing else.
 - No upstream clone is needed for the offline tests: `tests/run.sh` stubs Docker and Cloudflare.
+- `./lettucectl` from a clone builds every image itself and keeps its instance in the clone's untracked `data/` (or the directory `LETTUCE_DATA` names); it refuses a data directory a release runs ([lib/README.md](lib/README.md#code-and-data-are-apart)). Admins run released images instead; how a release is cut: [release/README.md](release/README.md#cutting-a-release).
 
 ## Relationship to upstream
 lettuce-garden composes [Lettuce](https://github.com/dmarchevsky/lettuce) and adds to it: one isolated stack per person, plus an opinionated set of extras (garden sidecars, MCP servers, agent skills, CLI commands). Lettuce is not ours, and every departure from its design is something `lettucectl upgrade` can break. Six rules follow from that.
@@ -54,11 +55,12 @@ These are the Lettuce internals lettuce-garden depends on today ("named today").
 | the vault and its skill | the vault's `http` entry in the MCP list; letta-code telling the agent when a background command finishes, which is how an agent waiting for an approval gets a new turn; `letta mcp call <tool> --args-file -` reading the arguments from stdin and exiting 2 when the tool reports an error (the skill's email recipe pipes `vault-fill` into it, under `bash` for `pipefail`); `MAX_WAIT_SECONDS` below the MCP bridge's 120 s | [vault/](vault/README.md#upstream-seams), [agent-skills/](agent-skills/README.md#upstream-seams) |
 | skills and `backup` | the global skills directory `/root/.letta/skills`, and the BFF rewriting upstream's `docker/agent-skills` there on every connect | [agent-skills/](agent-skills/README.md#upstream-seams), [backup/](backup/README.md#upstream-seams) |
 | Gmail triggers | the Google files the BFF writes on the `google-policy` and `google-creds` volumes | [gmail-triggers/](gmail-triggers/README.md#upstream-seams) |
+| `app_server_image`, `upstream_image_ns`, `fetch_upstream` | the app-server's image named `${LETTA_IMAGE_NS}lettuce-app-server:<release tag>`, `LETTA_IMAGE_NS` as upstream's pull-or-build switch, its images at `ghcr.io/<owner>/`, and GitHub's tag archives | [lib/](lib/README.md#upstream-seams) |
 | `garden-code-server-exec` | built `FROM` the app-server's image: Debian with `apt`, `bash` as root's shell, the image `ENV` pointing `PATH`, `NPM_CONFIG_PREFIX`, `CARGO_HOME`, `GOBIN` and the `UV_*` variables at `/opt/agent-tools`, `/usr/local/bin/agent-env` reading PID 1's environment; the workspaces and tools mounted as the app-server mounts them | [code-server/](code-server/README.md#upstream-seams) |
 | the landing page's agent links | code-server's `?folder=` query and the workspaces at `/work/<agent-id>` | [garden/](garden/README.md#upstream-seams) |
 
 ### Upgrading `LETTUCE_REF`
-`lettucectl upgrade <tag>` moves the clone, but only a person can check the seams. For each new tag:
+`lettucectl upgrade <tag>` downloads the new tag, but only a person can check the seams. A release's tested tag is `config.env.example`'s `LETTUCE_REF`, which `publish.yml` writes into `RELEASE`, so moving it there is what moves released installs (through `self-upgrade`). For each new tag:
 1. Read Lettuce's release notes and changelog for anything the table above names.
 2. Check each row against the new tag, starting with the ones its notes touch.
 3. Run `node --version` in an app-server. From 22.21 letta-code's own traffic goes through pipelock too: check that `NO_PROXY` still covers what it calls inside the stack ([pipelock/README.md](pipelock/README.md#upstream-seams)).
@@ -107,6 +109,8 @@ Three helpers recur:
 3. Document it: a row above, or the folder README's "Rules" for a profile's own check.
 4. Add a directive to [AGENTS.md](AGENTS.md) when an agent's change could break it.
 
+Two rules hold whatever the profiles: in release mode every published garden service runs the image `RELEASE` names, and the code editor's shell builds `FROM` the app-server's image as the render names it (`check_images`, [lib/README.md](lib/README.md#release-mode-is-a-file-not-a-setting)).
+
 ## Adding a garden sidecar
 A new page on the garden host, `garden-<page>` at `/<page>/`. Each step is a rule somewhere; this list gathers them.
 1. **The service:** a folder with the app, a `Dockerfile` with a `test` stage, and the `garden-common` build context ([garden-common/README.md](garden-common/README.md#how-it-plugs-in)). Use `garden_common.auth` for every page (Access JWT, Fetch Metadata, CSRF, COOP).
@@ -138,17 +142,18 @@ A new page on the garden host, `garden-<page>` at `/<page>/`. Each step is a rul
   | [doc-tools/](doc-tools/README.md) | the document tools' image and the PDF MCP server |
   | [agent-skills/](agent-skills/README.md) | the skills installed into every agent |
   | [backup/](backup/README.md) | the image `lettucectl backup` copies with |
+  | [release/](release/README.md) | releases: the published images, their content tags, the lettucectl image and its wrapper |
   | [tests/](tests/README.md) | the CLI's offline tests: the stubs and helpers |
 
-- **Design records**, kept as written, with a note where the build later differed: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md), [garden/DESIGN.md](garden/DESIGN.md) (the garden host and the garden-wide executor).
+- **Design records**, kept as written, with a note where the build later differed: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md), [garden/DESIGN.md](garden/DESIGN.md) (the garden host and the garden-wide executor), [lib/DESIGN.md](lib/DESIGN.md) (installing without a clone).
 - **The user and admin guides** in [docs/](docs/): each feature's security model (what it guarantees and what it does not) is there; the folder README says how it is enforced.
 
 ## Building and testing
-The CLI has no build step, and `lettucectl up` builds the sidecar images. The commands (the same block as in AGENTS.md):
+The CLI has no build step. From a clone, `lettucectl up` builds the sidecar images; a release pulls them. The commands (the same block as in AGENTS.md):
 ```bash
 tests/run.sh                 # all offline tests (docker, curl, dig, gh, secret-tool are stubbed)
 tests/run.sh <pattern>       # only tests whose function name contains <pattern>, e.g. tests/run.sh test_add_
-shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/* doc-tools/bin/* doc-tools/lib/launch.sh code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh
+shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/* doc-tools/bin/* doc-tools/lib/launch.sh code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh release/content-tag release/lettucectl-wrapper.sh
 tests/run-sidecar.sh vault            # vault tests (pytest in its image's `test` stage; needs Docker)
 tests/run-sidecar.sh vault -k vault   # extra args go to pytest
 tests/run-sidecar.sh gmail-triggers    # Gmail triggers' tests (pytest; the executor's run with garden)
@@ -166,7 +171,7 @@ tests/run-sidecar.sh doc-tools         # the PDF MCP's tests (pytest in the doc-
 - **Before changing docs:** `node scripts/check-doc-links.mjs`.
 - **End to end**, against real images (Docker, and the internet for the first build; throwaway containers only): `scripts/doc-tools-e2e.sh`, and `scripts/code-server-e2e.sh --browser` before keeping a new code editor extension or setting.
 
-CI (`.github/workflows/ci.yml`) runs all of these but the end-to-end scripts on every branch push, and by hand from Actions ("Run workflow"). A new test script or linted file goes there too, and in both copies of the block above.
+CI (`.github/workflows/ci.yml`) runs all of these but the end-to-end scripts on every branch push, by hand from Actions ("Run workflow"), and before every release (`publish.yml` calls it). A new test script or linted file goes there too, and in both copies of the block above.
 
 ## Writing docs
 Each audience has its own place:

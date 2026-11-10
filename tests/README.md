@@ -16,7 +16,8 @@ No build step. Before changing a file here, run what it runs: `tests/run.sh` for
 | `check-doc-links.test.mjs` | `scripts/check-doc-links.mjs` against temp Markdown trees |
 
 ## How `run.sh` works
-- Each test gets a copy of the repo in a temp dir, `$T`, and runs under `set -e`, so a failing assert ends it.
+- Each test gets a copy of the repo in a temp dir: the code in `$H` (`$T/home`, `LETTUCE_HOME`), its data in `$D` (`$H/data`, a clone's default `LETTUCE_DATA`) and Lettuce's source at `config.env.example`'s tag in `$U` (`$D/upstream/$REF`). It runs under `set -e`, so a failing assert ends it.
+- `ctl` runs `lettucectl` with `LETTUCE_DATA` set to `$CTL_DATA`, empty by default, so the tester's own environment never reaches it. `release_on` turns the copy into a released lettucectl: a `$H/RELEASE`, `CTL_DATA=$D`, and its container's mounts (`mounts PATH...`, in `$T/mounts.json`). `wrapper_in DIR` and `wctl DIR ARGS...` run the release wrapper from `DIR/bin`.
 - `tests/stubs/{docker,curl,dig,gh,secret-tool}` come first on `PATH`. Nothing reaches the network, Docker or the real home.
 - `lettucectl` runs docker under `env -i`, so the stubs read their settings from `$T/stub.env`, not the environment. Write one with `stub KEY=value`. Stub values can't hold spaces, since `stub.env` is sourced.
 
@@ -26,10 +27,12 @@ No build step. Before changing a file here, run what it runs: `tests/run.sh` for
 - Logs `curl METHOD PATH BODY` to `calls.log`, and the arguments to `argv.log`.
 - Answers with canned ids: `acc1`, `zone1`, `pol1`, `app1`/`aud1`, `tun1`/`tuntok1`, `rec1`. The garden's Access application is `app2`/`aud2` and its DNS record `rec2`. It also takes `PUT /accounts/acc1/access/apps/app1`, the application update.
 - `STUB_CF_FAIL="METHOD /path"` forces a failure. `STUB_CF_TAKEN="host ..."` names that already exist in the zone (a DNS lookup finds them).
+- `STUB_CF_ZONE_STATUS` and `STUB_CF_DNSSEC` set the zone's status (default `active`) and its DNSSEC (default `disabled`).
+- Downloads from `github.com` (Lettuce's tag archive, a release's files) log `curl-get URL` and answer from `$T/github/<file name>`, failing when it is not there. `make_upstream_archive [TAG]` puts Lettuce's source there.
 - Unknown routes fail, so a new Cloudflare call needs a route here.
 
 ### docker
-- **Rendered config.** `compose config --format json` returns `$T/compose-config.json`, which tests overwrite to simulate rendered configs. It fills `${KEY}` from the `--env-file`, and logs that file's `COMPOSE_PROFILES` as a `docker-env-file` line in `calls.log`. When set, it logs `DOC_TOOLS_NETWORK` and `DOC_TOOLS_VOLUME` as a `docker-env` line.
+- **Rendered config.** `compose config --format json` returns `$T/compose-config.json`, which tests overwrite to simulate rendered configs. It fills `${KEY}` from the `--env-file`, and logs that file's `COMPOSE_PROFILES` as a `docker-env-file` line in `calls.log`. When set, it logs `DOC_TOOLS_NETWORK` and `DOC_TOOLS_VOLUME` as a `docker-env` line. Every `compose` call logs a `docker-env-images` line: `LETTUCE_HOME`, `APP_SERVER_IMAGE`, `LETTA_IMAGE_NS` and, in release mode, `GARDEN_IMAGE_VAULT`.
 - **Services.** `compose config --services` lists `app-server`, `bff` and the services of each profile in the `--env-file`'s `COMPOSE_PROFILES`, like upstream: `garden-gmail-triggers` and `garden-pipelock` for their profiles, `garden-code-server`, `garden-code-server-editor` and `garden-code-server-exec` for `garden-code-server`, and `garden` with any profile `compose/garden.yml` gives it.
 - **Containers.** `docker ps -a --filter label=com.docker.compose.project=...` answers from `$T/containers.txt` lines of `project service` (helper `containers NAME SERVICE...`). `compose ps --status running --services` counts every container of the project there as running.
 - **`exec`.** `letta agents list` inside `compose exec` answers from `$T/agents.json` (helper `agents NAME...`, ids `agent-1`, `agent-2`, ...) and swallows stdin like the real thing. Any other `exec`:
@@ -38,6 +41,7 @@ No build step. Before changing a file here, run what it runs: `tests/run.sh` for
   - prints `$T/exec-stdout`, or `$T/exec-stdout-<group>` for a `lib/mcp-servers.mjs` run of that group when it exists;
   - exits with `STUB_EXEC_RC`. `STUB_EXEC_FAIL_GROUP=<group>` makes that group's runs exit 3.
 - **`run`.** Writes the value of each `-e NAME` to `$T/run-env.log`, so tests can tell values passed through the environment from argv. Saves its `sh -c` script to `$T/run-script`. Creates the `.partial-*` it is given in the directory mounted at `/dst`, like the backup copy. Exits with `STUB_RUN_RC`, or 1 when its arguments contain `STUB_RUN_FAIL` (only the first `STUB_RUN_FAIL_TIMES` times when that is set).
+- **The host and the registry.** `version --format` answers `STUB_PLATFORM` (default `linux/amd64`); `manifest inspect` publishes the image for the platforms in `STUB_MANIFEST_PLATFORMS`, or fails when it is unset; `pull` exits with `STUB_PULL_RC`; `inspect --format {{json .Mounts}}` (`check_mounts`) prints `$T/mounts.json`, or fails without it.
 - **Images, volumes, pause.** `image inspect` answers a Compose-built image's config (fails with `STUB_IMAGE_RC`, or for an image in `STUB_IMAGES_MISSING`). `volume inspect` exits with `STUB_VOLUME_RC`, or 1 for a volume named in `STUB_VOLUMES_MISSING`. `compose pause` exits with `STUB_PAUSE_RC`. `restart --no-deps bff` exits with `STUB_RESTART_RC`.
 - **Doc-tools resources.**
   - Networks live in `$T/networks` (`name label internal attached-ids`): `network ls/inspect/create/connect/disconnect/rm`, with `STUB_NETWORK_LS_RC`, `STUB_NETWORK_CREATE_RC` and `STUB_NETWORK_RM_RC`.

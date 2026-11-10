@@ -50,9 +50,9 @@ text in place, and Excel calculation beyond OfficeAgent's list of supported func
 
 ### Turning it on
 ```bash
-./lettucectl profiles cloudflared,search,garden-doc-tools   # your current list plus garden-doc-tools
-./lettucectl skills all                              # installs the working-with-documents skill
-./lettucectl mcp all                                 # adds office and pdf to each Settings -> MCP
+lettucectl profiles cloudflared,search,garden-doc-tools   # your current list plus garden-doc-tools
+lettucectl skills all                              # installs the working-with-documents skill
+lettucectl mcp all                                 # adds office and pdf to each Settings -> MCP
 ```
 `mcp` adds the two servers to each stack's **Settings -> MCP**, where each person sees them next
 to their own:
@@ -85,7 +85,7 @@ whenever `mcp` changes a stack's list, it restarts that stack's BFF alone; a tur
 finishes first (up to 10 minutes), and the vault and the app-server keep running. Stacks are
 restarted one after another, so `mcp all` can wait that long for each busy stack, and turning
 the profile off can restart a BFF that `up` has just recreated. If the
-restart fails, it says so, and agents see the servers after the next `./lettucectl restart <name>`.
+restart fails, it says so, and agents see the servers after the next `lettucectl restart <name>`.
 
 The first `up` with the profile builds the tools' image once per host, which takes a few
 minutes: it downloads OfficeAgent, a Python runtime and the Python packages, each pinned and
@@ -95,7 +95,7 @@ by step, in [doc-tools/README.md](../doc-tools/README.md#what-up-does-with-the-p
 
 ### Turning it off
 ```bash
-./lettucectl profiles cloudflared,search   # the list without garden-doc-tools
+lettucectl profiles cloudflared,search   # the list without garden-doc-tools
 ```
 The app-servers restart without the mount and the network, Gotenberg stops and is removed, and
 every `lettuce-doc-tools-*` network and tools volume is deleted. Documents stay in the
@@ -108,7 +108,7 @@ delete it (`docker image rm lettuce-doc-tools:<hash>`).
 ### After an update
 The tools' versions are pinned in this repo, so an update arrives with a new version of lettuce-garden;
 how the pins are moved is in [doc-tools/README.md](../doc-tools/README.md#maintaining). After pulling one,
-run `./lettucectl up all`. A change to the tools builds a new
+run `lettucectl up all`. A change to the tools builds a new
 image, fills a new volume and recreates the app-servers (the old volume is deleted once no
 container uses it; old images stay until you delete them); documents, memories, conversations, MCP entries, the vault
 and settings are not touched.
@@ -124,20 +124,20 @@ If removing the network fails, the next `up` or `profiles` removes it.
 ### Troubleshooting
 - **`MCP error -32000: Connection closed`**: the server did not start. The usual cause is a call
   made outside an agent workspace: the servers refuse to run unless the working directory is
-  inside `/work/<agent-id>`. Check with `./lettucectl shell <name> <agent>`, then
+  inside `/work/<agent-id>`. Check with `lettucectl shell <name> <agent>`, then
   `cd /work/<agent-id> && /opt/lettuce-doc-tools/bin/pdf-mcp </dev/null` (it prints why it
   refuses, or waits for input when it is fine).
 - **`the converter (Gotenberg) is unreachable`**: check `docker compose -p lettuce_shared ps`, and
   that the stack's network has it: `docker network inspect lettuce-doc-tools-<name>`. Running
-  `./lettucectl up <name>` repairs both.
+  `lettucectl up <name>` repairs both.
 - **`the converter took too long`**: letta-code gives each MCP call 60 seconds, so conversions
   stop at 50. Split the document or reduce its images.
 - **`not-found` from office after parallel calls**: calls made at the same time in one workspace
   can lose each other's document ids. Open the file again by its path.
 - **`spawn failed: ENOENT /opt/lettuce-doc-tools/bin/...`**, or an empty `/opt/lettuce-doc-tools`
-  in the app-server: the tools are not mounted. Run `./lettucectl up <name>`; if it says the
+  in the app-server: the tools are not mounted. Run `lettucectl up <name>`; if it says the
   volume is incomplete and in use, every stack with garden-doc-tools shares it: run
-  `./lettucectl down all`, then `./lettucectl up all`.
+  `lettucectl down all`, then `lettucectl up all`.
 - **`lettuce-doc-tools-<hash> was not made by lettucectl`** at `up`: a volume of that name exists
   without lettucectl's label, or with driver options (a bind to a host directory, say). Every
   app-server would run what it holds, so `up` refuses it; remove it and run `up` again.
@@ -146,12 +146,12 @@ If removing the network fails, the next `up` or `profiles` removes it.
   filled again.
 - **Agents do not find `office` or `pdf`** although `mcp` added them: the `mcp-servers` skill's
   description (in the app-server, `/root/.letta/skills/mcp-servers/SKILL.md`) should list them.
-  If it does not, the BFF restart after `mcp` failed: run `./lettucectl restart <name>`.
+  If it does not, the BFF restart after `mcp` failed: run `lettucectl restart <name>`.
 - **`mcp` says the MCP settings are not what lettucectl expects**: Lettuce changed the file's
   layout; add the servers by hand in Settings -> MCP, and report it to the lettuce-garden
   maintainers so `lettucectl mcp` can follow.
 - **`office` or `pdf` gone from Settings -> MCP**: a Settings page that was open before `mcp` ran
-  was saved over them; run `./lettucectl mcp <name> --force`.
+  was saved over them; run `lettucectl mcp <name> --force`.
 - **`check` refuses the stack**: the message names the rule; the overlay and the shared file are
   the reference (`compose/doc-tools.yml`, `compose/shared/gotenberg.yml`).
 

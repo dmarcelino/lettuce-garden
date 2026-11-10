@@ -25,12 +25,12 @@ How the code editor is built and wired, for developers: [code-server/README.md](
 
 ## Running it
 ```bash
-./lettucectl profiles <current list>,garden-code-server      # e.g. cloudflared,search,garden-code-server
+lettucectl profiles <current list>,garden-code-server      # e.g. cloudflared,search,garden-code-server
 ```
 - `profiles` routes `https://<garden>/code-server/` to the gate on every stack (on the garden's own address and Access application), and re-applies each stack's Access applications with an HttpOnly, SameSite=Lax cookie. `up` builds three images and starts three containers per stack: `garden-code-server` (the gate), `garden-code-server-editor` and `garden-code-server-exec` (the shell). The first build downloads code-server (pinned by version and SHA-256) and installs an SSH server on top of the app-server image. Dropping the profile removes the route and the containers; the editor's settings stay on the volume `lettuce-<name>_code-server-data`.
 - Nothing new goes in `stack.env`. The editor creates the SSH keys between itself and the shell on first start, on its own volumes, and rewrites `authorized_keys` and `known_hosts` at every start.
 - Editor state (settings, recently opened folders, the SSH client key) lives on `lettuce-<name>_code-server-data` and is not backed up: nothing in it is needed to restore a stack. The files people edit are the agents' workspaces, which `backup` copies.
-- Logs: `./lettucectl logs <name> garden-code-server`, `garden-code-server-editor`, `garden-code-server-exec`.
+- Logs: `lettucectl logs <name> garden-code-server`, `garden-code-server-editor`, `garden-code-server-exec`.
 
 ## Security model
 The editor shares its address with the vault and Gmail triggers: the stack's garden address, `<name>-garden.<your-domain>`, not Lettuce's. Whatever runs in the editor's tab acts there as you. So the design rests on one rule: **nothing an agent wrote ever runs in the editor's container.** Everything that runs code goes to a separate container, the shell, which is exactly as strong as an agent.
