@@ -2,6 +2,10 @@
 
 What a lettuce-garden release is made of, and how `publish.yml` makes one. A release is the `lettucectl` image (the CLI and every file it reads at run time), the garden's published images, and a wrapper script pinned to the `lettucectl` image's digest, which admins put in their data directory. Installing and upgrading, for admins: [docs/operations.md](../docs/operations.md#installing-and-upgrading). Why it is built this way: [lib/DESIGN.md](../lib/DESIGN.md).
 
+![A release, from a tag to an admin's self-upgrade](../docs/diagrams/release-workflow.svg)
+
+An interactive version, [release-workflow.html](../docs/diagrams/release-workflow.html), opens in a browser from a clone of this repo.
+
 ## Files
 | File | What it does |
 |---|---|
