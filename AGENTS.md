@@ -66,7 +66,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 ### Docs ([CONTRIBUTING.md](CONTRIBUTING.md#writing-docs))
 - README introduces and indexes, `docs/` is for users and admins, and CONTRIBUTING, ARCHITECTURE and the folder READMEs are for developers. This file holds directives only.
 - A rule change edits its developer doc, then the directive here if its one-line form changed.
-- Never claim more than is true: pipelock advisory, `env` delivery not a boundary, never trust a folder in the code editor.
+- Never claim more than is true: pipelock advisory, the vault's placeholders not a boundary, never trust a folder in the code editor.
 - Keep the guides' file names and `docs/cloudflare-setup.md`'s step numbers: `lettucectl` messages cite them and tests assert some.
 - Never add a file other than `README.md`, `AGENTS.md` and `CLAUDE.md` to `doc-tools/` or `garden-common/` for docs: it would rebuild images.
 - A new folder README gets an `AGENTS.md` pointer and a `CLAUDE.md` symlink to it; `node scripts/check-doc-links.mjs` fails without them.

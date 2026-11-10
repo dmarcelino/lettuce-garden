@@ -14,7 +14,6 @@ from garden_vault.service import ERASE_DELAY
 from garden_vault.vault import Vault
 
 from .conftest import (
-    ADDRESS_TEXT,
     CARD,
     EMAIL,
     FAST_KDF,
@@ -59,16 +58,26 @@ def setup_vault(client):
     assert r.status_code == 303, r.text
 
 
-ADDRESS = {"kind": "address", "name": "Home address", "f_text": ADDRESS_TEXT, "share_mode": "ask"}
+ADDRESS = {
+    "kind": "identity",
+    "name": "Home address",
+    "f_first_name": "Alfred",
+    "f_address1": STREET,
+    "f_city": "Lisboa",
+    "share_mode": "ask",
+}
 CARD_FORM = {
     "kind": "card",
     "name": "Visa",
-    "f_cardholder": "Alfred Test",
+    "f_cardholder_name": "Alfred Test",
+    "f_brand": "Visa",
     "f_number": CARD,
-    "f_expiry": "12/30",
-    "f_security_code": "123",
+    "f_exp_month": "12",
+    "f_exp_year": "2030",
+    "f_code": "123",
     "f_notes": SECRET,
 }
+AS_TEXT = {"delivery": "text", "reason": "compare it with the receipt"}
 
 
 def add(client, form) -> str:
@@ -407,41 +416,219 @@ def test_post_needs_csrf_and_same_origin(env):
 # ── secrets ────────────────────────────────────────────────────────────────────
 
 
-def test_private_fields_hidden_until_show(env):
+def test_masked_fields_hidden_until_show(env):
+    """Like Bitwarden: a card's number and code are masked; its expiry and notes are
+    private to agents, but the person sees them."""
     client = env[0]
     setup_vault(client)
     secret = add(client, CARD_FORM)
     page = client.get(f"{B}/secrets/{secret}").text
-    assert "Visa" in page and "ending 4242" in page and "12/30" in page
-    assert CARD not in page and SECRET not in page
+    assert "Visa ending 4242" in page and "Alfred Test" in page
+    assert CARD not in page and '"123"' not in page and ">123<" not in page
+    assert "2030" in page and SECRET in page and "Show hidden fields" in page
     shown = post(client, f"{B}/secrets/{secret}/show", {})
-    assert CARD in shown.text and SECRET in shown.text
+    assert CARD in shown.text and ">123<" in shown.text
     assert any(e.action == "viewed private fields" for e in env[1].audit_log())
     edit = client.get(f"{B}/secrets/{secret}/edit").text
-    assert CARD not in edit and SECRET not in edit
+    assert CARD not in edit and ">123<" not in edit and 'value="123"' not in edit
+    assert 'value="2030"' in edit and f">{SECRET}</textarea>" in edit  # not masked: prefilled
 
 
-def test_editing_keeps_private_values_left_blank(env):
+def test_the_form_masks_only_bitwardens_masked_fields(env):
+    client = env[0]
+    setup_vault(client)
+    form = client.get(f"{B}/secrets/new?kind=identity").text
+    for key in ("ssn", "passport_number"):
+        assert re.search(rf'<input name="f_{key}" type="password"', form), key
+    for key in ("address1", "city", "postal_code", "email", "phone", "license_number", "first_name"):
+        assert re.search(rf'<input name="f_{key}"(?! type="password")', form), key
+        assert not re.search(rf'<input name="f_{key}" type="password"', form), key
+    assert form.count('class="button ghost mask-toggle"') == 2 + 2  # SSN, passport, two new Hidden custom rows
+    ssh = client.get(f"{B}/secrets/new?kind=ssh_key").text
+    assert re.search(r'<textarea[^>]* class="short masked"[^>]* name="f_private_key"', ssh)
+    assert not re.search(r'<textarea[^>]*masked[^>]* name="f_public_key"', ssh)
+
+
+def test_an_identity_shows_its_address_and_hides_only_ssn_and_passport(env):
+    client = env[0]
+    setup_vault(client)
+    secret = add(client, {**ADDRESS, "f_ssn": "TEST_SSN_123456"})
+    page = client.get(f"{B}/secrets/{secret}").text
+    assert STREET in page and "Lisboa" in page and "TEST_SSN_123456" not in page
+    edit = client.get(f"{B}/secrets/{secret}/edit").text
+    assert f'value="{STREET}"' in edit and "TEST_SSN_123456" not in edit
+    only_address = add(client, ADDRESS)
+    page = client.get(f"{B}/secrets/{only_address}").text
+    assert STREET in page and "Show hidden fields" not in page
+
+
+def test_editing_keeps_masked_values_left_blank(env):
+    """Masked values never reach the edit page, so their blank box keeps them; every
+    other box is prefilled, so blank means removed."""
     client, vault = env[0], env[1]
     setup_vault(client)
     secret = add(client, CARD_FORM)
     form = {
         "kind": "card",
         "name": "Visa (work)",
-        "f_cardholder": "Alfred Test",
+        "f_cardholder_name": "Alfred Test",
         "f_number": "",
-        "clear_number": "on",  # required: cannot be removed, the blank keeps it
-        "f_expiry": "01/31",
-        "f_security_code": "",
-        "clear_security_code": "on",
+        "f_exp_month": "01",
+        "f_exp_year": "",
+        "f_code": "",
+        "clear_code": "on",
         "f_notes": "",
         "share_mode": "ask",
     }
     assert post(client, f"{B}/secrets/{secret}", form).status_code == 303
     saved = vault.secret(secret)
     assert saved.name == "Visa (work)" and saved.field("number").value == CARD
-    assert saved.field("expiry").value == "01/31" and saved.field("security_code") is None
-    assert saved.field("notes").value == SECRET
+    assert saved.field("exp_month").value == "01"
+    assert saved.field("code") is None and saved.field("brand") is None
+    assert saved.field("exp_year") is None and saved.field("notes") is None  # private, not masked: blank is blank
+
+
+def test_custom_fields_are_kept_renamed_and_removed(env):
+    client, vault = env[0], env[1]
+    setup_vault(client)
+    form = {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321", "c_hidden_0": "on", "c_name_1": "Bank"}
+    form.update({"c_value_1": "Banco Falso", "c_name_2": "", "c_value_2": ""})  # Bank: a Text field
+    secret = add(client, form)
+    custom = [(f.key, f.value, f.masked) for f in vault.secret(secret).custom_fields]
+    assert custom == [("pin", "4321", True), ("bank", "Banco Falso", False)]
+    new = client.get(f"{B}/secrets/new?kind=card").text
+    assert re.search(r'<input type="checkbox" name="c_hidden_0" checked>', new)  # new rows start Hidden
+    edit = client.get(f"{B}/secrets/{secret}/edit").text
+    assert 'value="PIN"' in edit and "4321" not in edit and 'value="Banco Falso"' in edit
+    assert re.search(r'<input name="c_value_0" type="password"', edit)
+    assert re.search(r'<input name="c_value_1"(?! type="password")', edit)
+    page = client.get(f"{B}/secrets/{secret}").text
+    assert "Banco Falso" in page and "4321" not in page
+    update = {**CARD_FORM, "f_number": "", "c_name_0": "Card PIN", "c_value_0": "", "c_old_0": "pin", "c_hidden_0": "on"}
+    update.update({"c_name_1": "Bank", "c_value_1": "", "c_old_1": "bank"})  # a Text field emptied: removed
+    update.update({"c_name_2": "Branch", "c_value_2": "Lisboa"})
+    assert post(client, f"{B}/secrets/{secret}", update).status_code == 303
+    custom = [(f.key, f.label, f.value, f.masked) for f in vault.secret(secret).custom_fields]
+    assert custom == [("card_pin", "Card PIN", "4321", True), ("branch", "Branch", "Lisboa", False)]
+    # Emptying an existing field's name removes it.
+    emptied = {**CARD_FORM, "f_number": "", "c_name_0": " ", "c_value_0": "", "c_old_0": "card_pin", "c_hidden_0": "on"}
+    emptied.update({"c_name_1": "Branch", "c_value_1": "Lisboa", "c_old_1": "branch"})
+    assert post(client, f"{B}/secrets/{secret}", emptied).status_code == 303
+    assert [f.key for f in vault.secret(secret).custom_fields] == ["branch"]
+
+
+def groups(html: str) -> list[str]:
+    """The titles of the page's groups; each one starts open and folds away."""
+    opening = r'<details class="group" data-group="([^"]+)" open>\s*<summary><h2 class="group-title">([^<]+)'
+    found = re.findall(opening, html)
+    assert all(key.endswith(":" + title) for key, title in found)
+    return [title for _, title in found]
+
+
+def group_body(html: str, title: str) -> str:
+    return html.split(f'<h2 class="group-title">{title}</h2>')[1].split("</details>")[0]
+
+
+def test_the_form_groups_fields_like_bitwarden(env):
+    client = env[0]
+    setup_vault(client)
+    form = client.get(f"{B}/secrets/new?kind=identity").text
+    assert groups(form) == [
+        "Item details",
+        "Personal details",
+        "Identification",
+        "Contact info",
+        "Address",
+        "Additional options",
+        "Custom fields",
+        "Agent access",
+    ]
+    assert 'data-group="form:identity:Address"' in form
+    personal = group_body(form, "Personal details")
+    assert 'name="f_first_name"' in personal and 'name="f_passport_number"' not in personal
+    secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321", "c_hidden_0": "on"})
+    edit = client.get(f"{B}/secrets/{secret}/edit").text
+    assert groups(edit)[1:3] == ["Card details", "Additional options"]
+    custom = group_body(edit, "Custom fields")
+    assert 'value="PIN"' in custom and "4321" not in edit
+
+
+def test_the_secret_page_groups_fields_like_the_form(env):
+    client = env[0]
+    setup_vault(client)
+    secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321", "c_hidden_0": "on"})
+    page = client.get(f"{B}/secrets/{secret}").text
+    assert groups(page) == ["Card details", "Additional options", "Custom fields", "Agent access"]
+    assert 'data-group="page:card:Custom fields"' in page
+    assert CARD not in page and "4321" not in page and SECRET in group_body(page, "Additional options")
+    shown = post(client, f"{B}/secrets/{secret}/show", {}).text
+    assert CARD in shown and "4321" in shown and 'data-copy="v-pin"' in shown
+
+
+def test_the_secret_page_names_what_agents_may_use_without_asking(env):
+    client = env[0]
+    setup_vault(client)
+    address = add(client, {**ADDRESS, "share_mode": "auto"})
+    page = client.get(f"{B}/secrets/{address}").text
+    assert "may use Address 1, City / Town without asking you" in page
+    no_address = add(client, {"kind": "identity", "name": "Passport", "f_passport_number": "X1", "share_mode": "auto"})
+    page = client.get(f"{B}/secrets/{no_address}").text
+    assert "must ask you every time" in page and "may use  without" not in page
+
+
+def test_bitwarden_import(env, caplog):
+    caplog.set_level(logging.DEBUG)
+    client, vault = env[0], env[1]
+    setup_vault(client)
+    page = client.get(f"{B}/secrets/import").text
+    assert 'enctype="multipart/form-data"' in page and ".json" in page
+    export = {
+        "encrypted": False,
+        "items": [
+            {"type": 3, "name": "Visa", "card": {"brand": "Visa", "number": CARD}},
+            {"type": 4, "name": "Home", "identity": {"address1": STREET}},
+            {"type": 2, "name": "Empty", "notes": None},
+        ],
+    }
+    csrf = csrf_of(client.get(f"{B}/notifications").text)
+    r = client.post(
+        f"{B}/secrets/import",
+        data={"csrf": csrf},
+        files={"file": ("bitwarden.json", json.dumps(export).encode(), "application/json")},
+        headers={"origin": ORIGIN},
+    )
+    assert r.status_code == 200, r.text
+    assert "Card: 1" in r.text and "Identity: 1" in r.text and "Empty: fill in at least one field" in r.text
+    assert CARD not in r.text and STREET not in r.text
+    secrets = vault.secrets()
+    assert sorted(s.name for s in secrets) == ["Home", "Visa"] and {s.share_mode for s in secrets} == {"ask"}
+    assert vault.audit_log()[0].action == "imported 2 secrets from Bitwarden"
+    assert CARD not in caplog.text and STREET not in caplog.text
+
+
+def test_bitwarden_import_refuses_a_large_upload_before_reading_it(env):
+    client, vault = env[0], env[1]
+    setup_vault(client)
+    csrf = csrf_of(client.get(f"{B}/notifications").text)
+    big = b"{" + b" " * (5 * 1024 * 1024 + 64 * 1024) + b"}"
+    r = client.post(
+        f"{B}/secrets/import",
+        data={"csrf": csrf},
+        files={"file": ("b.json", big, "application/json")},
+        headers={"origin": ORIGIN},
+    )
+    assert r.status_code == 413 and "at most 5 MB" in r.text and vault.secrets() == []
+
+
+def test_bitwarden_import_refuses_an_encrypted_export_and_needs_csrf(env):
+    client, vault = env[0], env[1]
+    setup_vault(client)
+    upload = {"file": ("b.json", b'{"encrypted": true, "items": []}', "application/json")}
+    no_csrf = client.post(f"{B}/secrets/import", data={"csrf": "x"}, files=upload, headers={"origin": ORIGIN})
+    assert no_csrf.status_code == 403
+    csrf = csrf_of(client.get(f"{B}/notifications").text)
+    r = client.post(f"{B}/secrets/import", data={"csrf": csrf}, files=upload, headers={"origin": ORIGIN})
+    assert r.status_code == 400 and "encrypted" in r.text and vault.secrets() == []
 
 
 def test_card_cannot_be_shared_without_asking(env):
@@ -480,8 +667,10 @@ def test_mcp_tools(env):
     assert tools["get_result"]["annotations"]["readOnlyHint"] is True
     assert tools["request_secret"]["annotations"].get("readOnlyHint") is not True
     assert tools["request_secret"]["inputSchema"]["required"] == ["secret_id", "purpose"]
-    delivery = tools["request_secret"]["inputSchema"]["properties"]["delivery"]
-    assert delivery["enum"] == ["text", "env"] and delivery["default"] == "text"
+    props = tools["request_secret"]["inputSchema"]["properties"]
+    assert props["delivery"]["enum"] == ["placeholders", "text"] and props["delivery"]["default"] == "placeholders"
+    assert {"reason", "alias"} <= set(props)
+    assert "AI provider" in tools["request_secret"]["description"]
     for name in ("request_secret", "get_result"):
         assert "never repeat" in tools[name]["description"].lower(), name
 
@@ -501,19 +690,21 @@ def test_end_to_end_through_mcp_and_ui(env, caplog):
     assert listed["secrets"][0]["name"] == "Visa"
     assert CARD not in raw and SECRET not in raw
 
-    args = {"secret_id": card, "fields": ["number", "security_code"], "purpose": "Pay for the train"}
+    args = {"secret_id": card, "fields": ["number", "code"], "purpose": "Pay for the train", **AS_TEXT}
     sub, _ = call_tool(client, "request_secret", args)
     assert sub["status"] == "pending"
     rid = sub["id"]
 
     page = client.get(f"{B}/r/{rid}").text
-    assert "Pay for the train" in page and "Card number" in page and "ending 4242" in page and CARD not in page
-    assert "Expiry (MM/YY): 12/30" in page
+    assert "Pay for the train" in page and "Number" in page and "ending 4242" in page and CARD not in page
+    assert "Cardholder name: Alfred Test" in page
+    assert "wants to read these values" in page and "compare it with the receipt" in page
     assert 'class="badge">1<' in client.get(f"{B}/secrets").text
     assert post(client, f"{B}/r/{rid}/decide", {"action": "share", "fields": ["number"]}).status_code == 303
 
     res, _ = call_tool(client, "get_result", {"request_id": rid, "wait_seconds": 5})
     assert res["status"] == "done" and res["values"] == {"number": CARD} and res["withheld"] == ["Security code"]
+    assert "Reason to read them: compare it with the receipt" in vault.audit_log()[0].detail
     again, _ = call_tool(client, "get_result", {"request_id": rid})
     assert "values" not in again
     assert CARD not in client.get(f"{B}/r/{rid}").text
@@ -529,7 +720,7 @@ def test_mcp_cannot_approve(env):
     sub, _ = call_tool(client, "request_secret", {"secret_id": secret, "purpose": "x"})
     r = client.post(
         f"http://garden-vault:8000{B}/r/{sub['id']}/decide",
-        data={"action": "share", "fields": "text", "csrf": "x"},
+        data={"action": "share", "fields": "city", "csrf": "x"},
         headers={"cf-access-jwt-assertion": "", "origin": ORIGIN},
     )
     assert r.status_code == 403
@@ -578,34 +769,34 @@ def test_locked_vault_answers_agents_and_notifies(env):
     assert len(sender.calls) == 1
 
 
-# ── env delivery and /redeem ─────────────────────────────────────────────────
+# ── placeholders and /redeem ─────────────────────────────────────────────────
 
 REDEEM = "http://garden-vault:8000/redeem"
 
 
 def redeem(client, handle, url=REDEEM, **headers):
-    return client.post(url, json={"handle": handle}, headers={"cf-access-jwt-assertion": "", **headers})
+    return client.post(url, json={"handles": [handle]}, headers={"cf-access-jwt-assertion": "", **headers})
 
 
-def test_env_delivery_end_to_end(env, caplog):
+def test_placeholders_end_to_end(env, caplog):
     caplog.set_level(logging.DEBUG)
     client, vault, sender = env
     setup_vault(client)
     card = add(client, CARD_FORM)
     vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
 
-    args = {"secret_id": card, "fields": ["number"], "purpose": "Pay for the train", "delivery": "env"}
+    args = {"secret_id": card, "fields": ["number"], "purpose": "Pay for the train"}
     sub, _ = call_tool(client, "request_secret", args)
     page = client.get(f"{B}/r/{sub['id']}").text
-    assert "pass these to a command" in page and CARD not in page
+    assert "pass these to a command" in page and CARD not in page and "wants to read" not in page
     assert post(client, f"{B}/r/{sub['id']}/decide", {"action": "share", "fields": ["number"]}).status_code == 303
 
     res, raw = call_tool(client, "get_result", {"request_id": sub["id"]})
-    assert res["status"] == "done" and res["env"] == {"VAULT_NUMBER": "Card number"} and CARD not in raw
+    assert res["status"] == "done" and res["placeholders"] == {"{{VAULT_NUMBER}}": "Number"} and CARD not in raw
 
     r = redeem(client, res["handle"])
     assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
-    assert r.json() == {"secret": "Visa", "env": {"VAULT_NUMBER": CARD}}
+    assert r.json() == {"secrets": ["Visa"], "env": {"VAULT_NUMBER": CARD}}
     again = redeem(client, res["handle"])
     assert again.status_code == 404 and CARD not in again.text
     assert CARD not in client.get(f"{B}/r/{sub['id']}").text
@@ -617,7 +808,7 @@ def test_redeem_is_internal_only(env):
     client = env[0]
     setup_vault(client)
     secret = add(client, {**ADDRESS, "share_mode": "auto"})
-    res, _ = call_tool(client, "request_secret", {"secret_id": secret, "purpose": "x", "delivery": "env"})
+    res, _ = call_tool(client, "request_secret", {"secret_id": secret, "purpose": "x", "fields": ["address1"]})
     handle = res["handle"]
     for r in (
         redeem(client, handle, url=f"{ORIGIN}/redeem"),
@@ -627,8 +818,8 @@ def test_redeem_is_internal_only(env):
         assert r.status_code == 403 and STREET not in r.text
     get = client.get(f"{REDEEM}?handle={handle}", headers={"cf-access-jwt-assertion": ""})
     assert get.status_code != 200 and STREET not in get.text
-    for body in ("not json", None):
-        r = client.post(REDEEM, content=body or b"[]", headers={"content-type": "application/json"})
-        assert r.status_code in (400, 404)
+    for body in (b"not json", b"[]", json.dumps({"handle": handle}).encode()):
+        r = client.post(REDEEM, content=body, headers={"content-type": "application/json"})
+        assert r.status_code == 400 and STREET not in r.text
     # None of that used up the handle.
-    assert redeem(client, handle).json()["env"] == {"VAULT_TEXT": ADDRESS_TEXT}
+    assert redeem(client, handle).json()["env"] == {"VAULT_ADDRESS1": STREET}
