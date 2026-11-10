@@ -7,28 +7,11 @@ decision. It is opt-in and **advisory**: it catches mistakes and naive attempts,
 what went where, but an agent that wants to can go around it. Read "What it does not do" before
 relying on it.
 
-```
-agent shells, Claude Code, Codex (app-server) ──HTTPS_PROXY──┐
-SearXNG, DuckDuckGo reader ───────────────────HTTPS_PROXY──┼──► pipelock ──► internet
-agents reading pages: curl http://garden-pipelock:8888/fetch?url=… ─┘      │
-                                                                    └─ signed receipts
-letta-code itself, the BFF, the vault, Google sidecars ──────────────────────► internet
-```
+![What goes through pipelock, what it records, and what goes around it](diagrams/egress-proxy-flow.svg)
 
-![What passes pipelock, and what does not](diagrams/egress-firewall-architecture.svg)
+An interactive version, [egress-proxy-flow.html](diagrams/egress-proxy-flow.html), opens in a browser from a clone of this repo.
 
-An interactive version, [egress-firewall-architecture.html](diagrams/egress-firewall-architecture.html),
-opens in a browser from a clone of this repo.
-
-## Turning it on
-```bash
-./lettucectl profiles cloudflared,search,garden-pipelock   # your current list plus garden-pipelock
-./lettucectl skills all                             # installs the fetching-web-pages skill
-```
-`up` builds the image (`pipelock/Dockerfile`) from pipelock's source at a pinned release,
-without its separately licensed enterprise code. The first start creates the stack's receipt
-signing key. Dropping the profile removes the container and the proxy settings, and keeps the
-receipts.
+How pipelock is built and wired, for developers: [pipelock/README.md](../pipelock/README.md).
 
 ## What it does
 - **Proxy settings** (`compose/pipelock-proxy.yml`): `HTTPS_PROXY`/`HTTP_PROXY` in the
@@ -49,7 +32,7 @@ receipts.
   (pipelock's balanced mode would only log a warning and hand the agent the page): the agent
   gets a 403 with `"block_reason": "response contains prompt injection: ..."` and a block
   receipt is signed. A page that only discusses prompt injection can be refused too; the agent
-  tells you, and you decide. `tests/run-pipelock.sh` checks this against a local test page.
+  tells you, and you decide.
 - **Signed receipts.** Every allow and block is written to a hash-chained log, each entry signed
   with the stack's own Ed25519 key. They show where the agents' tools went, and that this
   pipelock decided it.
@@ -74,7 +57,19 @@ receipts.
 - **Receipts are signed by the operator's key.** They show what this pipelock decided and that
   it was this key; they don't prove the operator honest, nor that nothing went around the proxy.
 
-## Reading the receipts
+## Running it
+
+### Turning it on
+```bash
+./lettucectl profiles cloudflared,search,garden-pipelock   # your current list plus garden-pipelock
+./lettucectl skills all                             # installs the fetching-web-pages skill
+```
+`up` builds the image (`pipelock/Dockerfile`) from pipelock's source at a pinned release,
+without its separately licensed enterprise code. The first start creates the stack's receipt
+signing key. Dropping the profile removes the container and the proxy settings, and keeps the
+receipts.
+
+### Reading the receipts
 ```bash
 ./lettucectl receipts alfred                        # verify every receipt, list the sessions
 ./lettucectl receipts alfred ~/alfred-receipts.html # HTML report of the newest session
@@ -96,7 +91,7 @@ The signing key and the receipts live on the volume `lettuce-<name>_pipelock-dat
 pipelock mounts. Receipts are never pruned (removing one would break the chain); they grow by
 roughly one line per request. `backup` copies them, and `remove` deletes them with the stack.
 
-## When an agent is blocked
+### When an agent is blocked
 The agent gets a 403 with an `X-Pipelock-Block-Reason` header (or `blocked: true` and a
 `block_reason` from `/fetch`).
 The skill tells agents to report it rather than try another way. To see why, read the receipts

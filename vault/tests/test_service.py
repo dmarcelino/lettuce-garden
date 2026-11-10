@@ -1,6 +1,7 @@
 import json
 import logging
 import sqlite3
+from collections import Counter
 
 import anyio
 import pytest
@@ -367,7 +368,8 @@ async def test_unused_handles_are_capped(settings, vault):
 
 
 def pushed_titles(sender: FakeSender) -> list[str]:
-    return [json.loads(c["data"])["title"] for c in sender.calls]
+    # Sorted: each push is sent from its own worker thread, so they finish in any order.
+    return sorted(json.loads(c["data"])["title"] for c in sender.calls)
 
 
 def audit_actions(vault) -> list[tuple[str, str]]:
@@ -387,7 +389,10 @@ async def test_scheduled_erase_tells_every_device_and_runs_when_due(settings, va
         at = service.schedule_erase(EMAIL)
         service.schedule_erase(EMAIL)  # already scheduled: no second notice
         assert service.erase_if_due() is False
-        await anyio.sleep(0.01)
+        for _ in range(100):  # the two pushes run in worker threads
+            if len(sender.calls) >= 2:
+                break
+            await anyio.sleep(0.01)
         scheduled = (pushed_titles(sender), audit_actions(vault))
         clock.t = at
         assert service.erase_if_due() is True
@@ -396,7 +401,7 @@ async def test_scheduled_erase_tells_every_device_and_runs_when_due(settings, va
     (titles, actions) = await with_service(service, flow)
     assert titles == ["Vault erase scheduled"] * 2  # one per device
     assert actions[-1] == (EMAIL, "scheduled an erase")
-    assert pushed_titles(sender)[2:] == ["Vault erased"] * 2
+    assert pushed_titles(sender) == sorted(["Vault erase scheduled"] * 2 + ["Vault erased"] * 2)
     assert audit_actions(vault) == [(EMAIL, "erased the vault (scheduled 24 hours earlier)")]
     assert not vault.is_setup()
     pushed = json.dumps([c["data"] for c in sender.calls])
@@ -419,9 +424,9 @@ async def test_cancelled_erase_is_announced(settings, vault):
         service.erase_cancelled(EMAIL, by_unlock=True)
 
     await with_service(service, flow)
-    assert pushed_titles(sender) == ["Vault erase scheduled", "Vault erase cancelled"] * 2
-    bodies = [json.loads(c["data"])["body"] for c in sender.calls]
-    assert "unlocked" in bodies[3]
+    assert pushed_titles(sender) == sorted(["Vault erase scheduled", "Vault erase cancelled"] * 2)
+    cancelled = [json.loads(c["data"])["body"] for c in sender.calls if "cancelled" in c["data"]]
+    assert sorted("unlocked" in b for b in cancelled) == [False, True]
     assert [a for _, a in audit_actions(vault)][-4:] == [
         "scheduled an erase",
         "cancelled the scheduled erase",
@@ -444,8 +449,8 @@ async def test_each_erase_notice_has_its_own_tag(settings, vault, clock):
         service.erase_if_due()
 
     await with_service(service, flow)
-    tags = [json.loads(c["data"])["tag"] for c in sender.calls]
-    assert len(tags) == 4 and len(set(tags)) == 3 and tags[0] == tags[2]
+    tags = Counter(json.loads(c["data"])["tag"] for c in sender.calls)
+    assert tags == {"vault-erase-scheduled": 2, "vault-erase-cancelled": 1, "vault-erase-done": 1}
 
 
 async def test_a_failed_erase_is_logged_and_retried(settings, vault, clock, monkeypatch, caplog):
@@ -466,7 +471,7 @@ async def test_a_failed_erase_is_logged_and_retried(settings, vault, clock, monk
 
     assert await with_service(service, flow) is True
     assert "erase failed" in caplog.text and "OperationalError" in caplog.text
-    assert [json.loads(c["data"])["title"] for c in sender.calls] == ["Vault erase scheduled", "Vault erased"]
+    assert pushed_titles(sender) == sorted(["Vault erase scheduled", "Vault erased"])
 
 
 async def test_an_erase_due_during_downtime_waits_an_hour_and_says_so(settings, vault, vault_path, clock):
@@ -488,8 +493,7 @@ async def test_an_erase_due_during_downtime_waits_an_hour_and_says_so(settings, 
         return service.erase_if_due()
 
     assert await with_service(service, flow) is True
-    titles = [json.loads(c["data"])["title"] for c in sender.calls]
-    assert titles == ["Vault erase in 1 hour", "Vault erased"]
+    assert pushed_titles(sender) == sorted(["Vault erase in 1 hour", "Vault erased"])
 
 
 async def test_no_restart_notice_for_an_erase_far_away(settings, vault):

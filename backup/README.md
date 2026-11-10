@@ -30,7 +30,18 @@ With `--compress`, step 7 writes a tar.gz of the same tree to stdout instead, wi
 
 The same image fills the document tools' volume: `fill_doc_tools_volume` (under `ensure_doc_tools_volume`) streams the tools out of the `doc-tools` image with `docker cp` into a container of this image with `BACKUP_RUN`'s limits, which unpacks them into the volume and writes the completion marker last ([docs/doc-tools.md](../docs/doc-tools.md)).
 
-`backup` touches no Compose file and is not part of `check_stack`; its rules are under "Key invariants" in [AGENTS.md](../AGENTS.md) ("`backup` reads the state only through its own container").
+`backup` touches no Compose file and is not part of `check_stack`.
+
+## Rules
+
+### `backup` reads the state only through its own container
+The state is root-owned and holds every stack's secrets, so the operator's shell never reads it directly and no sudo is needed. Every read goes through a container of this image with `BACKUP_RUN`'s limits (above): `--init` so Ctrl-C reaches rsync, `--network none`, a read-only root, and only the capabilities needed to read, write and chown. The state, `stack.env` and the two volumes are mounted read-only.
+
+- **The destination may not be inside this repo:** the repo is public, and backups hold secrets.
+- **Snapshots are complete or absent.** They are written as the operator (`--chown`), hard-linked to the previous one (`--link-dest`), and renamed from `.partial-<TS>` only when complete. A `flock` on `<dir>/<name>/.lock` keeps a second run from deleting the first one's `.partial-*`.
+- **The vault and pipelock's receipts are copied whenever their volume exists**, whatever the profiles. Check `volume inspect` before mounting one, since `run -v` creates a missing volume.
+- **A running stack is copied only after `--pause`, `--live` or the operator's answer**, and the `EXIT` trap that unpauses it is set before pausing.
+- **With `all`, each stack runs in its own subshell**, and a failure does not stop the rest.
 
 ## Build and test
 ```bash
