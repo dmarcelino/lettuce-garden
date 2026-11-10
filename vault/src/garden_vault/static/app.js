@@ -147,9 +147,26 @@ function setupGroups() {
   }, true);
 }
 
+// Like Bitwarden's eye button: shows what was typed into a masked box, and masks it
+// again. It changes only how the box draws its text.
+function setupMaskToggles() {
+  for (const button of document.querySelectorAll(".mask-toggle")) {
+    const box = button.previousElementSibling;
+    if (!box) continue;
+    button.addEventListener("click", () => {
+      const shown = button.getAttribute("aria-pressed") !== "true";
+      if (box.tagName === "TEXTAREA") box.classList.toggle("masked", !shown);
+      else box.type = shown ? "text" : "password";
+      button.setAttribute("aria-pressed", String(shown));
+      button.textContent = shown ? "Hide" : "Show";
+    });
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   setupPageHelpers();
   setupGroups();
+  setupMaskToggles();
   setupPush().catch((e) => {
     const status = document.getElementById("push-status");
     if (status) status.textContent = `Notifications unavailable: ${e.message}`;

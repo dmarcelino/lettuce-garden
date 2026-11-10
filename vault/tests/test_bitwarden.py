@@ -95,6 +95,14 @@ def test_reads_every_type_with_its_fields():
         "pin": ("4321", True),
         "remember_me": ("true", True),
     }
+    # Masked as in Bitwarden: its Hidden custom fields (type 1), not Text or Boolean ones.
+    assert {f.key: f.masked for f in login.fields} == {
+        "username": False,
+        "password": True,
+        "uris": False,
+        "pin": True,
+        "remember_me": False,
+    }
     assert fields(note) == {"notes": ("Gate code 1234", True)}
     assert fields(card)["number"] == (CARD, True) and fields(card)["exp_year"] == ("2030", True)
     assert fields(card)["cardholder_name"] == ("Alfred Test", False)

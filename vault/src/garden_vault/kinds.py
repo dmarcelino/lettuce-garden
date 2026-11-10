@@ -6,7 +6,8 @@ and which need approval (private), which private fields the person may let
 agents use without asking, and the preview on the approval page.
 
 Every secret may also carry custom fields (Bitwarden's text, hidden and
-checkbox fields): always private, never shared without asking."""
+checkbox fields): always private, never shared without asking; only hidden ones
+are masked on screen."""
 
 from __future__ import annotations
 
@@ -20,9 +21,8 @@ from typing import Any
 class FieldSpec:
     key: str
     label: str
-    # Private: hidden on screen until "Show", and shared with agents only on
-    # approval (or without asking, where `auto` allows it). Public: agents
-    # read it in list_secrets, like the name.
+    # Private: shared with agents only on approval (or without asking, where
+    # `auto` allows it). Public: agents read it in list_secrets, like the name.
     sensitive: bool = False
     multiline: bool = False
     # A private field the person may let agents use without asking.
@@ -30,6 +30,10 @@ class FieldSpec:
     hint: str = ""
     # The group it shows under on the form and the secret's page.
     section: str = ""
+    # Hidden from the person too: typed into a password box, never sent back to the
+    # edit page, and dots on the secret's page until "Show hidden fields". Bitwarden's
+    # rule (its form's password-type fields); about the screen only, not agents.
+    masked: bool = False
 
 
 @dataclass(frozen=True)
@@ -58,9 +62,17 @@ class Kind:
 
 
 def _private(
-    key: str, label: str, auto: bool = False, multiline: bool = False, hint: str = "", section: str = ""
+    key: str,
+    label: str,
+    auto: bool = False,
+    multiline: bool = False,
+    hint: str = "",
+    section: str = "",
+    masked: bool = False,
 ) -> FieldSpec:
-    return FieldSpec(key, label, sensitive=True, auto=auto, multiline=multiline, hint=hint, section=section)
+    return FieldSpec(
+        key, label, sensitive=True, auto=auto, multiline=multiline, hint=hint, section=section, masked=masked
+    )
 
 
 def _notes(auto: bool = False) -> FieldSpec:
@@ -81,8 +93,8 @@ KINDS: dict[str, Kind] = {
                 *_group(
                     "Login credentials",
                     FieldSpec("username", "Username"),
-                    _private("password", "Password"),
-                    _private("totp", "Authenticator key (TOTP)"),
+                    _private("password", "Password", masked=True),
+                    _private("totp", "Authenticator key (TOTP)", masked=True),
                     # Bitwarden's "Autofill options"; the vault fills nothing in.
                     FieldSpec("uris", "Websites", multiline=True, hint="one per line"),
                 ),
@@ -97,10 +109,10 @@ KINDS: dict[str, Kind] = {
                     "Card details",
                     FieldSpec("cardholder_name", "Cardholder name"),
                     FieldSpec("brand", "Brand", hint="e.g. Visa"),
-                    _private("number", "Number"),
+                    _private("number", "Number", masked=True),
                     _private("exp_month", "Expiration month", hint="e.g. 12"),
                     _private("exp_year", "Expiration year", hint="e.g. 2030"),
-                    _private("code", "Security code"),
+                    _private("code", "Security code", masked=True),
                 ),
                 _notes(),
             ),
@@ -120,8 +132,8 @@ KINDS: dict[str, Kind] = {
                 ),
                 *_group(
                     "Identification",
-                    _private("ssn", "Social Security number"),
-                    _private("passport_number", "Passport number"),
+                    _private("ssn", "Social Security number", masked=True),
+                    _private("passport_number", "Passport number", masked=True),
                     _private("license_number", "License number"),
                 ),
                 *_group("Contact info", _private("email", "Email"), _private("phone", "Phone")),
@@ -145,7 +157,7 @@ KINDS: dict[str, Kind] = {
             (
                 *_group(
                     "SSH key",
-                    _private("private_key", "Private key", multiline=True),
+                    _private("private_key", "Private key", multiline=True, masked=True),
                     FieldSpec("public_key", "Public key", multiline=True),
                     FieldSpec("key_fingerprint", "Fingerprint"),
                 ),

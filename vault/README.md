@@ -15,7 +15,7 @@ An interactive version, [vault-architecture.html](../docs/diagrams/vault-archite
 | `src/garden_vault/config.py` | `PREFIX` (`/vault`), the limits (`REQUEST_TTL_SECONDS`, `HANDLE_TTL_SECONDS`, `MAX_HANDLES`, `MAX_PENDING`, `AUTO_LOCK_SECONDS`, `ERASE_DELAY_SECONDS`, `ERASE_GRACE_SECONDS`, `ERASE_REQUESTS_PER_HOUR`, ...) and `Settings` from the environment |
 | `src/garden_vault/crypto.py` | scrypt key derivation and AES-256-GCM; the data key is stored only wrapped |
 | `src/garden_vault/vault.py` | The encrypted SQLite store (`/data/vault.db`): setup, unlock, lock and auto-lock, erase (at once, or scheduled while locked), secrets (`build_fields`, custom fields included), audit log, push subscriptions. `FORMAT` in `vault_meta` is the fields' shape: an unlock that finds another one deletes every secret (no conversion) and records how many |
-| `src/garden_vault/kinds.py` | The secret kinds, Bitwarden's five item types with its fields: public and private fields, the private ones that may be shared without asking (`FieldSpec.auto`; a kind with any is `auto_allowed`), custom field keys (`custom_key`) and the preview |
+| `src/garden_vault/kinds.py` | The secret kinds, Bitwarden's five item types with its fields: public and private fields, the private ones that may be shared without asking (`FieldSpec.auto`; a kind with any is `auto_allowed`), the ones masked on screen like Bitwarden's password fields (`FieldSpec.masked`), custom field keys (`custom_key`) and the preview |
 | `src/garden_vault/bitwarden.py` | Reads Bitwarden's unencrypted JSON export into kinds (`read_export`); refuses encrypted exports; per item, what was left out and why |
 | `src/garden_vault/service.py` | Agent requests, approvals, handles for the default `placeholders` delivery (in memory; `alias` prefixes their variable names), `text` delivery only with a `reason`, the `rules` sent with shared values, and the notices and audit entries of a scheduled erase |
 | `src/garden_vault/mcp_tools.py` | The three MCP tools: `list_secrets`, `request_secret`, `get_result` |
@@ -45,7 +45,7 @@ tests/run-sidecar.sh vault -k vault   # extra args go to pytest
 ```
 Run them before changing this directory or `garden-common/`.
 
-The tests never use the network: pushes go to `FakeSender`, Access tokens come from `make_jwt` with a test RSA key, `FAST_KDF` makes scrypt cheap, and a fake `Clock` drives time. Fake values (`TEST_SECRET_DO_NOT_USE_938742`, a card number, a street) are asserted never to reach the vault file on disk, logs, pushes or pages before Show. `test_vault_run.py` runs `agent-skills/using-vault-secrets/vault-run` against a loopback stub of `/redeem`, and `test_vault_fill.py` runs `vault-fill` (alone, and piped inside `vault-run`); `tests/run-sidecar.sh vault` mounts `agent-skills/` into the test container for them. `test_bitwarden.py` reads a fake export of every item type.
+The tests never use the network: pushes go to `FakeSender`, Access tokens come from `make_jwt` with a test RSA key, `FAST_KDF` makes scrypt cheap, and a fake `Clock` drives time. Fake values (`TEST_SECRET_DO_NOT_USE_938742`, a card number, a street) are asserted never to reach the vault file on disk, logs or pushes, nor pages before Show when they are masked (the card number). `test_vault_run.py` runs `agent-skills/using-vault-secrets/vault-run` against a loopback stub of `/redeem`, and `test_vault_fill.py` runs `vault-fill` (alone, and piped inside `vault-run`); `tests/run-sidecar.sh vault` mounts `agent-skills/` into the test container for them. `test_bitwarden.py` reads a fake export of every item type.
 
 ## Rules
 
@@ -61,7 +61,10 @@ That is the same JWT cloudflared sends the BFF in plain HTTP inside that namespa
 - `delivery: "text"` needs a `reason`, shown to the person and audited. Values shared as text always come with `rules` (`service.rules`): the approved purpose only, no outside service unless the purpose needs it, never repeated in a reply, memory or files. Those are instructions to the agent, not a boundary.
 
 ### Stored format
-Secrets are stored in the shape `vault.FORMAT` names. Changing a kind's fields means bumping it, and an unlock then deletes every secret (no migration).
+Secrets are stored in the shape `vault.FORMAT` names. Changing a kind's fields means bumping it, and an unlock then deletes every secret (no migration). A new display-only attribute of a stored field takes a safe default instead: `Field.masked` missing reads as masked.
+
+### Masked is not private
+`sensitive` (private) decides what agents must ask for; `masked` decides what the person's own screen hides. Masked follows Bitwarden's form: its password-type fields (a login's password and TOTP, a card's number and code, an identity's SSN and passport number, an SSH private key) and Hidden custom fields. Masked values are never sent to the edit page (blank keeps them) and show as dots until "Show hidden fields", which History records. Every other value, private or not, is shown and prefilled.
 
 ### Erasing without the passphrase
 The unlock page's erase is the one way to destroy the vault without knowing the passphrase, so the Access sign-in is all it checks. What stands in for the passphrase is time and noise: it runs only `ERASE_DELAY_SECONDS` after it was asked for, never while the vault is unlocked, every step (scheduled, cancelled, run, and the extra `ERASE_GRACE_SECONDS` after a restart) is pushed to every device under its own tag, unlocking cancels it, and `ERASE_REQUESTS_PER_HOUR` caps how often one person can set off those notices. The schedule lives in `vault_meta` (plaintext), so a restart keeps it, and `reset()` clears it.

@@ -74,6 +74,9 @@ class Field:
     value: str
     sensitive: bool = False
     multiline: bool = False
+    # Hidden on screen too (kinds.FieldSpec.masked, or a Hidden custom field).
+    # True when absent: a field saved before the flag existed stays hidden.
+    masked: bool = True
 
 
 @dataclass(frozen=True)
@@ -97,6 +100,10 @@ class Secret:
     @property
     def private_fields(self) -> tuple[Field, ...]:
         return tuple(f for f in self.fields if f.sensitive)
+
+    @property
+    def masked_fields(self) -> tuple[Field, ...]:
+        return tuple(f for f in self.fields if f.masked)
 
     @property
     def custom_fields(self) -> tuple[Field, ...]:
@@ -133,24 +140,27 @@ def check_passphrase(passphrase: str) -> str:
     return passphrase
 
 
-def build_fields(kind: str, values: dict[str, str], custom: list[tuple[str, str]] | None = None) -> tuple[Field, ...]:
-    """The kind's fields in order, then the custom fields (name, value), all
-    private; empty fields are dropped, and at least one must be left."""
+def build_fields(
+    kind: str, values: dict[str, str], custom: list[tuple[str, str, bool]] | None = None
+) -> tuple[Field, ...]:
+    """The kind's fields in order, then the custom fields (name, value, hidden),
+    all private and masked only when hidden; empty fields are dropped, and at
+    least one must be left."""
     if kind not in KINDS:
         raise VaultError("unknown type of secret")
     out: list[Field] = []
 
-    def add(key: str, label: str, value: str, sensitive: bool, multiline: bool) -> None:
+    def add(key: str, label: str, value: str, sensitive: bool, multiline: bool, masked: bool) -> None:
         if len(value) > MAX_FIELD_VALUE:
             raise VaultError(f"{label} is longer than {MAX_FIELD_VALUE} characters")
-        out.append(Field(key, label, value, sensitive, multiline))
+        out.append(Field(key, label, value, sensitive, multiline, masked))
 
     for spec in KINDS[kind].fields:
         if value := values.get(spec.key, "").strip():
-            add(spec.key, spec.label, value, spec.sensitive, spec.multiline)
+            add(spec.key, spec.label, value, spec.sensitive, spec.multiline, spec.masked)
     builtin = len(out)
     taken = {spec.key for spec in KINDS[kind].fields}
-    for name, value in custom or []:
+    for name, value, hidden in custom or []:
         name, value = name.strip(), value.strip()
         if not name and not value:
             continue
@@ -161,7 +171,7 @@ def build_fields(kind: str, values: dict[str, str], custom: list[tuple[str, str]
             raise VaultError(f"two fields would be called {key}: rename the custom field {name}")
         taken.add(key)
         if value:
-            add(key, name, value, True, "\n" in value)
+            add(key, name, value, True, "\n" in value, hidden)
     if len(out) - builtin > MAX_CUSTOM_FIELDS:
         raise VaultError(f"at most {MAX_CUSTOM_FIELDS} custom fields")
     if not out:

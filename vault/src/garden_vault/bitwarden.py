@@ -61,6 +61,7 @@ TYPES: dict[int, tuple[str, str | None, dict[str, str]]] = {
         {"privateKey": "private_key", "publicKey": "public_key", "keyFingerprint": "key_fingerprint"},
     ),
 }
+HIDDEN = 1  # a custom field Bitwarden masks; Text (0) and Boolean (2) are shown
 LINKED = 3  # a custom field that points at another field: no value of its own
 
 
@@ -97,14 +98,14 @@ def _item(raw: Any) -> tuple[Item, list[str]]:
     values["notes"] = _text(raw.get("notes"))
     fields = raw.get("fields") if isinstance(raw.get("fields"), list) else []
     custom = [
-        (_text(f.get("name")), _text(f.get("value")))
+        (_text(f.get("name")), _text(f.get("value")), f.get("type") == HIDDEN)
         for f in fields
         if isinstance(f, dict) and f.get("type") != LINKED
     ]
 
     name = _name(raw)
     kept: dict[str, str] = {}
-    kept_custom: list[tuple[str, str]] = []
+    kept_custom: list[tuple[str, str, bool]] = []
     left_out: list[str] = []
     for key, value in values.items():
         if value.strip():
@@ -113,11 +114,11 @@ def _item(raw: Any) -> tuple[Item, list[str]]:
                 kept[key] = value
             except VaultError as e:
                 left_out.append(f"{name}: {KINDS[kind].spec(key).label} left out ({e})")  # type: ignore[union-attr]
-    for field_name, value in custom:
+    for field_name, value, hidden in custom:
         if value.strip():
             try:
-                build_fields(kind, kept, [*kept_custom, (field_name, value)])
-                kept_custom.append((field_name, value))
+                build_fields(kind, kept, [*kept_custom, (field_name, value, hidden)])
+                kept_custom.append((field_name, value, hidden))
             except VaultError as e:
                 left_out.append(f"{name}: custom field {field_name or '(no name)'} left out ({e})")
     return Item(kind, name, build_fields(kind, kept, kept_custom)), left_out

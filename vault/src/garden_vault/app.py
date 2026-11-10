@@ -259,11 +259,12 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
 
     # ── secrets ──────────────────────────────────────────────────────────────
     def fields_from(form: Any, kind: str, current: Secret | None) -> tuple[Field, ...]:
-        # Private values are never sent back to the browser: blank keeps them,
-        # unless the person ticked "Remove this value".
+        # Masked values are never sent back to the browser: blank keeps them,
+        # unless the person ticked "Remove this value". Every other box comes
+        # prefilled, so there blank means removed.
         def kept(value: str, old_key: str, clear: str) -> str:
             old = current.field(old_key) if current is not None and old_key else None
-            if not value.strip() and old is not None and old.sensitive and form.get(clear) != "on":
+            if not value.strip() and old is not None and old.masked and form.get(clear) != "on":
                 return old.value
             return value
 
@@ -278,7 +279,8 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
             name, old_key = str(form.get(f"c_name_{i}", "")), str(form.get(f"c_old_{i}", ""))
             if old_key and not name.strip():
                 continue  # an existing field whose name was emptied: removed
-            custom.append((name, kept(str(form.get(f"c_value_{i}", "")), old_key, f"c_clear_{i}")))
+            value = kept(str(form.get(f"c_value_{i}", "")), old_key, f"c_clear_{i}")
+            custom.append((name, value, form.get(f"c_hidden_{i}") == "on"))
         return build_fields(kind, values, custom)
 
     def share_mode_from(form: Any) -> str:

@@ -1,3 +1,4 @@
+import json
 import sqlite3
 
 import pytest
@@ -226,7 +227,7 @@ def test_fields_are_grouped_like_bitwardens_form():
 
 
 def test_a_secrets_fields_group_like_its_form_with_custom_fields_last():
-    fields = build_fields("identity", {"first_name": "Alfred", "city": "Lisboa", "notes": SECRET}, [("PIN", "1")])
+    fields = build_fields("identity", {"first_name": "Alfred", "city": "Lisboa", "notes": SECRET}, [("PIN", "1", True)])
     grouped = [(title, [f.key for f in fs]) for title, fs in group_fields("identity", fields)]
     assert grouped == [
         ("Personal details", ["first_name"]),
@@ -263,24 +264,59 @@ def test_build_fields_rules():
 
 
 def test_custom_fields_are_private_and_named_for_agents():
-    fields = build_fields("login", {"password": SECRET}, [("VAT ID", "PT999"), ("  ", ""), ("Recovery codes", "a\nb")])
-    custom = [(f.key, f.label, f.value, f.sensitive, f.multiline) for f in fields[1:]]
-    assert custom == [
-        ("vat_id", "VAT ID", "PT999", True, False),
-        ("recovery_codes", "Recovery codes", "a\nb", True, True),
+    custom = [("VAT ID", "PT999", False), ("  ", "", True), ("Recovery codes", "a\nb", True)]
+    fields = build_fields("login", {"password": SECRET}, custom)
+    found = [(f.key, f.label, f.value, f.sensitive, f.multiline, f.masked) for f in fields[1:]]
+    assert found == [
+        ("vat_id", "VAT ID", "PT999", True, False, False),  # Bitwarden's Text field: private, not masked
+        ("recovery_codes", "Recovery codes", "a\nb", True, True, True),  # Hidden
     ]
-    assert [f.key for f in build_fields("login", {"password": SECRET}, [("Empty", "")])] == ["password"]
+    assert [f.key for f in build_fields("login", {"password": SECRET}, [("Empty", "", True)])] == ["password"]
+
+
+# Bitwarden's form masks these (type="password" with a show toggle); nothing else.
+MASKED = {
+    "login": ["password", "totp"],
+    "card": ["number", "code"],
+    "identity": ["ssn", "passport_number"],
+    "secure_note": [],
+    "ssh_key": ["private_key"],
+}
+
+
+def test_only_bitwardens_masked_fields_are_masked():
+    assert {key: [f.key for f in kind.fields if f.masked] for key, kind in KINDS.items()} == MASKED
+    for kind in KINDS.values():
+        assert all(f.sensitive for f in kind.fields if f.masked)  # masked is a kind of private
+    values = {"password": SECRET, "username": "alfred", "notes": "n"}
+    assert [(f.key, f.masked) for f in build_fields("login", values)] == [
+        ("username", False),
+        ("password", True),
+        ("notes", False),
+    ]
+
+
+def test_a_field_saved_without_the_masked_flag_stays_masked(vault):
+    secret_id = add_address(vault)
+    row = vault._q("SELECT * FROM secrets WHERE id = ?", (secret_id,))[0]
+    key = vault._key()
+    data = json.loads(crypto.open_sealed(key, bytes(row["blob"]), f"secret:{secret_id}".encode()))
+    for f in data["fields"]:
+        del f["masked"]
+    blob = crypto.seal(key, json.dumps(data).encode(), f"secret:{secret_id}".encode())
+    vault._x("UPDATE secrets SET blob = ? WHERE id = ?", (blob, secret_id))
+    assert all(f.masked for f in vault.secret(secret_id).fields)
 
 
 @pytest.mark.parametrize(
     "custom,error",
     [
-        ([("Password", "x")], "rename"),
-        ([("PIN", "1"), ("pin", "2")], "rename"),
-        ([("", "x")], "name"),
-        ([("!!", "x")], "name"),
-        ([("x" * 41, "x")], "name"),
-        ([(f"f{i}", "x") for i in range(21)], "at most"),
+        ([("Password", "x", True)], "rename"),
+        ([("PIN", "1", True), ("pin", "2", False)], "rename"),
+        ([("", "x", True)], "name"),
+        ([("!!", "x", True)], "name"),
+        ([("x" * 41, "x", True)], "name"),
+        ([(f"f{i}", "x", False) for i in range(21)], "at most"),
     ],
 )
 def test_custom_field_rules(custom, error):

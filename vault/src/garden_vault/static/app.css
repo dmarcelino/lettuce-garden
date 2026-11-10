@@ -181,3 +181,18 @@ dl.fields dd {
     margin-bottom: 8px;
   }
 }
+
+/* A masked box (Bitwarden's password-type fields) with its Show button beside it. */
+.masked-box {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.masked-box > input,
+.masked-box > textarea {
+  flex: 1;
+  min-width: 0;
+}
+textarea.masked {
+  -webkit-text-security: disc;
+}

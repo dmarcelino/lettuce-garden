@@ -416,21 +416,55 @@ def test_post_needs_csrf_and_same_origin(env):
 # ── secrets ────────────────────────────────────────────────────────────────────
 
 
-def test_private_fields_hidden_until_show(env):
+def test_masked_fields_hidden_until_show(env):
+    """Like Bitwarden: a card's number and code are masked; its expiry and notes are
+    private to agents, but the person sees them."""
     client = env[0]
     setup_vault(client)
     secret = add(client, CARD_FORM)
     page = client.get(f"{B}/secrets/{secret}").text
     assert "Visa ending 4242" in page and "Alfred Test" in page
-    assert CARD not in page and SECRET not in page and "2030" not in page
+    assert CARD not in page and '"123"' not in page and ">123<" not in page
+    assert "2030" in page and SECRET in page and "Show hidden fields" in page
     shown = post(client, f"{B}/secrets/{secret}/show", {})
-    assert CARD in shown.text and SECRET in shown.text
+    assert CARD in shown.text and ">123<" in shown.text
     assert any(e.action == "viewed private fields" for e in env[1].audit_log())
     edit = client.get(f"{B}/secrets/{secret}/edit").text
-    assert CARD not in edit and SECRET not in edit
+    assert CARD not in edit and ">123<" not in edit and 'value="123"' not in edit
+    assert 'value="2030"' in edit and f">{SECRET}</textarea>" in edit  # not masked: prefilled
 
 
-def test_editing_keeps_private_values_left_blank(env):
+def test_the_form_masks_only_bitwardens_masked_fields(env):
+    client = env[0]
+    setup_vault(client)
+    form = client.get(f"{B}/secrets/new?kind=identity").text
+    for key in ("ssn", "passport_number"):
+        assert re.search(rf'<input name="f_{key}" type="password"', form), key
+    for key in ("address1", "city", "postal_code", "email", "phone", "license_number", "first_name"):
+        assert re.search(rf'<input name="f_{key}"(?! type="password")', form), key
+        assert not re.search(rf'<input name="f_{key}" type="password"', form), key
+    assert form.count('class="button ghost mask-toggle"') == 2 + 2  # SSN, passport, two new Hidden custom rows
+    ssh = client.get(f"{B}/secrets/new?kind=ssh_key").text
+    assert re.search(r'<textarea[^>]* class="short masked"[^>]* name="f_private_key"', ssh)
+    assert not re.search(r'<textarea[^>]*masked[^>]* name="f_public_key"', ssh)
+
+
+def test_an_identity_shows_its_address_and_hides_only_ssn_and_passport(env):
+    client = env[0]
+    setup_vault(client)
+    secret = add(client, {**ADDRESS, "f_ssn": "TEST_SSN_123456"})
+    page = client.get(f"{B}/secrets/{secret}").text
+    assert STREET in page and "Lisboa" in page and "TEST_SSN_123456" not in page
+    edit = client.get(f"{B}/secrets/{secret}/edit").text
+    assert f'value="{STREET}"' in edit and "TEST_SSN_123456" not in edit
+    only_address = add(client, ADDRESS)
+    page = client.get(f"{B}/secrets/{only_address}").text
+    assert STREET in page and "Show hidden fields" not in page
+
+
+def test_editing_keeps_masked_values_left_blank(env):
+    """Masked values never reach the edit page, so their blank box keeps them; every
+    other box is prefilled, so blank means removed."""
     client, vault = env[0], env[1]
     setup_vault(client)
     secret = add(client, CARD_FORM)
@@ -440,6 +474,7 @@ def test_editing_keeps_private_values_left_blank(env):
         "f_cardholder_name": "Alfred Test",
         "f_number": "",
         "f_exp_month": "01",
+        "f_exp_year": "",
         "f_code": "",
         "clear_code": "on",
         "f_notes": "",
@@ -448,29 +483,36 @@ def test_editing_keeps_private_values_left_blank(env):
     assert post(client, f"{B}/secrets/{secret}", form).status_code == 303
     saved = vault.secret(secret)
     assert saved.name == "Visa (work)" and saved.field("number").value == CARD
-    assert saved.field("exp_month").value == "01" and saved.field("exp_year").value == "2030"
-    assert saved.field("code") is None and saved.field("brand") is None  # public: blank is blank
-    assert saved.field("notes").value == SECRET
+    assert saved.field("exp_month").value == "01"
+    assert saved.field("code") is None and saved.field("brand") is None
+    assert saved.field("exp_year") is None and saved.field("notes") is None  # private, not masked: blank is blank
 
 
 def test_custom_fields_are_kept_renamed_and_removed(env):
     client, vault = env[0], env[1]
     setup_vault(client)
-    form = {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321", "c_name_1": "Bank", "c_value_1": SECRET}
-    form.update({"c_name_2": "", "c_value_2": ""})
+    form = {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321", "c_hidden_0": "on", "c_name_1": "Bank"}
+    form.update({"c_value_1": "Banco Falso", "c_name_2": "", "c_value_2": ""})  # Bank: a Text field
     secret = add(client, form)
-    assert [(f.key, f.value) for f in vault.secret(secret).custom_fields] == [("pin", "4321"), ("bank", SECRET)]
+    custom = [(f.key, f.value, f.masked) for f in vault.secret(secret).custom_fields]
+    assert custom == [("pin", "4321", True), ("bank", "Banco Falso", False)]
+    new = client.get(f"{B}/secrets/new?kind=card").text
+    assert re.search(r'<input type="checkbox" name="c_hidden_0" checked>', new)  # new rows start Hidden
     edit = client.get(f"{B}/secrets/{secret}/edit").text
-    assert 'value="PIN"' in edit and "4321" not in edit and SECRET not in edit
-    update = {**CARD_FORM, "f_number": "", "c_name_0": "Card PIN", "c_value_0": "", "c_old_0": "pin"}
-    update.update({"c_name_1": "Bank", "c_value_1": "", "c_old_1": "bank", "c_clear_1": "on"})
+    assert 'value="PIN"' in edit and "4321" not in edit and 'value="Banco Falso"' in edit
+    assert re.search(r'<input name="c_value_0" type="password"', edit)
+    assert re.search(r'<input name="c_value_1"(?! type="password")', edit)
+    page = client.get(f"{B}/secrets/{secret}").text
+    assert "Banco Falso" in page and "4321" not in page
+    update = {**CARD_FORM, "f_number": "", "c_name_0": "Card PIN", "c_value_0": "", "c_old_0": "pin", "c_hidden_0": "on"}
+    update.update({"c_name_1": "Bank", "c_value_1": "", "c_old_1": "bank"})  # a Text field emptied: removed
     update.update({"c_name_2": "Branch", "c_value_2": "Lisboa"})
     assert post(client, f"{B}/secrets/{secret}", update).status_code == 303
-    custom = [(f.key, f.label, f.value) for f in vault.secret(secret).custom_fields]
-    assert custom == [("card_pin", "Card PIN", "4321"), ("branch", "Branch", "Lisboa")]
-    # Emptying an existing field's name removes it (its value box is always blank on the form).
-    emptied = {**CARD_FORM, "f_number": "", "c_name_0": " ", "c_value_0": "", "c_old_0": "card_pin"}
-    emptied.update({"c_name_1": "Branch", "c_value_1": "", "c_old_1": "branch"})
+    custom = [(f.key, f.label, f.value, f.masked) for f in vault.secret(secret).custom_fields]
+    assert custom == [("card_pin", "Card PIN", "4321", True), ("branch", "Branch", "Lisboa", False)]
+    # Emptying an existing field's name removes it.
+    emptied = {**CARD_FORM, "f_number": "", "c_name_0": " ", "c_value_0": "", "c_old_0": "card_pin", "c_hidden_0": "on"}
+    emptied.update({"c_name_1": "Branch", "c_value_1": "Lisboa", "c_old_1": "branch"})
     assert post(client, f"{B}/secrets/{secret}", emptied).status_code == 303
     assert [f.key for f in vault.secret(secret).custom_fields] == ["branch"]
 
@@ -504,7 +546,7 @@ def test_the_form_groups_fields_like_bitwarden(env):
     assert 'data-group="form:identity:Address"' in form
     personal = group_body(form, "Personal details")
     assert 'name="f_first_name"' in personal and 'name="f_passport_number"' not in personal
-    secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321"})
+    secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321", "c_hidden_0": "on"})
     edit = client.get(f"{B}/secrets/{secret}/edit").text
     assert groups(edit)[1:3] == ["Card details", "Additional options"]
     custom = group_body(edit, "Custom fields")
@@ -514,11 +556,11 @@ def test_the_form_groups_fields_like_bitwarden(env):
 def test_the_secret_page_groups_fields_like_the_form(env):
     client = env[0]
     setup_vault(client)
-    secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321"})
+    secret = add(client, {**CARD_FORM, "c_name_0": "PIN", "c_value_0": "4321", "c_hidden_0": "on"})
     page = client.get(f"{B}/secrets/{secret}").text
     assert groups(page) == ["Card details", "Additional options", "Custom fields", "Agent access"]
     assert 'data-group="page:card:Custom fields"' in page
-    assert CARD not in page and SECRET not in page and "4321" not in page
+    assert CARD not in page and "4321" not in page and SECRET in group_body(page, "Additional options")
     shown = post(client, f"{B}/secrets/{secret}/show", {}).text
     assert CARD in shown and "4321" in shown and 'data-copy="v-pin"' in shown
 
