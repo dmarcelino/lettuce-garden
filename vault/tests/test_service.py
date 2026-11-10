@@ -1,16 +1,26 @@
 import json
 import logging
+import sqlite3
+from collections import Counter
 
 import anyio
 import pytest
 
-from garden_vault.config import HANDLE_TTL_SECONDS, MAX_HANDLES, MAX_PENDING, MAX_WAIT_SECONDS, REQUEST_TTL_SECONDS
-from garden_vault.vault import VaultError
+from garden_vault.config import (
+    ERASE_GRACE_SECONDS,
+    HANDLE_TTL_SECONDS,
+    MAX_HANDLES,
+    MAX_PENDING,
+    MAX_WAIT_SECONDS,
+    REQUEST_TTL_SECONDS,
+)
+from garden_vault.vault import Vault, VaultError
 
 from .conftest import (
     ADDRESS_TEXT,
     CARD,
     EMAIL,
+    FAST_KDF,
     ORIGIN,
     PASSPHRASE,
     SECRET,
@@ -355,3 +365,146 @@ async def test_unused_handles_are_capped(settings, vault):
     refused, text = await with_service(service, flow)
     assert refused["status"] == "refused" and "handles" in refused["error"]
     assert text["status"] == "done"
+
+
+def pushed_titles(sender: FakeSender) -> list[str]:
+    # Sorted: each push is sent from its own worker thread, so they finish in any order.
+    return sorted(json.loads(c["data"])["title"] for c in sender.calls)
+
+
+def audit_actions(vault) -> list[tuple[str, str]]:
+    # Actor and action are plaintext, so this reads them while locked or erased.
+    return [(r["actor"], r["action"]) for r in vault._q("SELECT actor, action FROM audit ORDER BY rowid")]
+
+
+async def test_scheduled_erase_tells_every_device_and_runs_when_due(settings, vault, clock):
+    add_card(vault)
+    vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
+    vault.add_subscription("https://push.example/2", "k", "a", EMAIL)
+    vault.lock()
+    sender = FakeSender()
+    service = make_service(settings, vault, sender)
+
+    async def flow():
+        at = service.schedule_erase(EMAIL)
+        service.schedule_erase(EMAIL)  # already scheduled: no second notice
+        assert service.erase_if_due() is False
+        for _ in range(100):  # the two pushes run in worker threads
+            if len(sender.calls) >= 2:
+                break
+            await anyio.sleep(0.01)
+        scheduled = (pushed_titles(sender), audit_actions(vault))
+        clock.t = at
+        assert service.erase_if_due() is True
+        return scheduled
+
+    (titles, actions) = await with_service(service, flow)
+    assert titles == ["Vault erase scheduled"] * 2  # one per device
+    assert actions[-1] == (EMAIL, "scheduled an erase")
+    assert pushed_titles(sender) == sorted(["Vault erase scheduled"] * 2 + ["Vault erased"] * 2)
+    assert audit_actions(vault) == [(EMAIL, "erased the vault (scheduled 24 hours earlier)")]
+    assert not vault.is_setup()
+    pushed = json.dumps([c["data"] for c in sender.calls])
+    for needle in (CARD, SECRET, "Visa"):
+        assert needle not in pushed
+
+
+async def test_cancelled_erase_is_announced(settings, vault):
+    vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
+    vault.lock()
+    sender = FakeSender()
+    service = make_service(settings, vault, sender)
+
+    async def flow():
+        service.schedule_erase(EMAIL)
+        assert service.cancel_erase(EMAIL) is True
+        assert service.cancel_erase(EMAIL) is False  # nothing left to cancel: no notice
+        service.schedule_erase(EMAIL)
+        assert vault.unlock(PASSPHRASE) is True
+        service.erase_cancelled(EMAIL, by_unlock=True)
+
+    await with_service(service, flow)
+    assert pushed_titles(sender) == sorted(["Vault erase scheduled", "Vault erase cancelled"] * 2)
+    cancelled = [json.loads(c["data"])["body"] for c in sender.calls if "cancelled" in c["data"]]
+    assert sorted("unlocked" in b for b in cancelled) == [False, True]
+    assert [a for _, a in audit_actions(vault)][-4:] == [
+        "scheduled an erase",
+        "cancelled the scheduled erase",
+        "scheduled an erase",
+        "cancelled the scheduled erase by unlocking",
+    ]
+
+
+async def test_each_erase_notice_has_its_own_tag(settings, vault, clock):
+    # One tag would let a later notice silently replace one still on screen.
+    vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
+    vault.lock()
+    sender = FakeSender()
+    service = make_service(settings, vault, sender)
+
+    async def flow():
+        service.schedule_erase(EMAIL)
+        service.cancel_erase(EMAIL)
+        clock.t = service.schedule_erase(EMAIL)
+        service.erase_if_due()
+
+    await with_service(service, flow)
+    tags = Counter(json.loads(c["data"])["tag"] for c in sender.calls)
+    assert tags == {"vault-erase-scheduled": 2, "vault-erase-cancelled": 1, "vault-erase-done": 1}
+
+
+async def test_a_failed_erase_is_logged_and_retried(settings, vault, clock, monkeypatch, caplog):
+    vault.lock()
+    sender = FakeSender()
+    vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
+    service = make_service(settings, vault, sender)
+
+    def broken():
+        raise sqlite3.OperationalError("database or disk is full")
+
+    async def flow():
+        clock.t = service.schedule_erase(EMAIL)
+        monkeypatch.setattr(vault, "reset", broken)
+        assert service.erase_if_due() is False  # housekeeping goes on
+        monkeypatch.undo()
+        return service.erase_if_due()
+
+    assert await with_service(service, flow) is True
+    assert "erase failed" in caplog.text and "OperationalError" in caplog.text
+    assert pushed_titles(sender) == sorted(["Vault erase scheduled", "Vault erased"])
+
+
+async def test_an_erase_due_during_downtime_waits_an_hour_and_says_so(settings, vault, vault_path, clock):
+    vault.lock()
+    vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
+    at, _ = vault.schedule_erase(EMAIL)
+    clock.t = at + 4 * 3600  # the server was down when it came due
+    sender = FakeSender()
+    service = make_service(settings, Vault(vault_path, clock=clock, kdf=FAST_KDF), sender)
+    restarted = int(clock.t)
+
+    async def flow():
+        service.announce_overdue_erase()
+        assert service.pending_erase() == (restarted + ERASE_GRACE_SECONDS, EMAIL)
+        assert service.erase_if_due() is False
+        clock.t = restarted + ERASE_GRACE_SECONDS - 1
+        assert service.erase_if_due() is False
+        clock.t += 1
+        return service.erase_if_due()
+
+    assert await with_service(service, flow) is True
+    assert pushed_titles(sender) == sorted(["Vault erase in 1 hour", "Vault erased"])
+
+
+async def test_no_restart_notice_for_an_erase_far_away(settings, vault):
+    vault.lock()
+    vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
+    vault.schedule_erase(EMAIL)
+    sender = FakeSender()
+    service = make_service(settings, vault, sender)
+
+    async def flow():
+        service.announce_overdue_erase()
+
+    await with_service(service, flow)
+    assert sender.calls == []

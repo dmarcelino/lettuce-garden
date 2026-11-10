@@ -13,13 +13,14 @@ import os
 import sqlite3
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from secrets import token_hex
 from typing import Any
 
 from . import crypto
-from .config import AUTO_LOCK_SECONDS, MAX_FIELD_VALUE, MIN_PASSPHRASE_LENGTH
+from .config import AUTO_LOCK_SECONDS, ERASE_DELAY_SECONDS, MAX_FIELD_VALUE, MIN_PASSPHRASE_LENGTH
 from .kinds import KINDS
 
 SCHEMA = """
@@ -181,6 +182,22 @@ class Vault:
         with self._lock:
             return self._db.execute(sql, args).rowcount
 
+    @contextmanager
+    def _transaction(self) -> Iterator[None]:
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def _set_meta(self, pairs: tuple[tuple[str, bytes], ...]) -> None:
+        with self._transaction():
+            for k, v in pairs:
+                self._db.execute("INSERT OR REPLACE INTO vault_meta (k, v) VALUES (?, ?)", (k, v))
+
     def _meta(self, k: str) -> bytes | None:
         rows = self._q("SELECT v FROM vault_meta WHERE k = ?", (k,))
         return bytes(rows[0]["v"]) if rows else None
@@ -221,19 +238,7 @@ class Vault:
         salt = crypto.new_salt()
         kek = crypto.derive_key(passphrase, salt, self._kdf)
         wrapped = crypto.seal(kek, key, KEY_AAD)
-        with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
-                for k, v in (
-                    ("salt", salt),
-                    ("kdf", json.dumps(self._kdf.to_dict()).encode()),
-                    ("wrapped_key", wrapped),
-                ):
-                    self._db.execute("INSERT OR REPLACE INTO vault_meta (k, v) VALUES (?, ?)", (k, v))
-                self._db.execute("COMMIT")
-            except BaseException:
-                self._db.execute("ROLLBACK")
-                raise
+        self._set_meta((("salt", salt), ("kdf", json.dumps(self._kdf.to_dict()).encode()), ("wrapped_key", wrapped)))
 
     def _unwrap(self, passphrase: str) -> bytes:
         salt, kdf, wrapped = self._meta("salt"), self._meta("kdf"), self._meta("wrapped_key")
@@ -245,10 +250,20 @@ class Vault:
         except crypto.CryptoError as e:
             raise VaultError("wrong passphrase") from e
 
-    def unlock(self, passphrase: str) -> None:
+    def unlock(self, passphrase: str) -> bool:
+        """True when this cancelled a scheduled erase: knowing the passphrase
+        is the proof the erase's delay waits for."""
+        wrapped = self._meta("wrapped_key")
         key = self._unwrap(passphrase)
         with self._lock:
+            # The KDF runs outside the lock; a scheduled erase may have run meanwhile.
+            if self._meta("wrapped_key") != wrapped:
+                raise VaultError("the vault was erased")
+            # Cancel first: unlocked with the erase still scheduled, it would run
+            # after the next lock without a new notice.
+            cancelled = self.cancel_erase()
             self._state = _Unlocked(key, self._clock())
+            return cancelled
 
     def lock(self) -> None:
         with self._lock:
@@ -264,16 +279,45 @@ class Vault:
     def reset(self) -> None:
         """Forgotten passphrase: everything encrypted is gone for good."""
         with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
+            with self._transaction():
                 for table in ("secrets", "audit", "vault_meta"):
                     self._db.execute(f"DELETE FROM {table}")
-                self._db.execute("COMMIT")
-            except BaseException:
-                self._db.execute("ROLLBACK")
-                raise
             self._db.execute("VACUUM")
             self._state = None
+
+    # ── erase without the passphrase, after a delay ──────────────────────────
+    # Plaintext in vault_meta, so it survives a restart; reset() clears it.
+    def pending_erase(self) -> tuple[int, str] | None:
+        """(when, who asked), or None."""
+        at, by = self._meta("erase_at"), self._meta("erase_by")
+        return None if at is None else (int(at), (by or b"").decode())
+
+    def schedule_erase(self, actor: str) -> tuple[int, bool]:
+        """(when, whether this call scheduled it). An erase already scheduled
+        keeps its time, so asking again never brings it closer."""
+        with self._lock:
+            if not self.is_setup():
+                raise VaultError("there is no vault to erase")
+            if self.is_unlocked():
+                raise VaultError("the vault is unlocked: erase it from Settings")
+            pending = self.pending_erase()
+            if pending is not None:
+                return pending[0], False
+            at = self.now() + ERASE_DELAY_SECONDS
+            self._set_meta((("erase_at", str(at).encode()), ("erase_by", actor.encode())))
+            return at, True
+
+    def cancel_erase(self) -> bool:
+        return self._x("DELETE FROM vault_meta WHERE k IN ('erase_at', 'erase_by')") > 0
+
+    def erase_if_due(self, not_before: int = 0) -> str | None:
+        """Runs a due erase, never before `not_before`; returns who asked for it."""
+        with self._lock:
+            pending = self.pending_erase()
+            if pending is None or max(pending[0], not_before) > self.now() or self.is_unlocked():
+                return None
+            self.reset()
+            return pending[1]
 
     # ── secrets ──────────────────────────────────────────────────────────────
     def _decode(self, row: sqlite3.Row, key: bytes) -> Secret:
@@ -348,7 +392,8 @@ class Vault:
     # ── audit ────────────────────────────────────────────────────────────────
     def audit(self, actor: str, action: str, secret_id: str | None = None, detail: str = "") -> None:
         """Action and actor are plaintext; the detail is encrypted, so it is
-        dropped when the vault is locked (only lock events happen then)."""
+        dropped when the vault is locked. Entries written then (locking, a
+        scheduled erase and its cancelling, the erase itself) carry none."""
         entry_id = token_hex(8)
         blob = None
         if detail and self.is_unlocked():

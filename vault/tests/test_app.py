@@ -9,7 +9,8 @@ from garden_common.auth import Authenticator
 from starlette.testclient import TestClient
 
 from garden_vault.app import create_app
-from garden_vault.config import PREFIX
+from garden_vault.config import ERASE_REQUESTS_PER_HOUR, PREFIX
+from garden_vault.service import ERASE_DELAY
 from garden_vault.vault import Vault
 
 from .conftest import (
@@ -307,6 +308,88 @@ def test_reset_needs_typed_confirmation(env):
     assert post(client, f"{B}/settings/reset", {"confirm": "delete"}).status_code == 400
     assert post(client, f"{B}/settings/reset", {"confirm": "DELETE"}).status_code == 303
     assert not vault.is_setup()
+
+
+def wait_for_pushes(sender, count):
+    for _ in range(100):  # pushes are sent in the background
+        if len(sender.calls) >= count:
+            break
+        time.sleep(0.02)
+    # Sorted: each push is sent from its own worker thread, so they finish in any order.
+    return sorted(json.loads(c["data"])["title"] for c in sender.calls)
+
+
+def test_a_locked_vault_can_be_erased_after_24_hours(env, clock):
+    client, vault, sender = env
+    setup_vault(client)
+    add(client, CARD_FORM)
+    vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
+    # Unlocked, the erase is in Settings and immediate; this route refuses.
+    assert post(client, f"{B}/erase", {"confirm": "DELETE"}).status_code == 400
+    post(client, f"{B}/lock", {})
+    page = client.get(f"{B}/").text
+    assert f'action="{B}/erase"' in page and "24 hours" in page
+    assert post(client, f"{B}/erase", {"confirm": "delete"}).status_code == 400
+    assert post(client, f"{B}/erase", {"confirm": "DELETE"}, csrf="0" * 64).status_code == 403
+    assert vault.pending_erase() is None
+    r = post(client, f"{B}/erase", {"confirm": "DELETE"})
+    assert r.status_code == 303 and r.headers["location"] == f"{B}/"
+    at, by = vault.pending_erase()
+    assert by == EMAIL
+    page = client.get(f"{B}/").text
+    assert "will be erased" in page and f'action="{B}/erase/cancel"' in page and f'action="{B}/erase"' not in page
+    assert wait_for_pushes(sender, 1) == ["Vault erase scheduled"]
+    assert CARD not in json.dumps([c["data"] for c in sender.calls])
+    # Cancelling needs no passphrase.
+    assert post(client, f"{B}/erase/cancel", {}).status_code == 303
+    assert vault.pending_erase() is None and vault.is_setup() and not vault.is_unlocked()
+    assert wait_for_pushes(sender, 2) == sorted(["Vault erase scheduled", "Vault erase cancelled"])
+
+
+def test_unlocking_cancels_a_scheduled_erase(env):
+    client, vault, sender = env
+    setup_vault(client)
+    vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
+    post(client, f"{B}/lock", {})
+    post(client, f"{B}/erase", {"confirm": "DELETE"})
+    assert post(client, f"{B}/unlock", {"passphrase": PASSPHRASE}).status_code == 303
+    assert vault.pending_erase() is None and vault.is_unlocked()
+    assert wait_for_pushes(sender, 2) == sorted(["Vault erase scheduled", "Vault erase cancelled"])
+    assert [e.action for e in vault.audit_log()][:2] == ["cancelled the scheduled erase by unlocking", "unlocked"]
+
+
+def test_erase_needs_a_vault(env):
+    client, vault = env[0], env[1]
+    assert post(client, f"{B}/erase", {"confirm": "DELETE"}).status_code == 400
+    assert not vault.is_setup()
+
+
+def test_the_erase_time_names_its_time_zone_and_the_hours_left(env, clock):
+    client, vault = env[0], env[1]
+    setup_vault(client)
+    post(client, f"{B}/lock", {})
+    page = client.get(f"{B}/").text
+    assert f"Erase in {ERASE_DELAY}" in page
+    post(client, f"{B}/erase", {"confirm": "DELETE"})
+    page = client.get(f"{B}/").text
+    when = time.strftime("%Y-%m-%d %H:%M %Z", time.localtime(vault.pending_erase()[0]))
+    assert when in page and "in about 24 hours" in page
+    clock.t = vault.pending_erase()[0] - 1800
+    assert "in about 1 hour)" in client.get(f"{B}/").text
+
+
+def test_erase_requests_are_rate_limited(env):
+    client, vault, sender = env
+    setup_vault(client)
+    vault.add_subscription("https://push.example/1", "k", "a", EMAIL)
+    post(client, f"{B}/lock", {})
+    for _ in range(ERASE_REQUESTS_PER_HOUR):
+        assert post(client, f"{B}/erase", {"confirm": "DELETE"}).status_code == 303
+        assert post(client, f"{B}/erase/cancel", {}).status_code == 303
+    r = post(client, f"{B}/erase", {"confirm": "DELETE"})
+    assert r.status_code == 429 and "Too many" in r.text
+    assert vault.pending_erase() is None
+    assert len(wait_for_pushes(sender, 2 * ERASE_REQUESTS_PER_HOUR)) == 2 * ERASE_REQUESTS_PER_HOUR
 
 
 # ── CSRF and origin ──────────────────────────────────────────────────────────

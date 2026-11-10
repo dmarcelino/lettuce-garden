@@ -12,11 +12,11 @@ An interactive version, [vault-architecture.html](../docs/diagrams/vault-archite
 | `Dockerfile` | `base` installs `garden-common` from its build context, then this package; `test` adds pytest and `tests/`; the final stage runs as uid 10001, which owns `/data` |
 | `pyproject.toml` | The package and its pinned dependencies |
 | `src/garden_vault/__main__.py` | Entry point: reads the settings, builds the store, service, pusher and app, runs uvicorn on port 8000 without an access log |
-| `src/garden_vault/config.py` | `PREFIX` (`/vault`), the limits (`REQUEST_TTL_SECONDS`, `HANDLE_TTL_SECONDS`, `MAX_HANDLES`, `MAX_PENDING`, `AUTO_LOCK_SECONDS`, ...) and `Settings` from the environment |
+| `src/garden_vault/config.py` | `PREFIX` (`/vault`), the limits (`REQUEST_TTL_SECONDS`, `HANDLE_TTL_SECONDS`, `MAX_HANDLES`, `MAX_PENDING`, `AUTO_LOCK_SECONDS`, `ERASE_DELAY_SECONDS`, `ERASE_GRACE_SECONDS`, `ERASE_REQUESTS_PER_HOUR`, ...) and `Settings` from the environment |
 | `src/garden_vault/crypto.py` | scrypt key derivation and AES-256-GCM; the data key is stored only wrapped |
-| `src/garden_vault/vault.py` | The encrypted SQLite store (`/data/vault.db`): setup, unlock, lock and auto-lock, secrets, audit log, push subscriptions |
+| `src/garden_vault/vault.py` | The encrypted SQLite store (`/data/vault.db`): setup, unlock, lock and auto-lock, erase (at once, or scheduled while locked), secrets, audit log, push subscriptions |
 | `src/garden_vault/kinds.py` | The secret kinds: public and private fields, and which kinds may be shared without asking (`auto_allowed`) |
-| `src/garden_vault/service.py` | Agent requests, approvals, `env` delivery handles (in memory) and the `rules` sent with shared values |
+| `src/garden_vault/service.py` | Agent requests, approvals, `env` delivery handles (in memory), the `rules` sent with shared values, and the notices and audit entries of a scheduled erase |
 | `src/garden_vault/mcp_tools.py` | The three MCP tools: `list_secrets`, `request_secret`, `get_result` |
 | `src/garden_vault/app.py` | The routes: `/mcp`, `/redeem` (for `vault-run`), `/healthz` and the UI under `/vault/` |
 | `src/garden_vault/push.py` | Web Push to the person's devices (VAPID) |
@@ -59,7 +59,11 @@ That is the same JWT cloudflared sends the BFF in plain HTTP inside that namespa
 - With `delivery: "env"` the agent gets a handle instead of the values. `vault-run` redeems it at `/redeem`: single use, `HANDLE_TTL_SECONDS`, at most `MAX_HANDLES` unused, `garden-vault` host and no `Origin` only. A lock drops handles and uncollected values. `vault-run` then scrubs the values from the command's output.
 - That keeps values out of the conversation, but it is not a boundary either: agents are root in the app-server and can redeem a handle themselves. Docs must not claim more ([docs/vault.md](../docs/vault.md#security-model) says so in plain language).
 
+### Erasing without the passphrase
+The unlock page's erase is the one way to destroy the vault without knowing the passphrase, so the Access sign-in is all it checks. What stands in for the passphrase is time and noise: it runs only `ERASE_DELAY_SECONDS` after it was asked for, never while the vault is unlocked, every step (scheduled, cancelled, run, and the extra `ERASE_GRACE_SECONDS` after a restart) is pushed to every device under its own tag, unlocking cancels it, and `ERASE_REQUESTS_PER_HOUR` caps how often one person can set off those notices. The schedule lives in `vault_meta` (plaintext), so a restart keeps it, and `reset()` clears it.
+
 ### Never
+- Never shorten an erase without the passphrase below its delay, run it while unlocked, or let it run without a notice to every device.
 - Never add an MCP tool that edits secrets or bypasses approval.
 - Never write vault data, keys or the passphrase to disk unencrypted, or to logs.
 - Never mount `vault-data` into another service. Only `backup`'s one-off container may, read-only.

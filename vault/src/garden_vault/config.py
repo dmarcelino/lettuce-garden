@@ -24,6 +24,14 @@ MAX_PENDING = 5
 MAX_WAIT_SECONDS = 50
 # The vault locks itself after this long without use.
 AUTO_LOCK_SECONDS = 12 * 3600
+# An erase asked for while the vault is locked (forgotten passphrase) runs this
+# long later, unless someone unlocks the vault or cancels it first.
+ERASE_DELAY_SECONDS = 24 * 3600
+# After a restart, an erase that came due while the server was down waits this
+# long, and every device is told, so the owner still gets a chance to stop it.
+ERASE_GRACE_SECONDS = 3600
+# Erase requests per signed-in person per hour; each one notifies every device.
+ERASE_REQUESTS_PER_HOUR = 3
 MIN_PASSPHRASE_LENGTH = 12
 # Unlock attempts per signed-in person per minute.
 UNLOCK_ATTEMPTS_PER_MINUTE = 5

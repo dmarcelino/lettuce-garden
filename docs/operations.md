@@ -206,7 +206,7 @@ Each stack's push-notification keypairs (`PUSH_VAPID_*` for Lettuce, `VAULT_VAPI
 | `<garden>/vault/` gives a 404 | The `garden-vault` profile is off, or the route update failed: run `./lettucectl profiles <list>` again. |
 | An old `https://<stack>/garden/...` link shows Lettuce | The garden pages moved to `https://<name>-garden.<domain>/` (`./lettucectl list` shows it). |
 | `<garden>/vault/` gives 502 | The vault is not running: `./lettucectl status`, `./lettucectl logs <name> garden-vault`. |
-| Someone forgot their vault passphrase | It cannot be recovered. They can erase the vault in Settings after unlocking; if they cannot unlock, stop the service and delete its volume: `./lettucectl compose <name> rm -sf garden-vault`, `docker volume rm lettuce-<name>_vault-data`, `./lettucectl up <name>`. |
+| Someone forgot their vault passphrase | It cannot be recovered. They can erase the vault themselves from the unlock page, under **Forgot your passphrase?**: it is erased 24 hours later unless someone unlocks it or cancels. To erase it at once, stop the service and delete its volume: `./lettucectl compose <name> rm -sf garden-vault`, `docker volume rm lettuce-<name>_vault-data`, `./lettucectl up <name>`. |
 | `<garden>/gmail-triggers/` gives a 404 | The `garden-gmail-triggers` profile is off, or the route update failed: run `./lettucectl profiles <list>` again. |
 | `<garden>/code-server/` gives a 404 | The `garden-code-server` profile is off, or the route update failed: run `./lettucectl profiles <list>` again. |
 | The code editor says "The editor isn't running right now" | `./lettucectl status`, `./lettucectl logs <name> garden-code-server-editor`. The first `up` with the profile downloads code-server and builds two images. |
