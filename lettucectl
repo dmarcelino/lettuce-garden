@@ -1006,7 +1006,7 @@ cmd_apply() {
   apply_report "$entries"
   [[ $mode != dry ]] || return 0
   if [[ $mode == ask ]]; then
-    [[ -t 0 ]] || die "not a terminal; run with --yes to apply, or --dry-run to only show the plan"
+    stdin_is_terminal || die "not a terminal; run with --yes to apply, or --dry-run to only show the plan"
     printf 'Apply? [y/N] ' >&2
     read -r answer || true
     [[ $answer == [yY] || $answer == [yY][eE][sS] ]] || die "aborted"
@@ -1026,9 +1026,9 @@ cmd_apply() {
   for name in $(list_stacks); do
     [[ " ${adds[*]%% *} " == *" $name "* ]] || up+=("$name")
   done
-  if ((${#up[@]})); then
-    (up_targets all "${up[@]}") || failed+=("up")
-  fi
+  for name in "${up[@]}"; do
+    (up_targets "$name" "$name") || failed+=("up $name")
+  done
   if [[ -n $(list_stacks) ]]; then
     (cmd_skills all) || failed+=("skills all")
   fi

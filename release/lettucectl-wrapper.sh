@@ -47,7 +47,14 @@ args=(run --rm -i --init --user "$(id -u):$(id -g)" --group-add "$(stat -c %g "$
   --tmpfs /tmp -e HOME=/tmp -e TERM -e TZ -e LETTUCE_DATA="$data"
   -v "$sock:$sock" -e DOCKER_HOST="unix://$sock"
   -v "$data:$data")
-if [[ -t 0 && -t 1 ]]; then args+=(-t); fi
+# A terminal only when stdout is one too, so a pipe gets clean output; with only
+# stdin a terminal (`lettucectl apply | tee log`), lettucectl is told, so it
+# still asks before it changes anything (stdin_is_terminal).
+if [[ -t 0 && -t 1 ]]; then
+  args+=(-t)
+elif [[ -t 0 ]]; then
+  args+=(-e LETTUCECTL_STDIN_TTY=1)
+fi
 # Relative paths in the arguments mean the same inside.
 args+=(-w "$PWD")
 

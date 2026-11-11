@@ -24,11 +24,11 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
   - a short built-in blocklist of paste and file-drop sites (pastebin, transfer.sh, ...);
   - private, internal and cloud-metadata addresses (SSRF): the LAN, the host, `169.254.169.254`.
     This covers letta-code's model calls too: a model server elsewhere on your network is
-    refused, so run it on the Docker host and point Lettuce at `host.docker.internal`, which
-    stays direct;
+    refused unless you list it in `PIPELOCK_DIRECT` (see "A model server on your network");
+    one on the Docker host, reached as `host.docker.internal`, stays direct;
   - data hidden in host names (long random-looking subdomains);
-  - at most 600 requests per minute to one site (each plain-HTTP request and each HTTPS
-    connection counts), which only stops runaway loops.
+  - at most 1200 requests per minute to one site (each plain-HTTP request and each HTTPS
+    connection counts, letta-code's model calls included), which only stops runaway loops.
 - **Page checks, for pages read through `/fetch`.** Agents that follow the
   `fetching-web-pages` skill read pages through `http://garden-pipelock:8888/fetch?url=...`. Pipelock
   fetches the page itself, so it checks the whole URL for secrets and the page's text for
@@ -44,7 +44,10 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
 ## What it does not do
 - **It is not a boundary.** The stack network still reaches the internet directly, and any agent
   can unset the variable or use a tool that ignores it. The BFF, the vault, google-mcp and Gmail
-  triggers connect directly by design.
+  triggers connect directly by design; so does what the BFF does for agents, such as its
+  Remote Pi runs over SSH, which carry the agent's instructions. With the `telegram` profile,
+  the Telegram gateway connects directly too, including the packages it installs at every start.
+  Hosts in `PIPELOCK_DIRECT` are reached directly.
 - **No content checks on HTTPS.** There is no TLS interception, so for normal HTTPS requests
   pipelock sees only the host name: not the path, the request or the response. Secrets in a
   request body, or prompt injection in a page fetched with `curl`, pass unseen. Only `/fetch`
@@ -92,7 +95,30 @@ refuses (an SSRF block on `pipelock` itself) before the search goes through norm
 
 The signing key and the receipts live on the volume `lettuce-<name>_pipelock-data`, which only
 pipelock mounts. Receipts are never pruned (removing one would break the chain); they grow by
-roughly one line per request. `backup` copies them, and `remove` deletes them with the stack.
+one line of about 1.5 KB per request, model calls included, so a busy stack adds several MB a
+day. `backup` copies them, and `remove` deletes them with the stack. To start over, take a
+`backup`, then remove the volume with the stack down: pipelock makes a new signing key and
+chain at its next start, and the old receipts verify only from the backup.
+
+### A model server on your network
+Pipelock refuses private addresses, and letta-code's model calls go through it, so a model
+server elsewhere on your LAN (Ollama, vLLM, a LiteLLM proxy) is refused while the profile is on.
+List it in `PIPELOCK_DIRECT`, comma-separated host names or IP addresses, each with an optional
+port, or `.domain` suffixes:
+```bash
+# config.env: for every stack
+PIPELOCK_DIRECT=models.lan,10.0.0.5:11434
+# stacks/alfred/stack.env: added to the list above, for alfred only
+PIPELOCK_DIRECT=gpu-box.lan
+```
+Then run `lettucectl up all` (or `up alfred`). lettucectl appends the list to `NO_PROXY`, so
+those hosts are reached directly, without checks or receipts, by letta-code and by every agent
+tool in that stack. `*`, URLs and address ranges are refused. A model server on the Docker
+host needs none of this: point Lettuce at `host.docker.internal`.
+
+With the profile on, Node processes in the app-server also print `[UNDICI-EHPA] Warning:
+EnvHttpProxyAgent is experimental` on stderr, so agents sometimes see it in a tool's output. It
+is harmless: Node says its proxy support may change, not that something failed.
 
 ### When an agent is blocked
 The agent gets a 403 with an `X-Pipelock-Block-Reason` header (or `blocked: true` and a

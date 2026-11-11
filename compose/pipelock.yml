@@ -28,7 +28,9 @@ services:
       - /tmp
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    mem_limit: 256m
+    # Every model call of the stack's agents passes it (letta-code follows
+    # HTTPS_PROXY), each an open tunnel for as long as the model works.
+    mem_limit: 512m
     pids_limit: 256
     restart: unless-stopped
 
