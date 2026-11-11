@@ -1407,6 +1407,51 @@ test_compose_adds_the_proxy_overlay_only_with_pipelock() {
   log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/pipelock-proxy.yml --env-file $D/stacks/alfred/stack.env"
 }
 
+# PIPELOCK_DIRECT: hosts an install reaches without pipelock (a model server on
+# the LAN), from config.env for every stack plus stack.env for one, appended to
+# NO_PROXY by the overlay. Always passed with the profile, so Compose never
+# warns about an unset variable; never without it.
+test_compose_passes_pipelock_direct_from_config_and_stack() {
+  added
+  with_pipelock
+  echo PIPELOCK_DIRECT=models.lan,.internal.example.com >>"$D/config.env"
+  echo PIPELOCK_DIRECT=10.0.0.5:11434 >>"$D/stacks/alfred/stack.env"
+  ctl up alfred
+  ok_rc
+  log_has "docker-env PIPELOCK_DIRECT=models.lan,.internal.example.com,10.0.0.5:11434"
+}
+
+test_compose_passes_an_empty_pipelock_direct_with_the_profile() {
+  added
+  with_pipelock
+  ctl up alfred
+  ok_rc
+  grep -qx 'docker-env PIPELOCK_DIRECT=' "$T/calls.log" || fail "PIPELOCK_DIRECT not passed empty"
+}
+
+test_compose_passes_no_pipelock_direct_without_the_profile() {
+  added
+  echo PIPELOCK_DIRECT=models.lan >>"$D/config.env"
+  ctl up alfred
+  ok_rc
+  log_lacks "PIPELOCK_DIRECT"
+}
+
+test_up_refuses_a_malformed_pipelock_direct() {
+  local v
+  added
+  with_pipelock
+  for v in '*' 'http://models.lan' 'a,,b' 'models.lan;true' '10.0.0.0/8'; do
+    sed -i '/^PIPELOCK_DIRECT=/d' "$D/config.env"
+    echo "PIPELOCK_DIRECT=$v" >>"$D/config.env"
+    : >"$T/calls.log"
+    ctl up alfred
+    bad_rc
+    out_has "PIPELOCK_DIRECT"
+    log_lacks "up -d"
+  done
+}
+
 test_up_all_starts_every_stack() {
   ctl add alfred alfred@example.com
   ctl add hal hal@example.com
@@ -4542,6 +4587,25 @@ test_release_mode_fails_closed_without_its_own_container() {
   out_has "could not read this container's mounts"
 }
 
+# The wrapper says when the operator's stdin is a terminal but stdout is not
+# (`lettucectl apply | tee log`): it gives the container no terminal then, so
+# apply asks anyway. Only in release mode: from a clone stdin is the operator's.
+test_release_mode_apply_asks_when_the_wrapper_says_stdin_is_a_terminal() {
+  added
+  release_on
+  LETTUCECTL_STDIN_TTY=1 ctl apply </dev/null
+  bad_rc
+  out_has "Apply? [y/N]"
+  out_has "aborted"
+}
+
+test_apply_ignores_the_wrappers_terminal_flag_from_a_clone() {
+  printf 'alfred  alfred@example.com\n' >>"$D/stacks.conf"
+  LETTUCECTL_STDIN_TTY=1 ctl apply </dev/null
+  bad_rc
+  out_has "--yes"
+}
+
 test_release_mode_backup_needs_a_mounted_destination() {
   added
   release_on
@@ -4862,6 +4926,24 @@ test_wrapper_runs_the_pinned_image_with_the_data_directory_at_the_same_path() {
   [[ $run == *" $WIMAGE list" ]] || fail "not the pinned image: $run"
 }
 
+test_wrapper_says_when_only_stdin_is_a_terminal() {
+  wrapper_in "$T/srv"
+  RC=0
+  DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" script -qec "$T/srv/bin/lettucectl list | cat" /dev/null >"$OUT" 2>&1 || RC=$?
+  ok_rc
+  local run
+  run=$(grep '^docker run ' "$T/calls.log")
+  [[ $run == *" -e LETTUCECTL_STDIN_TTY=1 "* ]] || fail "stdin a terminal not passed on: $run"
+  [[ $run != *" -t "* ]] || fail "a terminal given with stdout piped: $run"
+}
+
+test_wrapper_passes_no_terminal_flag_without_one() {
+  wrapper_in "$T/srv"
+  wctl "$T/srv" list </dev/null
+  ok_rc
+  log_lacks "LETTUCECTL_STDIN_TTY"
+}
+
 test_wrapper_refuses_to_run_outside_a_data_directory() {
   mkdir -p "$T/elsewhere"
   wrapper_in "$T/srv"
@@ -4985,6 +5067,22 @@ test_apply_carries_on_past_a_stack_that_fails() {
   out_has "apply did not finish: add alfred"
   [[ -n $(senv hal CF_DNS_RECORD_ID) ]] || fail "hal was not added after alfred failed"
   grep -q '^docker compose -p lettuce-hal .* up -d --no-build' "$T/calls.log" || fail "hal was not started"
+  log_has "/root/.letta/skills"
+}
+
+test_apply_starts_the_other_stacks_when_one_fails_to_start() {
+  added
+  ctl add hal hal@example.com
+  ctl add lucius lucius@example.com
+  ok_rc
+  # alfred's check refuses it.
+  echo "DEV_BYPASS_EMAIL=x@y.com" >>"$D/stacks/alfred/stack.env"
+  : >"$T/calls.log"
+  ctl apply --yes
+  bad_rc
+  out_has "apply did not finish: up alfred"
+  eq "$(starts hal)" 1
+  eq "$(starts lucius)" 1
   log_has "/root/.letta/skills"
 }
 

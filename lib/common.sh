@@ -60,6 +60,13 @@ release_file() { printf '%s/RELEASE' "$LETTUCE_HOME"; }
 release_mode() { [[ -f $(release_file) ]]; }
 release_get() { env_get "$(release_file)" "$1"; }
 
+# stdin_is_terminal -> success when the operator types into stdin. In release
+# mode the wrapper gives the container a terminal only when stdout is one too,
+# and says so in LETTUCECTL_STDIN_TTY when only stdin is (`apply | tee log`).
+stdin_is_terminal() {
+  [[ -t 0 ]] || { release_mode && [[ ${LETTUCECTL_STDIN_TTY:-} == 1 ]]; }
+}
+
 # published_images -> "<image> <context> <shared context or -> <service or ->" per
 # image publish.yml publishes, from release/images
 published_images() { awk '!/^[[:space:]]*(#|$)/ { print $1, $2, $3, $4 }' "$LETTUCE_HOME/release/images"; }
@@ -438,10 +445,33 @@ expand_targets() {
 # --env-file stops Compose from reading any upstream/docker/.env.
 compose() { compose_env "$(stack_env "$1")" "$@"; }
 
+# pipelock_direct NAME ENV_FILE -> the hosts the app-server reaches without
+# pipelock beyond the stack's own services, which compose/pipelock-proxy.yml
+# appends to NO_PROXY: config.env's PIPELOCK_DIRECT for every stack, then the
+# stack's own (a model server on the LAN, which pipelock refuses as a private
+# address). Each entry is a host name or IP address with an optional port, or
+# a .domain suffix; dies on anything else (a *, a URL, a range).
+pipelock_direct() {
+  local name=$1 env_file=$2 list h parts out=()
+  local re='^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$'
+  for list in "$(cfg PIPELOCK_DIRECT)" "$(env_get "$env_file" PIPELOCK_DIRECT)"; do
+    [[ -n $list ]] || continue
+    [[ $list != ,* && $list != *, && $list != *,,* ]] ||
+      die "$name: PIPELOCK_DIRECT has an empty entry: '$list'"
+    IFS=, read -ra parts <<<"$list"
+    for h in "${parts[@]}"; do
+      [[ $h =~ $re ]] ||
+        die "$name: PIPELOCK_DIRECT entries are host names or IP addresses with an optional port, or .domain suffixes; not '$h'"
+      out+=("$h")
+    done
+  done
+  (IFS=, && printf '%s' "${out[*]}")
+}
+
 # compose_env ENV_FILE NAME ARGS... -> `compose`, reading ENV_FILE in place of
 # the stack's stack.env (check_stack renders a profile list before it is written)
 compose_env() {
-  local env_file=$1 name=$2 up profiles img extra=() vars=()
+  local env_file=$1 name=$2 up profiles img direct extra=() vars=()
   shift 2
   up=$(upstream_dir)
   profiles=$(env_get "$env_file" COMPOSE_PROFILES)
@@ -466,6 +496,8 @@ compose_env() {
   # Only with the profile: without it, no container gets a proxy setting.
   if has_profile "$profiles" garden-pipelock; then
     extra+=(-f "$LETTUCE_HOME/compose/pipelock-proxy.yml")
+    direct=$(pipelock_direct "$name" "$env_file") || exit 1
+    vars+=(PIPELOCK_DIRECT="$direct")
   fi
   env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} "${vars[@]}" \
     docker compose -p "lettuce-$name" \

@@ -9,6 +9,7 @@ STUB_LOG=$STUB_ROOT/calls.log
 printf 'docker %s\n' "$*" >>"$STUB_LOG"
 printf 'docker-env PUBLIC_ORIGIN=%s\n' "${PUBLIC_ORIGIN:-}" >>"$STUB_LOG"
 [[ -z ${DOC_TOOLS_VOLUME:-} ]] || printf 'docker-env DOC_TOOLS_NETWORK=%s DOC_TOOLS_VOLUME=%s\n' "${DOC_TOOLS_NETWORK:-}" "$DOC_TOOLS_VOLUME" >>"$STUB_LOG"
+[[ ! -v PIPELOCK_DIRECT ]] || printf 'docker-env PIPELOCK_DIRECT=%s\n' "$PIPELOCK_DIRECT" >>"$STUB_LOG"
 args=" $* "
 # What compose_env passes beside stack.env: the code, the shell's base and, in
 # release mode, the published images' names (the vault's stands for them all).

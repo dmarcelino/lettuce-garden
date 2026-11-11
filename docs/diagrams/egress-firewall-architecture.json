@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "93813779acb85f629c8f8d25219bbb8678bfdf24"
+      "revision": "5becc556cb74382948dd4a3fc19b941c90ea6890"
     }
   },
   "components": [
@@ -31,13 +31,13 @@
         {
           "path": "compose/pipelock-proxy.yml",
           "line": 12,
-          "end_line": 16,
+          "end_line": 19,
           "label": "Node 22.23 follows the proxy"
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 34,
-          "end_line": 37,
+          "line": 40,
+          "end_line": 43,
           "label": "NODE_USE_ENV_PROXY on the app-server"
         }
       ],
@@ -60,8 +60,8 @@
       "sources": [
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 25,
-          "end_line": 37,
+          "line": 31,
+          "end_line": 43,
           "label": "proxy variables on app-server"
         },
         {
@@ -88,14 +88,14 @@
       "sources": [
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 18,
-          "end_line": 31,
+          "line": 21,
+          "end_line": 37,
           "label": "NO_PROXY list"
         },
         {
           "path": "lib/common.sh",
-          "line": 914,
-          "end_line": 928,
+          "line": 946,
+          "end_line": 960,
           "label": "check_pipelock"
         }
       ]
@@ -123,8 +123,8 @@
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 38,
-          "end_line": 43,
+          "line": 44,
+          "end_line": 49,
           "label": "ddg-mcp, searxng"
         }
       ]
@@ -147,7 +147,7 @@
         {
           "path": "compose/pipelock.yml",
           "line": 17,
-          "end_line": 33,
+          "end_line": 35,
           "label": "hardened service"
         },
         {
@@ -179,8 +179,8 @@
       "sources": [
         {
           "path": "compose/pipelock.yml",
-          "line": 24,
-          "end_line": 39,
+          "line": 25,
+          "end_line": 41,
           "label": "named volume"
         },
         {
@@ -191,8 +191,8 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 725,
-          "end_line": 726,
+          "line": 757,
+          "end_line": 758,
           "label": "only garden-pipelock mounts it"
         }
       ]
@@ -353,8 +353,8 @@
       "dot": "rose",
       "title": "What pipelock checks",
       "items": [
-        "Destination of every proxied request: paste and file-drop blocklist, private and cloud-metadata addresses, data hidden in host names, 600 requests per minute per site",
-        "letta-code's own calls too: a model server on a private address other than host.docker.internal is refused",
+        "Destination of every proxied request: paste and file-drop blocklist, private and cloud-metadata addresses, data hidden in host names, 1200 requests per minute per site",
+        "letta-code's own calls too: a model server on a private address is refused unless it is in PIPELOCK_DIRECT or is host.docker.internal",
         "Page text and full URL only for pages read through /fetch (the fetching-web-pages skill); a page with prompt injection is blocked with a 403",
         "Every allow and block is a hash-chained receipt signed with the stack's own Ed25519 key"
       ]
@@ -365,7 +365,7 @@
       "items": [
         "Advisory, not a boundary: the stack network still reaches the internet, and any agent can unset HTTPS_PROXY",
         "No TLS interception: for HTTPS it sees the host name, not paths, bodies or responses",
-        "The BFF, garden-vault, google-mcp and garden-gmail-triggers connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg and host.docker.internal direct"
+        "The BFF (its Remote Pi SSH runs included), garden-vault, google-mcp, garden-gmail-triggers and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct"
       ]
     },
     {
