@@ -118,6 +118,13 @@ services:
         # app-server too, over a pulled image. lettucectl builds the app-server
         # first when it is built on this host (up_stack).
         base: docker-image://${APP_SERVER_IMAGE:?APP_SERVER_IMAGE is not set}
+    # One tag for every stack, rebuilt by each stack's `up` (from the build
+    # cache, so in seconds). Each build gets a new image ID, and the stacks run
+    # different ones: BuildKit's default provenance records the build time, and
+    # Compose labels the image with the project that built it. Harmless: up_stack
+    # builds just before it starts the stack, so the tag holds that stack's own
+    # variant, and Compose recreates the shell only when its content changes
+    # (sshd_config, the app-server's image).
     image: lettuce-code-server-exec:local
     # PID 1 keeps the container's environment for agent-env.
     init: true
