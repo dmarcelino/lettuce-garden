@@ -42,7 +42,7 @@ A file lettucectl reads at run time (a compose file, a skill, the executor, a bu
 ## Cutting a release
 1. Set `VERSION` to the new version (and `REBUILD`, for a rebuild release) on `main`, and make sure `config.env.example`'s `LETTUCE_REF` is the Lettuce tag you tested with ([CONTRIBUTING.md](../CONTRIBUTING.md#upgrading-lettuce_ref)).
 2. Tag it: `git tag vX.Y.Z && git push origin vX.Y.Z`. For a candidate to try on a test host first, `vX.Y.Z-rc.N`, published as a pre-release.
-3. The first time only: make each `ghcr.io/<owner>/lettuce-*` package and `lettucectl` public, so hosts pull without credentials.
+3. Check that hosts can pull without credentials: logged out of `ghcr.io`, `docker manifest inspect` each image `RELEASE` names and the wrapper's `lettucectl` image. The packages `publish.yml` creates from this public repository come out public (as for `v0.1.0-rc.1`); one that does not is made public in its package settings.
 
 ## Build and test
 ```bash

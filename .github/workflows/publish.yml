@@ -12,7 +12,8 @@
 #    name), the lettucectl image, the wrapper pinned to its digest, SHA256SUMS,
 #    the release notes (which images changed, and so which sidecars restart),
 #    and the GitHub release.
-# The GHCR packages are made public once, by hand, so hosts pull without credentials.
+# The GHCR packages it creates come out public, as this repository is, so hosts
+# pull without credentials (release/README.md, "Cutting a release", step 3).
 name: Publish
 
 on:

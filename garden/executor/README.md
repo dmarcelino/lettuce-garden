@@ -16,7 +16,7 @@ What ends up in the app-server:
 |---|---|---|
 | `/root/.letta/garden/executor/bin/run.mjs` | 0644 | The executor, on the `letta-home` bind mount, so a restart keeps it. |
 | `/etc/lettuce-garden/executor-token` | 0600 (directory 0700) | The token, in the container layer: not under `state/`, not in backups. `up` reinstalls it after every recreate. |
-| `/root/.letta/system-cron/lettuce-garden-executor` | 0644 | The cron file, named without a dot because cron skips such files; upstream's entrypoint copies `system-cron` to `/etc/cron.d` at every start. |
+| `/root/.letta/system-cron/lettuce-garden-executor` | 0644 | The cron file, named without a dot because cron skips such files; upstream's entrypoint copies `system-cron` to `/etc/cron.d` at every start. Since Lettuce v0.26 the BFF also lists every file there, read-only, in the Tasks tab; with no `# agent:` line, this one shows under every agent. |
 | `/etc/cron.d/lettuce-garden-executor` | 0644 | The same file, written too so it starts now. |
 | `/root/.letta/garden/executor/executor.log` | | Its output; truncated once it passes 256 KiB. |
 | `/root/.letta/garden/executor/.executor.lock` | 0700 | A lock directory, held for one run; taken over when older than 10 minutes. |

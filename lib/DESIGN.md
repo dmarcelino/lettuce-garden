@@ -28,6 +28,9 @@ as the design record. Where the build differs from it:
   `LETTUCE_HOME`; Compose prefers it to the `--env-file`'s.
 - **`lettucectl version`** names the release, its tested Lettuce tag, and the backup image the
   restore steps use.
+- **The GHCR packages needed no step by hand.** `publish.yml`'s first run (`v0.1.0-rc.1`)
+  created them public, as the repository is, so hosts pull without credentials; the release
+  steps now check this instead ([release/README.md](../release/README.md#cutting-a-release)).
 - **Not done:** moving the existing install ([below](#moving-the-existing-install); the operator's
   to do), and `init` creating the Google login method through the API (unverified, optional).
   `init` checks the other scopes by reads, which cannot tell a read scope from an edit one.
