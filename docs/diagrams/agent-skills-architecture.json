@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "884e5c7b5c9b9062a6810b912814523effdbecd4"
+      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
     }
   },
   "components": [
@@ -306,7 +306,7 @@
     {
       "id": "monskill",
       "type": "backend",
-      "label": "monitoring-sources",
+      "label": "watchlist-sources",
       "sublabel": "set up, report, repair",
       "pos": [
         1280,
@@ -318,17 +318,17 @@
       ],
       "sources": [
         {
-          "path": "agent-skills/monitoring-sources/SKILL.md",
+          "path": "agent-skills/watchlist-sources/SKILL.md",
           "line": 8,
           "end_line": 23,
-          "label": "the monitors server, through the wrapper"
+          "label": "the watchlist server, through the wrapper"
         }
       ]
     },
     {
-      "id": "monitors",
+      "id": "watchlist",
       "type": "backend",
-      "label": "garden-monitors",
+      "label": "garden-watchlist",
       "sublabel": "/mcp",
       "pos": [
         1280,
@@ -340,7 +340,7 @@
       ],
       "sources": [
         {
-          "path": "monitors/src/garden_monitors/app.py",
+          "path": "watchlist/src/garden_watchlist/app.py",
           "line": 253,
           "end_line": 264,
           "label": "internal /mcp only"
@@ -429,7 +429,7 @@
     },
     {
       "from": "monskill",
-      "to": "monitors",
+      "to": "watchlist",
       "label": "mcp.sh call"
     }
   ],
@@ -458,7 +458,7 @@
         "using-vault-secrets: the vault MCP server (garden-vault profile)",
         "working-with-documents: office and pdf in Settings -> MCP (garden-doc-tools)",
         "fetching-web-pages: HTTPS_PROXY pointing at garden-pipelock (garden-pipelock)",
-        "monitoring-sources: the monitors MCP server (garden-monitors)"
+        "watchlist-sources: the watchlist MCP server (garden-watchlist)"
       ]
     }
   ]

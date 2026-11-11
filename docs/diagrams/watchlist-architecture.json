@@ -2,15 +2,15 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Monitors: containers, boundaries and reports",
-    "output": "docs/diagrams/monitors-architecture.html",
+    "title": "Watchlist: containers, boundaries and reports",
+    "output": "docs/diagrams/watchlist-architecture.html",
     "quality_profile": "showcase",
     "locale": "en",
     "repository": {
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "884e5c7b5c9b9062a6810b912814523effdbecd4"
+      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
     }
   },
   "components": [
@@ -29,8 +29,8 @@
       ],
       "sources": [
         {
-          "path": "docs/monitors.md",
-          "line": 12,
+          "path": "docs/watchlist.md",
+          "line": 16,
           "label": "the page"
         }
       ]
@@ -123,9 +123,9 @@
       ]
     },
     {
-      "id": "monitors",
+      "id": "watchlist",
       "type": "backend",
-      "label": "garden-monitors",
+      "label": "garden-watchlist",
       "sublabel": "page, /mcp, fetcher, schedules",
       "pos": [
         790,
@@ -137,19 +137,19 @@
       ],
       "sources": [
         {
-          "path": "compose/monitors.yml",
+          "path": "compose/watchlist.yml",
           "line": 21,
           "end_line": 55,
           "label": "service and hardening"
         },
         {
-          "path": "monitors/src/garden_monitors/app.py",
+          "path": "watchlist/src/garden_watchlist/app.py",
           "line": 296,
           "end_line": 302,
           "label": "page, executor routes, /mcp"
         },
         {
-          "path": "monitors/src/garden_monitors/service.py",
+          "path": "watchlist/src/garden_watchlist/service.py",
           "line": 423,
           "label": "fire: a report only when something is new"
         }
@@ -159,7 +159,7 @@
       "id": "executor",
       "type": "backend",
       "label": "garden executor",
-      "sublabel": "run.mjs --monitors, every minute",
+      "sublabel": "run.mjs --watchlist, every minute",
       "pos": [
         1145,
         220
@@ -185,7 +185,7 @@
     {
       "id": "data",
       "type": "database",
-      "label": "monitors-data",
+      "label": "watchlist-data",
       "sublabel": "sources, items, monitors, reports",
       "pos": [
         450,
@@ -197,7 +197,7 @@
       ],
       "sources": [
         {
-          "path": "monitors/src/garden_monitors/store.py",
+          "path": "watchlist/src/garden_watchlist/store.py",
           "line": 1,
           "end_line": 4,
           "label": "what it keeps"
@@ -205,7 +205,7 @@
         {
           "path": "lib/common.sh",
           "line": 470,
-          "label": "mounted by garden-monitors only"
+          "label": "mounted by garden-watchlist only"
         }
       ]
     },
@@ -224,7 +224,7 @@
       ],
       "sources": [
         {
-          "path": "monitors/src/garden_monitors/fetch.py",
+          "path": "watchlist/src/garden_watchlist/fetch.py",
           "line": 95,
           "label": "PublicOnlyBackend"
         }
@@ -247,10 +247,10 @@
       "variant": "emphasis"
     },
     {
-      "id": "route-monitors",
+      "id": "route-watchlist",
       "from": "cloudflared",
-      "to": "monitors",
-      "label": "/monitors/ + JWT",
+      "to": "watchlist",
+      "label": "/watchlist/ + JWT",
       "variant": "emphasis"
     },
     {
@@ -268,13 +268,13 @@
     {
       "id": "agents-mcp",
       "from": "app-server",
-      "to": "monitors",
+      "to": "watchlist",
       "label": "agents: /mcp"
     },
     {
       "id": "fetch-reports",
       "from": "executor",
-      "to": "monitors",
+      "to": "watchlist",
       "label": "/executor/v1/ (token)",
       "variant": "security"
     },
@@ -286,13 +286,13 @@
     },
     {
       "id": "store",
-      "from": "monitors",
+      "from": "watchlist",
       "to": "data",
       "label": "SQLite"
     },
     {
       "id": "fetch-web",
-      "from": "monitors",
+      "from": "watchlist",
       "to": "web",
       "label": "public only",
       "variant": "dashed"
@@ -306,7 +306,7 @@
         "cloudflared",
         "bff",
         "app-server",
-        "monitors",
+        "watchlist",
         "executor",
         "data"
       ]
@@ -323,10 +323,10 @@
   "cards": [
     {
       "dot": "emerald",
-      "title": "garden-monitors (stack network)",
+      "title": "garden-watchlist (stack network)",
       "items": [
-        "Page at /monitors/ on the garden host: an Access JWT of the garden's own application, Fetch Metadata, CSRF and Origin on every POST",
-        "/mcp for agents: the host garden-monitors only, no Origin; the tunnel never routes it",
+        "Page at /watchlist/ on the garden host: an Access JWT of the garden's own application, Fetch Metadata, CSRF and Origin on every POST",
+        "/mcp for agents: the host garden-watchlist only, no Origin; the tunnel never routes it",
         "Fetches public addresses only, honours robots.txt, runs no script; no model",
         "Never connects to the app-server; uid 10002, read-only, no capabilities"
       ]
@@ -335,7 +335,7 @@
       "dot": "violet",
       "title": "Garden executor (inside the app-server)",
       "items": [
-        "With --monitors, claims queued reports from /executor/v1/ with the stack's token",
+        "With --watchlist, claims queued reports from /executor/v1/ with the stack's token",
         "Runs letta cron add --once from an argument array; posts results, the agent list and a heartbeat",
         "Agents can read its token: they can do what it does, which is no more than letta cron add"
       ]
@@ -344,9 +344,9 @@
       "dot": "amber",
       "title": "lettucectl (host)",
       "items": [
-        "compose/monitors.yml behind the garden-monitors profile; check_monitors keeps it hardened",
-        "lettucectl mcp registers the monitors server; lettucectl skills installs monitoring-sources",
-        "up copies the MONITORS_* settings from config.env; backup copies monitors-data"
+        "compose/watchlist.yml behind the garden-watchlist profile; check_watchlist keeps it hardened",
+        "lettucectl mcp registers the watchlist server; lettucectl skills installs watchlist-sources",
+        "up copies the WATCHLIST_* settings from config.env; backup copies watchlist-data"
       ]
     },
     {

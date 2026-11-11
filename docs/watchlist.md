@@ -2,9 +2,9 @@
 
 Each stack can have a watchlist: ask an agent, in plain words, to keep an eye on something and report on a schedule. "Tell me which films open soon at my cinema", "let me know when these promoters announce a concert", "give me the major international news at 9am, Monday to Friday". The agent finds the sources and sets the monitor up once; from then on a small service checks the sources without a model, and the agent reports at the chosen times only when something is new. It is opt-in, behind the `garden-watchlist` profile.
 
-![From a request in chat to a report when something is new: you, your agent, monitors, websites, the garden executor, Lettuce's scheduler](diagrams/monitors-flow.svg)
+![From a request in chat to a report when something is new: you, your agent, the watchlist, websites, the garden executor, Lettuce's scheduler](diagrams/watchlist-flow.svg)
 
-An interactive version, [monitors-flow.html](diagrams/monitors-flow.html), opens in a browser from a clone of this repo.
+An interactive version, [watchlist-flow.html](diagrams/watchlist-flow.html), opens in a browser from a clone of this repo.
 
 How the watchlist is built and wired, for developers: [watchlist/README.md](../watchlist/README.md); the design record is [watchlist/DESIGN.md](../watchlist/DESIGN.md).
 

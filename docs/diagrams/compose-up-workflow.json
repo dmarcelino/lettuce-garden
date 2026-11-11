@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "884e5c7b5c9b9062a6810b912814523effdbecd4"
+      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
     },
     "legend": {
       "entries": {
@@ -132,7 +132,7 @@
           "path": "lib/common.sh",
           "line": 368,
           "end_line": 397,
-          "label": "MONITORS_* settings, GARDEN_PROFILES"
+          "label": "WATCHLIST_* settings, GARDEN_PROFILES"
         }
       ]
     },
@@ -469,7 +469,7 @@
       "dot": "cyan",
       "title": "Compose files, in order",
       "items": [
-        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, monitors, pipelock, code-server, garden",
+        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, watchlist, pipelock, code-server, garden",
         "doc-tools.yml only with garden-doc-tools, pipelock-proxy.yml last and only with garden-pipelock",
         "-p lettuce-<name>, --project-directory upstream/docker, --env-file stack.env"
       ]

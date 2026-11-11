@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "884e5c7b5c9b9062a6810b912814523effdbecd4"
+      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
     },
     "legend": {
       "entries": {
@@ -398,7 +398,7 @@
       "items": [
         "--init, --network none, --read-only, --tmpfs /tmp, no-new-privileges",
         "cap_drop ALL, then CHOWN, DAC_OVERRIDE and FOWNER only",
-        "state, stack.env, vault-data, pipelock-data and monitors-data (when the volume exists) read-only; only <dir>/<name> is writable",
+        "state, stack.env, vault-data, pipelock-data and watchlist-data (when the volume exists) read-only; only <dir>/<name> is writable",
         "Old .partial-* entries and pruned snapshots are deleted through the same container"
       ]
     },

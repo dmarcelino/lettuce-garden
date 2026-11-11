@@ -2,15 +2,15 @@
   "schema_version": 1,
   "diagram_type": "sequence",
   "meta": {
-    "title": "Monitors: from a request in chat to a report when something is new",
-    "output": "docs/diagrams/monitors-flow.html",
+    "title": "Watchlist: from a request in chat to a report when something is new",
+    "output": "docs/diagrams/watchlist-flow.html",
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "884e5c7b5c9b9062a6810b912814523effdbecd4"
+      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
     }
   },
   "participants": [
@@ -19,12 +19,12 @@
       "type": "external",
       "icon": "person",
       "label": "You",
-      "sublabel": "chat, and <garden>/monitors/",
+      "sublabel": "chat, and <garden>/watchlist/",
       "sources": [
         {
-          "path": "docs/monitors.md",
-          "line": 8,
-          "end_line": 12,
+          "path": "docs/watchlist.md",
+          "line": 12,
+          "end_line": 16,
           "label": "using it"
         }
       ]
@@ -36,21 +36,21 @@
       "sublabel": "sets it up, writes reports",
       "sources": [
         {
-          "path": "agent-skills/monitoring-sources/SKILL.md",
+          "path": "agent-skills/watchlist-sources/SKILL.md",
           "line": 34,
           "label": "setting one up"
         }
       ]
     },
     {
-      "id": "monitors",
+      "id": "watchlist",
       "type": "backend",
-      "label": "Monitors",
+      "label": "Watchlist",
       "sublabel": "no model",
       "sources": [
         {
-          "path": "docs/monitors.md",
-          "line": 52,
+          "path": "docs/watchlist.md",
+          "line": 56,
           "label": "no model in the service"
         }
       ]
@@ -62,8 +62,8 @@
       "sublabel": "feeds, data, pages",
       "sources": [
         {
-          "path": "docs/monitors.md",
-          "line": 51,
+          "path": "docs/watchlist.md",
+          "line": 55,
           "label": "public addresses only"
         }
       ]
@@ -75,8 +75,8 @@
       "sublabel": "every minute",
       "sources": [
         {
-          "path": "docs/monitors.md",
-          "line": 48,
+          "path": "docs/watchlist.md",
+          "line": 52,
           "label": "monitors start agent turns"
         }
       ]
@@ -88,9 +88,9 @@
       "sublabel": "Tasks tab",
       "sources": [
         {
-          "path": "docs/monitors.md",
-          "line": 10,
-          "label": "Monitors: <schedule>"
+          "path": "docs/watchlist.md",
+          "line": 14,
+          "label": "Watchlist: <schedule>"
         }
       ]
     }
@@ -123,7 +123,7 @@
     {
       "id": "source",
       "from": "agent",
-      "to": "monitors",
+      "to": "watchlist",
       "y": 210,
       "label": "a source, tested before it is saved",
       "note": "it finds where it is published: a feed, a page's data, the page"
@@ -131,7 +131,7 @@
     {
       "id": "monitor",
       "from": "agent",
-      "to": "monitors",
+      "to": "watchlist",
       "y": 285,
       "label": "a monitor: sources, schedule"
     },
@@ -145,7 +145,7 @@
     },
     {
       "id": "fetch",
-      "from": "monitors",
+      "from": "watchlist",
       "to": "web",
       "y": 390,
       "label": "fetch each source",
@@ -154,7 +154,7 @@
     {
       "id": "items",
       "from": "web",
-      "to": "monitors",
+      "to": "watchlist",
       "y": 450,
       "label": "items",
       "variant": "return",
@@ -163,14 +163,14 @@
     {
       "id": "claim",
       "from": "executor",
-      "to": "monitors",
+      "to": "watchlist",
       "y": 525,
       "label": "anything to report?",
       "note": "nothing new: no report, no agent turn"
     },
     {
       "id": "report",
-      "from": "monitors",
+      "from": "watchlist",
       "to": "executor",
       "y": 580,
       "label": "a report: the new items",
@@ -190,7 +190,7 @@
       "from": "scheduler",
       "to": "agent",
       "y": 665,
-      "label": "\"Monitors: <schedule>\"",
+      "label": "\"Watchlist: <schedule>\"",
       "variant": "emphasis",
       "note": "website text is data, not instructions"
     },
@@ -208,8 +208,8 @@
       "dot": "emerald",
       "title": "What you see",
       "items": [
-        "Every monitor and source on <garden>/monitors/, with Delete",
-        "Reports in Lettuce's Tasks tab as \"Monitors: <schedule>\"",
+        "Every monitor and source on <garden>/watchlist/, with Delete",
+        "Reports in Lettuce's Tasks tab as \"Watchlist: <schedule>\"",
         "Nothing at all when nothing is new"
       ]
     },
@@ -225,7 +225,7 @@
       "dot": "slate",
       "title": "Limits",
       "items": [
-        "Reports per agent per day are capped (MONITORS_MAX_REPORTS_PER_DAY)",
+        "Reports per agent per day are capped (WATCHLIST_MAX_REPORTS_PER_DAY)",
         "Sites behind a login, CAPTCHA, waiting room or paywall can't be monitored"
       ]
     }

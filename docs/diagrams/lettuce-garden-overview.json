@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "884e5c7b5c9b9062a6810b912814523effdbecd4"
+      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
     }
   },
   "components": [
@@ -399,10 +399,10 @@
       ]
     },
     {
-      "id": "monitors",
+      "id": "watchlist",
       "type": "backend",
-      "label": "garden-monitors",
-      "sublabel": "/monitors/, monitors-data",
+      "label": "garden-watchlist",
+      "sublabel": "/watchlist/, watchlist-data",
       "pos": [
         560,
         620
@@ -413,7 +413,7 @@
       ],
       "sources": [
         {
-          "path": "compose/monitors.yml",
+          "path": "compose/watchlist.yml",
           "line": 1,
           "end_line": 60
         }
@@ -540,7 +540,7 @@
         "garden",
         "vault",
         "gmail",
-        "monitors",
+        "watchlist",
         "gate"
       ],
       "pad": 14
@@ -609,7 +609,7 @@
     },
     {
       "from": "cloudflared",
-      "to": "monitors"
+      "to": "watchlist"
     },
     {
       "from": "cloudflared",
@@ -651,7 +651,7 @@
     },
     {
       "from": "appserver",
-      "to": "monitors",
+      "to": "watchlist",
       "label": "/mcp, executor",
       "variant": "dashed"
     },
@@ -715,14 +715,14 @@
         "Garden services accept only the garden's Access application (CF_GARDEN_AUD), never Lettuce's JWT.",
         "The code editor runs nothing agents wrote; its terminals are SSH sessions into the shell, which is no stronger than an agent.",
         "Pipelock is advisory: the stack network keeps its direct route out.",
-        "garden-monitors fetches public websites directly, public addresses only (not drawn)."
+        "garden-watchlist fetches public websites directly, public addresses only (not drawn)."
       ]
     },
     {
       "dot": "amber",
       "title": "Volumes not drawn",
       "items": [
-        "vault-data: only garden-vault. pipelock-data: only garden-pipelock. monitors-data: only garden-monitors.",
+        "vault-data: only garden-vault. pipelock-data: only garden-pipelock. watchlist-data: only garden-watchlist.",
         "google-creds: the BFF, google-mcp, and garden-gmail-triggers read-only.",
         "code-server-sock, code-server-data, code-exec-keys: only the code editor's services.",
         "state/garden/gmail-triggers: only garden-gmail-triggers, outside every app-server mount."
