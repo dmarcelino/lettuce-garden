@@ -15,13 +15,17 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
 
 ## What it does
 - **Proxy settings** (`compose/pipelock-proxy.yml`): `HTTPS_PROXY`/`HTTP_PROXY` in the
-  app-server (agent shells, Claude Code and Codex subagents, `npm`, `pip`, `git`, `curl`...), in
-  SearXNG and in the DuckDuckGo reader. Traffic inside the stack (the vault, Gmail triggers, the
-  search sidecars, localhost, `host.docker.internal`) stays direct: pipelock must never see the
-  vault's values, and `lettucectl check` refuses a stack where it would.
+  app-server (letta-code itself, with its calls to the model provider, and agent shells, Claude
+  Code and Codex subagents, `npm`, `pip`, `git`, `curl`...), in SearXNG and in the DuckDuckGo
+  reader. Traffic inside the stack (the vault, Gmail triggers, the search sidecars, localhost,
+  `host.docker.internal`) stays direct: pipelock must never see the vault's values, and
+  `lettucectl check` refuses a stack where it would.
 - **Destination checks** (balanced mode, `pipelock/pipelock.yaml`):
   - a short built-in blocklist of paste and file-drop sites (pastebin, transfer.sh, ...);
-  - private, internal and cloud-metadata addresses (SSRF): the LAN, the host, `169.254.169.254`;
+  - private, internal and cloud-metadata addresses (SSRF): the LAN, the host, `169.254.169.254`.
+    This covers letta-code's model calls too: a model server elsewhere on your network is
+    refused, so run it on the Docker host and point Lettuce at `host.docker.internal`, which
+    stays direct;
   - data hidden in host names (long random-looking subdomains);
   - at most 600 requests per minute to one site (each plain-HTTP request and each HTTPS
     connection counts), which only stops runaway loops.
@@ -38,10 +42,9 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
   pipelock decided it.
 
 ## What it does not do
-- **It is not a boundary.** The stack network still reaches the internet directly. letta-code
-  itself runs on a Node version that ignores `HTTPS_PROXY` (it connects directly until its image
-  moves to Node 22.21 or later), and any agent can unset the variable or use a tool that ignores
-  it. The BFF, the vault, google-mcp and Gmail triggers connect directly by design.
+- **It is not a boundary.** The stack network still reaches the internet directly, and any agent
+  can unset the variable or use a tool that ignores it. The BFF, the vault, google-mcp and Gmail
+  triggers connect directly by design.
 - **No content checks on HTTPS.** There is no TLS interception, so for normal HTTPS requests
   pipelock sees only the host name: not the path, the request or the response. Secrets in a
   request body, or prompt injection in a page fetched with `curl`, pass unseen. Only `/fetch`

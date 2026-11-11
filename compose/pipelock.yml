@@ -6,7 +6,7 @@
 # tools at it.
 #
 # Advisory: the stack network keeps its direct route, so a process that ignores
-# HTTPS_PROXY (letta-code itself, on Node 22.19) or unsets it goes around it.
+# HTTPS_PROXY or unsets it goes around it.
 # No TLS interception: for HTTPS it sees the host name, not the content.
 #
 # Its data (the receipt signing key and the receipts) lives on a named volume

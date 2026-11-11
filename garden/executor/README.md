@@ -24,10 +24,10 @@ What ends up in the app-server:
 The cron line (`executor_cron`), with `--gmail-triggers` exactly when that profile is on:
 
 ```
-* * * * * root /usr/local/bin/agent-env node /root/.letta/garden/executor/bin/run.mjs --gmail-triggers >> /root/.letta/garden/executor/executor.log 2>&1
+* * * * * root /usr/local/bin/agent-env env -u NODE_USE_ENV_PROXY node /root/.letta/garden/executor/bin/run.mjs --gmail-triggers >> /root/.letta/garden/executor/executor.log 2>&1
 ```
 
-`agent-env` (upstream's) gives it PID 1's environment, so `node` and `letta` are on `PATH`. Uninstall removes both cron files, the token (and its directory once empty) and `bin/`.
+`agent-env` (upstream's) gives it PID 1's environment, so `node` and `letta` are on `PATH`. It drops `NODE_USE_ENV_PROXY`, which `garden-pipelock` sets: everything the executor calls is inside the stack, its token must never reach pipelock, and Node (from 22.21) would log a warning on every run. Uninstall removes both cron files, the token (and its directory once empty) and `bin/`.
 
 ## A run
 

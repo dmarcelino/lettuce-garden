@@ -1255,7 +1255,7 @@ exec_args() { tr '\0' '\n' <"$T/exec-args"; }
 executor_cron_text() {
   printf '%s\n' '# Installed by lettucectl (garden-gmail-triggers or garden-code-server profile). Removed with the last of them.' \
     'PATH=/usr/local/bin:/usr/bin:/bin' 'MAILTO=""'
-  printf '%s' "* * * * * root /usr/local/bin/agent-env node /root/.letta/garden/executor/bin/run.mjs${1:+ $1} >> /root/.letta/garden/executor/executor.log 2>&1"
+  printf '%s' "* * * * * root /usr/local/bin/agent-env env -u NODE_USE_ENV_PROXY node /root/.letta/garden/executor/bin/run.mjs${1:+ $1} >> /root/.letta/garden/executor/executor.log 2>&1"
 }
 GT_CRON_TEXT=$(executor_cron_text --gmail-triggers)
 EXECUTOR_ARGS="/root/.letta/garden/executor lettuce-garden-executor /root/.letta/system-cron /etc/cron.d /etc/lettuce-garden/executor-token"

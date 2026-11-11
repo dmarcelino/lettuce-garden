@@ -19,7 +19,7 @@ Both applications share the stack's Access policy, so `lettucectl users` changes
 |---|---|---|---|---|
 | `cloudflared` | upstream | `cloudflared` (required) | `default` | none |
 | `app-server` | upstream | always | `default`; `lettuce-doc-tools-<name>` with `garden-doc-tools` | `state/letta-home`, `letta-data`, `workspaces`, `tools`; the doc-tools volume read-only with `garden-doc-tools` |
-| `bff` | upstream | always | the app-server's namespace | `google-policy`, `google-creds`, `bff-data`, `bff-auth`; `workspaces`, `letta-home` and the memory files read-only |
+| `bff` | upstream | always | the app-server's namespace | `google-policy`, `google-creds`, `bff-data`, `bff-auth`, `workspaces` (read-write since Lettuce v0.42, for the Files tab's delete); `letta-home` and the memory files read-only |
 | `channel-gateway` | upstream | `telegram` | the app-server's namespace | `letta-home`, `letta-data`, `workspaces` |
 | `searxng`, `ddg-mcp` | upstream | `search` | `default` | none |
 | `google-mcp` | upstream | `google` | `default` | `google-policy` read-only, `google-creds` |

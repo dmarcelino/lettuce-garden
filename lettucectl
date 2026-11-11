@@ -253,7 +253,9 @@ sync_skills() {
 }
 
 # The garden executor (garden/executor/run.mjs): the app-server's cron runs it
-# every minute, through upstream's agent-env (PID 1's environment). It sends
+# every minute, through upstream's agent-env (PID 1's environment) without
+# NODE_USE_ENV_PROXY: everything it calls is inside the stack, its token must
+# never reach pipelock, and Node >= 22.21 would otherwise warn on every run. It sends
 # `letta agents list` to the garden service when that asks for one and, with
 # the garden-gmail-triggers profile (--gmail-triggers), fetches that sidecar's queued
 # requests over /executor/v1/ and turns each into `letta cron add --once`. It
@@ -283,7 +285,7 @@ executor_cron() {
   fi
   printf '%s\n' "# Installed by lettucectl (garden-gmail-triggers or garden-code-server profile). Removed with the last of them." \
     "PATH=/usr/local/bin:/usr/bin:/bin" 'MAILTO=""'
-  printf '%s' "* * * * * root /usr/local/bin/agent-env node $EXECUTOR_DIR/bin/run.mjs$flag >> $EXECUTOR_DIR/executor.log 2>&1"
+  printf '%s' "* * * * * root /usr/local/bin/agent-env env -u NODE_USE_ENV_PROXY node $EXECUTOR_DIR/bin/run.mjs$flag >> $EXECUTOR_DIR/executor.log 2>&1"
 }
 
 # Run by sh in the app-server as
