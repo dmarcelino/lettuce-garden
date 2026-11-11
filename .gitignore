@@ -1,6 +1,5 @@
 # Instance data: never commit. A clone keeps its own in data/ (lib/DESIGN.md);
-# the other entries keep an old clone's, or a LETTUCE_DATA pointed inside one,
-# out of commits too.
+# the other entries keep a LETTUCE_DATA pointed at a clone out of commits too.
 /data/
 /upstream/
 /config.env
