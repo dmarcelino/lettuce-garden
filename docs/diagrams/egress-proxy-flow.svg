@@ -943,15 +943,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
 
         <!-- Components -->
-        <g id="node-tools" data-node-id="tools" data-node-label="Agents' shells and tools" tabindex="0" role="button" aria-label="Focus Agents' shells and tools, Claude Code, Codex, npm, git, curl, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Claude Code, Codex, npm, git, curl" data-node-context="Architecture component">
-          <title>Agents' shells and tools · Claude Code, Codex, npm, git, curl · Architecture component</title>
+        <g id="node-tools" data-node-id="tools" data-node-label="letta-code, agents' tools" tabindex="0" role="button" aria-label="Focus letta-code, agents' tools, model calls, Claude Code, npm, git, curl, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="model calls, Claude Code, npm, git, curl" data-node-context="Architecture component">
+          <title>letta-code, agents' tools · model calls, Claude Code, npm, git, curl · Architecture component</title>
           <rect x="40" y="40" width="220" height="62" rx="8" class="c-mask"/>
           <rect x="40" y="40" width="220" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 0; --flow-node-name: archify-relay-node-0;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 46) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="150" y="69" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Agents' shells and tools</text>
-        <text x="150" y="85" class="t-muted" font-size="9" text-anchor="middle">Claude Code, Codex, npm, git, curl</text>
+          <text data-node-label="" x="150" y="69" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">letta-code, agents' tools</text>
+        <text x="150" y="85" class="t-muted" font-size="8.8" text-anchor="middle">model calls, Claude Code, npm, git, curl</text>
         </g>
 
         <g id="node-search" data-node-id="search" data-node-label="SearXNG, page reader" tabindex="0" role="button" aria-label="Focus SearXNG, page reader, the agents' web search, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="the agents' web search" data-node-context="Architecture component">
@@ -1012,14 +1012,14 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="800" y="195" class="t-muted" font-size="9" text-anchor="middle">the sites agents use</text>
         </g>
 
-        <g id="node-bypass" data-node-id="bypass" data-node-label="letta-code, BFF, vault, Google" tabindex="0" role="button" aria-label="Focus letta-code, BFF, vault, Google, and anything ignoring HTTPS_PROXY, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="and anything ignoring HTTPS_PROXY" data-node-context="Architecture component">
-          <title>letta-code, BFF, vault, Google · and anything ignoring HTTPS_PROXY · Architecture component</title>
+        <g id="node-bypass" data-node-id="bypass" data-node-label="BFF, vault, Google" tabindex="0" role="button" aria-label="Focus BFF, vault, Google, and anything ignoring HTTPS_PROXY, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="and anything ignoring HTTPS_PROXY" data-node-context="Architecture component">
+          <title>BFF, vault, Google · and anything ignoring HTTPS_PROXY · Architecture component</title>
           <rect x="40" y="420" width="220" height="62" rx="8" class="c-mask"/>
           <rect x="40" y="420" width="220" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-3;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 426) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="150" y="449" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">letta-code, BFF, vault, Google</text>
+          <text data-node-label="" x="150" y="449" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">BFF, vault, Google</text>
         <text x="150" y="465" class="t-muted" font-size="9" text-anchor="middle">and anything ignoring HTTPS_PROXY</text>
         </g>
 

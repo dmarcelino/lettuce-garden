@@ -10,34 +10,216 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "c9d5094283236533ca0c8bdd6b405640ea5dab5a"
+      "revision": "93813779acb85f629c8f8d25219bbb8678bfdf24"
     }
   },
   "components": [
-    { "id": "tools", "type": "backend", "label": "Agents' shells and tools", "sublabel": "Claude Code, Codex, npm, git, curl", "pos": [40, 40], "size": [220, 62],
-      "sources": [{ "path": "docs/egress-firewall.md", "line": 34, "end_line": 38, "label": "proxy settings" }] },
-    { "id": "search", "type": "backend", "label": "SearXNG, page reader", "sublabel": "the agents' web search", "pos": [40, 150], "size": [220, 62],
-      "sources": [{ "path": "docs/egress-firewall.md", "line": 11, "end_line": 12, "label": "also through the proxy" }] },
-    { "id": "fetch", "type": "backend", "label": "Agents reading pages", "sublabel": "fetching-web-pages skill", "pos": [40, 260], "size": [220, 62],
-      "sources": [{ "path": "docs/egress-firewall.md", "line": 45, "end_line": 51, "label": "page checks through /fetch" }] },
-    { "id": "pipelock", "type": "security", "label": "pipelock", "sublabel": "checks each destination", "pos": [400, 150], "size": [190, 62],
-      "sources": [{ "path": "docs/egress-firewall.md", "line": 39, "end_line": 44, "label": "destination checks" }] },
-    { "id": "receipts", "type": "database", "label": "Signed receipts", "sublabel": "lettucectl receipts", "pos": [400, 300], "size": [190, 62],
-      "sources": [{ "path": "docs/egress-firewall.md", "line": 52, "end_line": 54, "label": "signed receipts" }] },
-    { "id": "internet", "type": "external", "label": "Internet", "sublabel": "the sites agents use", "pos": [720, 150], "size": [160, 62] },
-    { "id": "bypass", "type": "backend", "label": "letta-code, BFF, vault, Google", "sublabel": "and anything ignoring HTTPS_PROXY", "pos": [40, 420], "size": [220, 62],
-      "sources": [{ "path": "docs/egress-firewall.md", "line": 57, "end_line": 61, "label": "it is not a boundary" }] }
+    {
+      "id": "tools",
+      "type": "backend",
+      "label": "letta-code, agents' tools",
+      "sublabel": "model calls, Claude Code, npm, git, curl",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        220,
+        62
+      ],
+      "sources": [
+        {
+          "path": "docs/egress-firewall.md",
+          "line": 17,
+          "end_line": 22,
+          "label": "proxy settings"
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "type": "backend",
+      "label": "SearXNG, page reader",
+      "sublabel": "the agents' web search",
+      "pos": [
+        40,
+        150
+      ],
+      "size": [
+        220,
+        62
+      ],
+      "sources": [
+        {
+          "path": "docs/egress-firewall.md",
+          "line": 17,
+          "end_line": 22,
+          "label": "also through the proxy"
+        }
+      ]
+    },
+    {
+      "id": "fetch",
+      "type": "backend",
+      "label": "Agents reading pages",
+      "sublabel": "fetching-web-pages skill",
+      "pos": [
+        40,
+        260
+      ],
+      "size": [
+        220,
+        62
+      ],
+      "sources": [
+        {
+          "path": "docs/egress-firewall.md",
+          "line": 32,
+          "end_line": 39,
+          "label": "page checks through /fetch"
+        }
+      ]
+    },
+    {
+      "id": "pipelock",
+      "type": "security",
+      "label": "pipelock",
+      "sublabel": "checks each destination",
+      "pos": [
+        400,
+        150
+      ],
+      "size": [
+        190,
+        62
+      ],
+      "sources": [
+        {
+          "path": "docs/egress-firewall.md",
+          "line": 23,
+          "end_line": 31,
+          "label": "destination checks"
+        }
+      ]
+    },
+    {
+      "id": "receipts",
+      "type": "database",
+      "label": "Signed receipts",
+      "sublabel": "lettucectl receipts",
+      "pos": [
+        400,
+        300
+      ],
+      "size": [
+        190,
+        62
+      ],
+      "sources": [
+        {
+          "path": "docs/egress-firewall.md",
+          "line": 40,
+          "end_line": 42,
+          "label": "signed receipts"
+        }
+      ]
+    },
+    {
+      "id": "internet",
+      "type": "external",
+      "label": "Internet",
+      "sublabel": "the sites agents use",
+      "pos": [
+        720,
+        150
+      ],
+      "size": [
+        160,
+        62
+      ]
+    },
+    {
+      "id": "bypass",
+      "type": "backend",
+      "label": "BFF, vault, Google",
+      "sublabel": "and anything ignoring HTTPS_PROXY",
+      "pos": [
+        40,
+        420
+      ],
+      "size": [
+        220,
+        62
+      ],
+      "sources": [
+        {
+          "path": "docs/egress-firewall.md",
+          "line": 45,
+          "end_line": 47,
+          "label": "it is not a boundary"
+        }
+      ]
+    }
   ],
   "connections": [
-    { "id": "tools-proxy", "from": "tools", "to": "pipelock", "label": "HTTPS_PROXY", "variant": "emphasis" },
-    { "id": "search-proxy", "from": "search", "to": "pipelock", "label": "HTTPS_PROXY", "variant": "emphasis" },
-    { "id": "fetch-proxy", "from": "fetch", "to": "pipelock", "label": "/fetch", "variant": "security" },
-    { "id": "allowed", "from": "pipelock", "to": "internet", "label": "if allowed" },
-    { "id": "record", "from": "pipelock", "to": "receipts", "label": "every decision" },
-    { "id": "direct", "from": "bypass", "to": "internet", "label": "direct, not checked", "variant": "dashed" }
+    {
+      "id": "tools-proxy",
+      "from": "tools",
+      "to": "pipelock",
+      "label": "HTTPS_PROXY",
+      "variant": "emphasis"
+    },
+    {
+      "id": "search-proxy",
+      "from": "search",
+      "to": "pipelock",
+      "label": "HTTPS_PROXY",
+      "variant": "emphasis"
+    },
+    {
+      "id": "fetch-proxy",
+      "from": "fetch",
+      "to": "pipelock",
+      "label": "/fetch",
+      "variant": "security"
+    },
+    {
+      "id": "allowed",
+      "from": "pipelock",
+      "to": "internet",
+      "label": "if allowed"
+    },
+    {
+      "id": "record",
+      "from": "pipelock",
+      "to": "receipts",
+      "label": "every decision"
+    },
+    {
+      "id": "direct",
+      "from": "bypass",
+      "to": "internet",
+      "label": "direct, not checked",
+      "variant": "dashed"
+    }
   ],
   "cards": [
-    { "dot": "emerald", "title": "What it checks", "items": ["A blocklist of paste and file-drop sites, private and cloud-metadata addresses, data hidden in host names, runaway request rates", "Pages read through /fetch: the whole URL for secrets, the text for prompt injection (blocked)"] },
-    { "dot": "rose", "title": "What it does not do", "items": ["It is not a boundary: the stack still reaches the internet directly, and any agent can unset HTTPS_PROXY", "No content checks on HTTPS: only the host name is seen, except through /fetch", "Receipts show what this pipelock decided, not that nothing went around it"] }
+    {
+      "dot": "emerald",
+      "title": "What it checks",
+      "items": [
+        "A blocklist of paste and file-drop sites, private and cloud-metadata addresses, data hidden in host names, runaway request rates",
+        "Pages read through /fetch: the whole URL for secrets, the text for prompt injection (blocked)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "What it does not do",
+      "items": [
+        "It is not a boundary: the stack still reaches the internet directly, and any agent can unset HTTPS_PROXY",
+        "No content checks on HTTPS: only the host name is seen, except through /fetch",
+        "Receipts show what this pipelock decided, not that nothing went around it"
+      ]
+    }
   ]
 }

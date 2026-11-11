@@ -1,17 +1,19 @@
 # Merged by lettucectl last, after every other compose file, only when the stack has the
 # `garden-pipelock` profile (the `compose` wrapper in lib/common.sh), so without it no
-# container gets a proxy setting. Points the tools that fetch what agents ask
-# for at pipelock: agent shells and subagents in the app-server, ddg-mcp's
-# searches and page fetches, and searxng's queries to its search engines.
+# container gets a proxy setting. Points the app-server at pipelock (letta-code
+# itself, its calls to the model provider included, and the agents' shells and
+# subagents), and ddg-mcp's searches and page fetches and searxng's queries to
+# its search engines.
 # searxng documents only its own `outgoing.proxies` (in upstream's
 # settings.yml, which is not ours); it follows these variables because its
 # HTTP client (curl_cffi) does by default (an upstream seam listed in
 # CONTRIBUTING.md, to check on every upgrade).
 #
 # Both spellings: curl reads only the lowercase http_proxy, other tools only
-# the uppercase. NODE_USE_ENV_PROXY makes Node's fetch and https follow them,
-# from Node 22.21; the app-server's Node 22.19 ignores it, so letta-code itself
-# still connects directly until its image moves on.
+# the uppercase. NODE_USE_ENV_PROXY makes Node's fetch and https follow them
+# from Node 22.21; the app-server's Node is 22.23 since Lettuce v0.42.3, so
+# letta-code follows them too, and a model server on a private address other
+# than host.docker.internal is refused. The executor's cron line unsets it.
 #
 # NO_PROXY keeps stack-internal traffic away from pipelock: it refuses private
 # addresses, and it must never see the vault's values (vault), the

@@ -5,7 +5,7 @@
 #
 #   scripts/doc-tools-e2e.sh [--report FILE] [--no-idle-wait] [APP_SERVER_IMAGE]
 #
-# APP_SERVER_IMAGE defaults to lettuce-app-server:v0.26.0-letta_0.34.21.
+# APP_SERVER_IMAGE defaults to lettuce-app-server:v0.42.3-letta_0.34.38.
 # --report FILE also writes the results and measurements there as Markdown.
 # --no-idle-wait skips the 90 s wait for Gotenberg's idle measurement.
 #
@@ -33,7 +33,7 @@ LETTUCE_HOME=$ROOT
 # shellcheck source=lib/common.sh
 source "$ROOT/lib/common.sh"
 
-APP=lettuce-app-server:v0.26.0-letta_0.34.21
+APP=lettuce-app-server:v0.42.3-letta_0.34.38
 REPORT=
 IDLE_WAIT=1
 while (($#)); do

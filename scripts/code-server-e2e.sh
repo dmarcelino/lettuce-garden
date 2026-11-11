@@ -5,7 +5,7 @@
 #
 #   scripts/code-server-e2e.sh [--browser] [--keep] [APP_SERVER_IMAGE]
 #
-# APP_SERVER_IMAGE defaults to lettuce-app-server:v0.26.0-letta_0.34.21.
+# APP_SERVER_IMAGE defaults to lettuce-app-server:v0.42.3-letta_0.34.38.
 # --browser also drives the workbench in Chromium (Playwright's image, about 2 GB).
 # --keep leaves everything running for inspection and prints how to remove it.
 #
@@ -49,7 +49,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-APP=lettuce-app-server:v0.26.0-letta_0.34.21
+APP=lettuce-app-server:v0.42.3-letta_0.34.38
 BROWSER=0
 KEEP=0
 DEBIAN=debian:12-slim
