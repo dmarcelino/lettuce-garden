@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "f8563bfc55ffeeada10efbe046a47c964413bb38"
+      "revision": "695c284c5833bf202b0ac24ab161fd191369c31a"
     }
   },
   "components": [
@@ -30,8 +30,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 227,
-          "end_line": 239,
+          "line": 233,
+          "end_line": 245,
           "label": "sync_skills: */SKILL.md, names checked"
         }
       ]
@@ -52,14 +52,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1792,
-          "end_line": 1800,
+          "line": 2016,
+          "end_line": 2024,
           "label": "cmd_skills"
         },
         {
           "path": "lettucectl",
-          "line": 240,
-          "end_line": 246,
+          "line": 246,
+          "end_line": 252,
           "label": "tar into compose exec"
         }
       ]
@@ -80,14 +80,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 236,
-          "end_line": 237,
+          "line": 242,
+          "end_line": 243,
           "label": "a shared name is refused"
         },
         {
           "path": "lettucectl",
-          "line": 1602,
-          "end_line": 1608,
+          "line": 1838,
+          "end_line": 1844,
           "label": "backup skips upstream's"
         }
       ]
@@ -108,13 +108,13 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 236,
+          "line": 242,
           "label": "rewrites its skills on connect"
         },
         {
           "path": "lettucectl",
-          "line": 653,
-          "end_line": 658,
+          "line": 706,
+          "end_line": 711,
           "label": "renders the mcp-servers skill"
         }
       ]
@@ -135,14 +135,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 206,
-          "end_line": 225,
+          "line": 212,
+          "end_line": 231,
           "label": "SKILLS_INSTALL"
         },
         {
           "path": "lettucectl",
-          "line": 1486,
-          "end_line": 1504,
+          "line": 1719,
+          "end_line": 1737,
           "label": "backup leaves them out"
         }
       ]
@@ -180,12 +180,33 @@
       "type": "backend",
       "label": "using-vault-secrets",
       "sublabel": "SKILL.md, vault-run, vault-fill",
-      "pos": [380, 420],
-      "size": [190, 64],
+      "pos": [
+        380,
+        420
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "agent-skills/using-vault-secrets/SKILL.md", "line": 1, "end_line": 126, "label": "placeholders; waiting for approval" },
-        { "path": "agent-skills/using-vault-secrets/vault-run", "line": 42, "end_line": 70, "label": "POST /redeem, no proxy" },
-        { "path": "agent-skills/using-vault-secrets/vault-fill", "line": 2, "end_line": 15, "label": "vault-fill: a template, filled" }
+        {
+          "path": "agent-skills/using-vault-secrets/SKILL.md",
+          "line": 1,
+          "end_line": 126,
+          "label": "placeholders; waiting for approval"
+        },
+        {
+          "path": "agent-skills/using-vault-secrets/vault-run",
+          "line": 42,
+          "end_line": 70,
+          "label": "POST /redeem, no proxy"
+        },
+        {
+          "path": "agent-skills/using-vault-secrets/vault-fill",
+          "line": 2,
+          "end_line": 15,
+          "label": "vault-fill: a template, filled"
+        }
       ]
     },
     {
@@ -246,8 +267,18 @@
         64
       ],
       "sources": [
-        { "path": "vault/src/garden_vault/app.py", "line": 1, "end_line": 4, "label": "internal /mcp and /redeem" },
-        { "path": "vault/src/garden_vault/app.py", "line": 543, "end_line": 550, "label": "routes" }
+        {
+          "path": "vault/src/garden_vault/app.py",
+          "line": 1,
+          "end_line": 4,
+          "label": "internal /mcp and /redeem"
+        },
+        {
+          "path": "vault/src/garden_vault/app.py",
+          "line": 546,
+          "end_line": 553,
+          "label": "routes"
+        }
       ]
     },
     {
@@ -272,8 +303,8 @@
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 23,
-          "end_line": 29,
+          "line": 31,
+          "end_line": 43,
           "label": "HTTPS_PROXY in the app-server"
         }
       ]

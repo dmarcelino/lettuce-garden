@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
+      "revision": "695c284c5833bf202b0ac24ab161fd191369c31a"
     }
   },
   "components": [
@@ -51,8 +51,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 80,
-          "end_line": 91,
+          "line": 73,
+          "end_line": 84,
           "label": "Access applications"
         }
       ]
@@ -73,8 +73,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 125,
-          "end_line": 131,
+          "line": 118,
+          "end_line": 124,
           "label": "PROFILE_ROUTES"
         }
       ]
@@ -95,7 +95,7 @@
       "sources": [
         {
           "path": "AGENTS.md",
-          "line": 39,
+          "line": 40,
           "label": "no second way into an agent"
         }
       ]
@@ -116,8 +116,8 @@
       "sources": [
         {
           "path": "CONTRIBUTING.md",
-          "line": 23,
-          "end_line": 25,
+          "line": 24,
+          "end_line": 26,
           "label": "turns through the scheduler"
         }
       ]
@@ -139,7 +139,7 @@
         {
           "path": "compose/watchlist.yml",
           "line": 21,
-          "end_line": 55,
+          "end_line": 54,
           "label": "service and hardening"
         },
         {
@@ -177,7 +177,7 @@
         },
         {
           "path": "lettucectl",
-          "line": 275,
+          "line": 283,
           "label": "executor_cron"
         }
       ]
@@ -204,7 +204,7 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 470,
+          "line": 787,
           "label": "mounted by garden-watchlist only"
         }
       ]

@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
+      "revision": "695c284c5833bf202b0ac24ab161fd191369c31a"
     }
   },
   "components": [
@@ -52,8 +52,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 79,
-          "end_line": 91,
+          "line": 72,
+          "end_line": 84,
           "label": "Access application body"
         }
       ]
@@ -74,8 +74,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 79,
-          "end_line": 91,
+          "line": 72,
+          "end_line": 84,
           "label": "same policy, own AUD"
         }
       ]
@@ -96,14 +96,14 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 121,
-          "end_line": 135,
+          "line": 114,
+          "end_line": 128,
           "label": "garden host routes"
         },
         {
           "path": "lib/cloudflare.sh",
-          "line": 161,
-          "end_line": 180,
+          "line": 154,
+          "end_line": 173,
           "label": "tunnel ingress"
         },
         {
@@ -135,8 +135,8 @@
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 39,
-          "end_line": 41,
+          "line": 47,
+          "end_line": 49,
           "label": "proxied by pipelock"
         }
       ]
@@ -163,7 +163,7 @@
         },
         {
           "path": "CONTRIBUTING.md",
-          "line": 22,
+          "line": 23,
           "label": "the only connection"
         }
       ]
@@ -191,8 +191,8 @@
         },
         {
           "path": "lettucectl",
-          "line": 377,
-          "end_line": 387,
+          "line": 385,
+          "end_line": 395,
           "label": "sync_executor"
         },
         {
@@ -224,8 +224,8 @@
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 36,
-          "end_line": 38,
+          "line": 44,
+          "end_line": 46,
           "label": "proxied by pipelock"
         }
       ]
@@ -252,8 +252,8 @@
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 20,
-          "end_line": 41,
+          "line": 1,
+          "end_line": 43,
           "label": "who follows the proxy"
         }
       ]
@@ -329,8 +329,8 @@
         },
         {
           "path": "lettucectl",
-          "line": 425,
-          "end_line": 432,
+          "line": 466,
+          "end_line": 473,
           "label": "image lettucectl builds"
         }
       ]
@@ -415,7 +415,7 @@
         {
           "path": "compose/watchlist.yml",
           "line": 1,
-          "end_line": 60
+          "end_line": 59
         }
       ]
     },
@@ -501,14 +501,14 @@
       "sources": [
         {
           "path": "docs/architecture.md",
-          "line": 51,
+          "line": 52,
           "label": "the stack's data",
-          "end_line": 64
+          "end_line": 69
         },
         {
           "path": "compose/code-server.yml",
-          "line": 124,
-          "end_line": 127,
+          "line": 127,
+          "end_line": 130,
           "label": "shell mounts"
         }
       ]

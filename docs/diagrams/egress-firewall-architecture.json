@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "5becc556cb74382948dd4a3fc19b941c90ea6890"
+      "revision": "695c284c5833bf202b0ac24ab161fd191369c31a"
     }
   },
   "components": [
@@ -94,8 +94,8 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 946,
-          "end_line": 960,
+          "line": 1011,
+          "end_line": 1025,
           "label": "check_pipelock"
         }
       ]
@@ -191,8 +191,8 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 757,
-          "end_line": 758,
+          "line": 785,
+          "end_line": 786,
           "label": "only garden-pipelock mounts it"
         }
       ]
@@ -213,14 +213,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1959,
-          "end_line": 1993,
+          "line": 1977,
+          "end_line": 2011,
           "label": "receipts: no network, read-only"
         },
         {
           "path": "lettucectl",
-          "line": 1799,
-          "end_line": 1799,
+          "line": 1814,
+          "end_line": 1814,
           "label": "backup mounts it read-only"
         }
       ]

@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
+      "revision": "695c284c5833bf202b0ac24ab161fd191369c31a"
     },
     "legend": {
       "entries": {
@@ -52,14 +52,14 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 80,
-          "end_line": 91,
+          "line": 73,
+          "end_line": 84,
           "label": "cf_app_body"
         },
         {
           "path": "lettucectl",
-          "line": 163,
-          "end_line": 179,
+          "line": 169,
+          "end_line": 185,
           "label": "the garden's Access app"
         }
       ]
@@ -72,14 +72,14 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 121,
-          "end_line": 135,
+          "line": 114,
+          "end_line": 128,
           "label": "page routes, landing page"
         },
         {
           "path": "lib/cloudflare.sh",
-          "line": 161,
-          "end_line": 181,
+          "line": 154,
+          "end_line": 174,
           "label": "404 for the rest"
         }
       ]

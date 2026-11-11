@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
+      "revision": "695c284c5833bf202b0ac24ab161fd191369c31a"
     }
   },
   "components": [
@@ -51,8 +51,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 79,
-          "end_line": 91,
+          "line": 72,
+          "end_line": 84,
           "label": "Access app: HttpOnly, Lax"
         },
         {
@@ -79,14 +79,14 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 121,
-          "end_line": 135,
+          "line": 114,
+          "end_line": 128,
           "label": "garden host routes"
         },
         {
           "path": "lib/cloudflare.sh",
-          "line": 161,
-          "end_line": 180,
+          "line": 154,
+          "end_line": 173,
           "label": "ingress rules"
         }
       ]
@@ -107,8 +107,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 125,
-          "end_line": 130,
+          "line": 118,
+          "end_line": 123,
           "label": "PROFILE_ROUTES"
         },
         {
@@ -202,8 +202,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 273,
-          "end_line": 287,
+          "line": 283,
+          "end_line": 295,
           "label": "executor_cron"
         }
       ]
@@ -258,8 +258,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 262,
-          "end_line": 264,
+          "line": 270,
+          "end_line": 272,
           "label": "install paths"
         },
         {
@@ -320,20 +320,20 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 289,
-          "end_line": 321,
+          "line": 297,
+          "end_line": 329,
           "label": "GARDEN_INSTALL"
         },
         {
           "path": "lettucectl",
-          "line": 347,
-          "end_line": 387,
+          "line": 355,
+          "end_line": 395,
           "label": "install and sync_executor"
         },
         {
           "path": "lib/common.sh",
-          "line": 342,
-          "end_line": 397,
+          "line": 651,
+          "end_line": 706,
           "label": "token and GARDEN_PROFILES"
         }
       ]

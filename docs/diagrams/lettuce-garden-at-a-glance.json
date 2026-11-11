@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "49558f4d327eb58f13369ede1e4ed90e468b70dd"
+      "revision": "695c284c5833bf202b0ac24ab161fd191369c31a"
     }
   },
   "components": [
@@ -160,9 +160,9 @@
       "sources": [
         {
           "path": "docs/architecture.md",
-          "line": 54,
+          "line": 57,
           "label": "per-stack state",
-          "end_line": 57
+          "end_line": 60
         }
       ]
     },
