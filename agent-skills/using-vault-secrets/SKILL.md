@@ -1,7 +1,108 @@
 ---
 name: using-vault-secrets
-description: Load this BEFORE asking the user's vault (the `vault` MCP server) for anything. It shows how to wait for the user's approval so you don't miss it, and how to use a password, card number, security code or document number in a script or shell command (filling a web form with Playwright, logging in with curl) without the values entering the conversation.
+description: Load this BEFORE asking the user's vault (the `vault` MCP server) for anything. It shows how to use the user's private data (addresses, card numbers, passwords, ID numbers...) in a document, an email, a form or any command without the values entering the conversation, and how to wait for the user's approval so you don't miss it.
 ---
+
+# Keep private values out of the conversation
+
+Everything in your conversation is sent to the AI provider. The vault can put a value straight
+into a file, a command or an MCP call instead, so you never read it. Before every
+`request_secret`, ask yourself:
+
+- **Do I only need to put the value somewhere?** (a letter, a form, an email, a login): use
+  placeholders, the default. This is almost always the case.
+- **Do I need to understand the value itself?** (decide something from it): first check the
+  public details in `list_secrets` (the name, the country, a card's brand...). Only if they are
+  not enough, ask with `delivery: "text"` and a `reason` the user reads before approving, for
+  the fewest fields that answer the question.
+
+Ask only for the fields the task needs: `fields: ["address1", "city", "postal_code"]`, not
+the whole identity.
+
+# Placeholders, step by step
+
+1. **Prepare everything first, with placeholders.** Write `{{VAULT_<FIELD>}}` where each value
+   goes: `{{VAULT_ADDRESS1}}`, `{{VAULT_POSTAL_CODE}}`, `{{VAULT_NUMBER}}`. A script reads
+   them from its environment instead (`process.env.VAULT_NUMBER`, `os.environ["VAULT_CODE"]`).
+   Check the template or script now: you can't look at the result later.
+2. **Request the secret** with a clear purpose. If the answer is `pending`, wait for the user
+   (below). Once approved, `get_result` answers with a `handle` and the exact `placeholders`.
+3. **Fill at the last step, within 5 minutes.** The handle works once. Run one of the recipes
+   below. In them, `V=/root/.letta/skills/using-vault-secrets`.
+
+## A document
+
+```bash
+python3 $V/vault-run <handle> -- python3 $V/vault-fill letter.tmpl.docx letter.docx
+```
+
+`vault-fill` fills `.txt`, `.md`, `.csv`, `.json`, `.html`, `.xml`, `.eml` and Office or
+OpenDocument files (`.docx`, `.xlsx`, `.pptx`, `.odt`, `.ods`, `.odp`), escaping each value for
+the format. For a PDF, fill the source (a `.docx` or `.html` template) and then convert the
+filled copy. It refuses to write anything when a placeholder has no value, or when Word split a
+placeholder across formatting: retype it in one go, with no formatting change inside it.
+
+## An email, or any other MCP tool
+
+Write the tool's arguments as a JSON template, with the placeholders inside its strings, then
+fill and send them in one command. The pipe must be inside `bash -c '...'`: `vault-run` replaces
+the values in its own output, so a pipe outside it would send `[VAULT_CITY]` instead of the city.
+`pipefail` stops a failed fill from being reported as sent.
+
+```bash
+python3 $V/vault-run <handle> -- bash -c 'set -o pipefail
+  V=/root/.letta/skills/using-vault-secrets
+  out=$(python3 $V/vault-fill send.tmpl.json - \
+    | sh /root/.letta/skills/mcp-servers/scripts/mcp.sh call <send-tool> --args-file -) \
+    && echo sent || printf "failed: %s\n" "$out"'
+```
+
+It prints `sent`, or the tool's error (with long values hidden). The handle is used up either
+way: to try again, request the secret again.
+
+## A form, a login, any command
+
+```bash
+python3 $V/vault-run <handle> -- node /work/$AGENT_ID/checkout/fill.js
+python3 $V/vault-run <handle> -- sh -c 'curl -fsS -u "me:$VAULT_PASSWORD" https://api.example.com/orders'
+```
+
+Put a value in an argument only inside `sh -c '...'`, in single quotes: otherwise your shell
+expands `$VAULT_PASSWORD` to nothing before `vault-run` sets it.
+
+## Several secrets in one step
+
+A letter needs the sender's and the recipient's address, whose fields have the same names.
+Request each with its own `alias` (`"alias": "home"` gives `{{VAULT_HOME_CITY}}`,
+`"alias": "client"` gives `{{VAULT_CLIENT_CITY}}`), then give `vault-run` both handles:
+
+```bash
+python3 $V/vault-run <handle1> <handle2> -- python3 $V/vault-fill letter.tmpl.docx letter.docx
+```
+
+## Rules
+
+- **Never open, print or convert-and-read the filled file**, and never read a command's output
+  that could echo the values. Check the template instead, and tell the user where the filled
+  file is so they can check it.
+- **Make commands print only a status.** `vault-run` hides values of 6 characters or more in
+  the output, as `[VAULT_NUMBER]`, but not shorter ones (a postal code, a house number, a
+  security code).
+- Run the command in the foreground. Output from anything it leaves running in the background
+  is lost when `vault-run` exits.
+- Use the values only for the purpose the user approved. Never save, log or send them anywhere
+  else.
+- "unknown or expired handle": the handle was already used or is older than 5 minutes. Ask for
+  that secret again; with several handles, none was used up, so the others still work.
+- "would come from two secrets" or "already set": two handles give the same names, or a
+  `VAULT_` variable is already set. Nothing was used up: request one secret again with an
+  `alias`, or unset the variable.
+
+## Values you asked to read (`delivery: "text"`)
+
+They are in your conversation, so follow the rules that come with them: never repeat them in
+your reply, memory or files (refer to the secret by its name, and when asked to check one, say
+what you checked and the result), and send them only where the approved purpose needs them.
 
 # Waiting for the user's approval
 
@@ -23,56 +124,3 @@ sh /root/.letta/skills/mcp-servers/scripts/mcp.sh call mcp__vault__get_result --
 
 If you can't run commands in the background, make the same calls in the foreground before you
 end your turn.
-
-# Using vault secrets without reading them
-
-When the `vault` MCP server's `request_secret` is called with `delivery: "env"`, you get a
-**handle** instead of the values. `vault-run` trades the handle for the values and gives them
-to one command as environment variables, then removes them from that command's output. The
-values never appear in your conversation, so the AI provider never sees them and they are not
-stored with the chat.
-
-Use it for opaque values that a program types in for you: passwords, card numbers, security
-codes, document numbers. For free text you need to read (an address, company details, notes),
-use the default `delivery: "text"`. Those values are in your conversation, so follow the rules
-that come with them: never repeat them in your reply, memory or files (refer to the secret by
-its name, and when asked to check one, say what you checked and the result), and send them
-only where the approved purpose needs them.
-
-## Steps
-
-1. **Write and test the script first**, with placeholder values. It must read the values from
-   its environment, for example `process.env.VAULT_NUMBER` in Node or
-   `os.environ["VAULT_PASSWORD"]` in Python.
-2. **Request the secret** with `delivery: "env"` and a clear purpose. If the answer is pending,
-   wait for the user's approval as above. Once the user approves, `get_result` answers with a
-   `handle`, the variable names in `env` (one
-   `VAULT_<FIELD>` per field, e.g. `VAULT_NUMBER`, `VAULT_SECURITY_CODE`, `VAULT_PASSWORD`) and a
-   `run` example.
-3. **Run it within 5 minutes.** The handle works once:
-
-```bash
-python3 /root/.letta/skills/using-vault-secrets/vault-run <handle> -- node /work/$AGENT_ID/checkout/fill.js
-```
-
-To use a value in an argument, put the whole command in single quotes behind `sh -c`. Without
-the quotes your shell expands `$VAULT_PASSWORD` to nothing before `vault-run` sets it:
-
-```bash
-python3 /root/.letta/skills/using-vault-secrets/vault-run <handle> -- sh -c 'curl -fsS -u "me:$VAULT_PASSWORD" https://api.example.com/orders'
-```
-
-## Rules
-
-- Run the command in the foreground. Output from anything it leaves running in the background
-  is lost when `vault-run` exits.
-- In the output, a value shows as `[VAULT_NUMBER]` and so on. That means it was used, not that
-  it is missing. Short values such as a 3-digit security code are not hidden, so don't print them.
-- Use the values only for the purpose the user approved. Never print, save, log or send them
-  anywhere else, and never write them into files, memory or messages.
-- "unknown or expired handle": the handle was already used or is older than 5 minutes. Ask for
-  the secret again.
-- One handle per `vault-run`. To use two secrets in one command, nest them:
-  `python3 $V <h1> -- python3 $V <h2> -- <command>`, with
-  `V=/root/.letta/skills/using-vault-secrets/vault-run`. Two secrets with the same field (two
-  cards) cannot be combined this way.

@@ -11,8 +11,10 @@ fetch_proxy:
   monitoring:
     # Per base domain, counting every plain-HTTP request and every CONNECT
     # tunnel. The default, 60, stops an apt-get or pip install partway (one
-    # request per package from one host).
-    max_requests_per_minute: 600
+    # request per package from one host). letta-code's model calls count too
+    # (its Node follows HTTPS_PROXY), and every agent and subagent of the stack
+    # shares one model provider's budget.
+    max_requests_per_minute: 1200
     # blocklist is left out on purpose: omitting it keeps the shipped list
     # (pastebin, transfer.sh, ...), while setting it replaces it.
 

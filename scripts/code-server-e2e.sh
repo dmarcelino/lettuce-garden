@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# End-to-end test of the code editor (docs/code-server.md). Opt-in and never run
+# End-to-end test of the code editor (code-server/README.md). Opt-in and never run
 # by tests/run.sh: it needs Docker, the stack's app-server image and, for the
 # first build, the internet (code-server's release, Debian packages).
 #
 #   scripts/code-server-e2e.sh [--browser] [--keep] [APP_SERVER_IMAGE]
 #
-# APP_SERVER_IMAGE defaults to lettuce-app-server:v0.22.0-letta_0.34.21.
+# APP_SERVER_IMAGE defaults to upstream's published app-server at the tag
+# config.env.example's LETTUCE_REF names (the tag a release is tested with).
 # --browser also drives the workbench in Chromium (Playwright's image, about 2 GB).
 # --keep leaves everything running for inspection and prints how to remove it.
 #
@@ -49,7 +50,8 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-APP=lettuce-app-server:v0.22.0-letta_0.34.21
+APP=$(sed -nE 's#^LETTUCE_REPO=https://github.com/([^/]+)/.*#\1#p' "$ROOT/config.env.example" | tr '[:upper:]' '[:lower:]')
+APP=ghcr.io/$APP/lettuce-app-server:$(sed -n 's/^LETTUCE_REF=//p' "$ROOT/config.env.example")
 BROWSER=0
 KEEP=0
 DEBIAN=debian:12-slim

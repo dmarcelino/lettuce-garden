@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Code editor: the editor shows, the shell runs",
+    "output": "docs/diagrams/code-server-flow.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "c9d5094283236533ca0c8bdd6b405640ea5dab5a"
+    }
+  },
+  "components": [
+    { "id": "browser", "type": "external", "icon": "person", "label": "Your browser", "sublabel": "<garden>/code-server/", "pos": [40, 150], "size": [140, 62],
+      "sources": [{ "path": "docs/code-server.md", "line": 17, "end_line": 30, "label": "using the editor" }] },
+    { "id": "access", "type": "security", "label": "Cloudflare Access", "sublabel": "the garden's sign-in", "pos": [250, 150], "size": [150, 62],
+      "sources": [{ "path": "docs/code-server.md", "line": 50, "label": "the gate is the only way in" }] },
+    { "id": "gate", "type": "security", "label": "Gate", "sublabel": "checks every request", "pos": [490, 150], "size": [150, 62],
+      "sources": [{ "path": "docs/code-server.md", "line": 50, "label": "sign-in on every request" }] },
+    { "id": "editor", "type": "frontend", "label": "Editor (VS Code)", "sublabel": "Restricted Mode: runs nothing", "pos": [740, 150], "size": [180, 62],
+      "sources": [{ "path": "docs/code-server.md", "line": 45, "end_line": 46, "label": "never trusts a workspace" }] },
+    { "id": "shell", "type": "backend", "label": "Shell", "sublabel": "terminals and git", "pos": [1010, 150], "size": [150, 62],
+      "sources": [{ "path": "docs/code-server.md", "line": 47, "end_line": 49, "label": "git and terminals run here" }] },
+    { "id": "internet", "type": "external", "label": "Internet", "sublabel": "direct, not through pipelock", "pos": [1000, 20], "size": [170, 62],
+      "sources": [{ "path": "docs/code-server.md", "line": 49, "label": "reaches the internet directly" }] },
+    { "id": "workspaces", "type": "database", "label": "Workspaces", "sublabel": "/work/<agent-id>", "pos": [740, 310], "size": [180, 62],
+      "sources": [{ "path": "docs/code-server.md", "line": 22, "label": "the agents' folders" }] },
+    { "id": "agents", "type": "backend", "label": "Your agents", "sublabel": "write the workspaces", "pos": [490, 310], "size": [150, 62],
+      "sources": [{ "path": "docs/code-server.md", "line": 20, "label": "agents write these folders" }] }
+  ],
+  "connections": [
+    { "id": "open", "from": "browser", "to": "access", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "signed-in", "from": "access", "to": "gate", "label": "signed in", "variant": "security" },
+    { "id": "to-editor", "from": "gate", "to": "editor", "label": "Unix socket", "variant": "emphasis" },
+    { "id": "to-shell", "from": "editor", "to": "shell", "label": "SSH" },
+    { "id": "shell-out", "from": "shell", "to": "internet", "label": "direct" },
+    { "id": "edit", "from": "editor", "to": "workspaces", "label": "edit files" },
+    { "id": "run", "from": "shell", "to": "workspaces", "label": "run code", "fromSide": "bottom", "toSide": "right" },
+    { "id": "agents-write", "from": "agents", "to": "workspaces", "label": "write", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "One rule", "items": ["Nothing an agent wrote ever runs in the editor", "Never choose \"Trust\" for a folder: the browser remembers it, and the editor can't undo it"] },
+    { "dot": "emerald", "title": "The shell is as strong as an agent", "items": ["The agents' tools and the workspaces, nothing else", "No sign-in token, no Google token, no credentials, no way to Lettuce or the vault"] },
+    { "dot": "slate", "title": "What it does not cover", "items": ["A bug in code-server or a kept built-in could still run script in the editor's tab, on the garden's address"] }
+  ]
+}

@@ -17,15 +17,21 @@ usage() {
 Usage: lettucectl <command> [args]
 
 Setup
-  init                          check dependencies, clone upstream Lettuce, look up Cloudflare ids
+  init                          check the Cloudflare setup step by step, download Lettuce, look up Cloudflare ids
+  apply [--dry-run|--yes]       make the stacks match stacks.conf (add, users), then up all and skills all;
+                                reports stacks missing from it and never removes one
   add <name> <email>[,<email>]  create a stack: hostnames, Access policy + apps, tunnel, DNS; start it
-  users <name> <email>[,...]    replace who may sign in (Access policy and ALLOWED_USERS together)
+  users <name> <email>[,...]    replace who may sign in (Access policy, ALLOWED_USERS and stacks.conf together)
   remove <name> [--purge]       stop a stack and delete its Cloudflare resources (--purge: its data too)
   profiles [<p>,<p>...]         show, or set for every stack, the compose profiles (optional features)
-  upgrade <tag>                 move upstream Lettuce to another tag and rebuild every stack
+  upgrade <tag>                 move Lettuce to another tag and update every stack
+  self-upgrade vX.Y.Z           (released lettucectl only) move lettuce-garden to another release
+  version                       lettuce-garden's release, or the clone it runs from
+  dns-preflight <domain> <ns> <ns> [names...]
+                                compare two nameservers before moving a domain (docs/cloudflare-setup.md, step 2.6)
 
 Operation (<target> is a stack name or "all")
-  up <target>                   check, then build and start
+  up <target>                   check, then build what is built here, and start
   down <target>                 stop
   restart <target>              down + up (app-server and bff share a namespace; never restart one alone)
   check <target>                refuse unsafe or inconsistent configuration
@@ -247,7 +253,9 @@ sync_skills() {
 }
 
 # The garden executor (garden/executor/run.mjs): the app-server's cron runs it
-# every minute, through upstream's agent-env (PID 1's environment). It sends
+# every minute, through upstream's agent-env (PID 1's environment) without
+# NODE_USE_ENV_PROXY: everything it calls is inside the stack, its token must
+# never reach pipelock, and Node >= 22.21 would otherwise warn on every run. It sends
 # `letta agents list` to the garden service when that asks for one and, with
 # the garden-gmail-triggers profile (--gmail-triggers), fetches that sidecar's queued
 # requests over /executor/v1/ and turns each into `letta cron add --once`. It
@@ -277,7 +285,7 @@ executor_cron() {
   fi
   printf '%s\n' "# Installed by lettucectl (garden-gmail-triggers or garden-code-server profile). Removed with the last of them." \
     "PATH=/usr/local/bin:/usr/bin:/bin" 'MAILTO=""'
-  printf '%s' "* * * * * root /usr/local/bin/agent-env node $EXECUTOR_DIR/bin/run.mjs$flag >> $EXECUTOR_DIR/executor.log 2>&1"
+  printf '%s' "* * * * * root /usr/local/bin/agent-env env -u NODE_USE_ENV_PROXY node $EXECUTOR_DIR/bin/run.mjs$flag >> $EXECUTOR_DIR/executor.log 2>&1"
 }
 
 # Run by sh in the app-server as
@@ -398,7 +406,40 @@ up_stack() {
     ensure_doc_tools_network "$1" || die "$1: could not create the network $(doc_tools_network "$1")"
   fi
   info "starting $1"
-  compose "$1" up -d --build --remove-orphans
+  build_local_images "$1"
+  # Never a build here: an image that should be published but is missing fails
+  # instead of building from a context the released image does not carry. An
+  # image already on the host is not pulled again.
+  compose "$1" up -d --no-build --pull missing --remove-orphans
+}
+
+# build_local_images NAME -> builds the stack's images that are built on this
+# host: upstream's when it publishes none for it (LETTA_IMAGE_NS empty), then
+# the garden's: from a clone all of them, in release mode only those RELEASE
+# does not name (the code editor's shell, FROM the app-server's image). Two
+# calls, in that order, since the shell names the app-server's image.
+build_local_images() {
+  local rendered published upstream=() garden=()
+  # up_stack runs check_stack just before: its render is this stack's config.
+  if [[ $CHECKED_NAME == "$1" ]]; then
+    rendered=$CHECKED_CONFIG
+  else
+    rendered=$(compose "$1" config --format json) || die "$1: docker compose config failed"
+  fi
+  if [[ -z $(cfg LETTA_IMAGE_NS) ]]; then
+    mapfile -t upstream < <(jq -r '.services | to_entries[] | select(.value.build != null)
+      | select(.key | startswith("garden") | not) | .key' <<<"$rendered")
+  fi
+  published=""
+  if release_mode; then published=$(published_images | awk '$4 != "-" { print $4 }' | paste -sd, -); fi
+  mapfile -t garden < <(jq -r --arg p ",$published," '.services | to_entries[] | select(.value.build != null)
+    | .key as $k | select($k | startswith("garden")) | select($p | contains("," + $k + ",") | not) | $k' <<<"$rendered")
+  if ((${#upstream[@]})); then
+    compose "$1" build "${upstream[@]}" || die "$1: could not build ${upstream[*]}"
+  fi
+  if ((${#garden[@]})); then
+    compose "$1" build "${garden[@]}" || die "$1: could not build ${garden[*]}"
+  fi
 }
 
 # ── document tools ───────────────────────────────────────────────────────────
@@ -430,8 +471,8 @@ ensure_doc_tools_image() {
 # then create it unlabelled)
 ensure_doc_tools_volume() {
   local lock rc=0
-  mkdir -p "$LETTUCE_HOME/stacks"
-  exec {lock}>"$LETTUCE_HOME/stacks/.doc-tools.lock"
+  mkdir -p "$LETTUCE_DATA/stacks"
+  exec {lock}>"$LETTUCE_DATA/stacks/.doc-tools.lock"
   if ! flock -n "$lock"; then
     info "waiting for another lettucectl to finish with the volume $(doc_tools_volume)"
     flock "$lock"
@@ -724,8 +765,8 @@ drop_mcp_servers() {
 
 # ── commands ─────────────────────────────────────────────────────────────────
 cmd_init() {
-  local c v f ref cur zone team idp
-  for c in docker git curl jq openssl dig; do
+  local c v f ref
+  for c in docker curl jq openssl dig tar; do
     command -v "$c" >/dev/null || die "$c is required but not installed"
   done
   v=$(docker compose version --short 2>/dev/null) || die "the Docker Compose plugin is required"
@@ -733,40 +774,63 @@ cmd_init() {
 
   f=$(config_file)
   if [[ ! -f $f ]]; then
-    (umask 077 && cp "$LETTUCE_HOME/config.env.example" "$f")
+    (umask 077 && mkdir -p "$LETTUCE_DATA" && cp "$LETTUCE_HOME/config.env.example" "$f")
     chmod 600 "$f"
-    die "created config.env; edit DOMAIN, PROFILES and TZ, then run: lettucectl init"
+    # A release starts on the Lettuce it was tested with.
+    if release_mode; then env_set "$f" LETTUCE_REF "$(release_get LETTUCE_REF)"; fi
+    die "created $f; edit DOMAIN, PUSH_CONTACT_EMAIL, PROFILES and TZ, then run: lettucectl init"
   fi
+  [[ -f $(stacks_conf) ]] || conf_create
   require_config
-
-  f=$(token_file)
-  [[ -f $f ]] || die "no Cloudflare API token at .secrets/cloudflare-api-token (docs/cloudflare-setup.md, step 5)"
-  [[ $(file_mode "$f") == 600 ]] || die "the API token file must be mode 600 (chmod 600 $f)"
+  init_cloudflare
 
   ref=$(cfg LETTUCE_REF)
-  if [[ ! -e $(upstream_dir) ]]; then
-    info "cloning $(cfg LETTUCE_REPO) at $ref"
-    git -c advice.detachedHead=false clone -q --branch "$ref" "$(cfg LETTUCE_REPO)" "$(upstream_dir)"
-  elif [[ -d $(upstream_dir)/.git ]]; then
-    cur=$(git -C "$(upstream_dir)" describe --tags --exact-match 2>/dev/null || echo "an untagged commit")
-    [[ $cur == "$ref" ]] || warn "upstream/ is at $cur but config.env says $ref; run: lettucectl upgrade $ref"
-  fi
-  [[ -f $(upstream_dir)/docker/compose.yml ]] || die "upstream/docker/compose.yml not found"
+  fetch_upstream "$ref"
+  sync_upstream_images
+  info "ready: zone $(cfg DOMAIN), Access team $(cfg CF_TEAM_DOMAIN).cloudflareaccess.com, Lettuce $ref"
+  info "next: list who gets a stack in $(stacks_conf), then run: lettucectl apply"
+}
 
-  zone=$(cf_zone "$(cfg DOMAIN)") || die "could not look up the zone (is the API token valid?)"
-  [[ -n $zone ]] || die "zone $(cfg DOMAIN) not found: is the domain added to Cloudflare, and does the token have Zone Read on it?"
-  team=$(cf_team "${zone#* }") || die "could not read the Zero Trust organization (token needs Access: Organizations, Identity Providers, and Groups Read)"
+# init_cloudflare -> walks docs/cloudflare-setup.md: checks each step the
+# token can see, in order, stops at the first one missing with its step number,
+# and caches the ids lettucectl needs in config.env
+init_cloudflare() {
+  local f zone acc team idp status missing=()
+  f=$(token_file)
+  [[ -f $f ]] || die "no Cloudflare API token at $f (docs/cloudflare-setup.md, step 5)"
+  [[ $(file_mode "$f") == 600 ]] || die "the API token file must be mode 600 (chmod 600 $f)"
+
+  zone=$(cf_api GET "/zones?name=$(cfg DOMAIN)") || die "could not look up the zone: is the API token valid? (docs/cloudflare-setup.md, step 5)"
+  [[ $(jq 'length' <<<"$zone") != 0 ]] ||
+    die "zone $(cfg DOMAIN) not found: add the domain to Cloudflare (docs/cloudflare-setup.md, step 2.3), and give the token Zone Read on it (step 5)"
+  status=$(jq -r '.[0].status' <<<"$zone")
+  acc=$(jq -r '.[0].account.id' <<<"$zone")
+  zone=$(jq -r '.[0].id' <<<"$zone")
+  if [[ $status != active ]]; then
+    warn "zone $(cfg DOMAIN) is $status, not active: switch the nameservers at the registrar and wait (docs/cloudflare-setup.md, steps 2.7 and 2.8)"
+    if [[ $(cf_api GET "/zones/$zone/dnssec" 2>/dev/null | jq -r '.status // empty') == active ]]; then
+      warn "DNSSEC is on for $(cfg DOMAIN); turn it off at the registrar first (docs/cloudflare-setup.md, step 2.2)"
+    fi
+  fi
+
+  team=$(cf_team "$acc") ||
+    die "could not read the Zero Trust organization: the token needs Access: Organizations, Identity Providers, and Groups Read (docs/cloudflare-setup.md, step 5)"
   [[ -n $team ]] || die "no Zero Trust organization yet (docs/cloudflare-setup.md, step 3)"
-  idp=$(cf_google_idp "${zone#* }") || die "could not list Access login methods"
+  idp=$(cf_google_idp "$acc") || die "could not list Access login methods (docs/cloudflare-setup.md, step 5)"
   [[ -n $idp ]] || die "no Google login method in Zero Trust (docs/cloudflare-setup.md, step 4)"
 
+  # The rest of the token's scopes, each by a read of what it covers. A write
+  # scope cannot be checked without writing; its read is the best sign.
+  cf_api GET "/accounts/$acc/cfd_tunnel?per_page=1" >/dev/null 2>&1 || missing+=("Account, Cloudflare Tunnel, Edit")
+  cf_api GET "/accounts/$acc/access/apps?per_page=1" >/dev/null 2>&1 || missing+=("Account, Access: Apps and Policies, Edit")
+  cf_api GET "/zones/$zone/dns_records?per_page=1" >/dev/null 2>&1 || missing+=("Zone, DNS, Edit")
+  ((${#missing[@]} == 0)) || die "the API token lacks: $(printf '%s; ' "${missing[@]}" | sed 's/; $//') (docs/cloudflare-setup.md, step 5)"
+
   f=$(config_file)
-  env_set "$f" CF_ZONE_ID "${zone%% *}"
-  env_set "$f" CF_ACCOUNT_ID "${zone#* }"
+  env_set "$f" CF_ZONE_ID "$zone"
+  env_set "$f" CF_ACCOUNT_ID "$acc"
   env_set "$f" CF_TEAM_DOMAIN "$team"
   env_set "$f" CF_GOOGLE_IDP_ID "$idp"
-  info "ready: zone $(cfg DOMAIN), Access team $team.cloudflareaccess.com, upstream $ref"
-  info "next: lettucectl add <name> <email>"
 }
 
 cmd_add() {
@@ -783,7 +847,15 @@ cmd_add() {
   elif [[ -f $f ]]; then
     host=$(env_get "$f" LETTUCE_HOSTNAME)
     info "resuming the unfinished setup of '$name' ($host)"
-    [[ -n $(env_get "$f" CF_ACCESS_POLICY_ID) ]] || env_set "$f" ALLOWED_USERS "$emails"
+    # The addresses given now win (stacks.conf's, from apply). With the policy
+    # made already, it changes with ALLOWED_USERS, as `users` does.
+    if [[ $(env_get "$f" ALLOWED_USERS) != "$emails" ]]; then
+      if [[ -n $(env_get "$f" CF_ACCESS_POLICY_ID) ]]; then
+        cf_policy_update "$acc" "$(env_get "$f" CF_ACCESS_POLICY_ID)" "lettuce-$name" "$emails" ||
+          die "could not update the Access policy of '$name'"
+      fi
+      env_set "$f" ALLOWED_USERS "$emails"
+    fi
   else
     # <name>-garden.<domain> is the garden host of the stack <name>.
     [[ $name != *-garden ]] || die "invalid stack name '$name': it may not end in -garden, which names each stack's garden host"
@@ -793,6 +865,8 @@ cmd_add() {
     write_new_stack_env "$name" "$host" "$garden" "$emails"
   fi
   emails=$(env_get "$f" ALLOWED_USERS)
+  # Recorded from the start, so `apply` resumes an add that stops part-way.
+  conf_set "$name" "$emails" || die "could not write $(stacks_conf)"
   local hint="Cloudflare setup of '$name' stopped part-way; what exists is recorded in stacks/$name/stack.env. Fix the cause, then re-run: lettucectl add $name $emails"
   garden=$(env_get "$f" GARDEN_HOSTNAME)
 
@@ -852,9 +926,19 @@ cmd_add() {
 
 cmd_users() {
   (($# == 2)) || die "usage: lettucectl users <name> <email>[,<email>]"
-  local name=$1 emails f pol
-  validate_name "$name"
+  local emails
+  validate_name "$1"
   emails=$(normalise_emails "$2")
+  users_update "$1" "$emails"
+  cmd_up "$1"
+  info "'$1' now admits: $emails"
+}
+
+# users_update NAME EMAILS -> who may sign in to NAME (normalised EMAILS): the
+# Access policy, ALLOWED_USERS and stacks.conf, in that order; the stack still
+# needs an `up` for ALLOWED_USERS (cmd_users does it, apply once for all)
+users_update() {
+  local name=$1 emails=$2 f pol
   require_initialised
   require_stack "$name"
   f=$(stack_env "$name")
@@ -862,8 +946,95 @@ cmd_users() {
   [[ -n $pol ]] || die "'$name' has no Access policy yet; finish it with: lettucectl add $name $emails"
   cf_policy_update "$(cfg CF_ACCOUNT_ID)" "$pol" "lettuce-$name" "$emails" || die "could not update the Access policy"
   env_set "$f" ALLOWED_USERS "$emails"
-  cmd_up "$name"
-  info "'$name' now admits: $emails"
+  conf_set "$name" "$emails" || die "the Access policy and stack.env now admit $emails, but $(stacks_conf) could not be written; fix it before the next apply"
+}
+
+# email_diff OLD NEW -> "<gained> <lost>" between two address lists, each
+# comma-separated, "-" when empty
+email_diff() {
+  local gained lost
+  gained=$(comm -13 <(tr , '\n' <<<"$1" | sort -u) <(tr , '\n' <<<"$2" | sort -u) | paste -sd, -)
+  lost=$(comm -23 <(tr , '\n' <<<"$1" | sort -u) <(tr , '\n' <<<"$2" | sort -u) | paste -sd, -)
+  printf '%s %s' "${gained:--}" "${lost:--}"
+}
+
+# apply_report ENTRIES -> what apply never changes: stacks missing from ENTRIES
+# (conf_entries' "<name> <emails>" lines) and stacks whose profile list is out
+# of step, each with the command to run
+apply_report() {
+  local entries=$1 n
+  for n in $(list_stacks); do
+    if ! grep -q "^$n " <<<"$entries"; then
+      warn "'$n' is not in stacks.conf; apply never removes a stack. To delete it: lettucectl remove $n"
+    elif [[ $(env_get "$(stack_env "$n")" COMPOSE_PROFILES) != "$(cfg PROFILES)" ]]; then
+      warn "'$n' has profiles $(env_get "$(stack_env "$n")" COMPOSE_PROFILES), not config.env's $(cfg PROFILES); run: lettucectl profiles $(cfg PROFILES)"
+    fi
+  done
+}
+
+cmd_apply() {
+  local mode=ask a name emails cur d plan=() adds=() changes=() failed=() up=() answer entries
+  for a in "$@"; do
+    case $a in
+      --dry-run) mode=dry ;;
+      --yes) mode=yes ;;
+      *) die "usage: lettucectl apply [--dry-run|--yes]" ;;
+    esac
+  done
+  require_config
+  entries=$(conf_entries)
+  if ! (require_initialised) 2>/dev/null; then
+    plan+=("init: check the Cloudflare setup and download Lettuce $(cfg LETTUCE_REF)")
+  fi
+  while read -r name emails; do
+    [[ -n $name ]] || continue
+    if [[ -z $(env_get "$(stack_env "$name")" CF_DNS_RECORD_ID) ]]; then
+      adds+=("$name $emails")
+      plan+=("add $name: $emails can sign in")
+    else
+      cur=$(env_get "$(stack_env "$name")" ALLOWED_USERS)
+      d=$(email_diff "$cur" "$emails")
+      [[ $d != "- -" ]] || continue
+      changes+=("$name $emails")
+      plan+=("users $name:$([[ ${d% *} == - ]] || echo " gains ${d% *}")$([[ ${d#* } == - ]] || echo " loses ${d#* }")")
+    fi
+  done <<<"$entries"
+  plan+=("up all, then skills all")
+
+  info "apply ($(stacks_conf)):"
+  for a in "${plan[@]}"; do info "  $a"; done
+  apply_report "$entries"
+  [[ $mode != dry ]] || return 0
+  if [[ $mode == ask ]]; then
+    stdin_is_terminal || die "not a terminal; run with --yes to apply, or --dry-run to only show the plan"
+    printf 'Apply? [y/N] ' >&2
+    read -r answer || true
+    [[ $answer == [yY] || $answer == [yY][eE][sS] ]] || die "aborted"
+  fi
+
+  (require_initialised) 2>/dev/null || cmd_init
+  # Each step in a subshell: the commands `die` on failure, and one stack that
+  # fails must not keep the others from being set up, started or reported.
+  for a in "${adds[@]}"; do
+    (cmd_add "${a% *}" "${a#* }") || failed+=("add ${a% *}")
+  done
+  for a in "${changes[@]}"; do
+    (users_update "${a% *}" "${a#* }") || failed+=("users ${a% *}")
+  done
+  # One up for every stack but those add just started (or failed to set up:
+  # they are in `failed` already), so none starts twice.
+  for name in $(list_stacks); do
+    [[ " ${adds[*]%% *} " == *" $name "* ]] || up+=("$name")
+  done
+  for name in "${up[@]}"; do
+    (up_targets "$name" "$name") || failed+=("up $name")
+  done
+  if [[ -n $(list_stacks) ]]; then
+    (cmd_skills all) || failed+=("skills all")
+  fi
+  apply_report "$entries"
+  ((${#failed[@]} == 0)) ||
+    die "apply did not finish: $(printf '%s, ' "${failed[@]}" | sed 's/, $//'); see the messages above, fix the cause, then run apply again"
 }
 
 cmd_remove() {
@@ -900,6 +1071,9 @@ cmd_remove() {
   printf 'Type the stack name to confirm: ' >&2
   read -r answer || true
   [[ $answer == "$name" ]] || die "aborted"
+  # Dropped first: if Cloudflare keeps something, `apply` reports the stack
+  # for another remove instead of setting it up again.
+  conf_unset "$name" || die "could not write $(stacks_conf)"
 
   compose "$name" down -v || warn "docker compose down failed; continuing"
   # The stack's network to the shared Gotenberg; Gotenberg stays for the others.
@@ -1104,31 +1278,48 @@ cmd_profiles() {
 
 cmd_upgrade() {
   (($# == 1)) || die "usage: lettucectl upgrade <tag>"
-  local ref=$1 up
-  require_config
-  up=$(upstream_dir)
-  [[ -d $up/.git ]] || die "upstream/ is not a git checkout"
-  git -C "$up" fetch -q --tags
-  git -C "$up" -c advice.detachedHead=false checkout -q "$ref"
+  local ref=$1
+  require_initialised
+  fetch_upstream "$ref"
   env_set "$(config_file)" LETTUCE_REF "$ref"
-  info "upstream now at $ref; rebuilding every stack"
+  warn_untested_ref
+  sync_upstream_images
+  info "Lettuce now at $ref; updating every stack"
   cmd_up all
+  prune_upstream "$ref"
+}
+
+# warn_untested_ref -> in release mode, says when LETTUCE_REF is not the tag this
+# release was tested with
+warn_untested_ref() {
+  local tested
+  release_mode || return 0
+  tested=$(release_get LETTUCE_REF)
+  [[ $(cfg LETTUCE_REF) == "$tested" ]] ||
+    warn "Lettuce $(cfg LETTUCE_REF) is not the version lettuce-garden $(release_get VERSION) was tested with ($tested); walk the upgrade checklist (CONTRIBUTING.md, Upgrading LETTUCE_REF)"
 }
 
 cmd_up() {
   (($# == 1)) || die "usage: lettucectl up <name|all>"
-  local n targets unsynced=() undropped=() docs=1
   require_initialised
-  targets=$(expand_targets "$1")
-  for n in $targets; do
+  # shellcheck disable=SC2046 # stack names are single words (validate_name)
+  up_targets "$1" $(expand_targets "$1")
+}
+
+# up_targets HINT NAME... -> `up` for these stacks; HINT is what to re-run
+# (`lettucectl up HINT`) when something is out of step
+up_targets() {
+  local hint=$1 n unsynced=() undropped=() docs=1
+  shift
+  for n in "$@"; do
     up_stack "$n"
     sync_executor "$n" || unsynced+=("$n")
     drop_mcp_servers "$n" || undropped+=("$n")
   done
   sync_doc_tools || docs=0
   ((${#unsynced[@]} == 0)) || executor_out_of_step "${unsynced[@]}"
-  ((${#undropped[@]} == 0)) || warn "could not remove servers whose profile is off from Settings -> MCP in: ${undropped[*]}; run: lettucectl up $1"
-  ((docs)) || die "the document tools (shared Gotenberg, networks) are out of step; fix the cause, then run: lettucectl up $1"
+  ((${#undropped[@]} == 0)) || warn "could not remove servers whose profile is off from Settings -> MCP in: ${undropped[*]}; run: lettucectl up $hint"
+  ((docs)) || die "the document tools (shared Gotenberg, networks) are out of step; fix the cause, then run: lettucectl up $hint"
   ((${#undropped[@]} == 0)) || die "servers whose profile is off are still in Settings -> MCP"
 }
 
@@ -1255,7 +1446,12 @@ exec bash'
 # The agents' installed tools are mounted only with --tools (read-only unless rw):
 # every agent writes them, and here they would run with the operator's credentials.
 
-toolbox_file() { printf '%s/lettucectl/toolbox' "${XDG_CONFIG_HOME:-$HOME/.config}"; }
+# host_home -> the operator's home on the host. In release mode lettucectl's own
+# HOME is a scratch directory in its container, and the wrapper mounts the
+# operator's home read-only at the same path and names it here.
+host_home() { printf '%s' "${LETTUCECTL_HOST_HOME:-$HOME}"; }
+
+toolbox_file() { printf '%s/lettucectl/toolbox' "${XDG_CONFIG_HOME:-$(host_home)/.config}"; }
 
 # tilde PATH HOME -> PATH with a leading ~ replaced by HOME
 tilde() {
@@ -1269,7 +1465,7 @@ tilde() {
 
 # toolbox_mount SRC DEST ro|rw
 toolbox_mount() {
-  [[ -e $1 ]] || die "toolbox: $1 does not exist"
+  [[ -e $1 ]] || die "toolbox: $1 does not exist$(release_mode && echo " (in release mode, toolbox mounts must be under $(host_home), which the wrapper mounts)")"
   [[ $1 == /* && $2 == /* ]] || die "toolbox: mount paths must be absolute: $1 $2"
   [[ $1$2 != *:* ]] || die "toolbox: mount paths cannot contain ':': $1 $2"
   run+=(-v "$1:$2:$3")
@@ -1291,19 +1487,24 @@ toolbox_secret() {
 
 # toolbox_builtins -> what every operator gets, each only when the host has it
 toolbox_builtins() {
-  local claude=${CLAUDE_CONFIG_DIR:-$HOME/.claude} f tok found=""
+  local home claude f tok found=""
+  home=$(host_home)
+  claude=${CLAUDE_CONFIG_DIR:-$home/.claude}
   if [[ -n ${SSH_AUTH_SOCK:-} && -e $SSH_AUTH_SOCK ]]; then
     run+=(-v "$SSH_AUTH_SOCK:/run/ssh-agent.sock" -e SSH_AUTH_SOCK=/run/ssh-agent.sock)
     have+=(ssh-agent)
   fi
-  if [[ -f $HOME/.ssh/known_hosts ]]; then
-    toolbox_mount "$HOME/.ssh/known_hosts" /root/.ssh/known_hosts ro
+  if [[ -f $home/.ssh/known_hosts ]]; then
+    toolbox_mount "$home/.ssh/known_hosts" /root/.ssh/known_hosts ro
   fi
-  if [[ -f $HOME/.gitconfig ]]; then
-    toolbox_mount "$HOME/.gitconfig" /root/.gitconfig ro
+  if [[ -f $home/.gitconfig ]]; then
+    toolbox_mount "$home/.gitconfig" /root/.gitconfig ro
     have+=(git)
   fi
-  if command -v gh >/dev/null && tok=$(gh auth token 2>/dev/null </dev/null) && [[ -n $tok ]]; then
+  # In release mode the wrapper runs gh and secret-tool on the host and passes
+  # what they print by name (LETTUCECTL_GH_TOKEN, LETTUCECTL_CLAUDE_TOKEN).
+  tok=${LETTUCECTL_GH_TOKEN:-}
+  if [[ -n $tok ]] || { command -v gh >/dev/null && tok=$(gh auth token 2>/dev/null </dev/null) && [[ -n $tok ]]; }; then
     # The host's credential helper may call gh by a path the image does not have.
     run+=(-e GIT_CONFIG_COUNT=2
       -e GIT_CONFIG_KEY_0=credential.https://github.com.helper -e GIT_CONFIG_VALUE_0=
@@ -1318,7 +1519,7 @@ toolbox_builtins() {
     fi
   done
   [[ -z $found ]] || have+=("claude config")
-  tok=${CLAUDE_CODE_OAUTH_TOKEN:-}
+  tok=${CLAUDE_CODE_OAUTH_TOKEN:-${LETTUCECTL_CLAUDE_TOKEN:-}}
   if [[ -z $tok ]] && command -v secret-tool >/dev/null; then
     tok=$(secret-tool lookup service claude-toolbox 2>/dev/null </dev/null) || tok=""
   fi
@@ -1351,7 +1552,7 @@ toolbox_personal() {
           unset 'a[-1]'
         fi
         ((${#a[@]} == 1 || ${#a[@]} == 2)) || die "$file: expected 'mount SRC [DEST] [rw]': $line"
-        src=$(tilde "${a[0]}" "$HOME")
+        src=$(tilde "${a[0]}" "$(host_home)")
         dest=$src
         [[ -z ${a[1]:-} ]] || dest=$(tilde "${a[1]}" /root)
         toolbox_mount "$src" "$dest" "$mode"
@@ -1360,6 +1561,15 @@ toolbox_personal() {
         name=${w[1]:-}
         ((${#w[@]} >= 3)) && [[ $name =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] ||
           die "$file: expected 'secret NAME COMMAND [ARG...]': $line"
+        if release_mode; then
+          # The command is the host's: the wrapper ran it there (lettucectl-wrapper.sh).
+          a=(LETTUCECTL_SECRET_"$name")
+          val=${!a:-}
+          [[ -n $val ]] || die "$file: secret $name: the wrapper passed no value; it runs 'secret' lines on the host"
+          toolbox_secret "$name" "$val"
+          n=$((n + 1))
+          continue
+        fi
         a=()
         for val in "${w[@]:2}"; do a+=("$(tilde "$val" "$HOME")"); done
         val=$("${a[@]}" </dev/null) || die "$file: secret $name: '${a[*]}' failed"
@@ -1448,15 +1658,23 @@ cmd_toolbox() {
 # read in a throwaway container of backup/Dockerfile. The helpers below read
 # cmd_backup's settings (dest, compress, tools, when, keep).
 
-BACKUP_IMAGE=lettuce-backup:local
+# Set by main (image_name backup): RELEASE's name in release mode, else the clone's build.
+BACKUP_IMAGE=
 # No network, and only the capabilities copying needs: read everything, write
 # into the operator's directory and hand the copies to the operator (--chown).
 # --init: as PID 1, sh would ignore the signal docker forwards on Ctrl-C.
 BACKUP_RUN=(run --rm --init --network none --read-only --tmpfs /tmp --security-opt no-new-privileges
   --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER)
-# build_backup_image -> (re)builds the image backup copies with; cached layers
-# make an unchanged rebuild cheap
-build_backup_image() { host_docker build -q -t "$BACKUP_IMAGE" "$LETTUCE_HOME/backup" >/dev/null; }
+# build_backup_image -> (re)builds the image backup copies with, from a clone
+# (cached layers make an unchanged rebuild cheap); in release mode pulls the
+# published one unless it is on the host
+build_backup_image() {
+  if release_mode; then
+    host_docker image inspect "$BACKUP_IMAGE" >/dev/null 2>&1 || host_docker pull -q "$BACKUP_IMAGE" >/dev/null
+  else
+    host_docker build -q -t "$BACKUP_IMAGE" "$LETTUCE_HOME/backup" >/dev/null
+  fi
+}
 
 # ensure_backup_image -> the backup image exists (it also fills the tools'
 # volume: ensure_doc_tools_volume)
@@ -1656,8 +1874,11 @@ cmd_backup() {
   [[ -d $dest ]] || die "$dest is not a directory"
   dest=$(realpath "$dest")
   [[ $dest != *[:,]* ]] || die "the destination cannot contain ':' or ',': $dest"
-  # This repo is public, and a backup holds stack.env and the agents' logins.
-  [[ $dest/ != "$LETTUCE_HOME"/* ]] || die "the destination cannot be inside $LETTUCE_HOME"
+  # A clone is public, and a backup holds stack.env and the agents' logins; in
+  # the data directory, a backup would back up the earlier ones.
+  ! inside "$dest" "$LETTUCE_HOME" || die "the destination cannot be inside $LETTUCE_HOME"
+  ! inside "$dest" "$LETTUCE_DATA" || die "the destination cannot be inside $LETTUCE_DATA"
+  require_mounted "$dest"
   command -v flock >/dev/null || die "flock is required but not installed (util-linux)"
   build_backup_image || die "could not build $BACKUP_IMAGE (backup/Dockerfile)"
   # One stack failing must not cost the others their backup, but Ctrl-C stops
@@ -1681,7 +1902,8 @@ cmd_backup() {
 }
 
 # ── receipts ─────────────────────────────────────────────────────────────────
-PIPELOCK_IMAGE=lettuce-pipelock:local
+# Set by main (image_name pipelock), like BACKUP_IMAGE.
+PIPELOCK_IMAGE=
 PIPELOCK_KEY_PUB=/data/keys/receipt-signing.json.pub
 PIPELOCK_RUN=()
 
@@ -1758,8 +1980,10 @@ cmd_receipts() {
     awk -v s="$session" '$2 == s { f = 1 } END { exit !f }' <<<"$sessions" || die "$name: no session $session"
   fi
   [[ -d $(dirname -- "$report") ]] || die "$(dirname -- "$report") is not a directory"
-  # This repo is public, and receipts name every site the agents reached.
-  [[ $(realpath -m -- "$report") != "$LETTUCE_HOME"/* ]] || die "the report cannot be inside $LETTUCE_HOME"
+  # A clone is public, and receipts name every site the agents reached.
+  ! inside "$report" "$LETTUCE_HOME" || die "the report cannot be inside $LETTUCE_HOME"
+  ! inside "$report" "$LETTUCE_DATA" || die "the report cannot be inside $LETTUCE_DATA"
+  require_mounted "$(dirname -- "$(realpath -m -- "$report")")"
   # Written beside it (mktemp makes it 600) and renamed: an existing file
   # takes the new mode, and survives a failure.
   tmp=$(mktemp "$(dirname -- "$report")/.receipts.XXXXXX") || die "could not write in $(dirname -- "$report")"
@@ -1796,14 +2020,79 @@ cmd_mcp() {
     die "could not register the MCP servers in: ${failed[*]}; see the messages above (is the stack up?), then run: lettucectl mcp <name>"
 }
 
+# ── releases ─────────────────────────────────────────────────────────────────
+# Run by the wrapper (release/lettucectl-wrapper.sh) for `self-upgrade`; not for
+# operators.
+
+# cmd__fetch_wrapper TAG -> downloads release TAG's wrapper and SHA256SUMS into
+# bin/.lettucectl.new and checks the sum. The sum comes from the same release,
+# so it catches a broken download, not a forged release: the attestation does
+# that (gh attestation verify).
+cmd__fetch_wrapper() {
+  (($# == 1)) && [[ $1 =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || die "usage: lettucectl self-upgrade vX.Y.Z"
+  release_mode || die "self-upgrade is for a released lettucectl; from a clone, git pull"
+  local url bin sums want got
+  url=https://github.com/$(release_get REPOSITORY)/releases/download/$1
+  bin=$LETTUCE_DATA/bin
+  sums=$(curl -fsSL --proto '=https' "$url/SHA256SUMS" </dev/null) || die "no release $1 at $url"
+  want=$(awk '$2 == "lettucectl" || $2 == "*lettucectl" { print $1 }' <<<"$sums")
+  [[ $want =~ ^[0-9a-f]{64}$ ]] || die "release $1's SHA256SUMS has no lettucectl"
+  curl -fsSL --proto '=https' -o "$bin/.lettucectl.new" "$url/lettucectl" </dev/null || die "could not download release $1's wrapper"
+  got=$(sha256sum "$bin/.lettucectl.new" | cut -d' ' -f1)
+  [[ $got == "$want" ]] || {
+    rm -f "$bin/.lettucectl.new"
+    die "release $1's wrapper does not match its SHA256SUMS"
+  }
+  chmod 755 "$bin/.lettucectl.new"
+}
+
+# cmd__after_upgrade -> run by the new wrapper once it is in place: moves Lettuce
+# forward to the tag this release was tested with (never back: an older
+# letta-code may not read what a newer one wrote), else updates every stack
+cmd__after_upgrade() {
+  local tested
+  [[ -f $(config_file) ]] || return 0
+  tested=$(release_get LETTUCE_REF)
+  info "lettuce-garden $(release_get VERSION)"
+  if [[ $tested != "$(cfg LETTUCE_REF)" ]] && version_ge "$tested" "$(cfg LETTUCE_REF)"; then
+    cmd_upgrade "$tested"
+  else
+    warn_untested_ref
+    cmd_up all
+  fi
+}
+
+cmd_version() {
+  if release_mode; then
+    printf 'lettuce-garden %s (Lettuce %s tested)\n' "$(release_get VERSION)" "$(release_get LETTUCE_REF)"
+  else
+    printf 'lettuce-garden from a clone: %s\n' "$LETTUCE_HOME"
+  fi
+  # Restores run in it by hand (docs/operations.md, Backups).
+  printf 'backup image: %s\n' "$BACKUP_IMAGE"
+}
+
 main() {
   local cmd=${1:-help}
   shift || true
   case $cmd in
-    init | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | toolbox | skills | mcp | backup | receipts)
+    help | -h | --help)
+      usage
+      return
+      ;;
+    # Before there is any data: docs/cloudflare-setup.md, step 2.6.
+    dns-preflight) exec "$LETTUCE_HOME/scripts/dns-preflight.sh" "$@" ;;
+  esac
+  resolve_data_dir
+  check_mounts
+  BACKUP_IMAGE=$(image_name backup)
+  PIPELOCK_IMAGE=$(image_name pipelock)
+  case $cmd in
+    init | apply | add | users | remove | profiles | upgrade | up | down | restart | check | status | list | logs | compose | shell | toolbox | skills | mcp | backup | receipts | version)
       "cmd_$cmd" "$@"
       ;;
-    help | -h | --help) usage ;;
+    _fetch-wrapper) cmd__fetch_wrapper "$@" ;;
+    _after-upgrade) cmd__after_upgrade "$@" ;;
     *)
       usage >&2
       exit 2

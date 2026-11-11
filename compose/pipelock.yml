@@ -6,7 +6,7 @@
 # tools at it.
 #
 # Advisory: the stack network keeps its direct route, so a process that ignores
-# HTTPS_PROXY (letta-code itself, on Node 22.19) or unsets it goes around it.
+# HTTPS_PROXY or unsets it goes around it.
 # No TLS interception: for HTTPS it sees the host name, not the content.
 #
 # Its data (the receipt signing key and the receipts) lives on a named volume
@@ -17,8 +17,8 @@ services:
   garden-pipelock:
     profiles: ["garden-pipelock"]
     build:
-      context: ../../pipelock
-    image: lettuce-pipelock:local
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/pipelock
+    image: ${GARDEN_IMAGE_PIPELOCK:-lettuce-pipelock:local}
     environment:
       TZ: ${TZ:-UTC}
     volumes:
@@ -28,7 +28,9 @@ services:
       - /tmp
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    mem_limit: 256m
+    # Every model call of the stack's agents passes it (letta-code follows
+    # HTTPS_PROXY), each an open tunnel for as long as the model works.
+    mem_limit: 512m
     pids_limit: 256
     restart: unless-stopped
 

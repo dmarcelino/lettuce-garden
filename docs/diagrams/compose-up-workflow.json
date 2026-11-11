@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "878eedd44b4bc61d399f9f66545d2ed1cd111f38"
     },
     "legend": {
       "entries": {
@@ -79,6 +79,7 @@
     "start",
     "prepare",
     "check",
+    "build",
     "compose-up",
     "executor",
     "mcp-drop",
@@ -96,14 +97,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1118,
-          "end_line": 1133,
+          "line": 1300,
+          "end_line": 1305,
           "label": "cmd_up"
         },
         {
           "path": "lettucectl",
-          "line": 1799,
-          "end_line": 1812,
+          "line": 2073,
+          "end_line": 2099,
           "label": "main dispatch"
         }
       ]
@@ -118,20 +119,20 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 389,
-          "end_line": 393,
+          "line": 396,
+          "end_line": 399,
           "label": "up_stack"
         },
         {
           "path": "lib/common.sh",
-          "line": 312,
-          "end_line": 342,
+          "line": 594,
+          "end_line": 620,
           "label": "VAPID keys, executor token"
         },
         {
           "path": "lib/common.sh",
-          "line": 359,
-          "end_line": 368,
+          "line": 641,
+          "end_line": 646,
           "label": "sync_garden_profiles"
         }
       ]
@@ -146,8 +147,8 @@
       "sources": [
         {
           "path": "lib/common.sh",
-          "line": 12,
-          "end_line": 48,
+          "line": 17,
+          "end_line": 38,
           "label": "env_get / env_set"
         }
       ]
@@ -162,13 +163,13 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 394,
+          "line": 400,
           "label": "called before anything starts"
         },
         {
           "path": "lib/common.sh",
-          "line": 370,
-          "end_line": 485,
+          "line": 655,
+          "end_line": 775,
           "label": "check_stack"
         }
       ]
@@ -184,14 +185,14 @@
       "sources": [
         {
           "path": "lib/common.sh",
-          "line": 170,
-          "end_line": 207,
+          "line": 436,
+          "end_line": 484,
           "label": "compose / compose_env"
         },
         {
           "path": "compose/doc-tools.yml",
           "line": 1,
-          "end_line": 4
+          "end_line": 3
         },
         {
           "path": "compose/pipelock-proxy.yml",
@@ -216,8 +217,8 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 376,
-          "end_line": 413,
+          "line": 655,
+          "end_line": 699,
           "label": "first refusals"
         }
       ]
@@ -232,15 +233,37 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 395,
-          "end_line": 399,
+          "line": 401,
+          "end_line": 405,
           "label": "only with the profile"
         },
         {
           "path": "lettucectl",
-          "line": 427,
-          "end_line": 490,
+          "line": 470,
+          "end_line": 529,
           "label": "fill volume, create network"
+        }
+      ]
+    },
+    {
+      "id": "build",
+      "lane": "wrapper",
+      "col": 3,
+      "type": "backend",
+      "label": "build_local_images",
+      "sublabel": "compose build, only what is built here",
+      "sources": [
+        {
+          "path": "lettucectl",
+          "line": 414,
+          "end_line": 439,
+          "label": "build_local_images"
+        },
+        {
+          "path": "compose/code-server.yml",
+          "line": 111,
+          "end_line": 121,
+          "label": "the shell, FROM the app-server by name"
         }
       ]
     },
@@ -250,13 +273,13 @@
       "col": 3,
       "type": "cloud",
       "label": "compose up -d",
-      "sublabel": "--build --remove-orphans",
+      "sublabel": "--no-build --pull missing",
       "sources": [
         {
           "path": "lettucectl",
-          "line": 400,
-          "end_line": 401,
-          "label": "compose up"
+          "line": 407,
+          "end_line": 411,
+          "label": "up --no-build --pull missing"
         },
         {
           "path": "compose/multi.yml",
@@ -269,7 +292,8 @@
           "line": 18,
           "end_line": 29
         }
-      ]
+      ],
+      "tag": "pulls published images"
     },
     {
       "id": "executor",
@@ -281,20 +305,20 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 369,
-          "end_line": 381,
+          "line": 377,
+          "end_line": 387,
           "label": "sync_executor"
         },
         {
           "path": "lettucectl",
-          "line": 338,
-          "end_line": 361,
+          "line": 347,
+          "end_line": 367,
           "label": "tar over compose exec"
         },
         {
           "path": "lettucectl",
-          "line": 268,
-          "end_line": 270,
+          "line": 274,
+          "end_line": 276,
           "label": "executor_wanted"
         }
       ]
@@ -309,14 +333,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 695,
-          "end_line": 723,
+          "line": 736,
+          "end_line": 750,
           "label": "drop_mcp_group"
         },
         {
           "path": "lettucectl",
-          "line": 637,
-          "end_line": 651,
+          "line": 676,
+          "end_line": 690,
           "label": "mcp-servers.mjs, BFF restart"
         }
       ]
@@ -331,14 +355,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 504,
-          "end_line": 576,
+          "line": 554,
+          "end_line": 615,
           "label": "sync_doc_tools"
         },
         {
           "path": "lib/common.sh",
-          "line": 209,
-          "end_line": 220,
+          "line": 486,
+          "end_line": 497,
           "label": "compose_shared"
         },
         {
@@ -358,14 +382,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1128,
-          "end_line": 1132,
+          "line": 1309,
+          "end_line": 1322,
           "label": "collected failures"
         },
         {
           "path": "lettucectl",
-          "line": 383,
-          "end_line": 387,
+          "line": 391,
+          "end_line": 393,
           "label": "executor_out_of_step"
         }
       ]
@@ -431,10 +455,16 @@
       "variant": "dashed"
     },
     {
-      "id": "check-up",
+      "id": "check-build",
       "from": "check",
-      "to": "compose-up",
+      "to": "build",
       "label": "passes",
+      "variant": "emphasis"
+    },
+    {
+      "id": "build-up",
+      "from": "build",
+      "to": "compose-up",
       "variant": "emphasis"
     },
     {
@@ -472,6 +502,15 @@
         "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, pipelock, code-server, garden",
         "doc-tools.yml only with garden-doc-tools, pipelock-proxy.yml last and only with garden-pipelock",
         "-p lettuce-<name>, --project-directory upstream/docker, --env-file stack.env"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "What is built here",
+      "items": [
+        "upstream's images, when Lettuce publishes none for this host (LETTA_IMAGE_NS empty)",
+        "from a clone every garden image; in release mode only the code editor's shell, named by RELEASE otherwise",
+        "then up never builds: a published image that is missing fails"
       ]
     },
     {

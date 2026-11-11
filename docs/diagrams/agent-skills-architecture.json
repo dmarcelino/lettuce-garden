@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "f8563bfc55ffeeada10efbe046a47c964413bb38"
     }
   },
   "components": [
@@ -89,12 +89,13 @@
       "id": "vaultskill",
       "type": "backend",
       "label": "using-vault-secrets",
-      "sublabel": "SKILL.md + vault-run",
+      "sublabel": "SKILL.md, vault-run, vault-fill",
       "pos": [380, 420],
       "size": [190, 64],
       "sources": [
-        { "path": "agent-skills/using-vault-secrets/SKILL.md", "line": 1, "end_line": 18, "label": "waiting for approval" },
-        { "path": "agent-skills/using-vault-secrets/vault-run", "line": 41, "end_line": 63, "label": "POST /redeem, no proxy" }
+        { "path": "agent-skills/using-vault-secrets/SKILL.md", "line": 1, "end_line": 126, "label": "placeholders; waiting for approval" },
+        { "path": "agent-skills/using-vault-secrets/vault-run", "line": 42, "end_line": 70, "label": "POST /redeem, no proxy" },
+        { "path": "agent-skills/using-vault-secrets/vault-fill", "line": 2, "end_line": 15, "label": "vault-fill: a template, filled" }
       ]
     },
     {
@@ -128,7 +129,7 @@
       "size": [190, 64],
       "sources": [
         { "path": "vault/src/garden_vault/app.py", "line": 1, "end_line": 4, "label": "internal /mcp and /redeem" },
-        { "path": "vault/src/garden_vault/app.py", "line": 457, "end_line": 464, "label": "routes" }
+        { "path": "vault/src/garden_vault/app.py", "line": 543, "end_line": 550, "label": "routes" }
       ]
     },
     {

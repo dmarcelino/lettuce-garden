@@ -13,14 +13,15 @@ import os
 import sqlite3
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from secrets import token_hex
 from typing import Any
 
 from . import crypto
-from .config import AUTO_LOCK_SECONDS, MAX_FIELD_VALUE, MIN_PASSPHRASE_LENGTH
-from .kinds import KINDS
+from .config import AUTO_LOCK_SECONDS, ERASE_DELAY_SECONDS, MAX_FIELD_VALUE, MIN_PASSPHRASE_LENGTH
+from .kinds import KINDS, MAX_CUSTOM_FIELDS, MAX_CUSTOM_NAME, custom_key
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS vault_meta (k TEXT PRIMARY KEY, v BLOB NOT NULL);
@@ -52,6 +53,9 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 ASK, AUTO = "ask", "auto"
 KEY_AAD = b"vault-data-key"
+# The shape of the secrets' fields. Secrets of another format are deleted on
+# unlock: 2 is Bitwarden's item types (kinds.py).
+FORMAT = b"2"
 
 
 class VaultError(Exception):
@@ -70,6 +74,9 @@ class Field:
     value: str
     sensitive: bool = False
     multiline: bool = False
+    # Hidden on screen too (kinds.FieldSpec.masked, or a Hidden custom field).
+    # True when absent: a field saved before the flag existed stays hidden.
+    masked: bool = True
 
 
 @dataclass(frozen=True)
@@ -93,6 +100,15 @@ class Secret:
     @property
     def private_fields(self) -> tuple[Field, ...]:
         return tuple(f for f in self.fields if f.sensitive)
+
+    @property
+    def masked_fields(self) -> tuple[Field, ...]:
+        return tuple(f for f in self.fields if f.masked)
+
+    @property
+    def custom_fields(self) -> tuple[Field, ...]:
+        kind = KINDS.get(self.kind)
+        return tuple(f for f in self.fields if kind is None or kind.spec(f.key) is None)
 
     @property
     def kind_label(self) -> str:
@@ -124,20 +140,42 @@ def check_passphrase(passphrase: str) -> str:
     return passphrase
 
 
-def build_fields(kind: str, values: dict[str, str]) -> tuple[Field, ...]:
-    """The kind's fields in order; empty optional fields are dropped."""
+def build_fields(
+    kind: str, values: dict[str, str], custom: list[tuple[str, str, bool]] | None = None
+) -> tuple[Field, ...]:
+    """The kind's fields in order, then the custom fields (name, value, hidden),
+    all private and masked only when hidden; empty fields are dropped, and at
+    least one must be left."""
     if kind not in KINDS:
         raise VaultError("unknown type of secret")
     out: list[Field] = []
-    for spec in KINDS[kind].fields:
-        value = values.get(spec.key, "").strip()
-        if not value:
-            if spec.required:
-                raise VaultError(f"{spec.label} is required")
-            continue
+
+    def add(key: str, label: str, value: str, sensitive: bool, multiline: bool, masked: bool) -> None:
         if len(value) > MAX_FIELD_VALUE:
-            raise VaultError(f"{spec.label} is longer than {MAX_FIELD_VALUE} characters")
-        out.append(Field(spec.key, spec.label, value, spec.sensitive, spec.multiline))
+            raise VaultError(f"{label} is longer than {MAX_FIELD_VALUE} characters")
+        out.append(Field(key, label, value, sensitive, multiline, masked))
+
+    for spec in KINDS[kind].fields:
+        if value := values.get(spec.key, "").strip():
+            add(spec.key, spec.label, value, spec.sensitive, spec.multiline, spec.masked)
+    builtin = len(out)
+    taken = {spec.key for spec in KINDS[kind].fields}
+    for name, value, hidden in custom or []:
+        name, value = name.strip(), value.strip()
+        if not name and not value:
+            continue
+        key = custom_key(name)
+        if not key or len(name) > MAX_CUSTOM_NAME:
+            raise VaultError(f"a custom field needs a name of 1 to {MAX_CUSTOM_NAME} letters or digits")
+        if key in taken:
+            raise VaultError(f"two fields would be called {key}: rename the custom field {name}")
+        taken.add(key)
+        if value:
+            add(key, name, value, True, "\n" in value, hidden)
+    if len(out) - builtin > MAX_CUSTOM_FIELDS:
+        raise VaultError(f"at most {MAX_CUSTOM_FIELDS} custom fields")
+    if not out:
+        raise VaultError("fill in at least one field")
     return tuple(out)
 
 
@@ -181,6 +219,22 @@ class Vault:
         with self._lock:
             return self._db.execute(sql, args).rowcount
 
+    @contextmanager
+    def _transaction(self) -> Iterator[None]:
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def _set_meta(self, pairs: tuple[tuple[str, bytes], ...]) -> None:
+        with self._transaction():
+            for k, v in pairs:
+                self._db.execute("INSERT OR REPLACE INTO vault_meta (k, v) VALUES (?, ?)", (k, v))
+
     def _meta(self, k: str) -> bytes | None:
         rows = self._q("SELECT v FROM vault_meta WHERE k = ?", (k,))
         return bytes(rows[0]["v"]) if rows else None
@@ -215,25 +269,14 @@ class Vault:
                 raise VaultError("the vault already exists")
             key = crypto.new_key()
             self._store_wrapped(key, passphrase)
+            self._set_meta((("format", FORMAT),))
             self._state = _Unlocked(key, self._clock())
 
     def _store_wrapped(self, key: bytes, passphrase: str) -> None:
         salt = crypto.new_salt()
         kek = crypto.derive_key(passphrase, salt, self._kdf)
         wrapped = crypto.seal(kek, key, KEY_AAD)
-        with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
-                for k, v in (
-                    ("salt", salt),
-                    ("kdf", json.dumps(self._kdf.to_dict()).encode()),
-                    ("wrapped_key", wrapped),
-                ):
-                    self._db.execute("INSERT OR REPLACE INTO vault_meta (k, v) VALUES (?, ?)", (k, v))
-                self._db.execute("COMMIT")
-            except BaseException:
-                self._db.execute("ROLLBACK")
-                raise
+        self._set_meta((("salt", salt), ("kdf", json.dumps(self._kdf.to_dict()).encode()), ("wrapped_key", wrapped)))
 
     def _unwrap(self, passphrase: str) -> bytes:
         salt, kdf, wrapped = self._meta("salt"), self._meta("kdf"), self._meta("wrapped_key")
@@ -245,10 +288,31 @@ class Vault:
         except crypto.CryptoError as e:
             raise VaultError("wrong passphrase") from e
 
-    def unlock(self, passphrase: str) -> None:
+    def unlock(self, passphrase: str) -> bool:
+        """True when this cancelled a scheduled erase: knowing the passphrase
+        is the proof the erase's delay waits for."""
+        wrapped = self._meta("wrapped_key")
         key = self._unwrap(passphrase)
         with self._lock:
+            # The KDF runs outside the lock; a scheduled erase may have run meanwhile.
+            if self._meta("wrapped_key") != wrapped:
+                raise VaultError("the vault was erased")
+            # Cancel first: unlocked with the erase still scheduled, it would run
+            # after the next lock without a new notice.
+            cancelled = self.cancel_erase()
             self._state = _Unlocked(key, self._clock())
+            self._upgrade_format()
+            return cancelled
+
+    def _upgrade_format(self) -> None:
+        """Secrets saved in an older shape are deleted, not converted."""
+        if self._meta("format") == FORMAT:
+            return
+        with self._transaction():
+            deleted = self._db.execute("DELETE FROM secrets").rowcount
+            self._db.execute("INSERT OR REPLACE INTO vault_meta (k, v) VALUES ('format', ?)", (FORMAT,))
+        if deleted:
+            self.audit("vault", f"deleted {deleted} secrets of an older format")
 
     def lock(self) -> None:
         with self._lock:
@@ -264,16 +328,45 @@ class Vault:
     def reset(self) -> None:
         """Forgotten passphrase: everything encrypted is gone for good."""
         with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
+            with self._transaction():
                 for table in ("secrets", "audit", "vault_meta"):
                     self._db.execute(f"DELETE FROM {table}")
-                self._db.execute("COMMIT")
-            except BaseException:
-                self._db.execute("ROLLBACK")
-                raise
             self._db.execute("VACUUM")
             self._state = None
+
+    # ── erase without the passphrase, after a delay ──────────────────────────
+    # Plaintext in vault_meta, so it survives a restart; reset() clears it.
+    def pending_erase(self) -> tuple[int, str] | None:
+        """(when, who asked), or None."""
+        at, by = self._meta("erase_at"), self._meta("erase_by")
+        return None if at is None else (int(at), (by or b"").decode())
+
+    def schedule_erase(self, actor: str) -> tuple[int, bool]:
+        """(when, whether this call scheduled it). An erase already scheduled
+        keeps its time, so asking again never brings it closer."""
+        with self._lock:
+            if not self.is_setup():
+                raise VaultError("there is no vault to erase")
+            if self.is_unlocked():
+                raise VaultError("the vault is unlocked: erase it from Settings")
+            pending = self.pending_erase()
+            if pending is not None:
+                return pending[0], False
+            at = self.now() + ERASE_DELAY_SECONDS
+            self._set_meta((("erase_at", str(at).encode()), ("erase_by", actor.encode())))
+            return at, True
+
+    def cancel_erase(self) -> bool:
+        return self._x("DELETE FROM vault_meta WHERE k IN ('erase_at', 'erase_by')") > 0
+
+    def erase_if_due(self, not_before: int = 0) -> str | None:
+        """Runs a due erase, never before `not_before`; returns who asked for it."""
+        with self._lock:
+            pending = self.pending_erase()
+            if pending is None or max(pending[0], not_before) > self.now() or self.is_unlocked():
+                return None
+            self.reset()
+            return pending[1]
 
     # ── secrets ──────────────────────────────────────────────────────────────
     def _decode(self, row: sqlite3.Row, key: bytes) -> Secret:
@@ -348,7 +441,8 @@ class Vault:
     # ── audit ────────────────────────────────────────────────────────────────
     def audit(self, actor: str, action: str, secret_id: str | None = None, detail: str = "") -> None:
         """Action and actor are plaintext; the detail is encrypted, so it is
-        dropped when the vault is locked (only lock events happen then)."""
+        dropped when the vault is locked. Entries written then (locking, a
+        scheduled erase and its cancelling, the erase itself) carry none."""
         entry_id = token_hex(8)
         blob = None
         if detail and self.is_unlocked():

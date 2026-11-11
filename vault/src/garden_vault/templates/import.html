@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Import from Bitwarden{% endblock %}
+{% block content %}
+<p class="crumb"><a href="{{ base }}/secrets">Secrets</a></p>
+<h1>Import from Bitwarden</h1>
+{% if done %}
+<section class="panel">
+  {% if counts %}
+  <p>Imported:</p>
+  <ul>{% for label, n in counts.items() %}<li>{{ label }}: {{ n }}</li>{% endfor %}</ul>
+  <p class="hint">Every imported secret asks before an agent uses it; change that on the secret's page.</p>
+  {% else %}
+  <p>Nothing was imported.</p>
+  {% endif %}
+  {% if skipped %}
+  <p>Left out:</p>
+  <ul>{% for line in skipped %}<li>{{ line }}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+<p><a class="button" href="{{ base }}/secrets">See your secrets</a></p>
+{% else %}
+<form method="post" action="{{ base }}/secrets/import" enctype="multipart/form-data" class="stack">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p>In Bitwarden, open <strong>Export vault</strong> and choose the <strong>.json</strong> format, not the encrypted one. Upload that file here (up to {{ max_mb }} MB), then delete it from your device.</p>
+  <p class="hint">Logins, cards, identities, secure notes and SSH keys come in with their custom fields. Folders, passkeys, attachments and password history are left out. Each item becomes a new secret, so importing twice makes copies.</p>
+  <label class="field">Bitwarden export
+    <input type="file" name="file" accept=".json,application/json" required>
+  </label>
+  <div class="form-actions">
+    <button class="button">Import</button>
+    <a class="button ghost" href="{{ base }}/secrets">Cancel</a>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
