@@ -1,0 +1,58 @@
+# Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
+# The Outlook sidecar (outlook/, docs/outlook.md): an agent-facing Outlook
+# mailbox (mail, calendar, tasks, and read-only shared mailboxes) under a
+# per-stack policy the person sets on the Outlook page. Opt-in behind the
+# `garden-outlook` profile; without it this file adds nothing.
+#
+# Agents reach it at http://garden-outlook:8000/mcp over the stack network, and
+# the tunnel forwards https://<name>-garden.<domain>/outlook/ to it
+# (cf_tunnel_configure). That reachability is not the control: what agents may do
+# is set on the page (behind the garden's own Cloudflare Access application, which
+# agents cannot forge) and enforced by the sidecar. Lettuce's JWT, which
+# cloudflared hands the BFF in plain HTTP inside the namespace agents share, is
+# for another audience, so the page refuses it (`lettucectl check` refuses a stack
+# where it would not).
+#
+# The connected Outlook session (the bearer token and refresh material) lives,
+# encrypted, on a named volume that no other service mounts; `lettucectl check`
+# refuses a stack where one does, or where this service loses read_only or
+# cap_drop ALL, gains privileges, capabilities, devices, another service's
+# namespaces or mounts, or a bind mount. The encryption key is OUTLOOK_SECRET,
+# generated once per stack and kept only in this environment, never on the volume.
+# Relative paths resolve against --project-directory (upstream/docker).
+services:
+  garden-outlook:
+    profiles: ["garden-outlook"]
+    build:
+      context: ../../outlook
+      # The shared package (Access JWT and CSRF checks) both garden images install.
+      additional_contexts:
+        garden-common: ../../garden-common
+    image: lettuce-outlook:local
+    environment:
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      # The garden's own Access application and host, never Lettuce's.
+      CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}
+      CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
+      ALLOWED_USERS: ${ALLOWED_USERS:-}
+      PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
+      OUTLOOK_SECRET: ${OUTLOOK_SECRET:-}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - outlook-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # scrypt needs ~32 MiB per key derivation (at startup, not per call).
+    mem_limit: 256m
+    pids_limit: 128
+    restart: unless-stopped
+
+volumes:
+  # Deleted by `lettucectl remove` (compose down -v): removing a stack deletes its
+  # Outlook session. Not under stacks/<name>/, and deliberately NOT copied by
+  # `lettucectl backup` (reconnecting with the bookmarklet is cheap, and a backup
+  # should not carry a live mail credential).
+  outlook-data:

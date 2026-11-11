@@ -390,6 +390,7 @@ executor_out_of_step() {
 up_stack() {
   ensure_push_keys "$1"
   ensure_executor_token "$1"
+  ensure_outlook_secret "$1"
   sync_garden_profiles "$1"
   check_stack "$1"
   # The app-server mounts the tools' volume and joins the network; both must exist.
@@ -585,12 +586,12 @@ sync_doc_tools() {
 # out again, since a server that cannot start or answer makes every
 # `letta mcp tools` call fail, the other servers' included.
 MCP_SETTINGS=/root/.letta/mcp-home/.letta/settings.json
-MCP_GROUPS=(doc-tools vault)
-declare -A MCP_PROFILE=([doc-tools]=garden-doc-tools [vault]=garden-vault)
-declare -A MCP_MARKER=([doc-tools]=DOC_TOOLS_MCP_REGISTERED [vault]=VAULT_MCP_REGISTERED)
-declare -A MCP_LABEL=([doc-tools]="the document tools" [vault]="the vault")
+MCP_GROUPS=(doc-tools vault outlook)
+declare -A MCP_PROFILE=([doc-tools]=garden-doc-tools [vault]=garden-vault [outlook]=garden-outlook)
+declare -A MCP_MARKER=([doc-tools]=DOC_TOOLS_MCP_REGISTERED [vault]=VAULT_MCP_REGISTERED [outlook]=OUTLOOK_MCP_REGISTERED)
+declare -A MCP_LABEL=([doc-tools]="the document tools" [vault]="the vault" [outlook]="Outlook")
 # What a same-named server of the person's differs in.
-declare -A MCP_KIND=([doc-tools]=command [vault]=URL)
+declare -A MCP_KIND=([doc-tools]=command [vault]=URL [outlook]=URL)
 # Set by register_mcp_group and drop_mcp_group when they changed the list.
 MCP_CHANGED=0
 
@@ -614,6 +615,7 @@ mcp_reminder() {
       case $g in
         doc-tools) info "Documents: office and pdf are in $url Settings -> MCP (docs/doc-tools.md)" ;;
         vault) info "Vault: vault is in $url Settings -> MCP (docs/vault.md)" ;;
+        outlook) info "Outlook: outlook is in $url Settings -> MCP (docs/outlook.md)" ;;
       esac
       continue
     fi
@@ -626,6 +628,10 @@ mcp_reminder() {
       vault)
         info "Vault: in $url Settings -> MCP, add an HTTP server:"
         info "  vault -> http://garden-vault:8000/mcp (docs/vault.md)"
+        ;;
+      outlook)
+        info "Outlook: in $url Settings -> MCP, add an HTTP server:"
+        info "  outlook -> http://garden-outlook:8000/mcp (docs/outlook.md)"
         ;;
     esac
   done
@@ -1022,6 +1028,7 @@ cmd_profiles() {
     # anything, so one broken stack cannot leave the others half-switched.
     for n in "${stacks[@]}"; do
       ensure_push_keys "$n"
+      ensure_outlook_secret "$n"
       check_stack "$n" --profiles "$new"
     done
     for n in "${stacks[@]}"; do

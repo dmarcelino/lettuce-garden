@@ -264,6 +264,7 @@ case $args in
         garden-gmail-triggers) echo garden-gmail-triggers ;;
         garden-pipelock) echo garden-pipelock ;;
         garden-code-server) printf '%s\n' garden-code-server garden-code-server-editor garden-code-server-exec ;;
+        garden-outlook) echo garden-outlook ;;
         garden-doc-tools) ;;
       esac
     done

@@ -126,6 +126,7 @@ PROFILE_ROUTES=(
   'garden-vault ^/vault(/|$) http://garden-vault:8000'
   'garden-gmail-triggers ^/gmail-triggers(/|$) http://garden-gmail-triggers:8000'
   'garden-code-server ^/code-server(/|$) http://garden-code-server:8000'
+  'garden-outlook ^/outlook(/|$) http://garden-outlook:8000'
 )
 # The landing page and its assets (any file under /assets/), served by the garden
 # service (compose/garden.yml) whenever a garden page profile is on. Its /executor/v1/

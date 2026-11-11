@@ -200,6 +200,7 @@ compose_env() {
     -f "$LETTUCE_HOME/compose/gmail-triggers.yml" \
     -f "$LETTUCE_HOME/compose/pipelock.yml" \
     -f "$LETTUCE_HOME/compose/code-server.yml" \
+    -f "$LETTUCE_HOME/compose/outlook.yml" \
     -f "$LETTUCE_HOME/compose/garden.yml" \
     "${extra[@]}" \
     --env-file "$env_file" \
@@ -341,6 +342,17 @@ ensure_executor_token() {
     env_set "$f" GARDEN_EXECUTOR_TOKEN "$(openssl rand -hex 32)"
 }
 
+# ensure_outlook_secret NAME -> gives the stack, once, the key that encrypts the
+# Outlook sidecar's stored session at rest. Kept only in stack.env (the sidecar's
+# environment), never on the data volume. Nothing rotates it; replacing it makes
+# the stored session unreadable, so the person reconnects with the bookmarklet.
+ensure_outlook_secret() {
+  local f
+  f=$(stack_env "$1")
+  [[ -n $(env_get "$f" OUTLOOK_SECRET) ]] ||
+    env_set "$f" OUTLOOK_SECRET "$(openssl rand -hex 32)"
+}
+
 # env_without_profile FILE PROFILE -> the path of a private temp copy of the env
 # FILE whose COMPOSE_PROFILES lacks PROFILE; the caller removes it
 env_without_profile() {
@@ -427,15 +439,17 @@ check_stack() {
   k=$(jq -r '([.services | to_entries[]
       | select([(.value.volumes // [])[] | select(.source == "google-creds" or .source == "vault-data"
         or .source == "pipelock-data" or .source == "code-server-data" or .source == "code-exec-keys"
-        or .source == "code-server-sock")] | length > 0)
-      | .key] + ["garden-gmail-triggers", "garden-vault", "garden-pipelock", "garden-code-server", "garden-code-server-editor", "garden-code-server-exec"]) as $held
+        or .source == "code-server-sock" or .source == "outlook-data")] | length > 0)
+      | .key] + ["garden-gmail-triggers", "garden-vault", "garden-pipelock", "garden-code-server", "garden-code-server-editor", "garden-code-server-exec", "garden-outlook"]) as $held
     | [.services | to_entries[] | .key as $k | (.value.volumes_from // [])[]
       | sub("^service:"; "") | sub(":(ro|rw)$"; "") | select(. as $t | $held | index($t)) | "\($k) from \(.)"]
     | join(", ")' <<<"$rendered")
-  [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor ($k)"
+  [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, the code editor or the Outlook session ($k)"
   # Both volumes outlive their profile, so these hold whatever the profiles.
   k=$(volume_users "$rendered" vault-data garden-vault)
   [[ -z $k ]] || die "$name: $k mount(s) the vault's volume; only the vault service may"
+  k=$(volume_users "$rendered" outlook-data garden-outlook)
+  [[ -z $k ]] || die "$name: $k mount(s) the Outlook session volume (the bearer token); only garden-outlook may"
   k=$(volume_users "$rendered" pipelock-data garden-pipelock)
   [[ -z $k ]] || die "$name: $k mount(s) pipelock's volume (its signing key and receipts); only garden-pipelock may"
   k=$(volume_users "$rendered" code-server-data garden-code-server-editor)
@@ -451,6 +465,11 @@ check_stack() {
   [[ -z $k ]] || die "$name: $k"
   if has_profile "$profiles" garden-vault; then
     check_sidecar "$name" "$rendered" garden-vault garden-vault compose/vault.yml
+  fi
+  if has_profile "$profiles" garden-outlook; then
+    check_sidecar "$name" "$rendered" garden-outlook garden-outlook compose/outlook.yml
+    k=$(env_get "$f" OUTLOOK_SECRET)
+    ((${#k} >= 32)) || die "$name: OUTLOOK_SECRET must be at least 32 characters (delete the line and run: lettucectl up $name)"
   fi
   if has_profile "$profiles" garden-pipelock; then
     check_pipelock "$name" "$rendered"
@@ -606,7 +625,7 @@ check_pipelock() {
       die "$name: the app-server's $k must be http://garden-pipelock:8888 with the garden-pipelock profile (compose/pipelock-proxy.yml)"
   done
   for k in NO_PROXY no_proxy; do
-    for v in garden-vault garden-gmail-triggers garden; do
+    for v in garden-vault garden-gmail-triggers garden garden-outlook; do
       jq -e --arg k "$k" --arg v "$v" '.services["app-server"].environment[$k] // "" | split(",") | index($v)' <<<"$rendered" >/dev/null ||
         die "$name: the app-server's $k must list $v; pipelock must not see its traffic (compose/pipelock-proxy.yml)"
     done

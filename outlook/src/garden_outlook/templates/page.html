@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Outlook{% endblock %}
+{% block content %}
+{% set policy = status_info.policy %}
+
+<section class="card">
+  <h1>Outlook</h1>
+  {% if status_info.connected %}
+    <div class="banner good"><p>Connected as <strong>{{ status_info.account }}</strong>.
+      {% if not status_info.can_refresh %}
+        <br>This session has no refresh token, so it will stop working when the access token expires
+        (about an hour). Reconnect then.
+      {% endif %}
+    </p></div>
+    <form method="post" action="{{ base }}/disconnect">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="button ghost">Disconnect</button>
+    </form>
+  {% else %}
+    <div class="banner"><p>Not connected. Use the bookmarklet below while signed in to Outlook on the web.</p></div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Connect with the bookmarklet</h2>
+  <ol>
+    <li>Drag this link to your bookmarks bar: <a class="button" href="{{ bookmarklet_href }}">Connect Outlook</a></li>
+    <li>Open <code>https://outlook.office.com/mail/</code> and wait for your mail to load.</li>
+    <li>Click the <strong>Connect Outlook</strong> bookmark. A new tab opens here and connects the session.</li>
+  </ol>
+  <details>
+    <summary>What the bookmarklet does (read before you add it)</summary>
+    <p>It reads the sign-in your browser already holds for Outlook and sends it to this page over your
+       stack's private address. It does not type your password and sends nothing anywhere else.</p>
+    <pre class="code">{{ bookmarklet_source }}</pre>
+  </details>
+  <p id="connect-status" class="muted" role="status"></p>
+</section>
+
+<section class="card">
+  <h2>What agents may do</h2>
+  <form method="post" action="{{ base }}/policy">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% for service in services %}
+    <div class="field">
+      <label for="level_{{ service }}">{{ service|capitalize }}</label>
+      <select id="level_{{ service }}" name="level_{{ service }}">
+        <option value="">off</option>
+        {% for level in levels[service] %}
+        <option value="{{ level }}" {% if policy.levels[service] == level %}selected{% endif %}>{{ level }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+
+    <div class="field">
+      <label for="allowed_recipients">Allowed recipients</label>
+      <p class="muted">One address or <code>@domain</code> per line. Agents may only send to, or invite, these
+        (your own address is always allowed). Leave empty for no restriction.</p>
+      <textarea id="allowed_recipients" name="allowed_recipients" rows="4">{{ policy.allowedRecipients|join("\n") }}</textarea>
+    </div>
+
+    <div class="field">
+      <label for="shared_mailboxes">Shared mailboxes (read-only)</label>
+      <p class="muted">One address per line. Agents may read these mailboxes, never write to them.</p>
+      <textarea id="shared_mailboxes" name="shared_mailboxes" rows="3">{{ policy.sharedMailboxes|join("\n") }}</textarea>
+    </div>
+
+    <button class="button">Save</button>
+  </form>
+</section>
+{% endblock %}

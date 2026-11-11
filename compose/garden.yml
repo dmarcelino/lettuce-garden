@@ -17,7 +17,7 @@
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
   garden:
-    profiles: ["garden-vault", "garden-gmail-triggers", "garden-code-server"]
+    profiles: ["garden-vault", "garden-gmail-triggers", "garden-code-server", "garden-outlook"]
     build:
       context: ../../garden
       additional_contexts:

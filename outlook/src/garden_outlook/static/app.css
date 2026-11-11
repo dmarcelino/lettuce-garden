@@ -1,0 +1,68 @@
+/* The Outlook page only; the shared look is garden.css. */
+
+.card {
+  max-width: 640px;
+  margin: 0 auto 20px;
+  padding: 16px 18px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d7dbe3);
+  border-radius: var(--radius, 10px);
+}
+.card h1,
+.card h2 {
+  margin-top: 0;
+}
+.field {
+  margin: 14px 0;
+}
+.field label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.field select,
+.field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font: inherit;
+  border: 1px solid var(--border, #d7dbe3);
+  border-radius: var(--radius, 8px);
+  background: var(--surface, #fff);
+  color: var(--text, #1b1f27);
+}
+.field textarea {
+  resize: vertical;
+}
+.muted {
+  color: var(--muted, #6b7280);
+  font-size: 14px;
+  margin: 4px 0;
+}
+pre.code {
+  overflow-x: auto;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: var(--code-bg, #f3f4f6);
+  border-radius: var(--radius, 8px);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin: 8px 0;
+}
+.banner {
+  padding: 10px 12px;
+  border-radius: var(--radius, 8px);
+  background: var(--code-bg, #f3f4f6);
+  margin-bottom: 12px;
+}
+.banner.good {
+  background: #e6f4ea;
+}
+.banner.bad {
+  background: #fdecea;
+}

@@ -52,10 +52,11 @@ Lettuce Garden's extras are Compose profiles whose names start with `garden-`. P
 | `garden-vault` | An encrypted vault for addresses, cards, documents and logins. Agents ask for a secret over MCP, and the person approves each request on the vault's page or by push notification. | `garden-vault`, at `/vault/` on the garden host | [vault/](vault/README.md), [docs/vault.md](docs/vault.md) |
 | `garden-gmail-triggers` | Rules such as "when an email arrives in label X, ask agent Y to do Z". The sidecar polls Gmail read-only, and the garden executor in the app-server starts each turn through letta-code's scheduler. Needs `google`. | `garden-gmail-triggers`, at `/gmail-triggers/` on the garden host | [gmail-triggers/](gmail-triggers/README.md), [docs/gmail-triggers.md](docs/gmail-triggers.md) |
 | `garden-code-server` | VS Code in the browser on the agents' workspaces. Its terminals are SSH sessions into a shell that has the agents' tools and is no stronger than an agent. | the gate `garden-code-server` at `/code-server/` on the garden host, the editor and the shell behind it | [code-server/](code-server/README.md), [docs/code-server.md](docs/code-server.md) |
+| `garden-outlook` | One Outlook mailbox (mail, calendar, tasks, and read-only shared mailboxes) for agents, under a per-stack policy the person sets. The person connects a signed-in Outlook web session with a bookmarklet; no app registration or admin consent. | `garden-outlook`, at `/outlook/` on the garden host | [outlook/](outlook/README.md), [docs/outlook.md](docs/outlook.md) |
 | `garden-pipelock` | An egress proxy for the agents' tools, which checks where they connect, scans pages fetched through it and signs a receipt for every decision. Advisory for now: the stack keeps its direct route out. | `garden-pipelock`, inside the stack only | [pipelock/](pipelock/README.md), [docs/egress-firewall.md](docs/egress-firewall.md) |
 | `garden-doc-tools` | Office and PDF tools as MCP servers: create, edit and convert Word, PowerPoint, Excel and PDF files in the agents' workspaces. | in the app-server, from a read-only volume, plus the host's one Gotenberg | [doc-tools/](doc-tools/README.md), [docs/doc-tools.md](docs/doc-tools.md) |
 
-With any of `garden-vault`, `garden-gmail-triggers` or `garden-code-server` on, the `garden` service serves the landing page at the root of the garden host, `https://<name>-garden.<your-domain>/`, linking to the pages that are on ([garden/](garden/README.md)). Upstream's own profiles (`cloudflared`, which is required, `search`, `google` and others) are described in Lettuce's `docs/CONFIGURATION.md`.
+With any of `garden-vault`, `garden-gmail-triggers`, `garden-code-server` or `garden-outlook` on, the `garden` service serves the landing page at the root of the garden host, `https://<name>-garden.<your-domain>/`, linking to the pages that are on ([garden/](garden/README.md)). Upstream's own profiles (`cloudflared`, which is required, `search`, `google` and others) are described in Lettuce's `docs/CONFIGURATION.md`.
 
 Shared parts have their own READMEs: [compose/](compose/README.md) (the overlays and their merge order), [garden-common/](garden-common/README.md) (sign-in and request checks the garden services share), [agent-skills/](agent-skills/README.md) (skills installed into every agent), [backup/](backup/README.md) (the backup image) and [lib/](lib/README.md) (the CLI's internals).
 
@@ -79,7 +80,7 @@ Shared parts have their own READMEs: [compose/](compose/README.md) (the overlays
    ```
 3. Each person opens their URL, signs in with Google, and connects a model provider in Lettuce under **Settings -> Providers & models**. One API key per person keeps spending separate.
 
-Day-to-day commands, optional features, upgrades, backups and troubleshooting are in **[docs/operations.md](docs/operations.md)**. To give agents Gmail, Calendar, Tasks and Contacts, see **[docs/google-setup.md](docs/google-setup.md)**. To give each person an encrypted vault for their address, cards, documents and logins, which agents may use only when that person agrees, see **[docs/vault.md](docs/vault.md)**. To send the agents' web traffic through a proxy that checks where it goes and signs a receipt for each request (advisory for now), see **[docs/egress-firewall.md](docs/egress-firewall.md)**. To let agents create, edit and convert Word, PowerPoint, Excel and PDF files, see **[docs/doc-tools.md](docs/doc-tools.md)**. To let each person open their agents' workspaces in VS Code in the browser, with a terminal that has the agents' tools, see **[docs/code-server.md](docs/code-server.md)**.
+Day-to-day commands, optional features, upgrades, backups and troubleshooting are in **[docs/operations.md](docs/operations.md)**. To give agents Gmail, Calendar, Tasks and Contacts, see **[docs/google-setup.md](docs/google-setup.md)**. To give each person an encrypted vault for their address, cards, documents and logins, which agents may use only when that person agrees, see **[docs/vault.md](docs/vault.md)**. To send the agents' web traffic through a proxy that checks where it goes and signs a receipt for each request (advisory for now), see **[docs/egress-firewall.md](docs/egress-firewall.md)**. To let agents create, edit and convert Word, PowerPoint, Excel and PDF files, see **[docs/doc-tools.md](docs/doc-tools.md)**. To let each person open their agents' workspaces in VS Code in the browser, with a terminal that has the agents' tools, see **[docs/code-server.md](docs/code-server.md)**. To connect one Outlook mailbox for agents (mail, calendar and tasks) under a policy the person sets, with no app registration, see **[docs/outlook.md](docs/outlook.md)**.
 
 ## What lives where
 | Path | Tracked | What |
@@ -91,7 +92,8 @@ Day-to-day commands, optional features, upgrades, backups and troubleshooting ar
 | `compose/gmail-triggers.yml`, [`gmail-triggers/`](gmail-triggers/README.md) | yes | optional Gmail triggers (`garden-gmail-triggers` profile) and their source |
 | `compose/pipelock.yml`, `compose/pipelock-proxy.yml`, [`pipelock/`](pipelock/README.md) | yes | the optional egress proxy (`garden-pipelock` profile), its proxy settings and its image |
 | `compose/code-server.yml`, [`code-server/`](code-server/README.md) | yes | the optional code editor (`garden-code-server` profile): its gate, the editor's image and the shell's image |
-| `compose/garden.yml`, [`garden/`](garden/README.md) | yes | the garden's landing page (on with `garden-vault`, `garden-gmail-triggers` or `garden-code-server`) and the garden executor, which runs Gmail triggers' requests and sends the landing page the agent list |
+| `compose/outlook.yml`, [`outlook/`](outlook/README.md) | yes | the optional Outlook sidecar (`garden-outlook` profile) and its source |
+| `compose/garden.yml`, [`garden/`](garden/README.md) | yes | the garden's landing page (on with `garden-vault`, `garden-gmail-triggers`, `garden-code-server` or `garden-outlook`) and the garden executor, which runs Gmail triggers' requests and sends the landing page the agent list |
 | `compose/doc-tools.yml`, `compose/shared/gotenberg.yml`, [`doc-tools/`](doc-tools/README.md) | yes | the optional Office and PDF tools (`garden-doc-tools` profile): the app-server's mount and network, the host's shared Gotenberg, and the tools' image and PDF server |
 | [`garden-common/`](garden-common/README.md) | yes | code the garden services share (sign-in checks, the executor API's checks, page styles, icons) |
 | [`agent-skills/`](agent-skills/README.md) | yes | skills `lettucectl skills` installs for every agent of every stack |
@@ -99,7 +101,7 @@ Day-to-day commands, optional features, upgrades, backups and troubleshooting ar
 | `docs/` | yes | guides, design records and [diagrams](docs/diagrams/) (archify: `.json` source, interactive `.html`, `.svg`) |
 | `config.env.example` | yes | template for `config.env` |
 | `scripts/dns-preflight.sh` | yes | compares two nameservers before and after moving a domain |
-| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) the sidecars' tests (`tests/run-sidecar.sh vault`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
+| `tests/` | yes | offline tests (`tests/run.sh`; docker, curl and dig are stubbed) the sidecars' tests (`tests/run-sidecar.sh vault`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh outlook`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
 | `config.env` | **no** | your settings plus cached Cloudflare ids (mode 600) |
 | `.secrets/cloudflare-api-token` | **no** | Cloudflare API token (mode 600) |
 | `upstream/` | **no** | Lettuce, cloned at `LETTUCE_REF` |
@@ -114,9 +116,10 @@ The compose files of each stack are applied in this order ([compose/README.md](c
 5. `compose/gmail-triggers.yml` (adds nothing unless the `garden-gmail-triggers` profile is on)
 6. `compose/pipelock.yml` (adds nothing unless the `garden-pipelock` profile is on)
 7. `compose/code-server.yml` (adds nothing unless the `garden-code-server` profile is on)
-8. `compose/garden.yml` (adds nothing unless a garden page profile is on: `garden-vault`, `garden-gmail-triggers` or `garden-code-server`)
-9. `compose/doc-tools.yml` (merged only when the `garden-doc-tools` profile is on)
-10. `compose/pipelock-proxy.yml` (merged only when the `garden-pipelock` profile is on)
+8. `compose/outlook.yml` (adds nothing unless the `garden-outlook` profile is on)
+9. `compose/garden.yml` (adds nothing unless a garden page profile is on: `garden-vault`, `garden-gmail-triggers`, `garden-code-server` or `garden-outlook`)
+10. `compose/doc-tools.yml` (merged only when the `garden-doc-tools` profile is on)
+11. `compose/pipelock-proxy.yml` (merged only when the `garden-pipelock` profile is on)
 
 Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<name>/stack.env`. With `garden-doc-tools`, the host also runs the Compose project `lettuce_shared` (one Gotenberg for every stack).
 

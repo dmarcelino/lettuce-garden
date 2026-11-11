@@ -758,7 +758,7 @@ test_check_refuses_the_vault_profile_without_the_vault() {
 # proxy settings from compose/pipelock-proxy.yml
 pipelock_config() {
   local svc=${1:-'{"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"volumes":[{"type":"volume","source":"pipelock-data","target":"/data"}]}'}
-  local np=localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden,searxng,ddg-mcp,google-mcp,host.docker.internal
+  local np=localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden,garden-outlook,searxng,ddg-mcp,google-mcp,host.docker.internal
   config_edit '.services["garden-pipelock"] = '"$svc"'
     | .services["app-server"].environment += {"HTTPS_PROXY":"http://garden-pipelock:8888","HTTP_PROXY":"http://garden-pipelock:8888",
       "https_proxy":"http://garden-pipelock:8888","http_proxy":"http://garden-pipelock:8888","NO_PROXY":"'"$np"'","no_proxy":"'"$np"'",
@@ -997,7 +997,7 @@ test_check_refuses_another_service_on_a_symlink_to_the_rules() {
 }
 
 test_check_refuses_volumes_from_gmail_triggers() {
-  triggers_refused ".services.bff.volumes_from = [\"garden-gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor (bff from garden-gmail-triggers)"
+  triggers_refused ".services.bff.volumes_from = [\"garden-gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, the code editor or the Outlook session (bff from garden-gmail-triggers)"
 }
 
 test_check_refuses_a_volume_bound_to_the_rules() {
@@ -1058,7 +1058,7 @@ test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
     | .services.searxng = {"volumes_from":["service:bff"]}'
   ctl check alfred
   bad_rc
-  out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts or the code editor (searxng from bff)"
+  out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, the code editor or the Outlook session (searxng from bff)"
 }
 
 test_check_refuses_volumes_from_the_vault() {
@@ -1295,7 +1295,7 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "--project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/outlook.yml -f $H/compose/garden.yml --env-file $H/stacks/alfred/stack.env"
   log_lacks "pipelock-proxy.yml"
 }
 
@@ -1304,7 +1304,7 @@ test_compose_adds_the_proxy_overlay_only_with_pipelock() {
   with_pipelock
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/pipelock-proxy.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/outlook.yml -f $H/compose/garden.yml -f $H/compose/pipelock-proxy.yml --env-file $H/stacks/alfred/stack.env"
 }
 
 test_up_all_starts_every_stack() {
@@ -3014,7 +3014,7 @@ test_compose_adds_the_doc_tools_overlay_and_its_values_only_with_the_profile() {
   with_docs
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/outlook.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env"
   log_has "docker-env DOC_TOOLS_NETWORK=lettuce-doc-tools-alfred DOC_TOOLS_VOLUME=lettuce-doc-tools-$(docs_tag)"
   grep -q '^DOC_TOOLS' "$H/stacks/alfred/stack.env" && fail "doc-tools values written to stack.env"
   true
@@ -3030,7 +3030,7 @@ test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
   log_has "docker network create --internal --label lettuce.doc-tools.stack=alfred lettuce-doc-tools-alfred"
   log_has "docker network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
   # The network exists before the app-server joins it, and Gotenberg joins after.
-  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
+  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $H/upstream/docker -f $H/upstream/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/outlook.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $H/stacks/alfred/stack.env up -d"))) ||
     fail "the network was created after compose up"
   (($(line_of "-p lettuce_shared") > $(line_of "up -d --build --remove-orphans"))) || fail "gotenberg started before the stack"
 }
@@ -4031,7 +4031,7 @@ test_compose_always_merges_the_code_editor_overlay() {
   added
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/outlook.yml -f $H/compose/garden.yml --env-file"
 }
 
 test_profiles_routes_the_code_editor_and_lists_it_on_the_landing_page() {
