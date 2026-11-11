@@ -19,8 +19,8 @@ Menu labels were checked against Google's docs in October 2026. Labels marked *(
 
 ## 1. Turn the profile on
 ```bash
-./lettucectl profiles                                  # shows the current list
-./lettucectl profiles cloudflared,search,google        # your list plus google
+lettucectl profiles                                  # shows the current list
+lettucectl profiles cloudflared,search,google        # your list plus google
 ```
 `profiles` checks every stack, writes the list to `config.env` and every `stack.env`, and rebuilds and restarts the stacks. Whenever the list contains `google` it prints each stack's redirect URI, even when nothing changed. Copy those URIs for step 4. Later, `add` prints the URI of each new stack and `remove` reminds you to delete it.
 
@@ -82,4 +82,4 @@ The client ID, secret and token are stored in the stack's `google-policy` and `g
 | Access stops working after about a week | The consent screen is in **Testing**. Publish it (step 3), then reconnect in Settings -> Google. |
 | An agent's Google call fails saying an API is disabled or has not been used | That API isn't enabled in the project (step 2). |
 
-To turn Google off, drop it from the list with `./lettucectl profiles`. That removes the `google-mcp` container from every stack, and you can delete the redirect URIs and the client. `lettucectl remove` deletes a stack's volumes, its Google token included; a backup of `stacks/` doesn't include them, so after a restore on another host each person connects again.
+To turn Google off, drop it from the list with `lettucectl profiles`. That removes the `google-mcp` container from every stack, and you can delete the redirect URIs and the client. `lettucectl remove` deletes a stack's volumes, its Google token included; a backup of `stacks/` doesn't include them, so after a restore on another host each person connects again.

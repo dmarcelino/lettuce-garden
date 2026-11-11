@@ -1,6 +1,6 @@
 # One-time Cloudflare and Google setup
 
-You do this once per installation. Afterwards each person is one `lettucectl add`. Work from a clone of this repo on the host: steps 2.6 and 5 use it.
+You do this once per installation. Afterwards each person is one line in `stacks.conf` and a `lettucectl apply`. Install `lettucectl` on the host first ([README, step 2](../README.md#quickstart)): steps 2.6 and 5 use it and its data directory, `/srv/lettuce-garden` below (`data/` if you run it from a clone). `lettucectl init` checks each step below in order and names the first one missing.
 
 Placeholders used below:
 - `example.com`: your domain.
@@ -90,9 +90,9 @@ Change one thing at a time.
 3. Don't change anything at the registrar yet.
 
 ### 2.6 Compare before switching
-From the directory you cloned this repo into, compare your current nameserver with one of the Cloudflare ones. Add every random-named record from your inventory as an extra name:
+On the host, compare your current nameserver with one of the Cloudflare ones. Add every random-named record from your inventory as an extra name:
 ```bash
-scripts/dns-preflight.sh example.com <current-ns> <cloudflare-ns> <extra names...>
+lettucectl dns-preflight example.com <current-ns> <cloudflare-ns> <extra names...>
 ```
 `<current-ns>` is one of the nameservers from 2.1 and `<cloudflare-ns>` one of the two from 2.5.
 
@@ -203,9 +203,9 @@ Changes on Google's side can take from 5 minutes to a few hours to apply.
    - **Client IP Address Filtering:** restrict to your host's public IP. The token is useless elsewhere, but it breaks if that IP changes.
    - **TTL:** an end date, if you want the token to expire.
 8. Click **Continue to summary**, check the list, then click **Create Token**.
-9. **The token is shown only once.** Without pasting it into any chat or file, store it on the host from the directory you cloned this repo into. The command doesn't echo it, and the token never reaches your shell history:
+9. **The token is shown only once.** Without pasting it into any chat or file, store it on the host in the data directory. The command doesn't echo it, and the token never reaches your shell history:
    ```bash
-   mkdir -p .secrets && chmod 700 .secrets
+   cd /srv/lettuce-garden && mkdir -p .secrets && chmod 700 .secrets
    (umask 077 && read -rs -p 'Cloudflare API token: ' T && printf '%s\n' "$T" > .secrets/cloudflare-api-token)
    ```
    Then close the Cloudflare page.
@@ -216,11 +216,11 @@ This is a *user* token. An account-owned token (**Manage Account -> Account API 
 
 ## 6. Initialise and add people
 ```bash
-./lettucectl init        # first run creates config.env: set DOMAIN, PUSH_CONTACT_EMAIL, TZ, PROFILES; then run init again
-./lettucectl add alfred alfred@gmail.com
-./lettucectl skills all  # the agent skills; `up` doesn't install them
+lettucectl init        # first run creates config.env: set DOMAIN, PUSH_CONTACT_EMAIL, TZ, PROFILES; then run init again
+$EDITOR /srv/lettuce-garden/stacks.conf   # one line per person: alfred alfred@gmail.com
+lettucectl apply       # shows the plan, then sets up and starts every stack, and installs the agent skills
 ```
-`add` uses `<name>.example.com` for Lettuce and `<name>-garden.example.com` for the garden extras (the vault, Gmail triggers, the code editor), each with its own Access application; both use the stack's one list of people. When Lettuce's name already exists in DNS, it uses `lettuce-<name>.example.com` instead (`HOSTNAME_FALLBACK`); the garden's name always follows Lettuce's (`lettuce-<name>-garden.example.com` then), and when that one is taken, `add` uses the first free of `<...>-garden-2` to `<...>-garden-9`. Stack names are a single DNS label on purpose, and may not end in `-garden`: Cloudflare's free certificate covers `*.example.com` but not `a.b.example.com`.
+`init` checks this guide's steps in order, each scope the token needs (step 5) and whether the zone is active (step 2.8), and stops at the first one missing. `apply` runs `lettucectl add` for each new stack ([operations.md](operations.md#people)), which uses `<name>.example.com` for Lettuce and `<name>-garden.example.com` for the garden extras (the vault, Gmail triggers, the code editor), each with its own Access application; both use the stack's one list of people. When Lettuce's name already exists in DNS, it uses `lettuce-<name>.example.com` instead (`HOSTNAME_FALLBACK`); the garden's name always follows Lettuce's (`lettuce-<name>-garden.example.com` then), and when that one is taken, `add` uses the first free of `<...>-garden-2` to `<...>-garden-9`. Stack names are a single DNS label on purpose, and may not end in `-garden`: Cloudflare's free certificate covers `*.example.com` but not `a.b.example.com`.
 
 Check it works:
 - `curl -sI https://alfred.example.com` answers `302` with a `location:` on `https://<team>.cloudflareaccess.com/...`.

@@ -10,6 +10,7 @@ An interactive version, [watchlist-architecture.html](../docs/diagrams/watchlist
 | Path | What it does |
 |---|---|
 | `Dockerfile` | `base` installs `garden-common` from its build context, then this package; `test` adds pytest and `tests/`; the final stage runs as uid 10002, which owns `/data` so the named volume inherits it |
+| `.dockerignore` | Caches and build output, kept out of the image and of its content tag |
 | `pyproject.toml` | The package and its pinned dependencies |
 | `src/garden_watchlist/__main__.py` | Entry point: settings, store, fetcher, service, app; uvicorn on port 8000 without an access log |
 | `src/garden_watchlist/config.py` | `PREFIX` (`/watchlist`), `INTERNAL_NAME`, every limit, `Settings` from the environment (the `WATCHLIST_*` keys included), `default_schedule` |
@@ -29,7 +30,7 @@ An interactive version, [watchlist-architecture.html](../docs/diagrams/watchlist
 | `tests/` | pytest: schedules, the fetcher (with a fake resolver and `httpx.MockTransport`), every extractor on synthetic pages, the service, the app |
 
 ## How it plugs in
-- **Overlay:** [compose/watchlist.yml](../compose/watchlist.yml) defines `garden-watchlist` (image `lettuce-watchlist:local`, built from this directory with the `garden-common` build context): uid 10002, read-only root, `/tmp` as tmpfs, `cap_drop: [ALL]`, `no-new-privileges`, 384 MB, no ports, on the stack's default network only.
+- **Overlay:** [compose/watchlist.yml](../compose/watchlist.yml) defines `garden-watchlist` (image `${GARDEN_IMAGE_WATCHLIST:-lettuce-watchlist:local}`: from a clone, built from this directory with the `garden-common` build context; in a release, the published image, a line in [release/images](../release/README.md#files) named by its content): uid 10002, read-only root, `/tmp` as tmpfs, `cap_drop: [ALL]`, `no-new-privileges`, 384 MB, no ports, on the stack's default network only.
 - **Storage:** the named volume `watchlist-data` at `/data`, no host path. `backup` copies it (`has_watchlist`, `watchlist_volume` in `lib/common.sh`); `remove` deletes it with the stack.
 - **Environment:** `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` (set from `CF_GARDEN_AUD`), `CF_ACCESS_ISSUER`, `ALLOWED_USERS`, `PUBLIC_ORIGIN` (set from `GARDEN_ORIGIN`), `GARDEN_EXECUTOR_TOKEN`, `TZ`, and the admin's `WATCHLIST_DEFAULT_TIMES`, `WATCHLIST_MAX_REPORTS_PER_DAY`, `WATCHLIST_MIN_INTERVAL`, `WATCHLIST_MAX_SOURCES`, `WATCHLIST_MAX_MONITORS`, which `up` copies from `config.env` into `stack.env` (`sync_watchlist_settings`).
 - **Tunnel:** the `PROFILE_ROUTES` row in [lib/cloudflare.sh](../lib/cloudflare.sh) sends `^/watchlist(/|$)` on the garden host to `http://garden-watchlist:8000`. `/mcp`, `/executor/v1/` and `/healthz` are outside that prefix, so the tunnel answers them with 404.
@@ -60,7 +61,7 @@ It is stored and shown as text (Jinja autoescape, no script on the page), cut to
 Relevance is the agent's, in its own turn. Never add a model call or API key here.
 
 ## Build and test
-`lettucectl up` builds the image. The tests need only Docker and never use the network:
+From a clone `lettucectl up` builds the image; a release pulls it. The tests need only Docker and never use the network:
 ```bash
 tests/run-sidecar.sh watchlist                  # pytest in the image's test stage
 node --test 'garden/executor/tests/*.test.mjs'  # the executor's side of the report queue

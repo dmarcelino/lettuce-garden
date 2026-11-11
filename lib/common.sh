@@ -52,23 +52,192 @@ file_mode() { stat -c '%a' "$1"; }
 # version_ge A B -> success when version A >= B
 version_ge() { printf '%s\n%s\n' "$2" "$1" | sort -V -C; }
 
+# ── release mode ─────────────────────────────────────────────────────────────
+# The published lettucectl image has a RELEASE file (written by publish.yml):
+# its version, the Lettuce tag it was tested with, and the full name of each
+# published image. A clone has none, and builds every image itself (lib/DESIGN.md).
+release_file() { printf '%s/RELEASE' "$LETTUCE_HOME"; }
+release_mode() { [[ -f $(release_file) ]]; }
+release_get() { env_get "$(release_file)" "$1"; }
+
+# stdin_is_terminal -> success when the operator types into stdin. In release
+# mode the wrapper gives the container a terminal only when stdout is one too,
+# and says so in LETTUCECTL_STDIN_TTY when only stdin is (`apply | tee log`).
+stdin_is_terminal() {
+  [[ -t 0 ]] || { release_mode && [[ ${LETTUCECTL_STDIN_TTY:-} == 1 ]]; }
+}
+
+# published_images -> "<image> <context> <shared context or -> <service or ->" per
+# image publish.yml publishes, from release/images
+published_images() { awk '!/^[[:space:]]*(#|$)/ { print $1, $2, $3, $4 }' "$LETTUCE_HOME/release/images"; }
+
+# release_key IMAGE -> its key in RELEASE and the overlays' variable: vault -> GARDEN_IMAGE_VAULT
+release_key() { printf 'GARDEN_IMAGE_%s' "$(tr 'a-z-' 'A-Z_' <<<"$1")"; }
+
+# image_name IMAGE -> the name the stacks use for it: RELEASE's in release mode,
+# else the one a clone builds, lettuce-IMAGE:local
+image_name() {
+  local n
+  if release_mode; then
+    n=$(release_get "$(release_key "$1")")
+    [[ -n $n ]] || die "RELEASE names no $(release_key "$1")"
+    printf '%s' "$n"
+  else
+    printf 'lettuce-%s:local' "$1"
+  fi
+}
+
 # ── paths and config ─────────────────────────────────────────────────────────
-config_file() { printf '%s/config.env' "$LETTUCE_HOME"; }
-upstream_dir() { printf '%s/upstream' "$LETTUCE_HOME"; }
-token_file() { printf '%s/.secrets/cloudflare-api-token' "$LETTUCE_HOME"; }
-stack_dir() { printf '%s/stacks/%s' "$LETTUCE_HOME" "$1"; }
-stack_env() { printf '%s/stacks/%s/stack.env' "$LETTUCE_HOME" "$1"; }
+# LETTUCE_HOME is the code; LETTUCE_DATA (resolve_data_dir) the instance's data.
+config_file() { printf '%s/config.env' "$LETTUCE_DATA"; }
+upstream_root() { printf '%s/upstream' "$LETTUCE_DATA"; }
+upstream_dir() { printf '%s/%s' "$(upstream_root)" "$(cfg LETTUCE_REF)"; }
+token_file() { printf '%s/.secrets/cloudflare-api-token' "$LETTUCE_DATA"; }
+stack_dir() { printf '%s/stacks/%s' "$LETTUCE_DATA" "$1"; }
+stack_env() { printf '%s/stacks/%s/stack.env' "$LETTUCE_DATA" "$1"; }
+stacks_conf() { printf '%s/stacks.conf' "$LETTUCE_DATA"; }
+
+# resolve_data_dir -> sets LETTUCE_DATA. In release mode the wrapper passes it
+# (its own directory's parent). From a clone it is the clone's data/ unless set,
+# so a clone or a worktree never reaches the real stacks by default, and it
+# refuses a data directory a release runs: a branch's code and images would
+# recreate people's stacks and lock every vault.
+resolve_data_dir() {
+  if release_mode; then
+    [[ -n ${LETTUCE_DATA:-} ]] || die "LETTUCE_DATA is not set; run lettucectl through its wrapper, bin/lettucectl in the data directory"
+  else
+    LETTUCE_DATA=${LETTUCE_DATA:-$LETTUCE_HOME/data}
+  fi
+  [[ $LETTUCE_DATA == /* ]] || die "LETTUCE_DATA must be an absolute path: $LETTUCE_DATA"
+  LETTUCE_DATA=$(realpath -m -- "$LETTUCE_DATA")
+  if ! release_mode && [[ -e $LETTUCE_DATA/bin/lettucectl ]]; then
+    die "$LETTUCE_DATA is run by a released lettucectl ($LETTUCE_DATA/bin/lettucectl); a clone may not use it"
+  fi
+}
+
+# ── the same-path check (release mode) ───────────────────────────────────────
+# lettucectl tells Docker to mount host paths; Docker reads them on the host,
+# not in lettucectl's container. So every host path lettucectl uses must be
+# mounted into its container at the same path, or Docker would create an empty,
+# root-owned directory in its place and a stack would start with no data.
+# BIND_MOUNTS holds this container's bind destinations once check_mounts ran.
+BIND_MOUNTS=""
+
+# check_mounts -> in release mode, reads this container's own mounts (one API
+# call) and dies unless every bind mount has the same source and destination
+# and LETTUCE_DATA is one of them. It fails closed: no container found, no run.
+check_mounts() {
+  local mounts bad
+  release_mode || return 0
+  mounts=$(host_docker inspect --format '{{json .Mounts}}' "$HOSTNAME" 2>/dev/null) ||
+    die "could not read this container's mounts (docker inspect $HOSTNAME); run lettucectl through its wrapper, which never sets --hostname"
+  bad=$(jq -r '[.[] | select(.Type == "bind" and .Source != .Destination) | "\(.Source) at \(.Destination)"] | join(", ")' <<<"$mounts") ||
+    die "could not read this container's mounts"
+  [[ -z $bad ]] || die "host paths must be mounted at the same path inside lettucectl's container; these are not: $bad"
+  BIND_MOUNTS=$(jq -r '.[] | select(.Type == "bind") | .Destination' <<<"$mounts")
+  if [[ $(stat -c %u "$LETTUCE_DATA" 2>/dev/null) != "$(id -u)" ]] || ! grep -qxF -- "$LETTUCE_DATA" <<<"$BIND_MOUNTS"; then
+    die "$LETTUCE_DATA is not mounted, at the same path and owned by you, into lettucectl's container; run lettucectl through its wrapper"
+  fi
+}
+
+# require_mounted PATH -> in release mode, dies unless PATH is at or below one
+# of this container's bind mounts (the wrapper mounts backup's and receipts'
+# destinations); always passes from a clone
+require_mounted() {
+  local m p
+  release_mode || return 0
+  p=$(realpath -m -- "$1")
+  while IFS= read -r m; do
+    [[ -n $m && ($p == "$m" || $p == "${m%/}"/*) ]] && return 0
+  done <<<"$BIND_MOUNTS"
+  die "$p is not mounted into lettucectl's container; the wrapper mounts the directory you name, so name an existing one"
+}
+
+# ── stacks.conf ──────────────────────────────────────────────────────────────
+# Who has a stack, and with which addresses: "<name> <email>[,<email>...]" per
+# line, # comments. Parsed here, never sourced; `apply` makes the stacks match
+# it, and add, users and remove keep it in step, so apply never undoes them.
+
+conf_create() {
+  local f
+  f=$(stacks_conf)
+  (umask 077 && mkdir -p "$LETTUCE_DATA" && cat >"$f" <<'EOF'
+# Who has a stack, one per line: <name> <email>[,<email>...]
+# `lettucectl apply` makes the stacks match this file; `add`, `users` and
+# `remove` keep it in step. A stack missing here is reported, never removed.
+#alfred  alfred@gmail.com
+EOF
+  )
+}
+
+# conf_entries -> "<name> <emails>" per stack in stacks.conf, normalised; dies
+# on a malformed line or a name listed twice
+conf_entries() {
+  local f line name emails rest seen=" "
+  f=$(stacks_conf)
+  [[ -f $f ]] || return 0
+  while IFS= read -r line || [[ -n $line ]]; do
+    line=${line%%#*}
+    read -r name emails rest <<<"$line"
+    [[ -n $name ]] || continue
+    [[ -n $emails && -z $rest ]] || die "stacks.conf: expected '<name> <email>[,<email>...]': $line"
+    (validate_name "$name") 2>/dev/null || die "stacks.conf: invalid stack name '$name'"
+    [[ $seen != *" $name "* ]] || die "stacks.conf: '$name' is listed twice"
+    seen+="$name "
+    emails=$(normalise_emails "$emails") || die "stacks.conf: $name: bad email address in: $line"
+    printf '%s %s\n' "$name" "$emails"
+  done <"$f"
+}
+
+# conf_set NAME EMAILS -> the line for NAME says EMAILS (added when missing)
+conf_set() {
+  local f tmp
+  f=$(stacks_conf)
+  [[ -f $f ]] || conf_create
+  tmp=$(mktemp "$f.XXXXXX") || return 1
+  if ! { awk -v n="$1" -v e="$2" '{ split($0, w, /[[:space:]]+/); k = (w[1] == "" ? w[2] : w[1]) }
+    k == n && !done { print n "  " e; done = 1; next } k == n { next } { print }
+    END { if (!done) print n "  " e }' "$f" >"$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$f"; }; then
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+# conf_unset NAME -> drops NAME's line
+conf_unset() {
+  local f tmp
+  f=$(stacks_conf)
+  [[ -f $f ]] || return 0
+  tmp=$(mktemp "$f.XXXXXX") || return 1
+  if ! { awk -v n="$1" '{ split($0, w, /[[:space:]]+/); k = (w[1] == "" ? w[2] : w[1]) } k != n { print }' "$f" >"$tmp" &&
+    chmod 600 "$tmp" && mv -f "$tmp" "$f"; }; then
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+# inside PATH DIR -> success when PATH is DIR or below it
+inside() {
+  local p
+  p=$(realpath -m -- "$1")
+  [[ $p == "$2" || $p == "$2"/* ]]
+}
 
 # cfg KEY -> value from config.env
 cfg() { env_get "$(config_file)" "$1"; }
 
+# A Lettuce tag: it names a directory under upstream/ and goes into a URL.
+TAG_RE='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+
 require_config() {
   local f
   f=$(config_file)
-  [[ -f $f ]] || die "no config.env; run: lettucectl init"
+  [[ -f $f ]] || die "no config.env in $LETTUCE_DATA; run: lettucectl init"
   [[ $(file_mode "$f") == 600 ]] || die "config.env must be mode 600 (chmod 600 $f)"
   [[ -n $(cfg DOMAIN) && $(cfg DOMAIN) != example.com ]] || die "set DOMAIN in config.env"
   has_profile "$(cfg PROFILES)" cloudflared || die "PROFILES in config.env must contain cloudflared"
+  [[ $(cfg LETTUCE_REF) =~ $TAG_RE ]] || die "LETTUCE_REF in config.env is not a tag: '$(cfg LETTUCE_REF)'"
+  upstream_repo >/dev/null
 }
 
 require_initialised() {
@@ -77,8 +246,111 @@ require_initialised() {
   for k in CF_ACCOUNT_ID CF_ZONE_ID CF_TEAM_DOMAIN CF_GOOGLE_IDP_ID; do
     [[ -n $(cfg "$k") ]] || die "$k is empty; run: lettucectl init"
   done
-  [[ -f $(upstream_dir)/docker/compose.yml ]] || die "upstream/ is missing; run: lettucectl init"
+  [[ -f $(upstream_dir)/docker/compose.yml ]] || die "Lettuce $(cfg LETTUCE_REF) is not in $(upstream_root); run: lettucectl init"
 }
+
+# ── upstream Lettuce ─────────────────────────────────────────────────────────
+# upstream_repo -> "owner/repo" of LETTUCE_REPO, which must be on GitHub
+upstream_repo() {
+  local r
+  r=$(cfg LETTUCE_REPO)
+  [[ $r =~ ^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$ ]] ||
+    die "LETTUCE_REPO must be https://github.com/<owner>/<repo>: '$r'"
+  r=${BASH_REMATCH[1]}/${BASH_REMATCH[2]}
+  printf '%s' "${r%.git}"
+}
+
+# fetch_upstream TAG -> Lettuce's source at TAG in upstream/TAG/, from GitHub's
+# archive of the tag. Kept whole: sync_skills reads docker/agent-skills/, and a
+# host upstream publishes no images for builds them from it (the BFF's context
+# is the repository root). Unpacked beside it, then renamed, so a directory
+# under that name is always complete.
+fetch_upstream() {
+  local tag=$1 repo root dst part tgz
+  [[ $tag =~ $TAG_RE ]] || die "not a tag: '$tag'"
+  repo=$(upstream_repo)
+  root=$(upstream_root)
+  dst=$root/$tag
+  [[ -f $dst/docker/compose.yml ]] && return 0
+  part=$dst.partial
+  tgz=$root/.$tag.tar.gz
+  (umask 077 && mkdir -p "$root")
+  rm -rf -- "$part" "$tgz"
+  info "downloading Lettuce $tag from github.com/$repo"
+  curl -fsSL --proto '=https' -o "$tgz" "https://github.com/$repo/archive/refs/tags/$tag.tar.gz" </dev/null ||
+    die "could not download Lettuce $tag (is it a tag of $(cfg LETTUCE_REPO)?)"
+  mkdir -p "$part"
+  tar -xzf "$tgz" -C "$part" --strip-components=1 --no-same-owner || {
+    rm -rf -- "$part" "$tgz"
+    die "could not unpack Lettuce $tag"
+  }
+  rm -f -- "$tgz"
+  [[ -f $part/docker/compose.yml ]] || {
+    rm -rf -- "$part"
+    die "Lettuce $tag has no docker/compose.yml"
+  }
+  rm -rf -- "$dst"
+  mv -- "$part" "$dst"
+}
+
+# prune_upstream KEEP -> removes every other tag's source
+prune_upstream() {
+  local d
+  for d in "$(upstream_root)"/*/; do
+    d=${d%/}
+    [[ -d $d && ${d##*/} != "$1" ]] || continue
+    rm -rf -- "$d"
+  done
+}
+
+# host_platform -> the Docker Engine's platform, e.g. linux/amd64
+host_platform() { host_docker version --format '{{.Server.Os}}/{{.Server.Arch}}'; }
+
+# upstream_image_ns -> the registry namespace of LETTUCE_REPO's owner when it
+# publishes the app-server of LETTUCE_REF for this host's platform, else nothing
+# (upstream's images are then built on this host). Upstream publishes them for
+# linux/amd64 only today. Only the registry's own "no" counts as not published:
+# "manifest unknown" (no such tag) or "denied" (GHCR's answer for a repository
+# it does not have, as for a fork that publishes nothing). Any other failure
+# (the network, a rate limit, Docker itself) returns 1 with the reason, so a
+# passing outage never switches every stack to building upstream's images.
+upstream_image_ns() {
+  local repo ns platform image out found
+  repo=$(upstream_repo)
+  ns=ghcr.io/$(tr '[:upper:]' '[:lower:]' <<<"${repo%%/*}")/
+  platform=$(host_platform 2>&1) || {
+    printf 'could not read the Docker Engine platform: %s\n' "$platform" >&2
+    return 1
+  }
+  image=${ns}lettuce-app-server:$(cfg LETTUCE_REF)
+  if ! out=$(host_docker manifest inspect -v "$image" 2>&1); then
+    if grep -qiE 'manifest unknown|denied' <<<"$out"; then return 0; fi
+    printf 'could not ask %s whether %s is published: %s\n' "${ns%/}" "$image" "$(tail -n 1 <<<"$out")" >&2
+    return 1
+  fi
+  found=$(jq -r --arg p "$platform" '[if type == "array" then .[] else . end | .Descriptor.platform // empty
+    | "\(.os)/\(.architecture)"] | index($p) // empty' <<<"$out" 2>/dev/null) || found=""
+  [[ -z $found ]] || printf '%s' "$ns"
+}
+
+# sync_upstream_images -> LETTA_IMAGE_NS in config.env: whether upstream's images
+# are pulled (and from where) or built here, looked up once per tag. A failed
+# lookup changes nothing and stops the command.
+sync_upstream_images() {
+  local ns
+  ns=$(upstream_image_ns) || die "LETTA_IMAGE_NS is unchanged; check the network and run the same command again"
+  env_set "$(config_file)" LETTA_IMAGE_NS "$ns"
+  if [[ -n $ns ]]; then
+    info "Lettuce's images: pulled from ${ns%/}"
+  else
+    info "Lettuce's images: none published for $(host_platform 2>/dev/null || echo this host) at $(cfg LETTUCE_REF); they are built here"
+  fi
+}
+
+# app_server_image -> the app-server's image name: upstream's compose.yml names
+# it ${LETTA_IMAGE_NS}lettuce-app-server and tags it with its release (an
+# upstream seam; check_images compares it with the render)
+app_server_image() { printf '%slettuce-app-server:%s' "$(cfg LETTA_IMAGE_NS)" "$(cfg LETTUCE_REF)"; }
 
 # has_profile "a,b,c" b -> exact comma-delimited token match, like upstream's BFF.
 has_profile() {
@@ -145,7 +417,7 @@ normalise_emails() {
 
 list_stacks() {
   local d
-  for d in "$LETTUCE_HOME"/stacks/*/stack.env; do
+  for d in "$LETTUCE_DATA"/stacks/*/stack.env; do
     [[ -f $d ]] || continue
     d=${d%/stack.env}
     printf '%s\n' "${d##*/}"
@@ -173,13 +445,48 @@ expand_targets() {
 # --env-file stops Compose from reading any upstream/docker/.env.
 compose() { compose_env "$(stack_env "$1")" "$@"; }
 
+# pipelock_direct NAME ENV_FILE -> the hosts the app-server reaches without
+# pipelock beyond the stack's own services, which compose/pipelock-proxy.yml
+# appends to NO_PROXY: config.env's PIPELOCK_DIRECT for every stack, then the
+# stack's own (a model server on the LAN, which pipelock refuses as a private
+# address). Each entry is a host name or IP address with an optional port, or
+# a .domain suffix; dies on anything else (a *, a URL, a range).
+pipelock_direct() {
+  local name=$1 env_file=$2 list h parts out=()
+  local re='^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$'
+  for list in "$(cfg PIPELOCK_DIRECT)" "$(env_get "$env_file" PIPELOCK_DIRECT)"; do
+    [[ -n $list ]] || continue
+    [[ $list != ,* && $list != *, && $list != *,,* ]] ||
+      die "$name: PIPELOCK_DIRECT has an empty entry: '$list'"
+    IFS=, read -ra parts <<<"$list"
+    for h in "${parts[@]}"; do
+      [[ $h =~ $re ]] ||
+        die "$name: PIPELOCK_DIRECT entries are host names or IP addresses with an optional port, or .domain suffixes; not '$h'"
+      out+=("$h")
+    done
+  done
+  (IFS=, && printf '%s' "${out[*]}")
+}
+
 # compose_env ENV_FILE NAME ARGS... -> `compose`, reading ENV_FILE in place of
 # the stack's stack.env (check_stack renders a profile list before it is written)
 compose_env() {
-  local env_file=$1 name=$2 up profiles extra=() vars=()
+  local env_file=$1 name=$2 up profiles img direct extra=() vars=()
   shift 2
   up=$(upstream_dir)
   profiles=$(env_get "$env_file" COMPOSE_PROFILES)
+  # The overlays' build contexts are under the code, which upstream/ is not
+  # under; the shell's image builds FROM the app-server's, by name; upstream's
+  # own switch, LETTA_IMAGE_NS, is global (init and upgrade set it). In release
+  # mode each published garden image is named by RELEASE; from a clone, the
+  # overlays' defaults name the local builds. All lettucectl's, never stack.env's:
+  # Compose prefers them to the --env-file's, so nothing there can go stale.
+  vars+=(LETTUCE_HOME="$LETTUCE_HOME" APP_SERVER_IMAGE="$(app_server_image)" LETTA_IMAGE_NS="$(cfg LETTA_IMAGE_NS)")
+  if release_mode; then
+    while read -r img _; do
+      vars+=("$(release_key "$img")=$(image_name "$img")")
+    done < <(published_images)
+  fi
   # Only with the profile: without it, the app-server has no doc-tools mount or
   # network. The values are lettucectl's, never stack.env's.
   if has_profile "$profiles" garden-doc-tools; then
@@ -189,6 +496,8 @@ compose_env() {
   # Only with the profile: without it, no container gets a proxy setting.
   if has_profile "$profiles" garden-pipelock; then
     extra+=(-f "$LETTUCE_HOME/compose/pipelock-proxy.yml")
+    direct=$(pipelock_direct "$name" "$env_file") || exit 1
+    vars+=(PIPELOCK_DIRECT="$direct")
   fi
   env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} "${vars[@]}" \
     docker compose -p "lettuce-$name" \
@@ -396,6 +705,9 @@ sync_garden_profiles() {
   [[ $(env_get "$f" GARDEN_PROFILES) == "$garden" ]] || env_set "$f" GARDEN_PROFILES "$garden"
 }
 
+# The config check_stack last rendered from a stack's own stack.env, and its name.
+CHECKED_NAME="" CHECKED_CONFIG=""
+
 # check_stack NAME [--profiles LIST] -> dies with the first reason the stack must
 # not start. With --profiles, `profiles` checks the stack as it will be under
 # LIST, before it writes the lists: the stack.env and config.env lists may differ
@@ -426,8 +738,13 @@ check_stack() {
   fi
   k=$(profile_unmet "$profiles")
   [[ -z $k ]] || die "$name: $k"
+  CHECKED_NAME=""
   if [[ $profiles == "$(env_get "$f" COMPOSE_PROFILES)" ]]; then
     rendered=$(compose "$name" config --format json) || die "$name: docker compose config failed"
+    # Kept for up_stack's build_local_images: the stack as stack.env renders it.
+    # A check that refuses it dies, so a kept config is always one that passed.
+    # shellcheck disable=SC2034 # read by lettucectl's build_local_images
+    CHECKED_NAME=$name CHECKED_CONFIG=$rendered
   else
     tmp=$(mktemp "$f.XXXXXX")
     chmod 600 "$tmp"
@@ -480,6 +797,10 @@ check_stack() {
       | select($m | test("^service:garden-code-server(-editor|-exec)?$") or (startswith("container:") and contains("code-server")))
       | "\(.key) shares the network namespace of the code editor (\($m))"] | join("; ")' <<<"$rendered")
   [[ -z $k ]] || die "$name: $k"
+  check_images "$name" "$rendered"
+  if has_profile "$profiles" garden-doc-tools && [[ $(host_platform 2>/dev/null) != linux/amd64 ]]; then
+    die "$name: garden-doc-tools needs a linux/amd64 host (OfficeAgent is pinned for x86_64 only); this one is $(host_platform 2>/dev/null || echo unknown)"
+  fi
   if has_profile "$profiles" garden-vault; then
     check_sidecar "$name" "$rendered" garden-vault garden-vault compose/vault.yml
   fi
@@ -591,6 +912,30 @@ volume_users() {
   shift 2
   jq -r --arg v "$volume" '[.services | to_entries[] | select(.key as $k | $ARGS.positional | index($k) | not)
     | select([(.value.volumes // [])[] | select(.source == $v)] | length > 0) | .key] | join(", ")' --args "$@" <<<"$rendered"
+}
+
+# check_images NAME RENDERED -> the images the stack runs are the ones
+# lettucectl means: in release mode, each published garden service runs the name
+# RELEASE gives it (a hand edit cannot swap one in); and the shell's base is the
+# app-server's image as the render names it (app_server_image follows upstream's
+# naming, an upstream seam)
+check_images() {
+  local name=$1 rendered=$2 img svc want got
+  if release_mode; then
+    while read -r img _ _ svc; do
+      [[ $svc != - ]] || continue
+      got=$(jq -r --arg s "$svc" '.services[$s].image // empty' <<<"$rendered")
+      [[ -z $got ]] && continue
+      want=$(image_name "$img")
+      [[ $got == "$want" ]] || die "$name: $svc runs $got, not the release's $want"
+    done < <(published_images)
+  fi
+  if jq -e '.services["garden-code-server-exec"]' <<<"$rendered" >/dev/null; then
+    want=$(app_server_image)
+    got=$(jq -r '.services["app-server"].image // empty' <<<"$rendered")
+    [[ $got == "$want" ]] ||
+      die "$name: the app-server's image is $got, but the code editor's shell would build FROM $want; upstream's image naming changed (app_server_image)"
+  fi
 }
 
 # check_hardened NAME SERVICE SVC -> the sidecar SERVICE (rendered as the JSON

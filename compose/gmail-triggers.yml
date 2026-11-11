@@ -26,10 +26,10 @@ services:
   garden-gmail-triggers:
     profiles: ["garden-gmail-triggers"]
     build:
-      context: ../../gmail-triggers
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/gmail-triggers
       additional_contexts:
-        garden-common: ../../garden-common
-    image: lettuce-gmail-triggers:local
+        garden-common: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden-common
+    image: ${GARDEN_IMAGE_GMAIL_TRIGGERS:-lettuce-gmail-triggers:local}
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       # The garden's own Access application and host, never Lettuce's.

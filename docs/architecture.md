@@ -10,7 +10,8 @@ Lettuce is single-user: agents in one stack can read each other's memory and tok
   - The Access policy admits only that stack's people.
   - The Lettuce BFF verifies the Access JWT against that application's own AUD tag, so a token minted for another stack is rejected.
   - `ALLOWED_USERS` must also match. `lettucectl users` updates the policy and `ALLOWED_USERS` together, because upstream says they must be kept in sync.
-- **One command per person.** `lettucectl add <name> <email>` creates the Access policy and applications, the tunnel and its routing, and the DNS records through the Cloudflare API, then starts the stack.
+- **One line per person.** A line in `stacks.conf` and `lettucectl apply` (or `lettucectl add <name> <email>`) create the Access policy and applications, the tunnel and its routing, and the DNS records through the Cloudflare API, then start the stack.
+- **Docker is all the host needs.** `lettucectl` runs from a published image, through a wrapper pinned to its digest; the stacks pull published images too, but for the document tools and the code editor's shell, which are built on the host ([operations.md](operations.md#installing-and-upgrading)).
 - **Checked before every start.** `lettucectl up` (and every command that starts a stack) refuses a stack whose isolation or hardening has been weakened, and says which rule it broke. A container Docker restarts on its own (after a reboot or a daemon restart) is not checked again until the next `up`.
 
 Within one stack there is no such separation: agents run as root in the same container and can read everything else in that stack, including its provider keys. The vault is the exception (see [vault.md](vault.md#security-model)).
@@ -49,6 +50,8 @@ An interactive version, [lettuce-garden-overview.html](diagrams/lettuce-garden-o
 Every service runs with `no-new-privileges` and a memory cap. The memory caps are 8 GiB for each app-server and for the code editor's shell, 2 GiB for the editor and for Gotenberg, 1 GiB for upstream's other services, 512 MiB for the vault, 384 MiB for the watchlist, 256 MiB for cloudflared, Gmail triggers, pipelock and the code editor's gate, and 128 MiB for the landing page. These are caps, not reservations; measure idle use with `docker stats`. The garden's services, pipelock, and the code editor's gate and editor also run read-only with every capability dropped. The code editor's shell is the exception: it is as strong as an agent, so it keeps Docker's default capabilities except `NET_RAW`, and a writable root. Profiles are global: all stacks share one app-server image, whose contents depend on `PROFILES`, so `lettucectl profiles` changes the list for every stack at once.
 
 ## Where the data lives
+Paths are in the data directory: `/srv/lettuce-garden` for a release install, `data/` in a clone ([operations.md](operations.md#files-on-the-host)).
+
 | Data | Where | `backup` | Deleted by |
 |---|---|---|---|
 | agents, conversations, memory, provider keys | `stacks/<name>/state/letta-data` | yes | `remove --purge` |

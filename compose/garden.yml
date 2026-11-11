@@ -19,10 +19,10 @@ services:
   garden:
     profiles: ["garden-vault", "garden-gmail-triggers", "garden-watchlist", "garden-code-server"]
     build:
-      context: ../../garden
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden
       additional_contexts:
-        garden-common: ../../garden-common
-    image: lettuce-garden:local
+        garden-common: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden-common
+    image: ${GARDEN_IMAGE_GARDEN:-lettuce-garden:local}
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}

@@ -1,0 +1,14 @@
+# The images publish.yml publishes, one per line (release/README.md):
+#   <image> <build context> <shared context, or -> <Compose service, or ->
+# Each is published as ghcr.io/<owner>/lettuce-<image>, named by its content
+# tag (release/content-tag), and lettucectl names it by RELEASE's
+# GARDEN_IMAGE_<IMAGE> (release_key). Not here, built on the host instead:
+# doc-tools (AGPL-3.0 PyMuPDF) and code-server/exec (FROM the app-server's image).
+garden              garden              garden-common  garden
+vault               vault               garden-common  garden-vault
+gmail-triggers      gmail-triggers      garden-common  garden-gmail-triggers
+watchlist           watchlist           garden-common  garden-watchlist
+pipelock            pipelock            -              garden-pipelock
+code-server         code-server         garden-common  garden-code-server
+code-server-editor  code-server/editor  -              garden-code-server-editor
+backup              backup              -              -

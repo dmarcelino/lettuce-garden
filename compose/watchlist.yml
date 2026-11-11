@@ -17,15 +17,14 @@
 # so it has the default network and nothing else. Its data lives on a named
 # volume no other service mounts; it runs as a non-root user, read-only, with no
 # capabilities. `lettucectl check` refuses a stack where it loses any of that.
-# Relative paths resolve against --project-directory (upstream/docker).
 services:
   garden-watchlist:
     profiles: ["garden-watchlist"]
     build:
-      context: ../../watchlist
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/watchlist
       additional_contexts:
-        garden-common: ../../garden-common
-    image: lettuce-watchlist:local
+        garden-common: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden-common
+    image: ${GARDEN_IMAGE_WATCHLIST:-lettuce-watchlist:local}
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       # The garden's own Access application and host, never Lettuce's.

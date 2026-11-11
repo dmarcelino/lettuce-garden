@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "c9d5094283236533ca0c8bdd6b405640ea5dab5a"
+      "revision": "55e9049d85cf1721d5e0e66b88255e94577cbbb2"
     }
   },
   "participants": [
@@ -23,8 +23,8 @@
       "sources": [
         {
           "path": "docs/vault.md",
-          "line": 18,
-          "end_line": 41,
+          "line": 11,
+          "end_line": 33,
           "label": "using the vault"
         }
       ]
@@ -37,9 +37,9 @@
       "sources": [
         {
           "path": "docs/vault.md",
-          "line": 47,
-          "end_line": 60,
-          "label": "what is protected"
+          "line": 58,
+          "end_line": 74,
+          "label": "security model"
         }
       ]
     },
@@ -51,9 +51,9 @@
       "sources": [
         {
           "path": "docs/vault.md",
-          "line": 5,
-          "end_line": 12,
-          "label": "the request flow"
+          "line": 3,
+          "end_line": 3,
+          "label": "what agents do with it"
         }
       ]
     },
@@ -65,9 +65,9 @@
       "sources": [
         {
           "path": "docs/vault.md",
-          "line": 42,
-          "end_line": 45,
-          "label": "values without reading them"
+          "line": 37,
+          "end_line": 38,
+          "label": "placeholders"
         }
       ]
     }
@@ -80,13 +80,13 @@
     },
     {
       "from": 375,
-      "to": 470,
-      "label": "Values as text"
+      "to": 610,
+      "label": "By default: placeholders"
     },
     {
-      "from": 480,
-      "to": 655,
-      "label": "Or values for a command"
+      "from": 620,
+      "to": 735,
+      "label": "Or, with a reason: values as text"
     }
   ],
   "messages": [
@@ -103,7 +103,7 @@
       "from": "agent",
       "to": "vault",
       "y": 235,
-      "label": "request_secret(secret, why)",
+      "label": "request_secret(secret, fields, purpose)",
       "variant": "emphasis"
     },
     {
@@ -132,45 +132,56 @@
       "label": "get_result"
     },
     {
-      "id": "values",
-      "from": "vault",
-      "to": "agent",
-      "y": 425,
-      "label": "the values you shared, once",
-      "variant": "return",
-      "note": "with rules: the approved purpose only, never repeated"
-    },
-    {
       "id": "handle",
       "from": "vault",
       "to": "agent",
-      "y": 500,
-      "label": "a one-time handle instead",
-      "variant": "return"
+      "y": 425,
+      "label": "a one-time handle and {{VAULT_...}} names",
+      "variant": "return",
+      "note": "never the values"
     },
     {
       "id": "run",
       "from": "agent",
       "to": "vault-run",
-      "y": 530,
-      "label": "vault-run <command>"
+      "y": 485,
+      "label": "vault-run <handles> -- vault-fill or a script",
+      "note": "at the last step"
     },
     {
       "id": "redeem",
       "from": "vault-run",
       "to": "vault",
-      "y": 560,
-      "label": "redeem the handle",
+      "y": 535,
+      "label": "redeem the handles, all or none",
       "variant": "security"
     },
     {
       "id": "env",
       "from": "vault",
       "to": "vault-run",
-      "y": 590,
-      "label": "values into that command's environment",
+      "y": 565,
+      "label": "values into that command only",
       "variant": "return",
-      "note": "scrubbed from its output; works once, within 5 minutes"
+      "note": "filled into the file or MCP call; scrubbed from its output"
+    },
+    {
+      "id": "text-request",
+      "from": "agent",
+      "to": "vault",
+      "y": 640,
+      "label": "request_secret(..., delivery text, reason)",
+      "variant": "emphasis",
+      "note": "you see the reason in a warning"
+    },
+    {
+      "id": "values",
+      "from": "vault",
+      "to": "agent",
+      "y": 690,
+      "label": "the values you shared, once",
+      "variant": "return",
+      "note": "with rules: the approved purpose only, never repeated"
     }
   ],
   "cards": [
@@ -178,8 +189,8 @@
       "dot": "emerald",
       "title": "You decide",
       "items": [
-        "ID documents, payment cards and logins always ask",
-        "Notes, addresses, companies and memberships ask unless you allow that secret to be used without asking",
+        "Logins, cards, SSH keys, custom fields and ID numbers always ask",
+        "A note's text and an identity's address ask unless you allow them",
         "Agents can't add, change or delete secrets"
       ]
     },
@@ -187,9 +198,9 @@
       "dot": "rose",
       "title": "What it does not stop",
       "items": [
-        "A value shared as text is in the conversation: your AI provider sees it and the server stores it",
-        "The rules are instructions to the agent, not something the vault can enforce",
-        "vault-run keeps values out of the conversation, but a misled agent can still redeem the handle itself"
+        "Values shared as text are in the conversation: your AI provider sees them and the server stores them",
+        "Placeholders are a precaution: a misled agent can redeem a handle itself or open the filled file",
+        "The rules are instructions to the agent, not something the vault can enforce"
       ]
     },
     {
@@ -197,6 +208,7 @@
       "title": "Limits",
       "items": [
         "At most 5 requests wait at once; each expires after 10 minutes",
+        "A handle works once, within 5 minutes; at most 10 unused",
         "Locking the vault cancels every handle and uncollected value"
       ]
     }

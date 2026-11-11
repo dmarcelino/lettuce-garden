@@ -66,5 +66,5 @@ node --test 'garden/executor/tests/*.test.mjs'   # the executor's tests on the h
 
 Listed in [CONTRIBUTING.md](../CONTRIBUTING.md#upstream-seams); every Lettuce upgrade checks them:
 
-- The executor: `letta cron add` with `--name=`, `--description=`, `--prompt=`, `--at=in 1m`, `--once`, `--agent=`, `--conversation=new|default` (the `=` form) and its JSON output (`.id`); `letta agents list` (`.items[]`); the scheduler picking up a changed task file without a restart; the app-server entrypoint copying `/root/.letta/system-cron` to `/etc/cron.d`; the image's `/usr/local/bin/agent-env`.
+- The executor: `letta cron add` with `--name=`, `--description=`, `--prompt=`, `--at=in 1m`, `--once`, `--agent=`, `--conversation=new|default` (the `=` form) and its JSON output (`.id`); `letta agents list` (`.items[]`); the scheduler picking up a changed task file without a restart; the app-server entrypoint copying `/root/.letta/system-cron` to `/etc/cron.d`, and the BFF listing that folder in the Tasks tab (since v0.26: [the cron file](executor/README.md)); the image's `/usr/local/bin/agent-env`.
 - The landing page's agent links, with the code editor on: code-server's `?folder=` query and the workspaces at `/work/<agent-id>`; the list itself comes from `letta agents list` through the executor.

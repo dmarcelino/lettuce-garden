@@ -1075,7 +1075,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
         <g data-graph-role="automatic-crossover" style="--step:9">
           <path data-graph-role="automatic-crossover-underlay" d="M 1066 362 L 1066 493 Q 1066 501 1058 501 L 620 501" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="vaultrun" data-edge-to="vault" data-edge-label="POST /redeem (handle)" data-edge-key="9" data-composition-points="1066,362;1066,501;620,501" data-composition-crossover="halo" data-composition-independent="true" d="M 1066 362 L 1066 493 Q 1066 501 1058 501 L 620 501" class="a-security" data-animate="edge" style="--step: 9;" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+          <path data-edge-from="vaultrun" data-edge-to="vault" data-edge-label="POST /redeem (handles)" data-edge-key="9" data-composition-points="1066,362;1066,501;620,501" data-composition-crossover="halo" data-composition-independent="true" d="M 1066 362 L 1066 493 Q 1066 501 1058 501 L 620 501" class="a-security" data-animate="edge" style="--step: 9;" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:10">
           <path data-graph-role="automatic-crossover-underlay" d="M 470 494 L 390 494" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -1181,15 +1181,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="1135" y="175" class="t-muted" font-size="9" text-anchor="middle">letta-code, agents as root</text>
         </g>
 
-        <g id="node-vaultrun" data-node-id="vaultrun" data-node-label="vault-run" tabindex="0" role="button" aria-label="Focus vault-run, redeem, run, scrub, Compose project lettuce-&lt;name&gt; (one per person) › shared network namespace › app-server container" aria-pressed="false" data-node-kind="backend" data-node-sublabel="redeem, run, scrub" data-node-context="Compose project lettuce-&lt;name&gt; (one per person) › shared network namespace › app-server container">
-          <title>vault-run · redeem, run, scrub · Compose project lettuce-&lt;name&gt; (one per person) › shared network namespace › app-server container</title>
+        <g id="node-vaultrun" data-node-id="vaultrun" data-node-label="vault-run + vault-fill" tabindex="0" role="button" aria-label="Focus vault-run + vault-fill, redeem, fill, run, scrub, Compose project lettuce-&lt;name&gt; (one per person) › shared network namespace › app-server container" aria-pressed="false" data-node-kind="backend" data-node-sublabel="redeem, fill, run, scrub" data-node-context="Compose project lettuce-&lt;name&gt; (one per person) › shared network namespace › app-server container">
+          <title>vault-run + vault-fill · redeem, fill, run, scrub · Compose project lettuce-&lt;name&gt; (one per person) › shared network namespace › app-server container</title>
           <rect x="1050" y="300" width="170" height="62" rx="8" class="c-mask"/>
           <rect x="1050" y="300" width="170" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 9; --flow-node-name: archify-relay-node-10;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1056 306) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="1135" y="329" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">vault-run</text>
-        <text x="1135" y="345" class="t-muted" font-size="9" text-anchor="middle">redeem, run, scrub</text>
+          <text data-node-label="" x="1135" y="329" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">vault-run + vault-fill</text>
+        <text x="1135" y="345" class="t-muted" font-size="9" text-anchor="middle">redeem, fill, run, scrub</text>
         </g>
 
         <g id="node-vault" data-node-id="vault" data-node-label="garden-vault" tabindex="0" role="button" aria-label="Focus garden-vault, /vault/, /mcp, /redeem, Compose project lettuce-&lt;name&gt; (one per person) › vault: read-only, no caps" aria-pressed="false" data-node-kind="security" data-node-sublabel="/vault/, /mcp, /redeem" data-node-context="Compose project lettuce-&lt;name&gt; (one per person) › vault: read-only, no caps">
@@ -1265,9 +1265,9 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <rect x="1042.1999999999998" y="239" width="86.8" height="14" rx="3" class="c-mask"/>
           <text x="1085.6" y="249" class="t-edge-default" font-size="8" text-anchor="middle">agent shell runs</text>
         </g>
-        <g data-edge-from="vaultrun" data-edge-to="vault" data-edge-label="POST /redeem (handle)" data-edge-key="9">
-          <rect x="949.2" y="424.5" width="110.8" height="14" rx="3" class="c-mask"/>
-          <text x="1004.6" y="434.5" class="t-edge-security" font-size="8" text-anchor="middle">POST /redeem (handle)</text>
+        <g data-edge-from="vaultrun" data-edge-to="vault" data-edge-label="POST /redeem (handles)" data-edge-key="9">
+          <rect x="944.4000000000001" y="424.5" width="115.6" height="14" rx="3" class="c-mask"/>
+          <text x="1002.2" y="434.5" class="t-edge-security" font-size="8" text-anchor="middle">POST /redeem (handles)</text>
         </g>
         <g data-edge-from="vault" data-edge-to="jwks" data-edge-label="JWKS" data-edge-key="10">
           <rect x="415" y="474" width="30" height="14" rx="3" class="c-mask"/>

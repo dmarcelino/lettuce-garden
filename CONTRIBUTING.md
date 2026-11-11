@@ -9,6 +9,7 @@ The rules live in the developer docs: the cross-cutting ones on this page, and e
 - [shellcheck](https://github.com/koalaman/shellcheck) v0.11.0, the version CI pins: older releases report differently.
 - Node 22 or newer for `node --test` on the host. The sidecars' tests run in Docker and need nothing else.
 - No upstream clone is needed for the offline tests: `tests/run.sh` stubs Docker and Cloudflare.
+- `./lettucectl` from a clone builds every image itself and keeps its instance in the clone's untracked `data/` (or the directory `LETTUCE_DATA` names); it refuses a data directory a release runs ([lib/README.md](lib/README.md#code-and-data-are-apart)). Admins run released images instead; how a release is cut: [release/README.md](release/README.md#cutting-a-release).
 
 ## Relationship to upstream
 lettuce-garden composes [Lettuce](https://github.com/dmarchevsky/lettuce) and adds to it: one isolated stack per person, plus an opinionated set of extras (garden sidecars, MCP servers, agent skills, CLI commands). Lettuce is not ours, and every departure from its design is something `lettucectl upgrade` can break. Six rules follow from that.
@@ -50,19 +51,20 @@ These are the Lettuce internals lettuce-garden depends on today ("named today").
 | `google_redirect_uri` | the BFF route `/api/google/oauth/callback` | [lib/](lib/README.md#upstream-seams) |
 | `find_agent` | the JSON shape of `letta agents list` (`.items[]`) | [lib/](lib/README.md#upstream-seams) |
 | `check_stack`, the overlays | upstream's service names, the volumes `google-creds` and `google-policy`, and `network_mode: service:app-server` for the BFF and channel-gateway | [compose/](compose/README.md#upstream-seams) |
-| `compose/pipelock-proxy.yml` | who follows `HTTPS_PROXY`: letta-code's Node (22.19 today) ignores it even with `NODE_USE_ENV_PROXY=1`, and Node >= 22.21 follows it. searxng and ddg-mcp follow it only because their clients trust the environment. `NO_PROXY` is a hand-kept list of the services agents and the executor call inside the stack | [pipelock/](pipelock/README.md#upstream-seams) |
-| the garden executor | `letta cron add` with `--name=`, `--description=`, `--prompt=`, `--at=in 1m`, `--once`, `--agent=`, `--conversation=new\|default` (the `=` form, since letta-code's strict `parseArgs` misreads a value starting with `-`) and its JSON output (`.id`); `letta agents list` (`.items[]`); the scheduler picking up a changed task file without a restart; the app-server entrypoint copying `/root/.letta/system-cron` to `/etc/cron.d`; the image's `/usr/local/bin/agent-env` | [garden/](garden/README.md#upstream-seams), [executor](garden/executor/README.md) |
+| `compose/pipelock-proxy.yml` | who follows `HTTPS_PROXY`: letta-code's Node follows it with `NODE_USE_ENV_PROXY=1` from 22.21 (22.23 since v0.42.3), so its own traffic, the model provider's included, goes through pipelock; the executor's cron line unsets the variable. searxng and ddg-mcp follow it only because their clients trust the environment. `NO_PROXY` is a hand-kept list of the services agents and the executor call inside the stack | [pipelock/](pipelock/README.md#upstream-seams) |
+| the garden executor | `letta cron add` with `--name=`, `--description=`, `--prompt=`, `--at=in 1m`, `--once`, `--agent=`, `--conversation=new\|default` (the `=` form, since letta-code's strict `parseArgs` misreads a value starting with `-`) and its JSON output (`.id`); `letta agents list` (`.items[]`); the scheduler picking up a changed task file without a restart; the app-server entrypoint copying `/root/.letta/system-cron` to `/etc/cron.d`, and the BFF listing that folder in the Tasks tab (since v0.26); the image's `/usr/local/bin/agent-env` | [garden/](garden/README.md#upstream-seams), [executor](garden/executor/README.md) |
 | `lettucectl mcp` | the shared MCP list's file, `/root/.letta/mcp-home/.letta/settings.json`, and its shape; the BFF rendering it whole and reading it from disk before every change; the `mcp-servers` skill's description, which the BFF renders from the list only on a Settings -> MCP save and on every connect (`ensureMcpServers`), hence the BFF restart | [lib/](lib/README.md#upstream-seams) |
 | doc-tools | how `letta mcp call` runs a stdio server (per call, in the agent's cwd, a fixed environment, stdin closed then SIGTERM then SIGKILL, stderr piped and never read, 60 s per request; a bare `tools`/`search` starts every server); the `mcp-servers` skill wrapper `/root/.letta/skills/mcp-servers/scripts/mcp.sh`; workspaces at `/work/<agent-id>`; `/opt/lettuce-doc-tools` free in the app-server image, glibc >= 2.28 and system ICU, a `/tmp` that allows exec | [doc-tools/](doc-tools/README.md#upstream-seams) |
 | the watchlist and its skill | the watchlist's `http` entry in the MCP list; the 120 s Lettuce's MCP bridge gives a tool call; through the executor, what Gmail triggers rely on (above); the `mcp-servers` skill wrapper | [watchlist/](watchlist/README.md#upstream-seams) |
-| the vault and its skill | the vault's `http` entry in the MCP list; letta-code telling the agent when a background command finishes, which is how an agent waiting for an approval gets a new turn; `MAX_WAIT_SECONDS` below the MCP bridge's 120 s | [vault/](vault/README.md#upstream-seams), [agent-skills/](agent-skills/README.md#upstream-seams) |
+| the vault and its skill | the vault's `http` entry in the MCP list; letta-code telling the agent when a background command finishes, which is how an agent waiting for an approval gets a new turn; `letta mcp call <tool> --args-file -` reading the arguments from stdin and exiting 2 when the tool reports an error (the skill's email recipe pipes `vault-fill` into it, under `bash` for `pipefail`); `MAX_WAIT_SECONDS` below the MCP bridge's 120 s | [vault/](vault/README.md#upstream-seams), [agent-skills/](agent-skills/README.md#upstream-seams) |
 | skills and `backup` | the global skills directory `/root/.letta/skills`, and the BFF rewriting upstream's `docker/agent-skills` there on every connect | [agent-skills/](agent-skills/README.md#upstream-seams), [backup/](backup/README.md#upstream-seams) |
 | Gmail triggers | the Google files the BFF writes on the `google-policy` and `google-creds` volumes | [gmail-triggers/](gmail-triggers/README.md#upstream-seams) |
+| `app_server_image`, `upstream_image_ns`, `fetch_upstream` | the app-server's image named `${LETTA_IMAGE_NS}lettuce-app-server:<release tag>`, `LETTA_IMAGE_NS` as upstream's pull-or-build switch, its images at `ghcr.io/<owner>/`, and GitHub's tag archives | [lib/](lib/README.md#upstream-seams) |
 | `garden-code-server-exec` | built `FROM` the app-server's image: Debian with `apt`, `bash` as root's shell, the image `ENV` pointing `PATH`, `NPM_CONFIG_PREFIX`, `CARGO_HOME`, `GOBIN` and the `UV_*` variables at `/opt/agent-tools`, `/usr/local/bin/agent-env` reading PID 1's environment; the workspaces and tools mounted as the app-server mounts them | [code-server/](code-server/README.md#upstream-seams) |
 | the landing page's agent links | code-server's `?folder=` query and the workspaces at `/work/<agent-id>` | [garden/](garden/README.md#upstream-seams) |
 
 ### Upgrading `LETTUCE_REF`
-`lettucectl upgrade <tag>` moves the clone, but only a person can check the seams. For each new tag:
+`lettucectl upgrade <tag>` downloads the new tag, but only a person can check the seams. A release's tested tag is `config.env.example`'s `LETTUCE_REF`, which `publish.yml` writes into `RELEASE`, so moving it there is what moves released installs (through `self-upgrade`). For each new tag:
 1. Read Lettuce's release notes and changelog for anything the table above names.
 2. Check each row against the new tag, starting with the ones its notes touch.
 3. Run `node --version` in an app-server. From 22.21 letta-code's own traffic goes through pipelock too: check that `NO_PROXY` still covers what it calls inside the stack ([pipelock/README.md](pipelock/README.md#upstream-seams)).
@@ -112,10 +114,12 @@ Three helpers recur:
 3. Document it: a row above, or the folder README's "Rules" for a profile's own check.
 4. Add a directive to [AGENTS.md](AGENTS.md) when an agent's change could break it.
 
+Two rules hold whatever the profiles: in release mode every published garden service runs the image `RELEASE` names, and the code editor's shell builds `FROM` the app-server's image as the render names it (`check_images`, [lib/README.md](lib/README.md#release-mode-is-a-file-not-a-setting)).
+
 ## Adding a garden sidecar
 A new page on the garden host, `garden-<page>` at `/<page>/`. Each step is a rule somewhere; this list gathers them.
 1. **The service:** a folder with the app, a `Dockerfile` with a `test` stage, and the `garden-common` build context ([garden-common/README.md](garden-common/README.md#how-it-plugs-in)). Use `garden_common.auth` for every page (Access JWT, Fetch Metadata, CSRF, COOP).
-2. **The overlay:** `compose/<name>.yml`, merged for every stack (add it to the `compose` wrapper's list), the service behind its own `garden-<page>` profile, hardened, with `CF_ACCESS_AUD: ${CF_GARDEN_AUD}` and `PUBLIC_ORIGIN: ${GARDEN_ORIGIN}`. Don't pass it `COMPOSE_PROFILES` or `GARDEN_PROFILES` ([lib/README.md](lib/README.md#tunnel-routes-follow-the-profiles)).
+2. **The overlay:** `compose/<name>.yml`, merged for every stack (add it to the `compose` wrapper's list), the service behind its own `garden-<page>` profile, hardened, with `CF_ACCESS_AUD: ${CF_GARDEN_AUD}` and `PUBLIC_ORIGIN: ${GARDEN_ORIGIN}`. Don't pass it `COMPOSE_PROFILES` or `GARDEN_PROFILES` ([lib/README.md](lib/README.md#tunnel-routes-follow-the-profiles)). Its build contexts are `${LETTUCE_HOME}/<folder>` and its image is `${GARDEN_IMAGE_<NAME>:-lettuce-<name>:local}`, with a line in [release/images](release/README.md#files) and a `.dockerignore` for caches, so a release publishes it and runs the published image ([compose/README.md](compose/README.md)).
 3. **The route:** a `PROFILE_ROUTES` row in `lib/cloudflare.sh` (profile `garden-<page>` with its page at `/<page>/`, which a test checks), the profile in `compose/garden.yml`'s list (a test checks they match), and an entry in `LABELS` (`garden/src/garden_landing/`).
 4. **Checks:** a `check_<name>` for its hardening, mounts and networks, and its tests; `check_garden_audience` picks it up from `PROFILE_ROUTES`.
 5. **Pipelock:** if agents or the executor call it inside the stack, add it to `NO_PROXY` in `compose/pipelock-proxy.yml`, or pipelock refuses its private address. If what passes between it and the app-server must never reach pipelock (secret values, as with the vault, or a token, as with the executor's), also add it to the names `check_pipelock` requires in `NO_PROXY`.
@@ -144,17 +148,18 @@ A new page on the garden host, `garden-<page>` at `/<page>/`. Each step is a rul
   | [doc-tools/](doc-tools/README.md) | the document tools' image and the PDF MCP server |
   | [agent-skills/](agent-skills/README.md) | the skills installed into every agent |
   | [backup/](backup/README.md) | the image `lettucectl backup` copies with |
+  | [release/](release/README.md) | releases: the published images, their content tags, the lettucectl image and its wrapper |
   | [tests/](tests/README.md) | the CLI's offline tests: the stubs and helpers |
 
-- **Design records**, kept as written, with a note where the build later differed: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md), [garden/DESIGN.md](garden/DESIGN.md) (the garden host and the garden-wide executor), [watchlist/DESIGN.md](watchlist/DESIGN.md).
+- **Design records**, kept as written, with a note where the build later differed: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md), [garden/DESIGN.md](garden/DESIGN.md) (the garden host and the garden-wide executor), [lib/DESIGN.md](lib/DESIGN.md) (installing without a clone), [watchlist/DESIGN.md](watchlist/DESIGN.md).
 - **The user and admin guides** in [docs/](docs/): each feature's security model (what it guarantees and what it does not) is there; the folder README says how it is enforced.
 
 ## Building and testing
-The CLI has no build step, and `lettucectl up` builds the sidecar images. The commands (the same block as in AGENTS.md):
+The CLI has no build step. From a clone, `lettucectl up` builds the sidecar images; a release pulls them. The commands (the same block as in AGENTS.md):
 ```bash
 tests/run.sh                 # all offline tests (docker, curl, dig, gh, secret-tool are stubbed)
 tests/run.sh <pattern>       # only tests whose function name contains <pattern>, e.g. tests/run.sh test_add_
-shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/* doc-tools/bin/* doc-tools/lib/launch.sh code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh
+shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/* doc-tools/bin/* doc-tools/lib/launch.sh code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh release/content-tag release/lettucectl-wrapper.sh
 tests/run-sidecar.sh vault            # vault tests (pytest in its image's `test` stage; needs Docker)
 tests/run-sidecar.sh vault -k vault   # extra args go to pytest
 tests/run-sidecar.sh gmail-triggers    # Gmail triggers' tests (pytest; the executor's run with garden)
@@ -173,7 +178,7 @@ tests/run-sidecar.sh doc-tools         # the PDF MCP's tests (pytest in the doc-
 - **Before changing docs:** `node scripts/check-doc-links.mjs`.
 - **End to end**, against real images (Docker, and the internet for the first build; throwaway containers only): `scripts/doc-tools-e2e.sh`, and `scripts/code-server-e2e.sh --browser` before keeping a new code editor extension or setting.
 
-CI (`.github/workflows/ci.yml`) runs all of these but the end-to-end scripts on every branch push, and by hand from Actions ("Run workflow"). A new test script or linted file goes there too, and in both copies of the block above.
+CI (`.github/workflows/ci.yml`) runs all of these but the end-to-end scripts on every branch push, by hand from Actions ("Run workflow"), and before every release (`publish.yml` calls it). A new test script or linted file goes there too, and in both copies of the block above.
 
 ## Writing docs
 Each audience has its own place:
@@ -189,7 +194,7 @@ Each audience has its own place:
 The rule of thumb: running `lettucectl`, using a page or knowing what is protected belongs in `docs/`; editing tracked files, how something is wired, the rules and tests belong with the developers. Each fact has one home, and the other places link to it.
 
 - **A rule lives in the developer docs.** Changing one edits its folder README or this page, then the AGENTS.md directive if its one-line form changed. AGENTS.md never carries a rule's detail.
-- **Never claim more than is true.** When a security model is written in plain language, every limit stays in the user doc: pipelock is advisory, the vault's `env` delivery is not a boundary, agents are root in their stack, and a folder in the code editor must never be trusted. Only the mechanism moves to the folder README.
+- **Never claim more than is true.** When a security model is written in plain language, every limit stays in the user doc: pipelock is advisory, the vault's placeholder delivery is not a boundary, agents are root in their stack, and a folder in the code editor must never be trusted. Only the mechanism moves to the folder README.
 - **Keep the guides' file names and `docs/cloudflare-setup.md`'s step numbers.** `lettucectl`'s messages cite them (`docs/cloudflare-setup.md, step 5`, `docs/vault.md`, `docs/doc-tools.md`, `docs/google-setup.md`), and `tests/run.sh` asserts some of those messages.
 - **Don't add files to `doc-tools/` or `garden-common/` for docs.** `doc_tools_tag` (`lib/common.sh`) hashes everything in `doc-tools/` but `tests/`, `README.md`, `AGENTS.md`, `CLAUDE.md` and Python caches, and `garden-common/.dockerignore` leaves out only `README.md`, `AGENTS.md` and `CLAUDE.md`: any other file there rebuilds an image, and for `doc-tools/` refills the tools' volume and recreates every app-server.
 - **Each folder README has an agents' pointer next to it:** an `AGENTS.md` that tells a coding agent to read the README's "Rules" and run its "Build and test" before changing the folder, and a `CLAUDE.md` symlink to it, which Claude Code loads when it works in that folder. The pointer holds no rule; a new folder README gets one too. `node scripts/check-doc-links.mjs` checks that every README has it.

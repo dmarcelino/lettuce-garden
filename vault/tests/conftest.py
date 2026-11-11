@@ -75,18 +75,35 @@ def vault(vault_path, clock) -> Vault:
     return v
 
 
-ADDRESS_TEXT = f"Alfred Test, {STREET}, 1000-001 Lisboa, Portugal"
+PHONE = "+351 910 000 042"
+ADDRESS = {
+    "first_name": "Alfred",
+    "last_name": "Test",
+    "address1": STREET,
+    "city": "Lisboa",
+    "postal_code": "1000-001",
+    "country": "Portugal",
+    "phone": PHONE,
+}
 
 
 def add_address(vault: Vault, share_mode: str = "ask") -> str:
-    fields = build_fields("address", {"text": ADDRESS_TEXT})
-    return vault.add_secret("address", "Home address", "deliveries", fields, share_mode)
+    """An identity holding an address: its address fields may be shared without asking, its phone may not."""
+    return vault.add_secret("identity", "Home address", "deliveries", build_fields("identity", ADDRESS), share_mode)
 
 
 def add_card(vault: Vault) -> str:
     fields = build_fields(
         "card",
-        {"cardholder": "Alfred Test", "number": CARD, "expiry": "12/30", "security_code": "123", "notes": SECRET},
+        {
+            "cardholder_name": "Alfred Test",
+            "brand": "Visa",
+            "number": CARD,
+            "exp_month": "12",
+            "exp_year": "2030",
+            "code": "123",
+            "notes": SECRET,
+        },
     )
     return vault.add_secret("card", "Visa", "", fields)
 
@@ -112,13 +129,14 @@ def make_service(settings: Settings, vault: Vault, sender: FakeSender | None = N
 
 
 async def with_service(service: Service, fn):
+    """Runs fn, then waits for every push it queued: leaving the task group waits
+    for them, where a fixed sleep could cut one short."""
     async with anyio.create_task_group() as tg:
         service.bind_task_group(tg)
         try:
             return await fn()
         finally:
-            await anyio.sleep(0.01)  # let queued pushes run
-            tg.cancel_scope.cancel()
+            service.bind_task_group(None)
 
 
 # ── Access JWTs ──────────────────────────────────────────────────────────────

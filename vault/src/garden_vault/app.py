@@ -1,6 +1,6 @@
 """The ASGI app: MCP at /mcp and vault-run's /redeem (internal only; the tunnel
 forwards /vault/ on the garden's host alone) and the vault UI at /vault/
-(every route needs a verified Access JWT, and all but setup/unlock/notifications
+(every route needs a verified Access JWT, and all but setup/unlock/erase/notifications
 an unlocked vault)."""
 
 from __future__ import annotations
@@ -26,10 +26,11 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, R
 from starlette.routing import Mount, Route
 
 from . import icons
-from .config import PREFIX, UNLOCK_ATTEMPTS_PER_MINUTE
-from .kinds import KINDS, preview
+from .bitwarden import MAX_IMPORT_BYTES, read_export
+from .config import ERASE_REQUESTS_PER_HOUR, PREFIX, UNLOCK_ATTEMPTS_PER_MINUTE
+from .kinds import KINDS, MAX_CUSTOM_FIELDS, group_fields, may_share_without_asking, preview
 from .mcp_tools import build_server
-from .service import Service
+from .service import ERASE_DELAY, Service, hours
 from .vault import ASK, AUTO, Field, Locked, Secret, Vault, VaultError, build_fields
 
 log = logging.getLogger("garden_vault.ui")
@@ -61,17 +62,18 @@ def _fmt_time(ts: int | None) -> str:
 
 
 class RateLimiter:
-    def __init__(self, per_minute: int, clock: Callable[[], float] = time.monotonic):
-        self._per_minute = per_minute
+    def __init__(self, limit: int, window: float = 60, clock: Callable[[], float] = time.monotonic):
+        self._limit = limit
+        self._window = window
         self._clock = clock
         self._hits: dict[str, deque[float]] = defaultdict(deque)
 
     def allow(self, key: str) -> bool:
         now = self._clock()
         hits = self._hits[key]
-        while hits and now - hits[0] > 60:
+        while hits and now - hits[0] > self._window:
             hits.popleft()
-        if len(hits) >= self._per_minute:
+        if len(hits) >= self._limit:
             return False
         hits.append(now)
         return True
@@ -85,9 +87,12 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
     env = Environment(loader=PackageLoader("garden_vault", "templates"), autoescape=select_autoescape(default=True))
     env.filters["time"] = _fmt_time
     env.globals["base"] = PREFIX
+    env.globals["erase_delay"] = ERASE_DELAY
     static = resources.files("garden_vault") / "static"
     vault: Vault = service.vault
     unlock_limiter = RateLimiter(UNLOCK_ATTEMPTS_PER_MINUTE)
+    # Every erase request notifies every device: a session must not flood them.
+    erase_limiter = RateLimiter(ERASE_REQUESTS_PER_HOUR, window=3600)
 
     def render(name: str, email: str, status: int = 200, **ctx: Any) -> HTMLResponse:
         unlocked = vault.is_unlocked()
@@ -101,6 +106,16 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
         )
         return HTMLResponse(html, status_code=status, headers=SECURITY_HEADERS)
 
+    def locked_page(email: str, next_path: str, status: int = 200, problem: str = "") -> HTMLResponse:
+        """The unlock page, with the scheduled erase if there is one."""
+        erase = None
+        pending = service.pending_erase()
+        if pending is not None:
+            at, by = pending
+            left = hours(max(at - vault.now(), 0) + 3599)  # rounded up: never claims more time than is left
+            erase = {"when": time.strftime("%Y-%m-%d %H:%M %Z", time.localtime(at)), "by": by, "left": left}
+        return render("unlock.html", email, status=status, next=next_path, problem=problem, erase=erase)
+
     def error(message: str, status: int, email: str = "") -> HTMLResponse:
         return render("error.html", email, status=status, message=message)
 
@@ -108,10 +123,11 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
         return RedirectResponse(PREFIX + path, status_code=303, headers=SECURITY_HEADERS)
 
     def page(
-        handler: Handler, post: bool = False, unlocked: bool = True, asset: bool = False
+        handler: Handler, post: bool = False, unlocked: bool = True, asset: bool = False, max_body: int | None = None
     ) -> Callable[[HttpRequest], Awaitable[Response]]:
         """`asset`: a script, stylesheet, icon or manifest, loaded by pages as a subresource (or as the
-        service worker); it holds nothing to protect."""
+        service worker); it holds nothing to protect. `max_body`: a post must declare its size, at most
+        this, before any of it is read (a multipart upload is otherwise spooled whole, at any size)."""
 
         async def endpoint(request: HttpRequest) -> Response:
             is_json = request.headers.get("content-type", "").startswith("application/json")
@@ -121,6 +137,10 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
             except AuthError as e:
                 log.info("refused %s %s reason=%s", request.method, request.url.path, e.reason)
                 return error(str(e), e.status)
+            if max_body is not None:
+                size = request.headers.get("content-length", "")
+                if not size.isdigit() or int(size) > max_body:
+                    return error(f"the upload must be at most {max_body // (1024 * 1024)} MB", 413, email)
             if post:
                 try:
                     authenticator.check_origin(request.headers)
@@ -136,12 +156,12 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
                     return render("setup.html", email)
                 if not vault.is_unlocked():
                     target = request.url.path if request.method == "GET" else PREFIX + "/"
-                    return render("unlock.html", email, next=target)
+                    return locked_page(email, target)
             vault.touch()
             try:
                 return await handler(request, email)
             except Locked:
-                return render("unlock.html", email, next=PREFIX + "/")
+                return locked_page(email, PREFIX + "/")
             except VaultError as e:
                 return error(str(e), 400, email)
 
@@ -164,13 +184,15 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
         form = await request.form()
         nxt = _safe_next(form.get("next"))
         if not unlock_limiter.allow(email):
-            return render("unlock.html", email, status=429, next=nxt, problem="Too many attempts. Wait a minute.")
+            return locked_page(email, nxt, 429, "Too many attempts. Wait a minute.")
         try:
-            vault.unlock(str(form.get("passphrase", "")))
+            cancelled_erase = vault.unlock(str(form.get("passphrase", "")))
         except VaultError as e:
             vault.audit(email, "failed unlock")
-            return render("unlock.html", email, status=403, next=nxt, problem=str(e))
+            return locked_page(email, nxt, 403, str(e))
         vault.audit(email, "unlocked")
+        if cancelled_erase:
+            service.erase_cancelled(email, by_unlock=True)
         return RedirectResponse(nxt, status_code=303, headers=SECURITY_HEADERS)
 
     async def lock(request: HttpRequest, email: str) -> Response:
@@ -198,6 +220,22 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
         vault.audit(email, "erased the vault")
         return back("/")
 
+    async def erase(request: HttpRequest, email: str) -> Response:
+        """A locked vault (forgotten passphrase): erased after a delay, unless
+        someone unlocks it or cancels first. Every device is told."""
+        form = await request.form()
+        if form.get("confirm") != "DELETE":
+            raise VaultError("type DELETE to erase the vault")
+        if not erase_limiter.allow(email):
+            return locked_page(email, PREFIX + "/", 429, "Too many erase requests. Wait an hour.")
+        service.schedule_erase(email)
+        return back("/")
+
+    async def erase_cancel(request: HttpRequest, email: str) -> Response:
+        # No passphrase: cancelling keeps data, so it needs no more proof than scheduling.
+        service.cancel_erase(email)
+        return back("/")
+
     # ── approvals ────────────────────────────────────────────────────────────
     async def approvals(request: HttpRequest, email: str) -> Response:
         return render("approvals.html", email, pending=service.pending(), recent=service.recent())
@@ -221,16 +259,29 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
 
     # ── secrets ──────────────────────────────────────────────────────────────
     def fields_from(form: Any, kind: str, current: Secret | None) -> tuple[Field, ...]:
-        values = {spec.key: str(form.get(f"f_{spec.key}", "")) for spec in KINDS[kind].fields}
-        if current is not None:
-            # Private values are never sent back to the browser: blank keeps them,
-            # unless the person ticked "Remove this value" on an optional one.
-            for spec in KINDS[kind].fields:
-                old = current.field(spec.key)
-                removing = not spec.required and form.get(f"clear_{spec.key}") == "on"
-                if spec.sensitive and not values[spec.key].strip() and old is not None and not removing:
-                    values[spec.key] = old.value
-        return build_fields(kind, values)
+        # Masked values are never sent back to the browser: blank keeps them,
+        # unless the person ticked "Remove this value". Every other box comes
+        # prefilled, so there blank means removed.
+        def kept(value: str, old_key: str, clear: str) -> str:
+            old = current.field(old_key) if current is not None and old_key else None
+            if not value.strip() and old is not None and old.masked and form.get(clear) != "on":
+                return old.value
+            return value
+
+        values = {
+            spec.key: kept(str(form.get(f"f_{spec.key}", "")), spec.key, f"clear_{spec.key}")
+            for spec in KINDS[kind].fields
+        }
+        custom = []
+        for i in range(MAX_CUSTOM_FIELDS + 2):
+            if f"c_name_{i}" not in form:
+                break
+            name, old_key = str(form.get(f"c_name_{i}", "")), str(form.get(f"c_old_{i}", ""))
+            if old_key and not name.strip():
+                continue  # an existing field whose name was emptied: removed
+            value = kept(str(form.get(f"c_value_{i}", "")), old_key, f"c_clear_{i}")
+            custom.append((name, value, form.get(f"c_hidden_{i}") == "on"))
+        return build_fields(kind, values, custom)
 
     def share_mode_from(form: Any) -> str:
         return AUTO if form.get("share_mode") == AUTO else ASK
@@ -267,9 +318,37 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
         return back(f"/secrets/{secret_id}")
 
     def show(email: str, secret: Secret, revealed: bool) -> Response:
+        auto = [f.label for f in secret.private_fields if may_share_without_asking(secret.kind, f.key)]
         return render(
-            "secret.html", email, secret=secret, revealed=revealed, preview=preview(secret.kind, list(secret.fields))
+            "secret.html",
+            email,
+            secret=secret,
+            groups=group_fields(secret.kind, secret.fields),
+            revealed=revealed,
+            preview=preview(secret.kind, list(secret.fields)),
+            auto_labels=auto,
         )
+
+    async def import_page(request: HttpRequest, email: str) -> Response:
+        return render("import.html", email, max_mb=MAX_IMPORT_BYTES // (1024 * 1024))
+
+    async def import_bitwarden(request: HttpRequest, email: str) -> Response:
+        """The file is read in memory (python-multipart spools a large one to the
+        tmpfs /tmp) and never kept; each item becomes a secret that asks first."""
+        upload = (await request.form()).get("file")
+        if upload is None or isinstance(upload, str):
+            raise VaultError("choose a Bitwarden .json export")
+        try:
+            raw = await upload.read(MAX_IMPORT_BYTES + 1)
+        finally:
+            await upload.close()
+        items, skipped = read_export(raw)
+        counts: dict[str, int] = {}
+        for item in items:
+            vault.add_secret(item.kind, item.name, "", item.fields, ASK)
+            counts[KINDS[item.kind].label] = counts.get(KINDS[item.kind].label, 0) + 1
+        vault.audit(email, f"imported {len(items)} secrets from Bitwarden")
+        return render("import.html", email, counts=counts, skipped=skipped, done=True)
 
     async def secret_view(request: HttpRequest, email: str) -> Response:
         return show(email, get_secret(request), revealed=False)
@@ -378,11 +457,10 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
             body = await request.json()
         except ValueError:
             return JSONResponse({"error": "expected JSON"}, status_code=400, headers=NO_STORE)
-        found = service.redeem(body.get("handle")) if isinstance(body, dict) else None
-        if found is None:
-            error = "unknown or expired handle; request the secret again"
-            return JSONResponse({"error": error}, status_code=404, headers=NO_STORE)
-        return JSONResponse(found, headers=NO_STORE)
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "expected a JSON object"}, status_code=400, headers=NO_STORE)
+        status, answer = service.redeem(body.get("handles"), body.get("taken", []))
+        return JSONResponse(answer, status_code=status, headers=NO_STORE)
 
     open_page = {"unlocked": False}
     ui = [
@@ -390,6 +468,8 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
         Route("/setup", page(setup, post=True, **open_page), methods=["POST"]),
         Route("/unlock", page(unlock, post=True, **open_page), methods=["POST"]),
         Route("/lock", page(lock, post=True, **open_page), methods=["POST"]),
+        Route("/erase", page(erase, post=True, **open_page), methods=["POST"]),
+        Route("/erase/cancel", page(erase_cancel, post=True, **open_page), methods=["POST"]),
         Route("/settings", page(settings_page)),
         Route("/settings/passphrase", page(change_passphrase, post=True), methods=["POST"]),
         Route("/settings/reset", page(reset, post=True), methods=["POST"]),
@@ -398,6 +478,13 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
         Route("/secrets", page(secrets_page)),
         Route("/secrets", page(secret_create, post=True), methods=["POST"]),
         Route("/secrets/new", page(secret_new)),
+        Route("/secrets/import", page(import_page)),
+        # The export, plus room for the form's other parts and multipart framing.
+        Route(
+            "/secrets/import",
+            page(import_bitwarden, post=True, max_body=MAX_IMPORT_BYTES + 64 * 1024),
+            methods=["POST"],
+        ),
         Route("/secrets/{sid}", page(secret_view)),
         Route("/secrets/{sid}", page(secret_update, post=True), methods=["POST"]),
         Route("/secrets/{sid}/edit", page(secret_edit)),
@@ -437,9 +524,11 @@ def create_app(service: Service, authenticator: Authenticator, vapid_public_key:
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         async with mcp_app.router.lifespan_context(mcp_app), anyio.create_task_group() as tg:
             service.bind_task_group(tg)
+            service.announce_overdue_erase()
 
             async def housekeeping() -> None:
                 while True:
+                    service.erase_if_due()
                     service.expire()
                     vault.is_unlocked()  # applies the auto-lock
                     await anyio.sleep(30)

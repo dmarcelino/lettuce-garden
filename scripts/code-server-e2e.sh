@@ -5,7 +5,8 @@
 #
 #   scripts/code-server-e2e.sh [--browser] [--keep] [APP_SERVER_IMAGE]
 #
-# APP_SERVER_IMAGE defaults to lettuce-app-server:v0.22.0-letta_0.34.21.
+# APP_SERVER_IMAGE defaults to upstream's published app-server at the tag
+# config.env.example's LETTUCE_REF names (the tag a release is tested with).
 # --browser also drives the workbench in Chromium (Playwright's image, about 2 GB).
 # --keep leaves everything running for inspection and prints how to remove it.
 #
@@ -49,7 +50,8 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-APP=lettuce-app-server:v0.22.0-letta_0.34.21
+APP=$(sed -nE 's#^LETTUCE_REPO=https://github.com/([^/]+)/.*#\1#p' "$ROOT/config.env.example" | tr '[:upper:]' '[:lower:]')
+APP=ghcr.io/$APP/lettuce-app-server:$(sed -n 's/^LETTUCE_REF=//p' "$ROOT/config.env.example")
 BROWSER=0
 KEEP=0
 DEBIAN=debian:12-slim

@@ -27,6 +27,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 | `doc-tools/` | [doc-tools/README.md](doc-tools/README.md#rules) | [doc-tools](doc-tools/README.md#build-and-test) |
 | `agent-skills/` | [agent-skills/README.md](agent-skills/README.md#rules) | [agent-skills](agent-skills/README.md#build-and-test) |
 | `backup/` | [backup/README.md](backup/README.md#rules) | [backup](backup/README.md#build-and-test) |
+| `release/`, `VERSION`, `REBUILD`, `.github/workflows/publish.yml` | [release/README.md](release/README.md#rules) | [release](release/README.md#build-and-test) |
 | `tests/` | [tests/README.md](tests/README.md) (the stubs and helpers) | [tests](tests/README.md#build-and-test) |
 | `docs/`, any `*.md` | [CONTRIBUTING.md](CONTRIBUTING.md#writing-docs) | `node scripts/check-doc-links.mjs` |
 
@@ -42,7 +43,11 @@ The "Build and test" sections are the one list of checks; this table only links 
 - Name new profiles `garden-<name>`. Move `LETTUCE_REF` only with `lettucectl upgrade <tag>`, and walk [the upgrade checklist](CONTRIBUTING.md#upgrading-lettuce_ref).
 
 ### The CLI ([lib/README.md](lib/README.md#rules))
-- Never source `config.env` or `stack.env`; use `env_get`, `env_set`, `env_unset` and `cfg`. No quotes or inline comments in them.
+- Never source `config.env` or `stack.env`; use `env_get`, `env_set`, `env_unset` and `cfg`. No quotes or inline comments in them. `stacks.conf` too: `conf_entries`, `conf_set`, `conf_unset`.
+- Instance paths go through `LETTUCE_DATA` (`config_file`, `stack_dir`, `upstream_dir`...), code paths through `LETTUCE_HOME`; never mix them ([rule](lib/README.md#code-and-data-are-apart)).
+- `apply` never removes a stack or changes a profile; `add`, `users` and `remove` keep `stacks.conf` in step ([rule](lib/README.md#stacksconf-is-kept-in-step-and-apply-never-removes)).
+- `up` never builds a published image in release mode, and the shell's base is the app-server's image by name, never `service:app-server` ([rule](lib/README.md#up-builds-only-what-is-built-on-this-host)).
+- In release mode every host path lettucectl hands Docker is mounted at the same path in its container; a new one goes in the wrapper and through `require_mounted` ([rule](lib/README.md#every-host-path-is-the-same-inside-lettucectls-container)).
 - Every Compose call goes through `compose NAME ...` (or `compose_env`, `compose_shared`); plain `docker` through `host_docker`.
 - Keep `add`'s creation order and `remove`'s reverse order, storing each id as soon as it exists and unsetting it only on success; tests assert the exact order. `up` makes no Cloudflare call.
 - Never put the Cloudflare API token, or any token, in argv: tokens go on stdin or as `-e NAME`.
@@ -55,7 +60,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 - A new safety rule goes into `check_stack`, with a `test_check_*` test, and into [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-rule) or its folder's "Rules". Remember that a container Docker restarts on its own is not re-checked.
 
 ### Features
-- **Vault** ([rules](vault/README.md#rules)): never add an MCP tool that edits secrets or bypasses approval; never write vault data, keys or the passphrase unencrypted or to logs; never mount `vault-data` elsewhere (only `backup`, read-only); agent activity must not extend the auto-lock.
+- **Vault** ([rules](vault/README.md#rules)): never add an MCP tool that edits secrets or bypasses approval; never write vault data, keys or the passphrase unencrypted or to logs; never mount `vault-data` elsewhere (only `backup`, read-only); agent activity must not extend the auto-lock; an erase without the passphrase always waits its delay and tells every device.
 - **Code editor** ([rules](code-server/README.md#rules)): nothing an agent wrote may run in the editor's container. Never add an extension, setting or flag that runs code, trusts a workspace or opens a port.
 - **Garden pages** ([garden-common rules](garden-common/README.md#rules), [garden rules](garden/README.md#rules)): every page checks Fetch Metadata (`check_fetch`) and sets COOP; the landing page has no script; every garden service accepts only `CF_GARDEN_AUD` and `GARDEN_ORIGIN`.
 - **Executor** ([install](garden/executor/README.md#install), [trust](garden/executor/README.md#trust)): only `sync_executor` installs or removes it (from `up`, `add` and `profiles`), through `compose exec`, replacing only its own files; its token is never rotated automatically. The executor runs `letta` from an argument array, never a shell. It and the sidecars share no directory and treat each other's data as untrusted.
@@ -64,11 +69,12 @@ The "Build and test" sections are the one list of checks; this table only links 
 - **Doc-tools** ([rules](doc-tools/README.md#rules)): lettucectl owns the image, volume and networks; Compose only uses them. Only the app-server mounts the tools.
 - **Skills** ([rules](agent-skills/README.md#rules)): only `skills` installs them, replacing only its own; names never match upstream's; text stays generic.
 - **Backup** ([rules](backup/README.md#rules)): it reads the state only through its own container, never into this repo.
+- **Releases** ([rules](release/README.md#rules)): images are named by content, never by release; `doc-tools` and `code-server/exec` are never published; no `latest`; a file lettucectl reads at run time goes into the `lettucectl` image.
 
 ### Docs ([CONTRIBUTING.md](CONTRIBUTING.md#writing-docs))
 - README introduces and indexes, `docs/` is for users and admins, and CONTRIBUTING, ARCHITECTURE and the folder READMEs are for developers. This file holds directives only.
 - A rule change edits its developer doc, then the directive here if its one-line form changed.
-- Never claim more than is true: pipelock advisory, `env` delivery not a boundary, never trust a folder in the code editor.
+- Never claim more than is true: pipelock advisory, the vault's placeholders not a boundary, never trust a folder in the code editor.
 - Keep the guides' file names and `docs/cloudflare-setup.md`'s step numbers: `lettucectl` messages cite them and tests assert some.
 - Never add a file other than `README.md`, `AGENTS.md` and `CLAUDE.md` to `doc-tools/` or `garden-common/` for docs: it would rebuild images.
 - A new folder README gets an `AGENTS.md` pointer and a `CLAUDE.md` symlink to it; `node scripts/check-doc-links.mjs` fails without them.
@@ -83,7 +89,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 ```bash
 tests/run.sh                 # all offline tests (docker, curl, dig, gh, secret-tool are stubbed)
 tests/run.sh <pattern>       # only tests whose function name contains <pattern>, e.g. tests/run.sh test_add_
-shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/* doc-tools/bin/* doc-tools/lib/launch.sh code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh
+shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/* doc-tools/bin/* doc-tools/lib/launch.sh code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh release/content-tag release/lettucectl-wrapper.sh
 tests/run-sidecar.sh vault            # vault tests (pytest in its image's `test` stage; needs Docker)
 tests/run-sidecar.sh vault -k vault   # extra args go to pytest
 tests/run-sidecar.sh gmail-triggers    # Gmail triggers' tests (pytest; the executor's run with garden)
@@ -97,4 +103,4 @@ node scripts/check-doc-links.mjs       # every relative link and anchor resolves
 tests/run-sidecar.sh garden            # the landing page and its executor API (pytest), plus the garden executor's tests (node --test in node:22.22.0-slim) when no args are given
 tests/run-sidecar.sh doc-tools         # the PDF MCP's tests (pytest in the doc-tools image's `test` stage, Debian 12 like the app-server)
 ```
-The same block is in [CONTRIBUTING.md](CONTRIBUTING.md#building-and-testing); keep both and `.github/workflows/ci.yml` in step. The CLI has no build step; `lettucectl up` builds the sidecar images. Untracked instance data, never committed: `config.env`, `.secrets/`, `upstream/`, `stacks/<name>/stack.env`, `stacks/<name>/state/`.
+The same block is in [CONTRIBUTING.md](CONTRIBUTING.md#building-and-testing); keep both and `.github/workflows/ci.yml` in step. The CLI has no build step; from a clone `lettucectl up` builds the sidecar images, and a release pulls them. A clone's instance data is in its untracked `data/` (`config.env`, `stacks.conf`, `.secrets/`, `upstream/`, `stacks/`), never committed.

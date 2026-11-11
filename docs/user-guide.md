@@ -9,7 +9,7 @@ This page is for you if someone runs lettuce-garden and has given you a stack. I
 
   | Page | What it does | Guide |
   |---|---|---|
-  | Vault, `/vault/` | Keeps your addresses, cards, documents and logins encrypted with your own passphrase. Agents ask to use one, and you approve each request, unless you let an everyday secret such as an address be used without asking. | [Using the vault](vault.md#using-it) |
+  | Vault, `/vault/` | Keeps your logins, cards, identities, notes and SSH keys encrypted with your own passphrase (you can import them from Bitwarden). Agents ask to use one, and you approve each request, unless you let an everyday detail such as an address be used without asking. By default agents fill the values in without reading them. | [Using the vault](vault.md#using-it) |
   | Gmail triggers, `/gmail-triggers/` | Rules such as "when an email arrives in label X, ask agent Y to do Z". | [Using Gmail triggers](gmail-triggers.md#using-it) |
   | Watchlist, `/watchlist/` | What your agents keep an eye on for you (films, concerts, news on a topic) and when they report; ask an agent to set one up. | [Using the watchlist](watchlist.md#using-it) |
   | Code editor, `/code-server/` | VS Code in the browser on your agents' workspaces, with a terminal that has the agents' tools. | [Using the code editor](code-server.md#using-it) |
@@ -30,7 +30,7 @@ If Cloudflare says you may not sign in, or Lettuce says forbidden or unknown use
 4. **Turn on notifications** on each device you use, in Lettuce and, if you use it, on the vault's **Notifications** page.
 
 ## Good to know
-- **Your agents are powerful inside your stack.** They run commands as root on the server, and can read everything in your stack: every agent's memory and workspace, and your provider keys. Only the vault keeps secrets from them: an agent gets a private value only when you approve, or when you let that secret be used without asking.
+- **Your agents are powerful inside your stack.** They run commands as root on the server, and can read everything in your stack: every agent's memory and workspace, and your provider keys. Only the vault keeps secrets from them: an agent gets a private value only when you approve, or when you let that detail be used without asking.
 - **Whatever you share with an agent goes to your AI provider** and is stored in the conversation on the server.
 - **In the code editor, never choose "Trust"** for a folder. Agents write those folders, and trusting one would let what they wrote run in your browser, on the same address as your vault. The [code editor guide](code-server.md#using-it) explains why.
 - **Your data is only as private as the server.** The admin (anyone with root on it) can read your stack. The vault is encrypted on disk with your passphrase, which nobody can recover for you; while it is unlocked, someone with root on the server could still read it ([what the vault protects](vault.md#security-model)).

@@ -31,13 +31,6 @@ cf_api() {
   jq -c '.result' <<<"$resp"
 }
 
-# cf_zone DOMAIN -> "zone_id account_id", empty when the zone is not visible
-cf_zone() {
-  local r
-  r=$(cf_api GET "/zones?name=$1") || return 1
-  jq -r 'if length == 0 then empty else "\(.[0].id) \(.[0].account.id)" end' <<<"$r"
-}
-
 # cf_team ACCOUNT -> the <team> of <team>.cloudflareaccess.com
 cf_team() {
   local r

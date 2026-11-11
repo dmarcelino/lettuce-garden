@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# release/content-tag IMAGE -> the content tag of IMAGE (a name in release/images):
+# a hash of what goes into the image, so an image that did not change keeps its
+# name from release to release and Compose leaves its container alone (renaming
+# an image recreates the container, and recreating the vault locks it).
+#
+# It hashes, with their paths: every file of the image's build context and of
+# its shared context, but the docs (README.md, AGENTS.md, CLAUDE.md, DESIGN.md),
+# tests/, Python caches and build output, and the top-level names the context's
+# .dockerignore lists (code-server's editor/ and exec/, garden's executor/); then
+# the image's name and REBUILD, which a release changes to rebuild every image on
+# fresh base images. Twelve hex characters.
+set -euo pipefail
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+img=${1:-}
+[[ -n $img ]] || {
+  echo "usage: release/content-tag IMAGE" >&2
+  exit 2
+}
+read -r _ ctx shared _ < <(awk -v i="$img" '$1 == i { print; exit }' "$ROOT/release/images") || true
+[[ -n ${ctx:-} ]] || {
+  echo "content-tag: no image '$img' in release/images" >&2
+  exit 1
+}
+[[ -f $ROOT/REBUILD ]] || {
+  echo "content-tag: REBUILD is missing" >&2
+  exit 1
+}
+
+# tree_sums DIR -> "<sha256>  <path>" for each file DIR's image takes, sorted
+tree_sums() {
+  local dir=$1 n prune=()
+  [[ -d $ROOT/$dir ]] || {
+    echo "content-tag: $dir is missing" >&2
+    exit 1
+  }
+  if [[ -f $ROOT/$dir/.dockerignore ]]; then
+    while IFS= read -r n; do
+      [[ $n =~ ^[A-Za-z0-9._-]+$ ]] && prune+=(-o -path "./$dir/$n")
+    done <"$ROOT/$dir/.dockerignore"
+  fi
+  (cd "$ROOT" && find "./$dir" \( -name tests -o -name __pycache__ -o -name .pytest_cache -o -name build \
+    -o -name '*.egg-info' "${prune[@]}" \) -prune -o -type f ! -name README.md ! -name AGENTS.md \
+    ! -name CLAUDE.md ! -name DESIGN.md ! -name '*.pyc' -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
+}
+
+{
+  printf 'image %s\nrebuild %s\n' "$img" "$(<"$ROOT/REBUILD")"
+  tree_sums "$ctx"
+  [[ $shared == - ]] || tree_sums "$shared"
+} | sha256sum | cut -c1-12

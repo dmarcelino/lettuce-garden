@@ -25,9 +25,9 @@ How the watchlist is built and wired, for developers: [watchlist/README.md](../w
 
 ## Running it
 ```bash
-./lettucectl profiles cloudflared,garden-watchlist   # plus whatever else you run
-./lettucectl mcp all                                 # adds the watchlist server to Settings -> MCP
-./lettucectl skills all                              # installs the watchlist-sources skill
+lettucectl profiles cloudflared,garden-watchlist   # plus whatever else you run
+lettucectl mcp all                                 # adds the watchlist server to Settings -> MCP
+lettucectl skills all                              # installs the watchlist-sources skill
 ```
 - `profiles` routes `https://<garden>/watchlist/` to the service on every stack, on the stack's garden address and its own Access application, and `up` installs the garden executor in the app-server with the watchlist's part on. Dropping the profile removes the route and the container; the data stays on its volume until the stack is removed.
 - `mcp` registers `watchlist -> http://garden-watchlist:8000/mcp` in each stack's Settings -> MCP, once per stack (a server the person removed stays removed; `--force` adds it again).
@@ -41,9 +41,9 @@ How the watchlist is built and wired, for developers: [watchlist/README.md](../w
   | `WATCHLIST_MAX_SOURCES` | `100` | Sources per stack |
   | `WATCHLIST_MAX_MONITORS` | `50` | Monitors per stack |
 
-  Change them in `config.env` and run `./lettucectl up all`.
+  Change them in `config.env` and run `lettucectl up all`.
 - **Data:** monitors, sources and what they found live on the stack's named volume `lettuce-<name>_watchlist-data`. `backup` copies it; `remove` deletes it with the stack.
-- **Logs:** `./lettucectl logs <name> garden-watchlist` shows fetches (source names, counts, failure reasons; never the text found) and reports queued.
+- **Logs:** `lettucectl logs <name> garden-watchlist` shows fetches (source names, counts, failure reasons; never the text found) and reports queued.
 - **Traffic:** the service fetches from the stack's network, not through pipelock; it identifies itself as `lettuce-garden-watchlist` with a link to this project. Sources are fetched every few hours at most, and at least 2 seconds apart per site.
 
 ## Security model
