@@ -1,5 +1,5 @@
-# The Lettuce Outlook sidecar (see docs/outlook.md). Built by lettucectl via
-# compose/outlook.yml. `tests/run-sidecar.sh outlook` builds the `test` stage and
+# The Lettuce Outlook sidecar (see docs/outlook.md). Built from a clone by
+# lettucectl via compose/outlook.yml, published for a release (release/images). `tests/run-sidecar.sh outlook` builds the `test` stage and
 # runs it. Both need the `garden-common` build context (the repo's garden-common/).
 FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1

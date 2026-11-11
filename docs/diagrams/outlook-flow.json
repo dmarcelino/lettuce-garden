@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Outlook: you connect and set the limits, agents work within them",
+    "output": "docs/diagrams/outlook-flow.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "2d79144625430931a6cff853a8bc5e22c9e3cfd0"
+    }
+  },
+  "participants": [
+    {
+      "id": "you",
+      "type": "external",
+      "icon": "person",
+      "label": "You",
+      "sublabel": "in your browser",
+      "sources": [
+        {
+          "path": "outlook/src/garden_outlook/app.py",
+          "line": 116,
+          "end_line": 129,
+          "label": "the policy you save"
+        }
+      ]
+    },
+    {
+      "id": "owa",
+      "type": "frontend",
+      "label": "Outlook on the web",
+      "sublabel": "the bookmarklet runs here",
+      "sources": [
+        {
+          "path": "outlook/src/garden_outlook/bookmarklet.py",
+          "line": 1,
+          "end_line": 16,
+          "label": "what the bookmarklet reads and opens"
+        }
+      ]
+    },
+    {
+      "id": "garden",
+      "type": "security",
+      "label": "Your Outlook service",
+      "sublabel": "<garden>/outlook/",
+      "sources": [
+        {
+          "path": "outlook/src/garden_outlook/service.py",
+          "line": 61,
+          "end_line": 68,
+          "label": "connect redeems at once"
+        },
+        {
+          "path": "outlook/src/garden_outlook/mcp_tools.py",
+          "line": 182,
+          "end_line": 200,
+          "label": "every tool checks the policy"
+        }
+      ]
+    },
+    {
+      "id": "microsoft",
+      "type": "external",
+      "label": "Microsoft",
+      "sublabel": "sign-in and Graph",
+      "sources": [
+        {
+          "path": "outlook/src/garden_outlook/outlook_client.py",
+          "line": 1,
+          "end_line": 14,
+          "label": "FOCI redemption and Graph"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "An agent",
+      "sublabel": "in your stack",
+      "sources": [
+        {
+          "path": "compose/outlook.yml",
+          "line": 7,
+          "end_line": 11,
+          "label": "agents reach it over MCP"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 155,
+      "to": 395,
+      "label": "Connect, once"
+    },
+    {
+      "from": 405,
+      "to": 480,
+      "label": "Set the limits"
+    },
+    {
+      "from": 490,
+      "to": 720,
+      "label": "An agent uses Outlook"
+    }
+  ],
+  "messages": [
+    {
+      "id": "click",
+      "from": "you",
+      "to": "owa",
+      "y": 175,
+      "label": "click the Connect Outlook bookmark",
+      "note": "signed in, mail loaded"
+    },
+    {
+      "id": "handover",
+      "from": "owa",
+      "to": "garden",
+      "y": 235,
+      "label": "opens /outlook/#connect=... with the sign-in",
+      "variant": "emphasis",
+      "note": "in the URL fragment, which no server log keeps"
+    },
+    {
+      "id": "redeem",
+      "from": "garden",
+      "to": "microsoft",
+      "y": 295,
+      "label": "redeem the refresh token for a Graph token",
+      "variant": "security"
+    },
+    {
+      "id": "token",
+      "from": "microsoft",
+      "to": "garden",
+      "y": 325,
+      "label": "a Graph token, or a refusal",
+      "variant": "return",
+      "note": "kept sealed; a tenant's refusal shows on the page"
+    },
+    {
+      "id": "policy",
+      "from": "you",
+      "to": "garden",
+      "y": 425,
+      "label": "levels, allowed recipients, shared mailboxes",
+      "variant": "security",
+      "note": "signed in to your garden; agents can't change these"
+    },
+    {
+      "id": "call",
+      "from": "agent",
+      "to": "garden",
+      "y": 510,
+      "label": "an MCP tool, e.g. send_draft",
+      "variant": "emphasis",
+      "note": "agents get tools, never the token"
+    },
+    {
+      "id": "graph",
+      "from": "garden",
+      "to": "microsoft",
+      "y": 570,
+      "label": "only what the policy allows",
+      "note": "level, recipients and self-events checked first"
+    },
+    {
+      "id": "result",
+      "from": "microsoft",
+      "to": "garden",
+      "y": 630,
+      "label": "the Graph result",
+      "variant": "return"
+    },
+    {
+      "id": "answer",
+      "from": "garden",
+      "to": "agent",
+      "y": 660,
+      "label": "the result, or refused and why",
+      "variant": "return",
+      "note": "mail text marked as untrusted"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "You decide",
+      "items": [
+        "Mail: off, readonly, organize, drafts, send or full",
+        "Calendar: off, readonly, self-events (your own time, no invitations) or full",
+        "Tasks: off, readonly or manage",
+        "Sends and invitations only to your allowed recipients; shared mailboxes read-only"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "What it does not stop",
+      "items": [
+        "It limits who the account mails or invites, not what an agent reads within its level",
+        "Mail, event and task text can still mislead an agent",
+        "Reusing the browser's sign-in is not a supported Microsoft route: your tenant can refuse it"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Where things live",
+      "items": [
+        "The token stays sealed in the Outlook service's own volume",
+        "Not in lettucectl backup: after a restore you connect again",
+        "Disconnect on the page, or the admin turns the profile off"
+      ]
+    }
+  ]
+}

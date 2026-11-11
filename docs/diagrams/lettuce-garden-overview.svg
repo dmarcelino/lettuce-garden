@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 1234 1030" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-node-ui="" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" data-reader-primary-text="14" style="--flow-cycle: 5.532s; width: 1234px; height: 1030px; min-width: 0px;" width="1234" height="1030" xmlns="http://www.w3.org/2000/svg"><style>
+<svg viewBox="0 0 1234 1150" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-node-ui="" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" data-reader-primary-text="14" style="--flow-cycle: 5.837s; width: 1234px; height: 1150px; min-width: 0px;" width="1234" height="1150" xmlns="http://www.w3.org/2000/svg"><style>
 /*
 JetBrains Mono variable WOFF2 subsets from Google Fonts service revision v24.
 These fixed bytes are shared by the viewer and its SVG/raster exports.
@@ -399,374 +399,402 @@ svg[data-preset="editorial"] { --flow-halo-peak: 0.07; --flow-glow-peak: 0.28; -
 }
 @keyframes archify-relay-ripple { 
   0% { r: 2px; opacity: var(--flow-peak, 0.6); }
-  13.557%, 100% { r: 20px; opacity: 0; }
+  12.849%, 100% { r: 20px; opacity: 0; }
 }
 @keyframes archify-relay-comet-0 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.169% { opacity: var(--flow-peak, 0.9); }
-  14.644% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  17.536%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  2.056% { opacity: var(--flow-peak, 0.9); }
+  13.879% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  16.62%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-0 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  14.644% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  30.913%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  13.879% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  29.298%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-1 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.169% { opacity: var(--flow-peak, 0.9); }
-  11.426% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  14.318%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  2.056% { opacity: var(--flow-peak, 0.9); }
+  10.829% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  13.57%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-1 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  11.426% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  27.695%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  10.829% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  26.248%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-2 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-2 { 
-  0%, 2.278% { opacity: 0; }
-  7.592% { opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0%, 2.159% { opacity: 0; }
+  7.195% { opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-3 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-3 { 
-  0%, 2.278% { opacity: 0; }
-  7.592% { opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0%, 2.159% { opacity: 0; }
+  7.195% { opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-4 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.169% { opacity: var(--flow-peak, 0.9); }
-  21.304% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  24.196%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  2.056% { opacity: var(--flow-peak, 0.9); }
+  20.191% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  22.932%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-4 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  21.304% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  37.573%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  20.191% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  35.61%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-5 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-5 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-6 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-6 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-7 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-7 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-8 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  2.056% { opacity: var(--flow-peak, 0.9); }
+  12.42% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  15.161%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-8 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  12.42% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  27.839%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-9 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-9 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-10 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-10 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-11 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-11 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-12 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-12 { 
-  0%, 2.278% { opacity: 0; }
-  7.592% { opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-13 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-13 { 
-  0%, 2.278% { opacity: 0; }
-  7.592% { opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0%, 2.159% { opacity: 0; }
+  7.195% { opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-14 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-14 { 
-  0%, 2.278% { opacity: 0; }
-  7.592% { opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0%, 2.159% { opacity: 0; }
+  7.195% { opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-15 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-15 { 
-  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0%, 2.159% { opacity: 0; }
+  7.195% { opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-16 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-16 { 
-  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0%, 2.159% { opacity: 0; }
+  7.195% { opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-17 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-17 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-18 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-18 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-19 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.549% { opacity: var(--flow-peak, 0.9); }
-  7.747% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.639%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-19 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.747% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  24.016%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-20 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-20 { 
-  0%, 2.278% { opacity: 0; }
-  7.592% { opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-21 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  2.056% { opacity: var(--flow-peak, 0.9); }
+  14.685% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  17.426%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-21 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  14.685% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  30.103%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-22 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.518% { opacity: var(--flow-peak, 0.9); }
-  7.592% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  10.484%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-22 { 
+  0%, 2.159% { opacity: 0; }
+  7.195% { opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+}
+@keyframes archify-relay-comet-23 { 
+  0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+}
+@keyframes archify-relay-wake-23 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  7.592% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  23.861%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+}
+@keyframes archify-relay-comet-24 { 
+  0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  1.439% { opacity: var(--flow-peak, 0.9); }
+  7.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  9.937%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+}
+@keyframes archify-relay-wake-24 { 
+  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  7.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.614%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-node-0 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
   0% { filter: var(--ambient-node-base-filter, none); }
-  2.169%, 7.592% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  21.692% { filter: var(--ambient-node-base-filter, none); }
+  2.056%, 7.195% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  20.558% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-1 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
   0% { filter: var(--ambient-node-base-filter, none); }
-  2.169%, 7.592% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  21.692% { filter: var(--ambient-node-base-filter, none); }
+  2.056%, 7.195% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  20.558% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-2 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  14.644% { filter: var(--ambient-node-base-filter, none); }
-  16.813%, 22.236% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  36.336% { filter: var(--ambient-node-base-filter, none); }
+  13.879% { filter: var(--ambient-node-base-filter, none); }
+  15.935%, 21.075% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  34.437% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-3 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  11.426% { filter: var(--ambient-node-base-filter, none); }
-  13.595%, 19.018% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  33.118% { filter: var(--ambient-node-base-filter, none); }
+  10.829% { filter: var(--ambient-node-base-filter, none); }
+  12.885%, 18.024% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  31.387% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-4 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  7.592% { filter: var(--ambient-node-base-filter, none); }
-  9.761%, 15.184% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  29.284% { filter: var(--ambient-node-base-filter, none); }
+  7.195% { filter: var(--ambient-node-base-filter, none); }
+  9.251%, 14.391% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  27.754% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-5 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  16.992% { filter: var(--ambient-node-base-filter, none); }
-  19.161%, 24.584% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  38.683% { filter: var(--ambient-node-base-filter, none); }
+  16.104% { filter: var(--ambient-node-base-filter, none); }
+  18.16%, 23.299% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  36.662% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-6 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  16.992% { filter: var(--ambient-node-base-filter, none); }
-  19.161%, 24.584% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  38.683% { filter: var(--ambient-node-base-filter, none); }
+  16.104% { filter: var(--ambient-node-base-filter, none); }
+  18.16%, 23.299% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  36.662% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-7 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  16.992% { filter: var(--ambient-node-base-filter, none); }
-  19.161%, 24.584% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  38.683% { filter: var(--ambient-node-base-filter, none); }
+  16.104% { filter: var(--ambient-node-base-filter, none); }
+  18.16%, 23.299% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  36.662% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-8 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  16.992% { filter: var(--ambient-node-base-filter, none); }
-  19.161%, 24.584% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  38.683% { filter: var(--ambient-node-base-filter, none); }
+  16.104% { filter: var(--ambient-node-base-filter, none); }
+  18.16%, 23.299% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  36.662% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-9 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  16.992% { filter: var(--ambient-node-base-filter, none); }
-  19.161%, 24.584% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  38.683% { filter: var(--ambient-node-base-filter, none); }
+  16.104% { filter: var(--ambient-node-base-filter, none); }
+  18.16%, 23.299% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  36.662% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-10 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  16.992% { filter: var(--ambient-node-base-filter, none); }
-  19.161%, 24.584% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  38.683% { filter: var(--ambient-node-base-filter, none); }
+  16.104% { filter: var(--ambient-node-base-filter, none); }
+  18.16%, 23.299% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  36.662% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-11 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  17.147% { filter: var(--ambient-node-base-filter, none); }
-  19.316%, 24.739% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  38.838% { filter: var(--ambient-node-base-filter, none); }
+  16.104% { filter: var(--ambient-node-base-filter, none); }
+  18.16%, 23.299% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  36.662% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-12 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  20.826% { filter: var(--ambient-node-base-filter, none); }
-  22.995%, 28.418% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  42.517% { filter: var(--ambient-node-base-filter, none); }
+  23.593% { filter: var(--ambient-node-base-filter, none); }
+  25.649%, 30.789% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  44.152% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-13 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  43.938% { filter: var(--ambient-node-base-filter, none); }
-  46.107%, 51.53% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  65.629% { filter: var(--ambient-node-base-filter, none); }
+  19.738% { filter: var(--ambient-node-base-filter, none); }
+  21.793%, 26.933% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  40.296% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-14 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  30.225% { filter: var(--ambient-node-base-filter, none); }
-  32.394%, 37.817% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  51.917% { filter: var(--ambient-node-base-filter, none); }
+  41.642% { filter: var(--ambient-node-base-filter, none); }
+  43.698%, 48.837% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  62.2% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-15 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  39.625% { filter: var(--ambient-node-base-filter, none); }
-  41.794%, 47.217% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  61.317% { filter: var(--ambient-node-base-filter, none); }
+  33.871% { filter: var(--ambient-node-base-filter, none); }
+  35.926%, 41.066% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  54.429% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-16 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  49.025% { filter: var(--ambient-node-base-filter, none); }
-  51.194%, 56.617% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  70.716% { filter: var(--ambient-node-base-filter, none); }
+  42.779% { filter: var(--ambient-node-base-filter, none); }
+  44.835%, 49.975% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  63.338% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-17 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  53.337% { filter: var(--ambient-node-base-filter, none); }
-  55.506%, 60.929% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  75.029% { filter: var(--ambient-node-base-filter, none); }
+  50.551% { filter: var(--ambient-node-base-filter, none); }
+  52.607%, 57.746% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  71.109% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-18 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  53.337% { filter: var(--ambient-node-base-filter, none); }
-  55.506%, 60.929% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  75.029% { filter: var(--ambient-node-base-filter, none); }
+  50.551% { filter: var(--ambient-node-base-filter, none); }
+  52.607%, 57.746% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  71.109% { filter: var(--ambient-node-base-filter, none); }
+}
+@keyframes archify-relay-node-19 { 
+  0%, 100% { filter: var(--ambient-node-base-filter, none); }
+  51.688% { filter: var(--ambient-node-base-filter, none); }
+  53.744%, 58.883% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  72.246% { filter: var(--ambient-node-base-filter, none); }
 }
 svg[data-node-ui] [data-node-id] &gt; rect:not(.c-mask) { stroke-width: 1.25px; }
 :is([data-theme="dark"] svg[data-node-ui], svg[data-node-ui][data-theme="dark"]) [data-node-id] &gt; rect:not(.c-mask).c-frontend { fill: color-mix(in srgb, var(--frontend-stroke) 13%, var(--mask)); stroke: color-mix(in srgb, var(--frontend-stroke) 72%, var(--mask)); }
@@ -792,7 +820,7 @@ svg[data-node-ui][data-preset="editorial"] :is([data-graph-role="structural-fram
 svg[data-theme="light"] { --bg: #f4f5f7; --grid: #e9edf2; --canvas-dot: #e2e7ec; --text: #111827; --text-muted: #5b6474; --text-dim: #9aa3b2; --text-faint: #6b7280; --panel: #ffffff; --panel-border: #e5e7eb; --lane-fill: rgba(248, 250, 252, 0.65); --lane-stroke: #cbd5e1; --arrow: #64748b; --arrow-emphasis: #059669; --mask: #ffffff; --frontend-fill: rgba(34, 211, 238, 0.15); --frontend-stroke: #0891b2; --backend-fill: rgba(52, 211, 153, 0.18); --backend-stroke: #059669; --database-fill: rgba(167, 139, 250, 0.2); --database-stroke: #7c3aed; --cloud-fill: rgba(251, 191, 36, 0.18); --cloud-stroke: #d97706; --security-fill: rgba(251, 113, 133, 0.15); --security-stroke: #e11d48; --messagebus-fill: rgba(251, 146, 60, 0.15); --messagebus-stroke: #ea580c; --external-fill: rgba(148, 163, 184, 0.18); --external-stroke: #64748b; --toolbar-bg: rgba(255, 255, 255, 0.92); --toolbar-border: #cbd5e1; --toolbar-text: #334155; --toolbar-hover: #ffffff; --toolbar-menu-bg: #ffffff; --flow-cycle: ; --flow-halo-peak: ; --flow-glow-peak: ; --flow-tail-peak: ; --flow-head-peak: ; --flow-wake-peak: ; --flow-ripple-peak: ; --flow-peak: ; }
 svg[data-theme="dark"] { --bg: #020617; --grid: #1e293b; --canvas-dot: rgba(148, 163, 184, 0.16); --text: #ffffff; --text-muted: #94a3b8; --text-dim: #475569; --text-faint: #7d8da1; --panel: rgba(15, 23, 42, 0.5); --panel-border: #1e293b; --lane-fill: rgba(15, 23, 42, 0.22); --lane-stroke: #334155; --arrow: #94a3b8; --arrow-emphasis: #34d399; --mask: #0f172a; --frontend-fill: rgba(8, 51, 68, 0.4); --frontend-stroke: #22d3ee; --backend-fill: rgba(6, 78, 59, 0.4); --backend-stroke: #34d399; --database-fill: rgba(76, 29, 149, 0.4); --database-stroke: #a78bfa; --cloud-fill: rgba(120, 53, 15, 0.3); --cloud-stroke: #fbbf24; --security-fill: rgba(136, 19, 55, 0.4); --security-stroke: #fb7185; --messagebus-fill: rgba(251, 146, 60, 0.3); --messagebus-stroke: #fb923c; --external-fill: rgba(30, 41, 59, 0.5); --external-stroke: #94a3b8; --toolbar-bg: rgba(15, 23, 42, 0.8); --toolbar-border: #334155; --toolbar-text: #e2e8f0; --toolbar-hover: rgba(15, 23, 42, 0.95); --toolbar-menu-bg: #0f172a; --flow-cycle: ; --flow-halo-peak: ; --flow-glow-peak: ; --flow-tail-peak: ; --flow-head-peak: ; --flow-wake-peak: ; --flow-ripple-peak: ; --flow-peak: ; }
 rect.c-bg-rect { fill: var(--bg); }
-</style><rect x="0" y="0" width="1234" height="1030" class="c-bg-rect"/><metadata id="archify-software-notices">NOTICE
+</style><rect x="0" y="0" width="1234" height="1150" class="c-bg-rect"/><metadata id="archify-software-notices">NOTICE
 Archify
 Copyright (c) 2026 tt-a1i (Archify)
 Copyright (c) 2025 Cocoon AI
@@ -1177,9 +1205,9 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="1" data-composition-frame-label="app-server network namespace" x="826" y="116" width="178" height="664" rx="8" class="c-security-group" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="2" data-composition-frame-label="garden host" x="546" y="236" width="198" height="466" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="2" data-composition-frame-label="garden host" x="546" y="236" width="198" height="586" rx="12" class="c-region" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="3" data-composition-frame-label="code-exec (internal)" x="546" y="736" width="198" height="226" rx="8" class="c-security-group" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="3" data-composition-frame-label="code-exec (internal)" x="546" y="856" width="198" height="226" rx="8" class="c-security-group" stroke-width="1"/>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="4" data-composition-frame-label="host: every stack" x="1036" y="496" width="158" height="226" rx="12" class="c-region" stroke-width="1"/>
 
@@ -1217,64 +1245,72 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <path data-edge-from="cloudflared" data-edge-to="gmail" data-edge-key="7" data-composition-points="510,516;560,516" data-composition-crossover="halo" data-composition-independent="true" d="M 510 516 L 560 516" class="a-default" data-animate="edge" style="--step: 7;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:8">
-          <path data-graph-role="automatic-crossover-underlay" d="M 510 636 L 560 636" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="cloudflared" data-edge-to="gate" data-edge-key="8" data-composition-points="510,636;560,636" data-composition-crossover="halo" data-composition-independent="true" d="M 510 636 L 560 636" class="a-default" data-animate="edge" style="--step: 8;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 443 682 L 443 763 Q 443 771 451 771 L 560 771" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="cloudflared" data-edge-to="gate" data-edge-key="8" data-composition-points="443,682;443,771;560,771" data-composition-crossover="halo" data-composition-independent="true" d="M 443 682 L 443 763 Q 443 771 451 771 L 560 771" class="a-default" data-animate="edge" style="--step: 8;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:9">
-          <path data-graph-role="automatic-crossover-underlay" d="M 906.95 202 L 906.95 260" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="bff" data-edge-to="appserver" data-edge-label="one connection" data-edge-key="9" data-composition-points="906.95,202;906.95,260" data-composition-crossover="halo" data-composition-independent="true" d="M 906.95 202 L 906.95 260" class="a-emphasis" data-animate="edge" style="--step: 9;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 510 636 L 560 636" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="cloudflared" data-edge-to="outlook" data-edge-key="9" data-composition-points="510,636;560,636" data-composition-crossover="halo" data-composition-independent="true" d="M 510 636 L 560 636" class="a-default" data-animate="edge" style="--step: 9;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:10">
-          <path data-graph-role="automatic-crossover-underlay" d="M 915 140 L 915 82" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="bff" data-edge-to="searxng" data-edge-label="search" data-edge-key="10" data-composition-points="915,140;915,82" data-composition-crossover="halo" data-composition-independent="true" d="M 915 140 L 915 82" class="a-default" data-animate="edge" style="--step: 10;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 906.95 202 L 906.95 260" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="bff" data-edge-to="appserver" data-edge-label="one connection" data-edge-key="10" data-composition-points="906.95,202;906.95,260" data-composition-crossover="halo" data-composition-independent="true" d="M 906.95 202 L 906.95 260" class="a-emphasis" data-animate="edge" style="--step: 10;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:11">
-          <path data-graph-role="automatic-crossover-underlay" d="M 990 171 L 1050 171" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="bff" data-edge-to="ddg" data-edge-label="fetch" data-edge-key="11" data-composition-points="990,171;1050,171" data-composition-crossover="halo" data-composition-independent="true" d="M 990 171 L 1050 171" class="a-default" data-animate="edge" style="--step: 11;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 915 140 L 915 82" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="bff" data-edge-to="searxng" data-edge-label="search" data-edge-key="11" data-composition-points="915,140;915,82" data-composition-crossover="halo" data-composition-independent="true" d="M 915 140 L 915 82" class="a-default" data-animate="edge" style="--step: 11;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:12">
-          <path data-graph-role="automatic-crossover-underlay" d="M 840 306 L 730 306" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="appserver" data-edge-to="garden" data-edge-label="agent list" data-edge-key="12" data-composition-points="840,306;730,306" data-composition-crossover="halo" data-composition-independent="true" d="M 840 306 L 730 306" class="a-dashed" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 990 171 L 1050 171" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="bff" data-edge-to="ddg" data-edge-label="fetch" data-edge-key="12" data-composition-points="990,171;1050,171" data-composition-crossover="halo" data-composition-independent="true" d="M 990 171 L 1050 171" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:13">
-          <path data-graph-role="automatic-crossover-underlay" d="M 840 426 L 730 426" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="appserver" data-edge-to="vault" data-edge-label="/mcp" data-edge-key="13" data-composition-points="840,426;730,426" data-composition-crossover="halo" data-composition-independent="true" d="M 840 426 L 730 426" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 840 306 L 730 306" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="appserver" data-edge-to="garden" data-edge-label="agent list" data-edge-key="13" data-composition-points="840,306;730,306" data-composition-crossover="halo" data-composition-independent="true" d="M 840 306 L 730 306" class="a-dashed" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:14">
-          <path data-graph-role="automatic-crossover-underlay" d="M 840 524 L 730 524" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="appserver" data-edge-to="gmail" data-edge-label="executor" data-edge-key="14" data-composition-points="840,524;730,524" data-composition-crossover="halo" data-composition-independent="true" d="M 840 524 L 730 524" class="a-dashed" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 840 426 L 730 426" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="appserver" data-edge-to="vault" data-edge-label="/mcp" data-edge-key="14" data-composition-points="840,426;730,426" data-composition-crossover="halo" data-composition-independent="true" d="M 840 426 L 730 426" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:15">
-          <path data-graph-role="automatic-crossover-underlay" d="M 990 306 L 1050 306" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="appserver" data-edge-to="pipelock" data-edge-label="proxy" data-edge-key="15" data-composition-points="990,306;1050,306" data-composition-crossover="halo" data-composition-independent="true" d="M 990 306 L 1050 306" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 840 517 L 730 517" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="appserver" data-edge-to="gmail" data-edge-label="executor" data-edge-key="15" data-composition-points="840,517;730,517" data-composition-crossover="halo" data-composition-independent="true" d="M 840 517 L 730 517" class="a-dashed" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:16">
-          <path data-graph-role="automatic-crossover-underlay" d="M 990 426 L 1050 426" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="appserver" data-edge-to="googlemcp" data-edge-label="MCP" data-edge-key="16" data-composition-points="990,426;1050,426" data-composition-crossover="halo" data-composition-independent="true" d="M 990 426 L 1050 426" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 840 636 L 730 636" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="appserver" data-edge-to="outlook" data-edge-label="/mcp" data-edge-key="16" data-composition-points="840,636;730,636" data-composition-crossover="halo" data-composition-independent="true" d="M 840 636 L 730 636" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:17">
-          <path data-graph-role="automatic-crossover-underlay" d="M 990 536 L 1050 536" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="appserver" data-edge-to="gotenberg" data-edge-label="pdf" data-edge-key="17" data-composition-points="990,536;1050,536" data-composition-crossover="halo" data-composition-independent="true" d="M 990 536 L 1050 536" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 990 306 L 1050 306" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="appserver" data-edge-to="pipelock" data-edge-label="proxy" data-edge-key="17" data-composition-points="990,306;1050,306" data-composition-crossover="halo" data-composition-independent="true" d="M 990 306 L 1050 306" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:18">
-          <path data-graph-role="automatic-crossover-underlay" d="M 1050 671 L 990 671" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="toolsvol" data-edge-to="appserver" data-edge-label="ro" data-edge-key="18" data-composition-points="1050,671;990,671" data-composition-crossover="halo" data-composition-independent="true" d="M 1050 671 L 990 671" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 990 426 L 1050 426" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="appserver" data-edge-to="googlemcp" data-edge-label="MCP" data-edge-key="18" data-composition-points="990,426;1050,426" data-composition-crossover="halo" data-composition-independent="true" d="M 990 426 L 1050 426" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:19">
-          <path data-graph-role="automatic-crossover-underlay" d="M 915 760 L 915 880" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="appserver" data-edge-to="state" data-edge-label="bind mounts" data-edge-key="19" data-composition-points="915,760;915,880" data-composition-crossover="halo" data-composition-independent="true" d="M 915 760 L 915 880" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 990 536 L 1050 536" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="appserver" data-edge-to="gotenberg" data-edge-label="pdf" data-edge-key="19" data-composition-points="990,536;1050,536" data-composition-crossover="halo" data-composition-independent="true" d="M 990 536 L 1050 536" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:20">
-          <path data-graph-role="automatic-crossover-underlay" d="M 645 682 L 645 760" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="gate" data-edge-to="editor" data-edge-label="Unix socket" data-edge-key="20" data-composition-points="645,682;645,760" data-composition-crossover="halo" data-composition-independent="true" d="M 645 682 L 645 760" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 1050 671 L 990 671" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="toolsvol" data-edge-to="appserver" data-edge-label="ro" data-edge-key="20" data-composition-points="1050,671;990,671" data-composition-crossover="halo" data-composition-independent="true" d="M 1050 671 L 990 671" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:21">
-          <path data-graph-role="automatic-crossover-underlay" d="M 645 822 L 645 880" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="editor" data-edge-to="shell" data-edge-label="SSH" data-edge-key="21" data-composition-points="645,822;645,880" data-composition-crossover="halo" data-composition-independent="true" d="M 645 822 L 645 880" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 915 760 L 915 1000" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="appserver" data-edge-to="state" data-edge-label="bind mounts" data-edge-key="21" data-composition-points="915,760;915,1000" data-composition-crossover="halo" data-composition-independent="true" d="M 915 760 L 915 1000" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:22">
-          <path data-graph-role="automatic-crossover-underlay" d="M 730 911 L 840 911" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="shell" data-edge-to="state" data-edge-label="workspaces" data-edge-key="22" data-composition-points="730,911;840,911" data-composition-crossover="halo" data-composition-independent="true" d="M 730 911 L 840 911" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 645 802 L 645 880" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="gate" data-edge-to="editor" data-edge-label="Unix socket" data-edge-key="22" data-composition-points="645,802;645,880" data-composition-crossover="halo" data-composition-independent="true" d="M 645 802 L 645 880" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        </g>
+        <g data-graph-role="automatic-crossover" style="--step:23">
+          <path data-graph-role="automatic-crossover-underlay" d="M 645 942 L 645 1000" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="editor" data-edge-to="shell" data-edge-label="SSH" data-edge-key="23" data-composition-points="645,942;645,1000" data-composition-crossover="halo" data-composition-independent="true" d="M 645 942 L 645 1000" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        </g>
+        <g data-graph-role="automatic-crossover" style="--step:24">
+          <path data-graph-role="automatic-crossover-underlay" d="M 730 1031 L 840 1031" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="shell" data-edge-to="state" data-edge-label="workspaces" data-edge-key="24" data-composition-points="730,1031;840,1031" data-composition-crossover="halo" data-composition-independent="true" d="M 730 1031 L 840 1031" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
 
         <!-- Components -->
@@ -1317,7 +1353,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <g id="node-cloudflared" data-node-id="cloudflared" data-node-label="cloudflared" tabindex="0" role="button" aria-label="Focus cloudflared, tunnel, no ports, Architecture component" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="tunnel, no ports" data-node-context="Architecture component">
           <title>cloudflared · tunnel, no ports · Architecture component</title>
           <rect x="390" y="140" width="120" height="542" rx="8" class="c-mask"/>
-          <rect x="390" y="140" width="120" height="542" rx="8" class="c-cloud" data-animate="node" style="--step: 3; --flow-node-name: archify-relay-node-12;" stroke-width="1.5"/>
+          <rect x="390" y="140" width="120" height="542" rx="8" class="c-cloud" data-animate="node" style="--step: 3; --flow-node-name: archify-relay-node-13;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(396 146) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
@@ -1328,7 +1364,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <g id="node-searxng" data-node-id="searxng" data-node-label="searxng" tabindex="0" role="button" aria-label="Focus searxng, web search, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="web search" data-node-context="Architecture component">
           <title>searxng · web search · Architecture component</title>
           <rect x="840" y="20" width="150" height="62" rx="8" class="c-mask"/>
-          <rect x="840" y="20" width="150" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 11; --flow-node-name: archify-relay-node-17;" stroke-width="1.5"/>
+          <rect x="840" y="20" width="150" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-17;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(846 26) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
@@ -1339,7 +1375,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <g id="node-bff" data-node-id="bff" data-node-label="bff" tabindex="0" role="button" aria-label="Focus bff, web UI on :8080, app-server network namespace" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="web UI on :8080" data-node-context="app-server network namespace">
           <title>bff · web UI on :8080 · app-server network namespace</title>
           <rect x="840" y="140" width="150" height="62" rx="8" class="c-mask"/>
-          <rect x="840" y="140" width="150" height="62" rx="8" class="c-frontend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-13;" stroke-width="1.5"/>
+          <rect x="840" y="140" width="150" height="62" rx="8" class="c-frontend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-14;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(846 146) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
@@ -1353,7 +1389,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <g id="node-appserver" data-node-id="appserver" data-node-label="app-server" tabindex="0" role="button" aria-label="Focus app-server, letta-code, agents as root, app-server network namespace" aria-pressed="false" data-node-kind="backend" data-node-sublabel="letta-code, agents as root" data-node-tag="+ garden executor (cron)" data-node-context="app-server network namespace">
           <title>app-server · letta-code, agents as root · app-server network namespace · + garden executor (cron)</title>
           <rect x="840" y="260" width="150" height="500" rx="8" class="c-mask"/>
-          <rect x="840" y="260" width="150" height="500" rx="8" class="c-backend" data-animate="node" style="--step: 10; --flow-node-name: archify-relay-node-4;" stroke-width="1.5"/>
+          <rect x="840" y="260" width="150" height="500" rx="8" class="c-backend" data-animate="node" style="--step: 11; --flow-node-name: archify-relay-node-4;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(846 266) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
@@ -1376,7 +1412,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <g id="node-pipelock" data-node-id="pipelock" data-node-label="garden-pipelock" tabindex="0" role="button" aria-label="Focus garden-pipelock, egress proxy, advisory, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="egress proxy, advisory" data-node-context="Architecture component">
           <title>garden-pipelock · egress proxy, advisory · Architecture component</title>
           <rect x="1050" y="260" width="130" height="62" rx="8" class="c-mask"/>
-          <rect x="1050" y="260" width="130" height="62" rx="8" class="c-security" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-8;" stroke-width="1.5"/>
+          <rect x="1050" y="260" width="130" height="62" rx="8" class="c-security" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-9;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(1056 266) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
@@ -1388,7 +1424,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <g id="node-googlemcp" data-node-id="googlemcp" data-node-label="google-mcp" tabindex="0" role="button" aria-label="Focus google-mcp, Gmail, Calendar, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Gmail, Calendar" data-node-context="Architecture component">
           <title>google-mcp · Gmail, Calendar · Architecture component</title>
           <rect x="1050" y="380" width="130" height="62" rx="8" class="c-mask"/>
-          <rect x="1050" y="380" width="130" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-9;" stroke-width="1.5"/>
+          <rect x="1050" y="380" width="130" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-10;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1056 386) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
@@ -1399,7 +1435,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <g id="node-gotenberg" data-node-id="gotenberg" data-node-label="Gotenberg" tabindex="0" role="button" aria-label="Focus Gotenberg, lettuce_shared, host: every stack" aria-pressed="false" data-node-kind="backend" data-node-sublabel="lettuce_shared" data-node-context="host: every stack">
           <title>Gotenberg · lettuce_shared · host: every stack</title>
           <rect x="1050" y="520" width="130" height="62" rx="8" class="c-mask"/>
-          <rect x="1050" y="520" width="130" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-10;" stroke-width="1.5"/>
+          <rect x="1050" y="520" width="130" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-11;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1056 526) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
@@ -1458,51 +1494,63 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
 
         <g id="node-gate" data-node-id="gate" data-node-label="garden-code-server" tabindex="0" role="button" aria-label="Focus garden-code-server, /code-server/ gate, garden host" aria-pressed="false" data-node-kind="security" data-node-sublabel="/code-server/ gate" data-node-context="garden host">
           <title>garden-code-server · /code-server/ gate · garden host</title>
-          <rect x="560" y="620" width="170" height="62" rx="8" class="c-mask"/>
-          <rect x="560" y="620" width="170" height="62" rx="8" class="c-security" data-animate="node" style="--step: 9; --flow-node-name: archify-relay-node-14;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(566 626) scale(0.6875)">
+          <rect x="560" y="740" width="170" height="62" rx="8" class="c-mask"/>
+          <rect x="560" y="740" width="170" height="62" rx="8" class="c-security" data-animate="node" style="--step: 9; --flow-node-name: archify-relay-node-15;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(566 746) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" x="645" y="649" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-code-server</text>
-        <text x="645" y="665" class="t-muted" font-size="9" text-anchor="middle">/code-server/ gate</text>
+          <text data-node-label="" x="645" y="769" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-code-server</text>
+        <text x="645" y="785" class="t-muted" font-size="9" text-anchor="middle">/code-server/ gate</text>
         </g>
 
         <g id="node-editor" data-node-id="editor" data-node-label="code-server editor" tabindex="0" role="button" aria-label="Focus code-server editor, socket only, no port, code-exec (internal)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="socket only, no port" data-node-context="code-exec (internal)">
           <title>code-server editor · socket only, no port · code-exec (internal)</title>
-          <rect x="560" y="760" width="170" height="62" rx="8" class="c-mask"/>
-          <rect x="560" y="760" width="170" height="62" rx="8" class="c-frontend" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-15;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(566 766) scale(0.6875)">
+          <rect x="560" y="880" width="170" height="62" rx="8" class="c-mask"/>
+          <rect x="560" y="880" width="170" height="62" rx="8" class="c-frontend" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-16;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(566 886) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" x="645" y="789" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">code-server editor</text>
-        <text x="645" y="805" class="t-muted" font-size="9" text-anchor="middle">socket only, no port</text>
+          <text data-node-label="" x="645" y="909" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">code-server editor</text>
+        <text x="645" y="925" class="t-muted" font-size="9" text-anchor="middle">socket only, no port</text>
         </g>
 
         <g id="node-shell" data-node-id="shell" data-node-label="code-server shell" tabindex="0" role="button" aria-label="Focus code-server shell, SSH in, code-egress out, code-exec (internal)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="SSH in, code-egress out" data-node-context="code-exec (internal)">
           <title>code-server shell · SSH in, code-egress out · code-exec (internal)</title>
-          <rect x="560" y="880" width="170" height="62" rx="8" class="c-mask"/>
-          <rect x="560" y="880" width="170" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-16;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(566 886) scale(0.6875)">
+          <rect x="560" y="1000" width="170" height="62" rx="8" class="c-mask"/>
+          <rect x="560" y="1000" width="170" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-19;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(566 1006) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="645" y="909" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">code-server shell</text>
-        <text x="645" y="925" class="t-muted" font-size="9" text-anchor="middle">SSH in, code-egress out</text>
+          <text data-node-label="" x="645" y="1029" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">code-server shell</text>
+        <text x="645" y="1045" class="t-muted" font-size="9" text-anchor="middle">SSH in, code-egress out</text>
         </g>
 
         <g id="node-state" data-node-id="state" data-node-label="stacks/&lt;name&gt;/state" tabindex="0" role="button" aria-label="Focus stacks/&lt;name&gt;/state, letta-home, workspaces, Architecture component" aria-pressed="false" data-node-kind="database" data-node-sublabel="letta-home, workspaces" data-node-context="Architecture component">
           <title>stacks/&lt;name&gt;/state · letta-home, workspaces · Architecture component</title>
-          <rect x="840" y="880" width="150" height="62" rx="8" class="c-mask"/>
-          <rect x="840" y="880" width="150" height="62" rx="8" class="c-database" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-11;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(846 886) scale(0.6875)">
+          <rect x="840" y="1000" width="150" height="62" rx="8" class="c-mask"/>
+          <rect x="840" y="1000" width="150" height="62" rx="8" class="c-database" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-12;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(846 1006) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" x="915" y="909" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">stacks/&lt;name&gt;/state</text>
-        <text x="915" y="925" class="t-muted" font-size="9" text-anchor="middle">letta-home, workspaces</text>
+          <text data-node-label="" x="915" y="1029" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">stacks/&lt;name&gt;/state</text>
+        <text x="915" y="1045" class="t-muted" font-size="9" text-anchor="middle">letta-home, workspaces</text>
+        </g>
+
+        <g id="node-outlook" data-node-id="outlook" data-node-label="garden-outlook" tabindex="0" role="button" aria-label="Focus garden-outlook, /outlook/, outlook-data, garden host" aria-pressed="false" data-node-kind="security" data-node-sublabel="/outlook/, outlook-data" data-node-context="garden host">
+          <title>garden-outlook · /outlook/, outlook-data · garden host</title>
+          <rect x="560" y="620" width="170" height="62" rx="8" class="c-mask"/>
+          <rect x="560" y="620" width="170" height="62" rx="8" class="c-security" data-animate="node" style="--step: 10; --flow-node-name: archify-relay-node-8;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(566 626) scale(0.6875)">
+            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+            <path d="m5.8 8 1.5 1.5 3-3"/>
+          </g>
+          <text data-node-label="" x="645" y="649" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-outlook</text>
+        <text x="645" y="665" class="t-muted" font-size="9" text-anchor="middle">/outlook/, outlook-data</text>
         </g>
 
         <!-- Connection labels -->
@@ -1530,61 +1578,66 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
 
 
 
-        <g data-edge-from="bff" data-edge-to="appserver" data-edge-label="one connection" data-edge-key="9">
+
+        <g data-edge-from="bff" data-edge-to="appserver" data-edge-label="one connection" data-edge-key="10">
           <rect x="823.75" y="224" width="77.2" height="14" rx="3" class="c-mask"/>
           <text x="862.35" y="234" class="t-edge-emphasis" font-size="8" text-anchor="middle">one connection</text>
         </g>
-        <g data-edge-from="bff" data-edge-to="searxng" data-edge-label="search" data-edge-key="10">
+        <g data-edge-from="bff" data-edge-to="searxng" data-edge-label="search" data-edge-key="11">
           <rect x="870.2" y="104" width="38.8" height="14" rx="3" class="c-mask"/>
           <text x="889.6" y="114" class="t-edge-default" font-size="8" text-anchor="middle">search</text>
         </g>
-        <g data-edge-from="bff" data-edge-to="ddg" data-edge-label="fetch" data-edge-key="11">
+        <g data-edge-from="bff" data-edge-to="ddg" data-edge-label="fetch" data-edge-key="12">
           <rect x="1003" y="151" width="34" height="14" rx="3" class="c-mask"/>
           <text x="1020" y="161" class="t-edge-default" font-size="8" text-anchor="middle">fetch</text>
         </g>
-        <g data-edge-from="appserver" data-edge-to="garden" data-edge-label="agent list" data-edge-key="12">
+        <g data-edge-from="appserver" data-edge-to="garden" data-edge-label="agent list" data-edge-key="13">
           <rect x="756" y="286" width="58" height="14" rx="3" class="c-mask"/>
           <text x="785" y="296" class="t-edge-dashed" font-size="8" text-anchor="middle">agent list</text>
         </g>
-        <g data-edge-from="appserver" data-edge-to="vault" data-edge-label="/mcp" data-edge-key="13">
+        <g data-edge-from="appserver" data-edge-to="vault" data-edge-label="/mcp" data-edge-key="14">
           <rect x="770" y="406" width="30" height="14" rx="3" class="c-mask"/>
           <text x="785" y="416" class="t-edge-security" font-size="8" text-anchor="middle">/mcp</text>
         </g>
-        <g data-edge-from="appserver" data-edge-to="gmail" data-edge-label="executor" data-edge-key="14">
-          <rect x="760.8" y="504" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="785" y="514" class="t-edge-dashed" font-size="8" text-anchor="middle">executor</text>
+        <g data-edge-from="appserver" data-edge-to="gmail" data-edge-label="executor" data-edge-key="15">
+          <rect x="760.8" y="497" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="785" y="507" class="t-edge-dashed" font-size="8" text-anchor="middle">executor</text>
         </g>
-        <g data-edge-from="appserver" data-edge-to="pipelock" data-edge-label="proxy" data-edge-key="15">
+        <g data-edge-from="appserver" data-edge-to="outlook" data-edge-label="/mcp" data-edge-key="16">
+          <rect x="770" y="616" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="785" y="626" class="t-edge-security" font-size="8" text-anchor="middle">/mcp</text>
+        </g>
+        <g data-edge-from="appserver" data-edge-to="pipelock" data-edge-label="proxy" data-edge-key="17">
           <rect x="1003" y="286" width="34" height="14" rx="3" class="c-mask"/>
           <text x="1020" y="296" class="t-edge-default" font-size="8" text-anchor="middle">proxy</text>
         </g>
-        <g data-edge-from="appserver" data-edge-to="googlemcp" data-edge-label="MCP" data-edge-key="16">
+        <g data-edge-from="appserver" data-edge-to="googlemcp" data-edge-label="MCP" data-edge-key="18">
           <rect x="1005" y="406" width="30" height="14" rx="3" class="c-mask"/>
           <text x="1020" y="416" class="t-edge-default" font-size="8" text-anchor="middle">MCP</text>
         </g>
-        <g data-edge-from="appserver" data-edge-to="gotenberg" data-edge-label="pdf" data-edge-key="17">
+        <g data-edge-from="appserver" data-edge-to="gotenberg" data-edge-label="pdf" data-edge-key="19">
           <rect x="1005" y="516" width="30" height="14" rx="3" class="c-mask"/>
           <text x="1020" y="526" class="t-edge-default" font-size="8" text-anchor="middle">pdf</text>
         </g>
-        <g data-edge-from="toolsvol" data-edge-to="appserver" data-edge-label="ro" data-edge-key="18">
+        <g data-edge-from="toolsvol" data-edge-to="appserver" data-edge-label="ro" data-edge-key="20">
           <rect x="1005" y="651" width="30" height="14" rx="3" class="c-mask"/>
           <text x="1020" y="661" class="t-edge-default" font-size="8" text-anchor="middle">ro</text>
         </g>
-        <g data-edge-from="appserver" data-edge-to="state" data-edge-label="bind mounts" data-edge-key="19">
-          <rect x="846.2" y="813" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="877.6" y="823" class="t-edge-default" font-size="8" text-anchor="middle">bind mounts</text>
+        <g data-edge-from="appserver" data-edge-to="state" data-edge-label="bind mounts" data-edge-key="21">
+          <rect x="846.2" y="873" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="877.6" y="883" class="t-edge-default" font-size="8" text-anchor="middle">bind mounts</text>
         </g>
-        <g data-edge-from="gate" data-edge-to="editor" data-edge-label="Unix socket" data-edge-key="20">
-          <rect x="576.2" y="714" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="607.6" y="724" class="t-edge-security" font-size="8" text-anchor="middle">Unix socket</text>
+        <g data-edge-from="gate" data-edge-to="editor" data-edge-label="Unix socket" data-edge-key="22">
+          <rect x="576.2" y="834" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="607.6" y="844" class="t-edge-security" font-size="8" text-anchor="middle">Unix socket</text>
         </g>
-        <g data-edge-from="editor" data-edge-to="shell" data-edge-label="SSH" data-edge-key="21">
-          <rect x="609" y="844" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="624" y="854" class="t-edge-default" font-size="8" text-anchor="middle">SSH</text>
+        <g data-edge-from="editor" data-edge-to="shell" data-edge-label="SSH" data-edge-key="23">
+          <rect x="609" y="964" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="624" y="974" class="t-edge-default" font-size="8" text-anchor="middle">SSH</text>
         </g>
-        <g data-edge-from="shell" data-edge-to="state" data-edge-label="workspaces" data-edge-key="22">
-          <rect x="756" y="891" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="785" y="901" class="t-edge-default" font-size="8" text-anchor="middle">workspaces</text>
+        <g data-edge-from="shell" data-edge-to="state" data-edge-label="workspaces" data-edge-key="24">
+          <rect x="756" y="1011" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="785" y="1021" class="t-edge-default" font-size="8" text-anchor="middle">workspaces</text>
         </g>
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
@@ -1604,8 +1657,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="3" data-composition-frame-kind="security-group" data-composition-frame-label="code-exec (internal)">
-          <rect data-graph-role="structural-frame-label-mask" x="550" y="740" width="118" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="554" y="753" class="t-security" font-size="9" font-weight="600">code-exec (internal)</text>
+          <rect data-graph-role="structural-frame-label-mask" x="550" y="860" width="118" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="554" y="873" class="t-security" font-size="9" font-weight="600">code-exec (internal)</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="4" data-composition-frame-kind="region" data-composition-frame-label="host: every stack">
@@ -1615,30 +1668,30 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
 
         <!-- Legend -->
         <g data-legend="">
-          <text x="40" y="994" class="t-primary" font-size="12" font-weight="650">Legend</text>
-          <g data-legend-semantic-kind="frontend" data-legend-x="40" data-legend-baseline="1014" data-legend-width="93">
-            <rect x="40" y="1005" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
-            <text x="62" y="1014" class="t-muted" font-size="10" font-weight="500">Frontend</text>
+          <text x="40" y="1114" class="t-primary" font-size="12" font-weight="650">Legend</text>
+          <g data-legend-semantic-kind="frontend" data-legend-x="40" data-legend-baseline="1134" data-legend-width="93">
+            <rect x="40" y="1125" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
+            <text x="62" y="1134" class="t-muted" font-size="10" font-weight="500">Frontend</text>
           </g>
-          <g data-legend-semantic-kind="backend" data-legend-x="155" data-legend-baseline="1014" data-legend-width="87">
-            <rect x="155" y="1005" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
-            <text x="177" y="1014" class="t-muted" font-size="10" font-weight="500">Backend</text>
+          <g data-legend-semantic-kind="backend" data-legend-x="155" data-legend-baseline="1134" data-legend-width="87">
+            <rect x="155" y="1125" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+            <text x="177" y="1134" class="t-muted" font-size="10" font-weight="500">Backend</text>
           </g>
-          <g data-legend-semantic-kind="database" data-legend-x="264" data-legend-baseline="1014" data-legend-width="93">
-            <rect x="264" y="1005" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
-            <text x="286" y="1014" class="t-muted" font-size="10" font-weight="500">Database</text>
+          <g data-legend-semantic-kind="database" data-legend-x="264" data-legend-baseline="1134" data-legend-width="93">
+            <rect x="264" y="1125" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+            <text x="286" y="1134" class="t-muted" font-size="10" font-weight="500">Database</text>
           </g>
-          <g data-legend-semantic-kind="cloud" data-legend-x="379" data-legend-baseline="1014" data-legend-width="74">
-            <rect x="379" y="1005" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
-            <text x="401" y="1014" class="t-muted" font-size="10" font-weight="500">Cloud</text>
+          <g data-legend-semantic-kind="cloud" data-legend-x="379" data-legend-baseline="1134" data-legend-width="74">
+            <rect x="379" y="1125" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+            <text x="401" y="1134" class="t-muted" font-size="10" font-weight="500">Cloud</text>
           </g>
-          <g data-legend-semantic-kind="security" data-legend-x="475" data-legend-baseline="1014" data-legend-width="93">
-            <rect x="475" y="1005" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
-            <text x="497" y="1014" class="t-muted" font-size="10" font-weight="500">Security</text>
+          <g data-legend-semantic-kind="security" data-legend-x="475" data-legend-baseline="1134" data-legend-width="93">
+            <rect x="475" y="1125" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
+            <text x="497" y="1134" class="t-muted" font-size="10" font-weight="500">Security</text>
           </g>
-          <g data-legend-semantic-kind="external" data-legend-x="590" data-legend-baseline="1014" data-legend-width="93">
-            <rect x="590" y="1005" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
-            <text x="612" y="1014" class="t-muted" font-size="10" font-weight="500">External</text>
+          <g data-legend-semantic-kind="external" data-legend-x="590" data-legend-baseline="1134" data-legend-width="93">
+            <rect x="590" y="1125" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="612" y="1134" class="t-muted" font-size="10" font-weight="500">External</text>
           </g>
         </g>
       </svg>

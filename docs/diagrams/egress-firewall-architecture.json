@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "5becc556cb74382948dd4a3fc19b941c90ea6890"
+      "revision": "2d79144625430931a6cff853a8bc5e22c9e3cfd0"
     }
   },
   "components": [
@@ -36,8 +36,8 @@
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 40,
-          "end_line": 43,
+          "line": 41,
+          "end_line": 44,
           "label": "NODE_USE_ENV_PROXY on the app-server"
         }
       ],
@@ -60,8 +60,8 @@
       "sources": [
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 31,
-          "end_line": 43,
+          "line": 32,
+          "end_line": 44,
           "label": "proxy variables on app-server"
         },
         {
@@ -76,7 +76,7 @@
       "id": "vault",
       "type": "backend",
       "label": "garden services",
-      "sublabel": "garden-vault, -gmail-triggers, garden",
+      "sublabel": "vault, gmail-triggers, outlook, garden",
       "pos": [
         40,
         460
@@ -89,14 +89,20 @@
         {
           "path": "compose/pipelock-proxy.yml",
           "line": 21,
-          "end_line": 37,
+          "end_line": 38,
           "label": "NO_PROXY list"
         },
         {
           "path": "lib/common.sh",
-          "line": 946,
-          "end_line": 960,
+          "line": 965,
+          "end_line": 979,
           "label": "check_pipelock"
+        },
+        {
+          "path": "outlook/src/garden_outlook/outlook_client.py",
+          "line": 43,
+          "end_line": 46,
+          "label": "Outlook calls Microsoft directly"
         }
       ]
     },
@@ -123,8 +129,8 @@
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 44,
-          "end_line": 49,
+          "line": 45,
+          "end_line": 50,
           "label": "ddg-mcp, searxng"
         }
       ]
@@ -191,8 +197,8 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 757,
-          "end_line": 758,
+          "line": 771,
+          "end_line": 772,
           "label": "only garden-pipelock mounts it"
         }
       ]
@@ -213,14 +219,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1959,
-          "end_line": 1993,
+          "line": 1966,
+          "end_line": 2000,
           "label": "receipts: no network, read-only"
         },
         {
           "path": "lettucectl",
-          "line": 1799,
-          "end_line": 1799,
+          "line": 1806,
+          "end_line": 1806,
           "label": "backup mounts it read-only"
         }
       ]
@@ -365,7 +371,7 @@
       "items": [
         "Advisory, not a boundary: the stack network still reaches the internet, and any agent can unset HTTPS_PROXY",
         "No TLS interception: for HTTPS it sees the host name, not paths, bodies or responses",
-        "The BFF (its Remote Pi SSH runs included), garden-vault, google-mcp, garden-gmail-triggers and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct"
+        "The BFF (its Remote Pi SSH runs included), garden-vault, google-mcp, garden-gmail-triggers, garden-outlook and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct"
       ]
     },
     {
@@ -374,7 +380,7 @@
       "items": [
         "garden-pipelock hardened: read-only, no capabilities, no host mounts",
         "Only garden-pipelock mounts pipelock-data, whatever the profiles",
-        "The app-server's proxy variables point at garden-pipelock, and its NO_PROXY lists garden-vault, garden-gmail-triggers and garden, so pipelock never sees the vault's values or the executor's token"
+        "The app-server's proxy variables point at garden-pipelock, and its NO_PROXY lists garden-vault, garden-gmail-triggers, garden and garden-outlook, so pipelock never sees the vault's values, the executor's token or Outlook's mail"
       ]
     }
   ]

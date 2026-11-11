@@ -15,13 +15,13 @@ FOCI). Because that reuses an existing first-party sign-in, no admin has to appr
 anything — but a strict tenant can still refuse the exchange (see the security
 model), and where a normal Graph app registration is available, prefer it.
 
-```
-you  ──bookmarklet on outlook.office.com──> opens /outlook/#<session>   (the refresh token, in the URL fragment)
-you  ──https://<garden>/outlook/ ─────────> sets levels + allowed recipients; the session is sealed on disk
-agent──(MCP)──> garden-outlook ──> graph.microsoft.com   only what the policy allows; the token stays here
-```
+![You connect Outlook with a bookmarklet and set the limits; an agent's tool call reaches Microsoft only as far as they allow](diagrams/outlook-flow.svg)
 
-## For the person using it
+An interactive version, [outlook-flow.html](diagrams/outlook-flow.html), opens in a browser from a clone of this repo.
+
+How it is built and wired, for developers: [outlook/README.md](../outlook/README.md).
+
+## Using it
 
 1. **Open `https://<your garden>/outlook/`** and sign in as usual; `<your garden>`
    is your stack's garden address, `<name>-garden.<domain>`.
@@ -53,23 +53,24 @@ agent──(MCP)──> garden-outlook ──> graph.microsoft.com   only what t
 
 To stop, **Disconnect** on the page, or turn the `garden-outlook` profile off.
 
-## For the operator (running it)
+## Running it
+- **Turn it on:**
+  ```bash
+  lettucectl profiles <current list>,garden-outlook      # e.g. cloudflared,search,garden-outlook
+  ```
+  This routes `https://<garden>/outlook/` (and the garden's home page) to the Outlook service on every stack, on the stack's garden address and its own Access application, then starts it. Each stack gets its own `OUTLOOK_SECRET` in `stack.env`, once: the key that encrypts the stored session. There is no Microsoft-side setup and no redirect URI to register. Dropping `garden-outlook` from the list removes the route and the container, and leaves the data where it is.
+- **Register it with the agents:**
+  ```bash
+  lettucectl mcp all      # adds outlook (and the other garden servers that are on) to each Settings -> MCP
+  ```
+  `add` does this for a new stack, and `profiles` prints, for each stack, whether it is registered or the entry to add by hand. `mcp` adds `{"name": "outlook", "transport": "http", "url": "http://garden-outlook:8000/mcp"}` once per stack (`OUTLOOK_MCP_REGISTERED` in `stack.env`), so a person who removes it keeps it removed; `mcp <name> --force` adds it again. An HTTP entry with that exact URL counts as Outlook whatever its name; a different server named `outlook` is left alone, and nothing is added (it says so). It then restarts the stack's BFF alone so agents see it. With `garden-outlook` dropped from the list, `up` and `profiles` remove the entry they registered; if that fails, the next `up` or `profiles` retries it.
+- **Data:** the sealed session and the policy live in the Docker volume `lettuce-<name>_outlook-data`, not under `stacks/<name>/`. `lettucectl backup` deliberately does **not** copy it: reconnecting with the bookmarklet is cheap, and a backup should not carry a live mail credential. After a restore, the person reconnects and sets the policy again.
+- **Removal:** `lettucectl remove <name>` deletes the volume, so removing a stack deletes its Outlook session and policy.
+- **Isolation:** the Outlook container has a read-only root filesystem and no capabilities, and no host mounts. Its volume is mounted by nothing else. With `garden-pipelock`, agents' calls to it bypass the proxy (`NO_PROXY`), and the service itself calls Microsoft directly, so pipelock never sees the token or the mail. `lettucectl check` refuses a stack where any of that is not true.
 
-Turn the profile on for every stack:
+## Security model
+What the Outlook connection protects, and what it does not.
 
-```
-lettucectl profiles <your current list>,garden-outlook
-```
-
-`up`/`profiles` generate `OUTLOOK_SECRET` once per stack (the key that encrypts the
-stored session), create the garden host if it is not there yet, add the tunnel route
-`/outlook/`, and register the `outlook` MCP server in each stack's Settings → MCP so
-agents see it. There is no Microsoft-side setup and no redirect URI to register.
-
-`lettucectl backup` deliberately does **not** copy the Outlook session: reconnecting
-with the bookmarklet is cheap, and a backup should not carry a live mail credential.
-
-## Security model (what is and isn't guaranteed)
 
 - **The token stays in the sidecar.** Agents get MCP tools only; the bearer token
   and refresh material never reach them. They are sealed with `OUTLOOK_SECRET`
@@ -92,9 +93,5 @@ with the bookmarklet is cheap, and a backup should not carry a live mail credent
   first-party-app restrictions. If it is refused, the `/outlook/` page says so when
   you connect. Device-based sign-in policies can also mean a refresh from the server
   is refused and you reconnect more often, or that it does not work at all.
-- **This guards the account's identity, not your data.** (Repeated because it matters.)
-  The level and allowed-recipients list limit what the account sends and who it
-  invites — not what an agent can read within its level, nor where it sends data by
-  other means.
 - **Not for accounts with a supported path.** Where a normal Graph app registration is
   available, use it instead.

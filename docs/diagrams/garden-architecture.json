@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "2d79144625430931a6cff853a8bc5e22c9e3cfd0"
     }
   },
   "components": [
@@ -30,8 +30,9 @@
       "sources": [
         {
           "path": "docs/code-server.md",
-          "line": 14,
-          "label": "the landing page in use"
+          "line": 12,
+          "label": "the landing page in use",
+          "end_line": 12
         }
       ]
     },
@@ -51,8 +52,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 79,
-          "end_line": 91,
+          "line": 72,
+          "end_line": 84,
           "label": "Access app: HttpOnly, Lax"
         },
         {
@@ -79,14 +80,14 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 121,
-          "end_line": 134,
+          "line": 118,
+          "end_line": 128,
           "label": "garden host routes"
         },
         {
           "path": "lib/cloudflare.sh",
-          "line": 160,
-          "end_line": 179,
+          "line": 154,
+          "end_line": 173,
           "label": "ingress rules"
         }
       ]
@@ -94,21 +95,21 @@
     {
       "id": "pages",
       "type": "security",
-      "label": "vault, code editor",
-      "sublabel": "/vault/, /code-server/",
+      "label": "vault, code editor, Outlook",
+      "sublabel": "/vault/, /code-server/, /outlook/",
       "pos": [
         490,
         210
       ],
       "size": [
-        170,
+        200,
         62
       ],
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 125,
-          "end_line": 129,
+          "line": 118,
+          "end_line": 123,
           "label": "PROFILE_ROUTES"
         },
         {
@@ -141,14 +142,14 @@
         },
         {
           "path": "garden/src/garden_landing/app.py",
-          "line": 109,
-          "end_line": 124,
+          "line": 110,
+          "end_line": 125,
           "label": "landing page"
         },
         {
           "path": "garden/src/garden_landing/app.py",
-          "line": 134,
-          "end_line": 157,
+          "line": 135,
+          "end_line": 158,
           "label": "routes, executor API"
         }
       ]
@@ -191,8 +192,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 272,
-          "end_line": 281,
+          "line": 281,
+          "end_line": 289,
           "label": "executor_cron"
         }
       ]
@@ -214,19 +215,19 @@
         {
           "path": "garden/executor/run.mjs",
           "line": 1,
-          "end_line": 20,
+          "end_line": 22,
           "label": "what a run does"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 491,
-          "end_line": 541,
+          "line": 493,
+          "end_line": 543,
           "label": "run order"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 276,
-          "end_line": 293,
+          "line": 278,
+          "end_line": 295,
           "label": "bearer token calls"
         }
       ]
@@ -247,14 +248,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 261,
-          "end_line": 263,
+          "line": 269,
+          "end_line": 271,
           "label": "install paths"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 149,
-          "end_line": 159,
+          "line": 151,
+          "end_line": 161,
           "label": "readToken"
         }
       ]
@@ -275,20 +276,20 @@
       "sources": [
         {
           "path": "garden/executor/run.mjs",
-          "line": 189,
-          "end_line": 242,
+          "line": 191,
+          "end_line": 244,
           "label": "argv, no shell"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 415,
-          "end_line": 445,
+          "line": 417,
+          "end_line": 447,
           "label": "cron add --once"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 451,
-          "end_line": 473,
+          "line": 453,
+          "end_line": 475,
           "label": "agents list"
         }
       ]
@@ -309,20 +310,20 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 283,
-          "end_line": 315,
+          "line": 291,
+          "end_line": 323,
           "label": "GARDEN_INSTALL"
         },
         {
           "path": "lettucectl",
-          "line": 338,
-          "end_line": 381,
+          "line": 346,
+          "end_line": 389,
           "label": "install and sync_executor"
         },
         {
           "path": "lib/common.sh",
-          "line": 333,
-          "end_line": 368,
+          "line": 644,
+          "end_line": 690,
           "label": "token and GARDEN_PROFILES"
         }
       ]

@@ -17,6 +17,8 @@ const GOOGLE = { name: "google", transport: "http", url: "http://google-mcp:8000
 const VAULT = { name: "vault", transport: "http", url: "http://garden-vault:8000/mcp", headers: { "x-a": "b" } };
 // The entry lettucectl adds for the vault (upstream bff/src/mcp/settings.ts).
 const OUR_VAULT = { name: "vault", transport: "http", url: "http://garden-vault:8000/mcp" };
+// The entry lettucectl adds for Outlook.
+const OUR_OUTLOOK = { name: "outlook", transport: "http", url: "http://garden-outlook:8000/mcp" };
 
 // The file as upstream's BFF renders it (renderMcpSettings).
 function settings(servers, extra = {}) {
@@ -251,6 +253,49 @@ test("each group leaves the other's entries alone", async () => {
   const vault = await update(file, "remove", "vault", { settleMs: 0 });
   assert.deepEqual(vault.removed, ["vault"]);
   assert.deepEqual(serversIn(file), [OFFICE, PDF]);
+});
+
+test("adds Outlook after the existing ones; one added by hand under any name counts as there", async () => {
+  const file = tmpFile(render(settings([GOOGLE, OUR_VAULT])));
+  const result = await update(file, "add", "outlook", { settleMs: 0 });
+  assert.deepEqual(result.added, ["outlook"]);
+  assert.deepEqual(serversIn(file), [GOOGLE, OUR_VAULT, OUR_OUTLOOK]);
+
+  const mine = { name: "mail", transport: "http", url: "http://garden-outlook:8000/mcp" };
+  const byHand = tmpFile(render(settings([mine])));
+  const before = fs.readFileSync(byHand, "utf8");
+  const again = await update(byHand, "add", "outlook", { settleMs: 0 });
+  assert.deepEqual(again.added, []);
+  assert.deepEqual(again.present, ["mail"]);
+  assert.equal(fs.readFileSync(byHand, "utf8"), before);
+});
+
+test("an outlook server that is not Outlook's exact HTTP entry is the person's, and nothing is added", async () => {
+  const cases = [
+    { name: "outlook", transport: "http", url: "http://garden-outlook:8000/mcp/" },
+    { name: "outlook", transport: "http", url: "https://outlook.example.com/mcp" },
+    { name: "outlook", transport: "stdio", command: "/usr/local/bin/my-outlook" },
+  ];
+  for (const mine of cases) {
+    const file = tmpFile(render(settings([mine])));
+    const before = fs.readFileSync(file, "utf8");
+    const result = await update(file, "add", "outlook", { settleMs: 0 });
+    assert.deepEqual(result.added, [], JSON.stringify(mine));
+    assert.deepEqual(result.conflicts, ["outlook"], JSON.stringify(mine));
+    assert.equal(fs.readFileSync(file, "utf8"), before, JSON.stringify(mine));
+  }
+});
+
+test("removing Outlook takes out only its exact HTTP entries, and leaves the vault's alone", async () => {
+  const renamed = { name: "mail", transport: "http", url: "http://garden-outlook:8000/mcp" };
+  const other = { name: "outlook", transport: "http", url: "https://outlook.example.com/mcp" };
+  const file = tmpFile(render(settings([GOOGLE, OUR_VAULT, OUR_OUTLOOK, renamed, other])));
+  const result = await update(file, "remove", "outlook", { settleMs: 0 });
+  assert.deepEqual(result.removed, ["outlook", "mail"]);
+  assert.deepEqual(serversIn(file), [GOOGLE, OUR_VAULT, other]);
+  const vault = await update(file, "remove", "vault", { settleMs: 0 });
+  assert.deepEqual(vault.removed, ["vault"]);
+  assert.deepEqual(serversIn(file), [GOOGLE, other]);
 });
 
 test("an overwrite after its rename is noticed for the vault too, and it is added again", async () => {

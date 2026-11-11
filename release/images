@@ -9,5 +9,6 @@ vault               vault               garden-common  garden-vault
 gmail-triggers      gmail-triggers      garden-common  garden-gmail-triggers
 pipelock            pipelock            -              garden-pipelock
 code-server         code-server         garden-common  garden-code-server
+outlook             outlook             garden-common  garden-outlook
 code-server-editor  code-server/editor  -              garden-code-server-editor
 backup              backup              -              -

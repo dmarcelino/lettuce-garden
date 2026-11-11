@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "2d79144625430931a6cff853a8bc5e22c9e3cfd0"
     }
   },
   "components": [
@@ -30,8 +30,8 @@
       "sources": [
         {
           "path": "README.md",
-          "line": 5,
-          "end_line": 8,
+          "line": 9,
+          "end_line": 12,
           "label": "two hosts per person"
         }
       ]
@@ -52,8 +52,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 79,
-          "end_line": 91,
+          "line": 72,
+          "end_line": 84,
           "label": "Access application body"
         }
       ]
@@ -74,8 +74,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 79,
-          "end_line": 91,
+          "line": 72,
+          "end_line": 84,
           "label": "same policy, own AUD"
         }
       ]
@@ -96,14 +96,14 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 121,
-          "end_line": 134,
+          "line": 118,
+          "end_line": 128,
           "label": "garden host routes"
         },
         {
           "path": "lib/cloudflare.sh",
-          "line": 160,
-          "end_line": 179,
+          "line": 154,
+          "end_line": 173,
           "label": "tunnel ingress"
         },
         {
@@ -135,8 +135,8 @@
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 39,
-          "end_line": 41,
+          "line": 48,
+          "end_line": 50,
           "label": "proxied by pipelock"
         }
       ]
@@ -162,9 +162,10 @@
           "label": "shares app-server netns"
         },
         {
-          "path": "AGENTS.md",
-          "line": 22,
-          "label": "the only connection"
+          "path": "CONTRIBUTING.md",
+          "line": 23,
+          "label": "the only connection",
+          "end_line": 23
         }
       ]
     },
@@ -191,14 +192,14 @@
         },
         {
           "path": "lettucectl",
-          "line": 371,
-          "end_line": 381,
+          "line": 379,
+          "end_line": 389,
           "label": "sync_executor"
         },
         {
           "path": "compose/doc-tools.yml",
-          "line": 25,
-          "end_line": 36,
+          "line": 26,
+          "end_line": 37,
           "label": "tools mount and network"
         }
       ]
@@ -224,8 +225,8 @@
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 36,
-          "end_line": 38,
+          "line": 45,
+          "end_line": 47,
           "label": "proxied by pipelock"
         }
       ]
@@ -247,13 +248,13 @@
         {
           "path": "compose/pipelock.yml",
           "line": 1,
-          "end_line": 33,
+          "end_line": 41,
           "label": "service"
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 20,
-          "end_line": 41,
+          "line": 1,
+          "end_line": 50,
           "label": "who follows the proxy"
         }
       ]
@@ -324,13 +325,13 @@
         {
           "path": "compose/doc-tools.yml",
           "line": 1,
-          "end_line": 24,
+          "end_line": 25,
           "label": "shared, read-only"
         },
         {
           "path": "lettucectl",
-          "line": 418,
-          "end_line": 425,
+          "line": 460,
+          "end_line": 467,
           "label": "image lettucectl builds"
         }
       ]
@@ -405,7 +406,7 @@
       "sublabel": "/code-server/ gate",
       "pos": [
         560,
-        620
+        740
       ],
       "size": [
         170,
@@ -415,7 +416,7 @@
         {
           "path": "compose/code-server.yml",
           "line": 27,
-          "end_line": 54,
+          "end_line": 55,
           "label": "the gate"
         }
       ]
@@ -427,7 +428,7 @@
       "sublabel": "socket only, no port",
       "pos": [
         560,
-        760
+        880
       ],
       "size": [
         170,
@@ -437,7 +438,7 @@
         {
           "path": "compose/code-server.yml",
           "line": 56,
-          "end_line": 109,
+          "end_line": 110,
           "label": "the editor"
         }
       ]
@@ -449,7 +450,7 @@
       "sublabel": "SSH in, code-egress out",
       "pos": [
         560,
-        880
+        1000
       ],
       "size": [
         170,
@@ -459,7 +460,7 @@
         {
           "path": "compose/code-server.yml",
           "line": 111,
-          "end_line": 150,
+          "end_line": 149,
           "label": "the shell and networks"
         }
       ]
@@ -471,7 +472,7 @@
       "sublabel": "letta-home, workspaces",
       "pos": [
         840,
-        880
+        1000
       ],
       "size": [
         150,
@@ -479,15 +480,44 @@
       ],
       "sources": [
         {
-          "path": "README.md",
-          "line": 82,
-          "label": "the stack's data"
+          "path": "docs/architecture.md",
+          "line": 52,
+          "label": "the stack's data",
+          "end_line": 59
         },
         {
           "path": "compose/code-server.yml",
-          "line": 124,
-          "end_line": 127,
+          "line": 127,
+          "end_line": 130,
           "label": "shell mounts"
+        }
+      ]
+    },
+    {
+      "id": "outlook",
+      "type": "security",
+      "label": "garden-outlook",
+      "sublabel": "/outlook/, outlook-data",
+      "pos": [
+        560,
+        620
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/outlook.yml",
+          "line": 23,
+          "end_line": 58,
+          "label": "service, hardening and volume"
+        },
+        {
+          "path": "outlook/src/garden_outlook/mcp_tools.py",
+          "line": 182,
+          "end_line": 200,
+          "label": "every tool checks the policy"
         }
       ]
     }
@@ -518,7 +548,8 @@
         "garden",
         "vault",
         "gmail",
-        "gate"
+        "gate",
+        "outlook"
       ],
       "pad": 14
     },
@@ -586,7 +617,13 @@
     },
     {
       "from": "cloudflared",
-      "to": "gate"
+      "to": "gate",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "from": "cloudflared",
+      "to": "outlook"
     },
     {
       "from": "bff",
@@ -621,6 +658,12 @@
       "to": "gmail",
       "label": "executor",
       "variant": "dashed"
+    },
+    {
+      "from": "appserver",
+      "to": "outlook",
+      "label": "/mcp",
+      "variant": "security"
     },
     {
       "from": "appserver",
@@ -688,7 +731,7 @@
       "dot": "amber",
       "title": "Volumes not drawn",
       "items": [
-        "vault-data: only garden-vault. pipelock-data: only garden-pipelock.",
+        "vault-data: only garden-vault. outlook-data: only garden-outlook. pipelock-data: only garden-pipelock.",
         "google-creds: the BFF, google-mcp, and garden-gmail-triggers read-only.",
         "code-server-sock, code-server-data, code-exec-keys: only the code editor's services.",
         "state/garden/gmail-triggers: only garden-gmail-triggers, outside every app-server mount."

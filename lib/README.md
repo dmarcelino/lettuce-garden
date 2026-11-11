@@ -106,10 +106,11 @@ The BFF shares the app-server's network namespace and dies when the app-server i
 - The agents' tools (`state/tools`) are mounted at `/opt/agent-tools` only with `--tools`, read-only unless `--tools=rw`. A missing directory is refused rather than created by Docker.
 - In release mode the operator's home is `LETTUCECTL_HOST_HOME` (the wrapper mounts it read-only at the same path), and what only the host's commands can give (`gh auth token`, `secret-tool`, the toolbox file's `secret` lines) the wrapper runs on the host and passes as `LETTUCECTL_*` variables, by name.
 
-### `mcp` registers the document tools and the vault once per stack, and only those
-There is no supported way to set Settings -> MCP across stacks, so `lettucectl mcp` is the one write into Lettuce's MCP list. It owns two kinds of entries and touches nothing else:
+### `mcp` registers the document tools, the vault and Outlook once per stack, and only those
+There is no supported way to set Settings -> MCP across stacks, so `lettucectl mcp` is the one write into Lettuce's MCP list. It owns three kinds of entries and touches nothing else:
 - **`doc-tools`** (profile `garden-doc-tools`): entries whose command is under `/opt/lettuce-doc-tools/`. It adds `office` and `pdf` when missing. A same-named server with another command is the person's and stays.
 - **`vault`** (profile `garden-vault`): HTTP entries whose URL is exactly `http://garden-vault:8000/mcp`, under any name. It adds `{"name": "vault", "transport": "http", "url": "http://garden-vault:8000/mcp"}` only when none is there, and nothing when another server is named `vault` (the person's). Registering the vault gives agents nothing new: they reach that URL over the stack network anyway, and approval stays in the vault.
+- **`outlook`** (profile `garden-outlook`): like the vault, HTTP entries whose URL is exactly `http://garden-outlook:8000/mcp`, under any name. It adds `{"name": "outlook", "transport": "http", "url": "http://garden-outlook:8000/mcp"}` only when none is there, and nothing when another server is named `outlook`. It gives agents nothing new either: the policy is enforced in the sidecar ([outlook/README.md](../outlook/README.md#rules)).
 
 How it writes:
 - `mcp-servers.mjs` is streamed into the app-server (the script on stdin) and touches only its group's entries.
@@ -118,7 +119,7 @@ How it writes:
 - On a new stack it waits up to 90 s for the BFF to create the file.
 
 When it runs:
-- Success sets the group's marker in `stack.env` (`DOC_TOOLS_MCP_REGISTERED=1`, `VAULT_MCP_REGISTERED=1`; `MCP_GROUPS`, `MCP_PROFILE` and `MCP_MARKER` in `lettucectl`). `mcp` registers every group whose profile is on and skips a marked group unless `--force`, so a server the person removed stays removed. It refuses only when both profiles are off.
+- Success sets the group's marker in `stack.env` (`DOC_TOOLS_MCP_REGISTERED=1`, `VAULT_MCP_REGISTERED=1`, `OUTLOOK_MCP_REGISTERED=1`; `MCP_GROUPS`, `MCP_PROFILE` and `MCP_MARKER` in `lettucectl`). `mcp` registers every group whose profile is on and skips a marked group unless `--force`, so a server the person removed stays removed. It refuses only when all three profiles are off.
 - `add` registers a new stack's groups after `sync_doc_tools` (the document tools only when that succeeded). `profiles` and `up` never register.
 - With a group's profile off, `up` and every `profiles` run remove that group's entries in each stack marked for it, and clear the mark. A stdio server that cannot start, or an HTTP server that does not answer, breaks every unfiltered `letta mcp tools` call. A failure keeps the mark, so the next run retries.
 - Whenever a stack's list changed, `refresh_mcp_skill` restarts its BFF alone (`compose NAME restart --no-deps bff`), once per stack per command, so the `mcp-servers` description agents see names the new list. Its `stop_grace_period` lets a turn finish. A failed restart only warns.

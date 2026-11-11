@@ -19,9 +19,10 @@ The "Build and test" sections are the one list of checks; this table only links 
 | `vault/` | [vault/README.md](vault/README.md#rules) | [vault](vault/README.md#build-and-test) |
 | `gmail-triggers/` | [gmail-triggers/README.md](gmail-triggers/README.md#rules) | [gmail-triggers](gmail-triggers/README.md#build-and-test) |
 | `code-server/` | [code-server/README.md](code-server/README.md#rules) | [code-server](code-server/README.md#build-and-test) |
+| `outlook/` | [outlook/README.md](outlook/README.md#rules) | [outlook](outlook/README.md#build-and-test) |
 | `garden/` | [garden/README.md](garden/README.md#rules) | [garden](garden/README.md#build-and-test) |
 | `garden/executor/` | [install](garden/executor/README.md#install), [trust](garden/executor/README.md#trust) | [executor](garden/executor/README.md#build-and-test) |
-| `garden-common/` | [garden-common/README.md](garden-common/README.md#rules) | [garden-common](garden-common/README.md#build-and-test) (the four suites that use it) |
+| `garden-common/` | [garden-common/README.md](garden-common/README.md#rules) | [garden-common](garden-common/README.md#build-and-test) (the five suites that use it) |
 | `pipelock/` | [pipelock/README.md](pipelock/README.md#rules) | [pipelock](pipelock/README.md#build-and-test) |
 | `doc-tools/` | [doc-tools/README.md](doc-tools/README.md#rules) | [doc-tools](doc-tools/README.md#build-and-test) |
 | `agent-skills/` | [agent-skills/README.md](agent-skills/README.md#rules) | [agent-skills](agent-skills/README.md#build-and-test) |
@@ -37,7 +38,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 - Plug in only through the supported seams. A new dependency on a Lettuce internal is redesigned away, or adds a row to the upstream seams named today in [CONTRIBUTING.md](CONTRIBUTING.md#upstream-seams).
 - Overlays restrict, never redefine: never replace an upstream service's image, entrypoint, command or internal env. The written exceptions are `pipelock-proxy.yml` (proxy variables on three upstream services) and `doc-tools.yml` (a mount and a network on the app-server); leave them be. A new one needs a written reason in [compose/README.md](compose/README.md#rules) first, then a mention here.
 - No second way into an agent: no command or sidecar opens a connection to the app-server or starts a turn; `compose exec` for files and read-only CLI calls is the limit. Gmail triggers through letta-code's scheduler is the only exception. Another sidecar starting turns, or a new way around the BFF, needs a written reason in CONTRIBUTING first, and goes under `/<sidecar>/` on the garden host, never on Lettuce's.
-- Don't write into what Lettuce manages (settings, MCP list, memory, workspaces). Where we must write, we own a namespace: `skills` its manifest, the executor install its own files; the one write into the MCP list is `mcp`, with its two kinds of entries. Never turn an upstream feature on by editing its files.
+- Don't write into what Lettuce manages (settings, MCP list, memory, workspaces). Where we must write, we own a namespace: `skills` its manifest, the executor install its own files; the one write into the MCP list is `mcp`, with its three kinds of entries. Never turn an upstream feature on by editing its files.
 - Keep upstream's defences on: strictest auth settings, no disabled boot check, nothing secret under `stacks/<name>/state/`, never shorten the BFF's `stop_grace_period`.
 - Name new profiles `garden-<name>`. Move `LETTUCE_REF` only with `lettucectl upgrade <tag>`, and walk [the upgrade checklist](CONTRIBUTING.md#upgrading-lettuce_ref).
 
@@ -63,6 +64,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 - **Code editor** ([rules](code-server/README.md#rules)): nothing an agent wrote may run in the editor's container. Never add an extension, setting or flag that runs code, trusts a workspace or opens a port.
 - **Garden pages** ([garden-common rules](garden-common/README.md#rules), [garden rules](garden/README.md#rules)): every page checks Fetch Metadata (`check_fetch`) and sets COOP; the landing page has no script; every garden service accepts only `CF_GARDEN_AUD` and `GARDEN_ORIGIN`.
 - **Executor** ([install](garden/executor/README.md#install), [trust](garden/executor/README.md#trust)): only `sync_executor` installs or removes it (from `up`, `add` and `profiles`), through `compose exec`, replacing only its own files; its token is never rotated automatically. The executor runs `letta` from an argument array, never a shell. It and the sidecars share no directory and treat each other's data as untrusted.
+- **Outlook** ([rules](outlook/README.md#rules)): the policy is checked in the sidecar when each tool runs; never add a tool that changes the policy or returns the token; never mount `outlook-data` elsewhere, log the tokens, pass the service a proxy, or have `backup` copy its volume.
 - **Pipelock** ([rules](pipelock/README.md#rules)): it is advisory; never describe it as a boundary. A service agents or the executor call inside the stack goes in `NO_PROXY`.
 - **Doc-tools** ([rules](doc-tools/README.md#rules)): lettucectl owns the image, volume and networks; Compose only uses them. Only the app-server mounts the tools.
 - **Skills** ([rules](agent-skills/README.md#rules)): only `skills` installs them, replacing only its own; names never match upstream's; text stays generic.
@@ -72,7 +74,7 @@ The "Build and test" sections are the one list of checks; this table only links 
 ### Docs ([CONTRIBUTING.md](CONTRIBUTING.md#writing-docs))
 - README introduces and indexes, `docs/` is for users and admins, and CONTRIBUTING, ARCHITECTURE and the folder READMEs are for developers. This file holds directives only.
 - A rule change edits its developer doc, then the directive here if its one-line form changed.
-- Never claim more than is true: pipelock advisory, the vault's placeholders not a boundary, never trust a folder in the code editor.
+- Never claim more than is true: pipelock advisory, the vault's placeholders not a boundary, never trust a folder in the code editor, Outlook's token redemption unsupported and refusable by a tenant.
 - Keep the guides' file names and `docs/cloudflare-setup.md`'s step numbers: `lettucectl` messages cite them and tests assert some.
 - Never add a file other than `README.md`, `AGENTS.md` and `CLAUDE.md` to `doc-tools/` or `garden-common/` for docs: it would rebuild images.
 - A new folder README gets an `AGENTS.md` pointer and a `CLAUDE.md` symlink to it; `node scripts/check-doc-links.mjs` fails without them.
@@ -99,5 +101,6 @@ node --test tests/check-doc-links.test.mjs # the link checker against temp Markd
 node scripts/check-doc-links.mjs       # every relative link and anchor resolves; every folder README has its agents' pointer
 tests/run-sidecar.sh garden            # the landing page and its executor API (pytest), plus the garden executor's tests (node --test in node:22.22.0-slim) when no args are given
 tests/run-sidecar.sh doc-tools         # the PDF MCP's tests (pytest in the doc-tools image's `test` stage, Debian 12 like the app-server)
+tests/run-sidecar.sh outlook           # the Outlook sidecar's tests (pytest: levels, recipients, tokens, client, enforcement)
 ```
 The same block is in [CONTRIBUTING.md](CONTRIBUTING.md#building-and-testing); keep both and `.github/workflows/ci.yml` in step. The CLI has no build step; from a clone `lettucectl up` builds the sidecar images, and a release pulls them. A clone's instance data is in its untracked `data/` (`config.env`, `stacks.conf`, `.secrets/`, `upstream/`, `stacks/`), never committed.

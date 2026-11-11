@@ -1,0 +1,449 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Outlook: containers, boundaries and interactions",
+    "output": "docs/diagrams/outlook-architecture.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "2d79144625430931a6cff853a8bc5e22c9e3cfd0"
+    }
+  },
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Cloudflare",
+      "wraps": [
+        "edge",
+        "jwks"
+      ],
+      "pad": 16
+    },
+    {
+      "kind": "region",
+      "label": "Compose project lettuce-<name> (one per person)",
+      "wraps": [
+        "cloudflared",
+        "garden",
+        "bff",
+        "appserver",
+        "outlook",
+        "volume"
+      ],
+      "pad": 26
+    },
+    {
+      "kind": "security-group",
+      "label": "shared network namespace",
+      "wraps": [
+        "bff",
+        "appserver"
+      ],
+      "pad": 18
+    },
+    {
+      "kind": "security-group",
+      "label": "garden-outlook: read-only, no caps",
+      "wraps": [
+        "outlook",
+        "volume"
+      ],
+      "pad": 12
+    }
+  ],
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Person's browser",
+      "sublabel": "Outlook web, /outlook/",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        130,
+        62
+      ],
+      "sources": [
+        {
+          "path": "outlook/src/garden_outlook/bookmarklet.py",
+          "line": 1,
+          "end_line": 16,
+          "label": "the bookmarklet's handover"
+        },
+        {
+          "path": "outlook/src/garden_outlook/static/app.js",
+          "line": 1,
+          "end_line": 30,
+          "label": "the page posts it to /outlook/connect"
+        }
+      ]
+    },
+    {
+      "id": "edge",
+      "type": "security",
+      "label": "Cloudflare Access",
+      "sublabel": "Lettuce's app + garden's app",
+      "pos": [
+        230,
+        300
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 76,
+          "end_line": 91,
+          "label": "cf_app_body: HttpOnly, SameSite=Lax"
+        },
+        {
+          "path": "lettucectl",
+          "line": 169,
+          "end_line": 185,
+          "label": "the garden's own Access app (CF_GARDEN_AUD)"
+        }
+      ]
+    },
+    {
+      "id": "jwks",
+      "type": "security",
+      "label": "Access signing keys",
+      "sublabel": "team JWKS (certs)",
+      "pos": [
+        240,
+        470
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "garden-common/src/garden_common/auth.py",
+          "line": 66,
+          "end_line": 74,
+          "label": "JWKS resolver"
+        }
+      ]
+    },
+    {
+      "id": "cloudflared",
+      "type": "cloud",
+      "label": "cloudflared",
+      "sublabel": "routes by host + path",
+      "pos": [
+        470,
+        300
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 118,
+          "end_line": 128,
+          "label": "garden routes, /outlook/ included"
+        },
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 158,
+          "end_line": 173,
+          "label": "cf_tunnel_configure"
+        },
+        {
+          "path": "compose/multi.yml",
+          "line": 1,
+          "end_line": 10,
+          "label": "no published ports"
+        }
+      ]
+    },
+    {
+      "id": "garden",
+      "type": "frontend",
+      "label": "garden",
+      "sublabel": "landing page, links /outlook/",
+      "pos": [
+        470,
+        130
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/garden.yml",
+          "line": 19,
+          "end_line": 48,
+          "label": "on with any garden page profile"
+        },
+        {
+          "path": "garden/src/garden_landing/app.py",
+          "line": 151,
+          "end_line": 157,
+          "label": "routes"
+        }
+      ]
+    },
+    {
+      "id": "bff",
+      "type": "frontend",
+      "label": "BFF",
+      "sublabel": "Lettuce UI :8080, MCP bridge",
+      "pos": [
+        730,
+        130
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "lib/README.md",
+          "line": 99,
+          "end_line": 99,
+          "label": "shares the app-server's network namespace"
+        },
+        {
+          "path": "outlook/src/garden_outlook/app.py",
+          "line": 167,
+          "end_line": 176,
+          "label": "/mcp: Host garden-outlook, no Origin"
+        }
+      ]
+    },
+    {
+      "id": "appserver",
+      "type": "backend",
+      "label": "app-server",
+      "sublabel": "letta-code, agents as root",
+      "pos": [
+        1050,
+        130
+      ],
+      "size": [
+        170,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/outlook.yml",
+          "line": 7,
+          "end_line": 11,
+          "label": "agents reach /mcp; the policy is the control"
+        },
+        {
+          "path": "compose/hardening.yml",
+          "line": 13,
+          "end_line": 28,
+          "label": "NET_RAW dropped"
+        }
+      ]
+    },
+    {
+      "id": "outlook",
+      "type": "security",
+      "label": "garden-outlook",
+      "sublabel": "/outlook/ and /mcp",
+      "pos": [
+        470,
+        470
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/outlook.yml",
+          "line": 23,
+          "end_line": 51,
+          "label": "service and hardening"
+        },
+        {
+          "path": "outlook/src/garden_outlook/app.py",
+          "line": 70,
+          "end_line": 88,
+          "label": "Access JWT, Fetch Metadata, CSRF"
+        },
+        {
+          "path": "outlook/src/garden_outlook/mcp_tools.py",
+          "line": 182,
+          "end_line": 200,
+          "label": "every tool checks the policy"
+        }
+      ]
+    },
+    {
+      "id": "volume",
+      "type": "database",
+      "label": "outlook-data",
+      "sublabel": "sealed session, policy",
+      "pos": [
+        470,
+        640
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "sources": [
+        {
+          "path": "compose/outlook.yml",
+          "line": 53,
+          "end_line": 58,
+          "label": "named volume, not backed up"
+        },
+        {
+          "path": "outlook/src/garden_outlook/tokens.py",
+          "line": 125,
+          "end_line": 153,
+          "label": "sealed with OUTLOOK_SECRET"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 769,
+          "end_line": 770,
+          "label": "only garden-outlook mounts it"
+        }
+      ]
+    },
+    {
+      "id": "microsoft",
+      "type": "external",
+      "label": "Microsoft",
+      "sublabel": "token + Graph",
+      "pos": [
+        240,
+        640
+      ],
+      "size": [
+        130,
+        62
+      ],
+      "sources": [
+        {
+          "path": "outlook/src/garden_outlook/outlook_client.py",
+          "line": 1,
+          "end_line": 14,
+          "label": "FOCI redemption, then Graph"
+        },
+        {
+          "path": "outlook/src/garden_outlook/outlook_client.py",
+          "line": 118,
+          "end_line": 132,
+          "label": "bearer token; refresh on 401"
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "browser",
+      "to": "edge",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "from": "edge",
+      "to": "cloudflared",
+      "label": "tunnel",
+      "variant": "emphasis"
+    },
+    {
+      "from": "cloudflared",
+      "to": "garden",
+      "label": "garden host /"
+    },
+    {
+      "from": "cloudflared",
+      "to": "bff",
+      "label": "Lettuce host + Lettuce JWT"
+    },
+    {
+      "from": "cloudflared",
+      "to": "outlook",
+      "label": "garden host /outlook/ + garden JWT",
+      "variant": "security"
+    },
+    {
+      "from": "bff",
+      "to": "appserver",
+      "label": "WebSocket 127.0.0.1:4500"
+    },
+    {
+      "from": "appserver",
+      "to": "bff",
+      "label": "mcp_call (outlook tool)",
+      "fromSide": "top",
+      "toSide": "top"
+    },
+    {
+      "from": "bff",
+      "to": "outlook",
+      "label": "POST /mcp, Host garden-outlook"
+    },
+    {
+      "from": "outlook",
+      "to": "jwks",
+      "label": "JWKS",
+      "variant": "dashed"
+    },
+    {
+      "from": "outlook",
+      "to": "volume",
+      "label": "sealed session"
+    },
+    {
+      "from": "outlook",
+      "to": "microsoft",
+      "label": "redeem + Graph, direct",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Boundaries that hold",
+      "items": [
+        "The policy page and the connect handover need an Access JWT for the garden's own application (CF_GARDEN_AUD); Lettuce's JWT is refused",
+        "Every tool checks the stored level, allowed recipients, self-events and shared mailboxes when it runs, so calling /mcp directly gains nothing",
+        "The token is sealed with OUTLOOK_SECRET, which lives only in this service's environment, on a volume nothing else mounts",
+        "/mcp answers only Host garden-outlook with no Origin; the tunnel routes only /outlook/ to it",
+        "Microsoft is called directly (trust_env off), and garden-outlook is in NO_PROXY, so pipelock never sees the token or the mail"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Not a boundary",
+      "items": [
+        "BFF and app-server share one network namespace; agents run as root in the app-server and can call /mcp",
+        "The allowed recipients guard the account's identity, not what an agent reads within its level",
+        "The FOCI redemption is unsupported by Microsoft: a tenant can refuse it, and the page then says so"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Not shown",
+      "items": [
+        "Other garden pages on the same host (vault, Gmail triggers, the code editor) and Lettuce's opt-in services",
+        "Outlook on the web itself, where the bookmarklet reads the cached sign-in",
+        "lettucectl on the host: generates OUTLOOK_SECRET, checks the stack, registers outlook in Settings -> MCP (lettucectl mcp)"
+      ]
+    }
+  ]
+}

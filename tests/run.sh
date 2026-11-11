@@ -853,6 +853,96 @@ test_check_refuses_the_vault_profile_without_the_vault() {
   out_has "vault"
 }
 
+# outlook_config [OUTLOOK_JSON] -> the rendered config also holds this Outlook
+# service (default: the hardened one compose/outlook.yml renders) and the
+# garden service
+outlook_config() {
+  local svc=${1:-'{"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"environment":'"$GARDEN_ENV"',"volumes":[{"type":"volume","source":"outlook-data","target":"/data"}]}'}
+  config_edit '.services["garden-outlook"] = '"$svc"
+  garden_config
+}
+
+# with_outlook [OUTLOOK_JSON] -> alfred runs the `garden-outlook` profile and the
+# rendered config holds this service (default: the hardened one)
+with_outlook() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-outlook/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-outlook/' "$D/stacks/alfred/stack.env"
+  outlook_config "$@"
+}
+
+test_check_accepts_the_hardened_outlook() {
+  added
+  with_outlook
+  ctl check alfred
+  ok_rc
+}
+
+test_check_refuses_an_outlook_that_is_not_hardened() {
+  added
+  local b
+  for b in \
+    '{"cap_drop":["ALL"],"volumes":[]}' \
+    '{"read_only":true,"volumes":[]}' \
+    '{"read_only":true,"cap_drop":["NET_RAW"],"volumes":[]}' \
+    '{"read_only":true,"cap_drop":["ALL"],"privileged":true,"volumes":[]}' \
+    '{"read_only":true,"cap_drop":["ALL"],"volumes":[{"type":"bind","source":"/srv","target":"/data"}]}'; do
+    with_outlook "$b"
+    ctl check alfred
+    bad_rc
+    out_has "garden-outlook"
+  done
+}
+
+test_check_refuses_the_outlook_profile_without_the_service() {
+  added
+  with_outlook
+  config_edit 'del(.services["garden-outlook"])'
+  ctl check alfred
+  bad_rc
+  out_has "the garden-outlook profile is on but garden-outlook is not in the rendered config"
+}
+
+test_check_refuses_a_short_outlook_secret() {
+  added
+  with_outlook
+  sed -i 's/^OUTLOOK_SECRET=.*/OUTLOOK_SECRET=short/' "$D/stacks/alfred/stack.env"
+  ctl check alfred
+  bad_rc
+  out_has "alfred: OUTLOOK_SECRET must be at least 32 characters"
+}
+
+test_check_refuses_the_outlook_volume_without_the_profile() {
+  added
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"outlook-data","target":"/x"}]'
+  ctl check alfred
+  bad_rc
+  out_has "alfred: bff mount(s) the Outlook session volume"
+}
+
+test_check_refuses_volumes_from_outlook() {
+  added
+  config_edit '.services.searxng = {"volumes_from":["garden-outlook"]}'
+  ctl check alfred
+  bad_rc
+  out_has "(searxng from garden-outlook)"
+}
+
+test_up_creates_the_outlook_secret_once() {
+  added
+  local s
+  s=$(senv alfred OUTLOOK_SECRET)
+  [[ $s =~ ^[0-9a-f]{64}$ ]] || fail "bad secret [$s]"
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred OUTLOOK_SECRET)" "$s"
+  eq "$(stat -c %a "$D/stacks/alfred/stack.env")" 600
+  sed -i '/^OUTLOOK_SECRET=/d' "$D/stacks/alfred/stack.env"
+  ctl up alfred
+  ok_rc
+  [[ $(senv alfred OUTLOOK_SECRET) =~ ^[0-9a-f]{64}$ ]] || fail "secret not recreated"
+  [[ $(senv alfred OUTLOOK_SECRET) != "$s" ]] || fail "secret reused"
+}
+
 # pipelock_config [PIPELOCK_JSON] -> the rendered config also holds this pipelock
 # (default: the hardened one compose/pipelock.yml renders) and the app-server's
 # proxy settings from compose/pipelock-proxy.yml
@@ -953,7 +1043,7 @@ test_check_refuses_a_proxy_that_would_see_the_vault_or_the_executor() {
   added
   local k v
   for k in NO_PROXY no_proxy; do
-    for v in garden-vault garden-gmail-triggers garden; do
+    for v in garden-vault garden-gmail-triggers garden garden-outlook; do
       with_pipelock
       config_edit '.services["app-server"].environment["'"$k"'"] |= (split(",") - ["'"$v"'"] | join(","))'
       ctl check alfred
@@ -3755,11 +3845,11 @@ test_mcp_leaves_a_persons_server_of_the_same_name() {
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
 }
 
-test_mcp_needs_the_doc_tools_or_the_vault_profile() {
+test_mcp_needs_the_doc_tools_the_vault_or_the_outlook_profile() {
   added
   ctl mcp alfred
   bad_rc
-  out_has "the garden-doc-tools and garden-vault profiles are both off"
+  out_has "the garden-doc-tools, garden-vault and garden-outlook profiles are all off"
   log_lacks "node --input-type=module"
 }
 
@@ -3776,6 +3866,24 @@ test_mcp_registers_the_vault_with_its_profile() {
   eq "$(senv alfred VAULT_MCP_REGISTERED)" 1
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
   (($(line_of "restart --no-deps bff") > $(line_of "$VAULT_ADD"))) || fail "the BFF restarted before the change"
+}
+
+OUTLOOK_ADD="exec -T app-server node --input-type=module - add /root/.letta/mcp-home/.letta/settings.json outlook"
+
+test_mcp_registers_outlook_with_its_profile() {
+  added
+  with_outlook
+  mcp_answer '{"added":["outlook"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
+  ctl mcp alfred
+  ok_rc
+  log_has "$OUTLOOK_ADD"
+  log_lacks "$VAULT_ADD"
+  log_lacks "$MCP_ADD"
+  grep -q 'garden-outlook:8000/mcp' "$T/exec-stdin.log" || fail "the script was not streamed"
+  out_has "alfred: added outlook to Settings -> MCP"
+  eq "$(senv alfred OUTLOOK_MCP_REGISTERED)" 1
+  eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
+  (($(line_of "restart --no-deps bff") > $(line_of "$OUTLOOK_ADD"))) || fail "the BFF restarted before the change"
 }
 
 test_mcp_registers_both_and_restarts_the_bff_once() {

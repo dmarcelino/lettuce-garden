@@ -1,5 +1,7 @@
 # Outlook: implementation plan
 
+Note (2026-11-11): moved here from `docs/outlook-plan.md` when the design records moved next to their code. The sidecar has since been built on `outlook-mcp` (the status line below is from when the plan was written); [README.md](README.md) describes it as built. The record below is unchanged.
+
 Status: design. Branch `outlook-mcp`. Not yet implemented beyond the enforcement
 core (`levels.py`, `recipients.py`) and this record.
 

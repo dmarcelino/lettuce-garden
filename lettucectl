@@ -2018,7 +2018,7 @@ cmd_mcp() {
   require_initialised
   mapfile -t groups < <(mcp_groups "$(cfg PROFILES)")
   ((${#groups[@]})) ||
-    die "the garden-doc-tools and garden-vault profiles are both off; turn one on first, e.g.: lettucectl profiles $(cfg PROFILES),garden-doc-tools"
+    die "the garden-doc-tools, garden-vault and garden-outlook profiles are all off; turn one on first, e.g.: lettucectl profiles $(cfg PROFILES),garden-doc-tools"
   targets=$(expand_targets "$1")
   for n in $targets; do
     register_mcp "$n" "${2:-}" "${groups[@]}" || failed+=("$n")

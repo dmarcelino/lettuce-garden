@@ -24,11 +24,11 @@ services:
   garden-outlook:
     profiles: ["garden-outlook"]
     build:
-      context: ../../outlook
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/outlook
       # The shared package (Access JWT and CSRF checks) both garden images install.
       additional_contexts:
-        garden-common: ../../garden-common
-    image: lettuce-outlook:local
+        garden-common: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden-common
+    image: ${GARDEN_IMAGE_OUTLOOK:-lettuce-outlook:local}
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       # The garden's own Access application and host, never Lettuce's.

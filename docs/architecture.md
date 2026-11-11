@@ -87,7 +87,7 @@ Each feature's own guarantees and limits are in its guide: [vault](vault.md#secu
 | app-server | The container that runs letta-code: the agents, their shell, memory and workspaces. Agents are root in it. |
 | BFF | "Backend for frontend": Lettuce's own server, which serves the web app, checks the sign-in and holds the only connection to the agents. |
 | profile | An optional feature, named in `PROFILES` (for example `search`, `google`, `garden-vault`). It is on for every stack or for none. |
-| garden, garden pages | lettuce-garden's own extras with a page of their own (the vault, Gmail triggers, the code editor), on each stack's second address, `<name>-garden.<domain>`. |
+| garden, garden pages | lettuce-garden's own extras with a page of their own (the vault, Gmail triggers, the code editor, Outlook), on each stack's second address, `<name>-garden.<domain>`. |
 | sidecar | A small extra container next to the app-server, such as the vault or `google-mcp`, which agents use but which is not part of their container. |
 | MCP | Model Context Protocol: how agents call tools that run outside their own code, such as the vault or the document tools. Listed in Lettuce under **Settings -> MCP**. |
 | Cloudflare Tunnel | An outbound connection from the stack's `cloudflared` to Cloudflare, which carries the stack's traffic, so the host opens no port. |

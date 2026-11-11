@@ -499,7 +499,7 @@
       "dot": "cyan",
       "title": "Compose files, in order",
       "items": [
-        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, pipelock, code-server, garden",
+        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, pipelock, code-server, outlook, garden",
         "doc-tools.yml only with garden-doc-tools, pipelock-proxy.yml last and only with garden-pipelock",
         "-p lettuce-<name>, --project-directory upstream/docker, --env-file stack.env"
       ]

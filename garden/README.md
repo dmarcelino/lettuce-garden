@@ -47,7 +47,7 @@ An interactive version, [garden-architecture.html](../docs/diagrams/garden-archi
 Whatever the profiles, `check_garden_audience` refuses a garden service (`garden_services`: each `PROFILE_ROUTES` service and `garden`) whose `CF_ACCESS_AUD` is not `CF_GARDEN_AUD`, or is Lettuce's `CF_ACCESS_AUD`, or whose `PUBLIC_ORIGIN` is not `GARDEN_ORIGIN`. cloudflared hands Lettuce's token to the BFF in plain HTTP, inside the namespace agents share, so a garden page that took it could be driven by an agent that caught it.
 
 ### What `check_garden` refuses
-With any garden page profile (`garden-vault`, `garden-gmail-triggers`, `garden-code-server`): `GARDEN_ORIGIN` or `CF_GARDEN_AUD` empty (the garden host is missing, and `up` creates it), a missing or malformed `GARDEN_EXECUTOR_TOKEN`, and a `garden` service that is missing, not a hardened sidecar (`check_sidecar`), on a network other than `default`, or mounting anything.
+With any garden page profile (`garden-vault`, `garden-gmail-triggers`, `garden-code-server`, `garden-outlook`): `GARDEN_ORIGIN` or `CF_GARDEN_AUD` empty (the garden host is missing, and `up` creates it), a missing or malformed `GARDEN_EXECUTOR_TOKEN`, and a `garden` service that is missing, not a hardened sidecar (`check_sidecar`), on a network other than `default`, or mounting anything.
 
 ### The landing page stays passive
 It has no script (its CSP allows none), touches no other sidecar and opens no connection to Lettuce: it reads only the agent list the executor sends. Garden sidecars go under `/<sidecar>/` on the garden host, never on Lettuce's. The Fetch Metadata rules every garden page follows are in [garden-common](../garden-common/README.md#rules).
