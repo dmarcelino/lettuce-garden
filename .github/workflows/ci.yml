@@ -1,11 +1,14 @@
-# The checks of AGENTS.md "Commands", run as an operator would run them, on
-# every branch push and by hand. A new test script or linted file goes here too.
+# The checks of CONTRIBUTING.md "Building and testing" (and AGENTS.md
+# "Commands"), run as an operator would run them, on every branch push, by
+# hand, and by publish.yml before it publishes anything (workflow_call). A new
+# test script or linted file goes here too, and in both docs.
 name: CI
 
 on:
   push:
     branches: ['**']
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -35,7 +38,7 @@ jobs:
           tar -xJf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/shellcheck-$SHELLCHECK_VERSION" >>"$GITHUB_PATH"
       - run: shellcheck --version
-      - run: shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/* doc-tools/bin/* doc-tools/lib/launch.sh code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh
+      - run: shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.sh tests/run-sidecar.sh tests/run-pipelock.sh tests/stubs/* doc-tools/bin/* doc-tools/lib/launch.sh code-server/editor/bin/* code-server/editor/entrypoint.sh code-server/editor/tests/test.sh release/content-tag release/lettucectl-wrapper.sh
 
   cli:
     runs-on: ubuntu-24.04
@@ -68,3 +71,13 @@ jobs:
         with:
           persist-credentials: false
       - run: tests/run-pipelock.sh
+
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node --test tests/check-doc-links.test.mjs
+      - run: node scripts/check-doc-links.mjs

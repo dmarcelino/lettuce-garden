@@ -1,8 +1,16 @@
-# Instance data: never commit. See README "What lives where".
+# Instance data: never commit. A clone keeps its own in data/ (lib/DESIGN.md);
+# the other entries keep an old clone's, or a LETTUCE_DATA pointed inside one,
+# out of commits too.
+/data/
 /upstream/
 /config.env
 /.secrets/
 /stacks/
+/stacks.conf
+
+# Written by publish.yml for the lettucectl image; in a clone it would switch
+# lettucectl to release mode.
+/RELEASE
 
 # Local git worktrees (git worktree add .worktrees/<branch>)
 /.worktrees/

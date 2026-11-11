@@ -5,7 +5,8 @@
 #
 #   scripts/doc-tools-e2e.sh [--report FILE] [--no-idle-wait] [APP_SERVER_IMAGE]
 #
-# APP_SERVER_IMAGE defaults to lettuce-app-server:v0.22.0-letta_0.34.21.
+# APP_SERVER_IMAGE defaults to upstream's published app-server at the tag
+# config.env.example's LETTUCE_REF names (the tag a release is tested with).
 # --report FILE also writes the results and measurements there as Markdown.
 # --no-idle-wait skips the 90 s wait for Gotenberg's idle measurement.
 #
@@ -33,7 +34,8 @@ LETTUCE_HOME=$ROOT
 # shellcheck source=lib/common.sh
 source "$ROOT/lib/common.sh"
 
-APP=lettuce-app-server:v0.22.0-letta_0.34.21
+APP=$(sed -nE 's#^LETTUCE_REPO=https://github.com/([^/]+)/.*#\1#p' "$ROOT/config.env.example" | tr '[:upper:]' '[:lower:]')
+APP=ghcr.io/$APP/lettuce-app-server:$(sed -n 's/^LETTUCE_REF=//p' "$ROOT/config.env.example")
 REPORT=
 IDLE_WAIT=1
 while (($#)); do

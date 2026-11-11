@@ -1,5 +1,5 @@
 # Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
-# The code editor (code-server/, docs/code-server.md): VS Code in the browser at
+# The code editor (code-server/README.md; docs/code-server.md for users): VS Code in the browser at
 # https://<name>-garden.<domain>/code-server/, on the agents' workspaces. Opt-in
 # behind the `garden-code-server` profile; without it this file adds nothing.
 #
@@ -27,10 +27,10 @@ services:
   garden-code-server:
     profiles: ["garden-code-server"]
     build:
-      context: ../../code-server
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/code-server
       additional_contexts:
-        garden-common: ../../garden-common
-    image: lettuce-code-server:local
+        garden-common: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden-common
+    image: ${GARDEN_IMAGE_CODE_SERVER:-lettuce-code-server:local}
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       # The garden's own Access application and host, never Lettuce's.
@@ -56,8 +56,8 @@ services:
   garden-code-server-editor:
     profiles: ["garden-code-server"]
     build:
-      context: ../../code-server/editor
-    image: lettuce-code-server-editor:local
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/code-server/editor
+    image: ${GARDEN_IMAGE_CODE_SERVER_EDITOR:-lettuce-code-server-editor:local}
     command:
       # A Unix socket, not a port: code-server has no Access check of its own.
       # Mode 666 because the gate runs as nobody; only the two of them mount it.
@@ -111,10 +111,13 @@ services:
   garden-code-server-exec:
     profiles: ["garden-code-server"]
     build:
-      context: ../../code-server/exec
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/code-server/exec
       additional_contexts:
-        # The app-server's image, whatever upstream builds it as.
-        base: service:app-server
+        # The app-server's image, by the name lettucectl passes (app_server_image).
+        # Not service:app-server: building this service would then build the
+        # app-server too, over a pulled image. lettucectl builds the app-server
+        # first when it is built on this host (up_stack).
+        base: docker-image://${APP_SERVER_IMAGE:?APP_SERVER_IMAGE is not set}
     image: lettuce-code-server-exec:local
     # PID 1 keeps the container's environment for agent-env.
     init: true

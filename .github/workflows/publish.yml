@@ -1,0 +1,232 @@
+# Publishes a release (release/README.md): on a vX.Y.Z or vX.Y.Z-rc.N tag, and
+# only after every check of ci.yml passes. Nothing is published from main, and
+# there is no `latest`: the lettucectl image holds the Docker socket, so a
+# moving tag would let one push reach every host.
+#
+# 1. plan: the images, from release/images (the one list).
+# 2. image (one job per image): its content tag (release/content-tag); built for
+#    linux/amd64 and linux/arm64 and pushed only when that tag is not in the
+#    registry yet, so an unchanged image keeps its name and digest; with an SBOM,
+#    BuildKit provenance and a GitHub attestation.
+# 3. release: RELEASE (the version, the tested Lettuce tag, each image's full
+#    name), the lettucectl image, the wrapper pinned to its digest, SHA256SUMS,
+#    the release notes (which images changed, and so which sidecars restart),
+#    and the GitHub release.
+# The GHCR packages it creates come out public, as this repository is, so hosts
+# pull without credentials (release/README.md, "Cutting a release", step 3).
+name: Publish
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  plan:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      images: ${{ steps.images.outputs.images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the tag against VERSION
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || { echo "::error::$TAG is not vX.Y.Z or vX.Y.Z-rc.N"; exit 1; }
+          v=$(cat VERSION)
+          t=${TAG#v}
+          [[ ${t%-rc.*} == "$v" ]] || { echo "::error::VERSION ($v) and the tag ($TAG) disagree"; exit 1; }
+      - id: images
+        run: |
+          set -eu
+          printf 'images=%s\n' "$(awk '!/^[[:space:]]*(#|$)/ { print $1, $2, $3 }' release/images |
+            jq -Rnc '[inputs | split(" ") | {image: .[0], context: .[1], shared: .[2]}]')" >>"$GITHUB_OUTPUT"
+
+  image:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.images) }}
+    env:
+      IMAGE: ${{ matrix.image }}
+      CONTEXT: ${{ matrix.context }}
+      SHARED: ${{ matrix.shared }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push, unless this content is published already
+        id: build
+        run: |
+          set -euo pipefail
+          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lettuce-$IMAGE
+          tag=$(release/content-tag "$IMAGE")
+          if digest=$(docker buildx imagetools inspect "$name:$tag" --format '{{json .Manifest}}' 2>/dev/null | jq -er .digest); then
+            echo "$IMAGE: $name:$tag is published; reused"
+            built=false
+          else
+            args=(--platform linux/amd64,linux/arm64 --push --provenance mode=max --sbom true
+              --metadata-file "$RUNNER_TEMP/meta.json" -t "$name:$tag" -f "$CONTEXT/Dockerfile")
+            [[ $SHARED == - ]] || args+=(--build-context "$SHARED=$SHARED")
+            docker buildx build "${args[@]}" "$CONTEXT"
+            digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/meta.json")
+            built=true
+          fi
+          {
+            echo "name=$name"
+            echo "digest=$digest"
+            echo "built=$built"
+          } >>"$GITHUB_OUTPUT"
+          key=GARDEN_IMAGE_$(tr 'a-z-' 'A-Z_' <<<"$IMAGE")
+          mkdir -p "$RUNNER_TEMP/ref"
+          echo "$key=$name:$tag@$digest" >"$RUNNER_TEMP/ref/$IMAGE.env"
+      - if: steps.build.outputs.built == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.build.outputs.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ref-${{ matrix.image }}
+          path: ${{ runner.temp }}/ref/${{ matrix.image }}.env
+          retention-days: 1
+
+  release:
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ref-*
+          path: ${{ runner.temp }}/ref
+          merge-multiple: true
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Write RELEASE and check every image is published for both platforms
+        run: |
+          set -euo pipefail
+          {
+            echo "VERSION=${TAG#v}"
+            echo "LETTUCE_REF=$(sed -n 's/^LETTUCE_REF=//p' config.env.example)"
+            echo "REPOSITORY=$GITHUB_REPOSITORY"
+            awk '!/^[[:space:]]*(#|$)/ { print $1 }' release/images | while read -r img; do
+              cat "$RUNNER_TEMP/ref/$img.env"
+            done
+          } >RELEASE
+          cat RELEASE
+          # compose build --push has exited 0 having pushed nothing (upstream's
+          # publish.yml); this reads the registry back.
+          sed -n 's/^GARDEN_IMAGE_[A-Z_]*=//p' RELEASE | while read -r ref; do
+            p=$(docker buildx imagetools inspect --raw "$ref" | jq -r '[.manifests[].platform | "\(.os)/\(.architecture)"] | join(" ")')
+            [[ " $p " == *" linux/amd64 "* && " $p " == *" linux/arm64 "* ]] || { echo "::error::$ref is not published for both platforms ($p)"; exit 1; }
+          done
+      - name: Build and push the lettucectl image
+        id: ctl
+        run: |
+          set -euo pipefail
+          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lettucectl
+          docker buildx build --platform linux/amd64,linux/arm64 --push --provenance mode=max --sbom true \
+            --metadata-file "$RUNNER_TEMP/ctl.json" -t "$name:$TAG" -f release/lettucectl.Dockerfile .
+          digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/ctl.json")
+          echo "name=$name" >>"$GITHUB_OUTPUT"
+          echo "digest=$digest" >>"$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.ctl.outputs.name }}
+          subject-digest: ${{ steps.ctl.outputs.digest }}
+          push-to-registry: true
+      - name: Write the wrapper, SHA256SUMS and the release notes
+        env:
+          IMAGE: ${{ steps.ctl.outputs.name }}:${{ github.ref_name }}@${{ steps.ctl.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          sed -e "s|@VERSION@|$TAG|" -e "s|@IMAGE@|$IMAGE|" -e "s|@REPOSITORY@|$GITHUB_REPOSITORY|" \
+            release/lettucectl-wrapper.sh >dist/lettucectl
+          ! grep -q '@[A-Z]*@' dist/lettucectl
+          cp RELEASE dist/RELEASE
+          (cd dist && sha256sum lettucectl RELEASE >SHA256SUMS)
+          # The images whose name changed since the last release: their
+          # containers restart on self-upgrade; a changed vault relocks.
+          prev=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty')
+          : >"$RUNNER_TEMP/prev"
+          [[ -z $prev ]] || gh release download "$prev" --pattern RELEASE --output "$RUNNER_TEMP/prev" --clobber || true
+          {
+            echo "lettuce-garden $TAG, tested with Lettuce $(sed -n 's/^LETTUCE_REF=//p' RELEASE)."
+            echo
+            echo "Install or upgrade: release/README.md. Verify the wrapper: \`gh attestation verify lettucectl --repo $GITHUB_REPOSITORY\`."
+            echo
+            if [[ -z $prev ]]; then
+              echo "First release: every container is new."
+            else
+              changed=$(comm -13 <(grep '^GARDEN_IMAGE_' "$RUNNER_TEMP/prev" | sort) <(grep '^GARDEN_IMAGE_' RELEASE | sort) | cut -d= -f1 | sed 's/^GARDEN_IMAGE_//' | tr 'A-Z_' 'a-z-')
+              if [[ -z $changed ]]; then
+                echo "No garden image changed since $prev: no sidecar restarts."
+              else
+                echo "Images changed since $prev (their containers restart on self-upgrade):"
+                for i in $changed; do echo "- $i"; done
+                if grep -qx vault <<<"$changed"; then
+                  echo
+                  echo "**The vault's image changed: every person must unlock their vault again after the upgrade.**"
+                fi
+              fi
+            fi
+          } >dist/NOTES.md
+          cat dist/NOTES.md
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/lettucectl
+      - name: Create the GitHub release
+        run: |
+          set -euo pipefail
+          flags=()
+          [[ $TAG != *-rc.* ]] || flags+=(--prerelease)
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" \
+            --notes-file dist/NOTES.md "${flags[@]}" dist/lettucectl dist/RELEASE dist/SHA256SUMS

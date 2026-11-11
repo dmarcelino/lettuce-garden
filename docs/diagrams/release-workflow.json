@@ -1,0 +1,423 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "A release: from a tag to an admin's self-upgrade",
+    "output": "docs/diagrams/release-workflow.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "878eedd44b4bc61d399f9f66545d2ed1cd111f38"
+    },
+    "legend": {
+      "entries": {
+        "backend": {
+          "label": "publish.yml job or step"
+        },
+        "security": {
+          "label": "Stop: nothing published"
+        },
+        "database": {
+          "label": "Published, named by content"
+        },
+        "cloud": {
+          "label": "GitHub release"
+        },
+        "external": {
+          "label": "Maintainer or admin"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "maintainer",
+      "label": "Maintainer"
+    },
+    {
+      "id": "ghcr",
+      "label": "ghcr.io"
+    },
+    {
+      "id": "actions",
+      "label": "publish.yml (GitHub Actions)"
+    },
+    {
+      "id": "stopped",
+      "label": "Stopped",
+      "variant": "exception"
+    },
+    {
+      "id": "release",
+      "label": "GitHub release"
+    },
+    {
+      "id": "admin",
+      "label": "Admin's host"
+    }
+  ],
+  "phases": [
+    {
+      "id": "per-image",
+      "label": "One job per image, in parallel",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "tag",
+    "checks",
+    "plan",
+    "image",
+    "ctl-job",
+    "assets",
+    "gh-release",
+    "upgrade"
+  ],
+  "nodes": [
+    {
+      "id": "tag",
+      "lane": "maintainer",
+      "col": 0,
+      "type": "external",
+      "label": "push a tag",
+      "sublabel": "vX.Y.Z or vX.Y.Z-rc.N",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 18,
+          "end_line": 20,
+          "label": "on: push tags"
+        },
+        {
+          "path": "VERSION",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "id": "checks",
+      "lane": "actions",
+      "col": 1,
+      "type": "backend",
+      "label": "checks",
+      "sublabel": "every job of ci.yml",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 29,
+          "end_line": 31,
+          "label": "uses ci.yml"
+        }
+      ]
+    },
+    {
+      "id": "plan",
+      "lane": "actions",
+      "col": 2,
+      "type": "backend",
+      "label": "plan",
+      "sublabel": "tag matches VERSION",
+      "tag": "release/images",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 33,
+          "end_line": 56,
+          "label": "tag check, image list"
+        },
+        {
+          "path": "release/images",
+          "line": 1,
+          "end_line": 13
+        }
+      ]
+    },
+    {
+      "id": "stop",
+      "lane": "stopped",
+      "col": 3,
+      "type": "security",
+      "label": "fail",
+      "sublabel": "no release",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 46,
+          "end_line": 51,
+          "label": "tag and VERSION disagree"
+        },
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 163,
+          "end_line": 168,
+          "label": "not on both platforms"
+        }
+      ]
+    },
+    {
+      "id": "image",
+      "lane": "actions",
+      "col": 3,
+      "type": "backend",
+      "label": "image",
+      "sublabel": "content tag; build only if new",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 86,
+          "end_line": 110,
+          "label": "reuse or build and push"
+        },
+        {
+          "path": "release/content-tag",
+          "line": 1,
+          "end_line": 12,
+          "label": "what the tag hashes"
+        },
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 111,
+          "end_line": 116,
+          "label": "attestation"
+        }
+      ]
+    },
+    {
+      "id": "garden-images",
+      "lane": "ghcr",
+      "col": 3,
+      "type": "database",
+      "label": "lettuce-<image>",
+      "sublabel": ":<content tag>, amd64 + arm64",
+      "tag": "SBOM, provenance",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 96,
+          "end_line": 99,
+          "label": "both platforms, SBOM, provenance"
+        },
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 108,
+          "end_line": 110,
+          "label": "full name with digest"
+        }
+      ]
+    },
+    {
+      "id": "ctl-job",
+      "lane": "actions",
+      "col": 4,
+      "type": "backend",
+      "label": "release",
+      "sublabel": "RELEASE, lettucectl image",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 151,
+          "end_line": 162,
+          "label": "write RELEASE"
+        },
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 169,
+          "end_line": 183,
+          "label": "lettucectl image"
+        },
+        {
+          "path": "release/lettucectl.Dockerfile",
+          "line": 1,
+          "end_line": 31
+        }
+      ]
+    },
+    {
+      "id": "ctl-image",
+      "lane": "ghcr",
+      "col": 4,
+      "type": "database",
+      "label": "lettucectl",
+      "sublabel": ":vX.Y.Z, carries RELEASE",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 173,
+          "end_line": 178,
+          "label": "pushed with its digest"
+        }
+      ]
+    },
+    {
+      "id": "assets",
+      "lane": "actions",
+      "col": 5,
+      "type": "backend",
+      "label": "wrapper, sums, notes",
+      "sublabel": "pinned to the digest",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 184,
+          "end_line": 194,
+          "label": "wrapper and SHA256SUMS"
+        },
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 195,
+          "end_line": 221,
+          "label": "notes: what restarts"
+        }
+      ]
+    },
+    {
+      "id": "gh-release",
+      "lane": "release",
+      "col": 5,
+      "type": "cloud",
+      "label": "vX.Y.Z",
+      "sublabel": "lettucectl, RELEASE, SHA256SUMS",
+      "sources": [
+        {
+          "path": ".github/workflows/publish.yml",
+          "line": 225,
+          "end_line": 231,
+          "label": "gh release create"
+        }
+      ]
+    },
+    {
+      "id": "upgrade",
+      "lane": "admin",
+      "col": 5,
+      "type": "external",
+      "label": "self-upgrade",
+      "sublabel": "swaps after the pull",
+      "sources": [
+        {
+          "path": "release/lettucectl-wrapper.sh",
+          "line": 146,
+          "end_line": 161,
+          "label": "fetch, pull, then swap"
+        },
+        {
+          "path": "release/lettucectl-wrapper.sh",
+          "line": 30,
+          "end_line": 34,
+          "label": "the new wrapper pulls"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "tag-checks",
+      "from": "tag",
+      "to": "checks",
+      "variant": "emphasis"
+    },
+    {
+      "id": "checks-plan",
+      "from": "checks",
+      "to": "plan",
+      "label": "pass",
+      "variant": "emphasis"
+    },
+    {
+      "id": "plan-image",
+      "from": "plan",
+      "to": "image",
+      "label": "per line",
+      "variant": "emphasis"
+    },
+    {
+      "id": "plan-stop",
+      "from": "plan",
+      "to": "stop",
+      "label": "tag is not VERSION",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "image-push",
+      "from": "image",
+      "to": "garden-images",
+      "label": "push if new",
+      "role": "branch"
+    },
+    {
+      "id": "image-ctl",
+      "from": "image",
+      "to": "ctl-job",
+      "label": "names + digests",
+      "variant": "emphasis"
+    },
+    {
+      "id": "ctl-stop",
+      "from": "ctl-job",
+      "to": "stop",
+      "label": "not on both platforms",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "ctl-push",
+      "from": "ctl-job",
+      "to": "ctl-image",
+      "label": "push",
+      "role": "branch"
+    },
+    {
+      "id": "ctl-assets",
+      "from": "ctl-job",
+      "to": "assets",
+      "label": "digest",
+      "variant": "emphasis"
+    },
+    {
+      "id": "assets-release",
+      "from": "assets",
+      "to": "gh-release",
+      "label": "gh release create",
+      "variant": "emphasis"
+    },
+    {
+      "id": "release-upgrade",
+      "from": "gh-release",
+      "to": "upgrade",
+      "label": "new wrapper",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Named by content",
+      "items": [
+        "a garden image's tag hashes its build context, its shared context, its name and REBUILD",
+        "an unchanged image keeps its name and digest, so its container is not recreated and a vault stays unlocked"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Built on the admin's host, never published",
+      "items": [
+        "doc-tools (AGPL-3.0 PyMuPDF) and the code editor's shell (FROM the app-server's image)",
+        "both build contexts ship inside the lettucectl image"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Nothing moves after a release",
+      "items": [
+        "no latest and nothing from main: the wrapper names the lettucectl image by digest",
+        "the notes list the images that changed, so which containers restart and whether vaults lock"
+      ]
+    }
+  ]
+}

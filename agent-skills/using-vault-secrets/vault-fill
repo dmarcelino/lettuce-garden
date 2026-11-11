@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""vault-fill TEMPLATE OUTPUT
+
+Copies TEMPLATE to OUTPUT ("-" for standard output) with every
+{{VAULT_<NAME>}} replaced by the environment variable VAULT_<NAME>, which
+vault-run sets: run it as `vault-run HANDLE -- vault-fill TEMPLATE OUTPUT`, so
+the values go from the vault into the file without entering the conversation.
+
+Each value is escaped for where it lands: JSON string escapes in .json, HTML
+escapes in .html/.htm/.xml/.svg, CSV quoting in .csv (a cell with a comma,
+quote or line break is quoted), XML escapes inside Office and OpenDocument
+files (.docx .xlsx .pptx .odt .ods .odp), as is in any other text file. It
+writes nothing when a placeholder has no value or is split by formatting, and
+prints no value, ever. Standard library only.
+"""
+
+from __future__ import annotations
+
+import csv
+import html
+import io
+import json
+import os
+import re
+import sys
+import tempfile
+import zipfile
+from collections.abc import Callable
+
+USAGE = "usage: vault-fill TEMPLATE OUTPUT   (OUTPUT - for standard output)"
+PLACEHOLDER = re.compile(r"\{\{(VAULT_[A-Z0-9_]+)\}\}")
+# What is left of a placeholder once formatting tags are removed: one Word
+# split across runs (so it was not replaced), or one with no value.
+LEFT = re.compile(r"\{\{\s*VAULT_[A-Z0-9_]*\s*\}\}")
+TAG = re.compile(r"<[^>]*>")
+ZIPPED = {".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp"}
+MARKUP = {".html", ".htm", ".xml", ".svg"}
+
+
+class FillError(Exception):
+    pass
+
+
+def fail(message: str) -> None:
+    print(f"vault-fill: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def escaper(ext: str) -> Callable[[str], str]:
+    if ext == ".json":
+        return lambda v: json.dumps(v, ensure_ascii=False)[1:-1]
+    if ext in MARKUP:
+        return lambda v: html.escape(v, quote=True)
+    return lambda v: v
+
+
+def substitute(text: str, values: dict[str, str], escape: Callable[[str], str], markup: bool) -> str:
+    missing = sorted({m for m in PLACEHOLDER.findall(text) if m not in values})
+    if missing:
+        raise FillError(f"no value for {', '.join(missing)}: request that field, or fix the placeholder's name")
+    filled = PLACEHOLDER.sub(lambda m: escape(values[m.group(1)]), text)
+    if LEFT.search(TAG.sub("", filled) if markup else filled):
+        raise FillError(
+            "a placeholder is split by formatting or has spaces inside the braces: "
+            "retype it as {{VAULT_NAME}} in one go, with no formatting change inside it"
+        )
+    return filled
+
+
+def fill_zip(data: bytes, values: dict[str, str]) -> bytes:
+    escape = escaper(".xml")
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as src, zipfile.ZipFile(out, "w") as dst:
+        for info in src.infolist():
+            body = src.read(info)
+            if info.filename.endswith(".xml"):
+                body = substitute(body.decode("utf-8"), values, escape, markup=True).encode("utf-8")
+            dst.writestr(info, body)  # keeps each member's order and compression (ODF's mimetype first, stored)
+    return out.getvalue()
+
+
+def fill_csv(text: str, values: dict[str, str]) -> str:
+    """Cell by cell, then written back with CSV quoting, so a value with a comma
+    stays one cell whether or not the template quoted its placeholder."""
+    newline = "\r\n" if "\r\n" in text else "\n"
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator=newline)
+    for row in csv.reader(io.StringIO(text, newline="")):
+        writer.writerow([substitute(cell, values, escaper(""), markup=False) for cell in row])
+    filled = out.getvalue()
+    return filled if text.endswith(("\n", "\r")) else filled[: -len(newline)]
+
+
+def fill(template: str, data: bytes, values: dict[str, str]) -> bytes:
+    ext = os.path.splitext(template)[1].lower()
+    if ext in ZIPPED:
+        try:
+            return fill_zip(data, values)
+        except zipfile.BadZipFile as e:
+            raise FillError(f"{template} is not a valid {ext} file") from e
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise FillError(
+            f"{template} is not a text file or an Office/OpenDocument file: fill the source "
+            "(.docx, .html, .md...) first, then convert the filled copy (e.g. to PDF)"
+        ) from e
+    if ext == ".csv":
+        try:
+            return fill_csv(text, values).encode("utf-8")
+        except csv.Error as e:
+            raise FillError(f"{template} is not valid CSV: {e}") from e
+    return substitute(text, values, escaper(ext), markup=ext in MARKUP).encode("utf-8")
+
+
+def write(output: str, body: bytes) -> None:
+    folder = os.path.dirname(os.path.abspath(output))
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".vault-fill-")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(body)  # mkstemp made it 0600
+        os.replace(tmp, output)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        fail(USAGE)
+    template, output = argv
+    if output != "-" and os.path.exists(output) and os.path.samefile(template, output):
+        fail("OUTPUT is the template: write the filled copy to another file")
+    values = {k: v for k, v in os.environ.items() if k.startswith("VAULT_")}
+    try:
+        with open(template, "rb") as f:
+            body = fill(template, f.read(), values)
+    except OSError as e:
+        fail(f"cannot read {template}: {e.strerror}")
+    except (FillError, UnicodeDecodeError) as e:
+        fail(str(e) if isinstance(e, FillError) else f"{template} has a part that is not UTF-8")
+    if output == "-":
+        sys.stdout.buffer.write(body)
+        sys.stdout.flush()
+    else:
+        try:
+            write(output, body)
+        except OSError as e:
+            fail(f"cannot write {output}: {e.strerror}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

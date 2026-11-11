@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "5becc556cb74382948dd4a3fc19b941c90ea6890"
     }
   },
   "components": [
@@ -18,7 +18,7 @@
       "id": "letta",
       "type": "backend",
       "label": "letta-code",
-      "sublabel": "Node 22.19: ignores the proxy",
+      "sublabel": "model calls, MCP outside the stack",
       "pos": [
         40,
         100
@@ -30,17 +30,18 @@
       "sources": [
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 11,
-          "end_line": 14,
-          "label": "Node 22.19 ignores the proxy"
+          "line": 12,
+          "end_line": 19,
+          "label": "Node 22.23 follows the proxy"
         },
         {
-          "path": "compose/pipelock.yml",
-          "line": 8,
-          "end_line": 10,
-          "label": "advisory"
+          "path": "compose/pipelock-proxy.yml",
+          "line": 40,
+          "end_line": 43,
+          "label": "NODE_USE_ENV_PROXY on the app-server"
         }
-      ]
+      ],
+      "tag": "HTTPS_PROXY set"
     },
     {
       "id": "agents",
@@ -59,8 +60,8 @@
       "sources": [
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 23,
-          "end_line": 35,
+          "line": 31,
+          "end_line": 43,
           "label": "proxy variables on app-server"
         },
         {
@@ -87,14 +88,14 @@
       "sources": [
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 16,
-          "end_line": 29,
+          "line": 21,
+          "end_line": 37,
           "label": "NO_PROXY list"
         },
         {
           "path": "lib/common.sh",
-          "line": 595,
-          "end_line": 614,
+          "line": 946,
+          "end_line": 960,
           "label": "check_pipelock"
         }
       ]
@@ -116,14 +117,14 @@
       "sources": [
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 3,
-          "end_line": 9,
+          "line": 7,
+          "end_line": 10,
           "label": "who follows the proxy"
         },
         {
           "path": "compose/pipelock-proxy.yml",
-          "line": 36,
-          "end_line": 41,
+          "line": 44,
+          "end_line": 49,
           "label": "ddg-mcp, searxng"
         }
       ]
@@ -145,8 +146,8 @@
       "sources": [
         {
           "path": "compose/pipelock.yml",
-          "line": 16,
-          "end_line": 33,
+          "line": 17,
+          "end_line": 35,
           "label": "hardened service"
         },
         {
@@ -178,8 +179,8 @@
       "sources": [
         {
           "path": "compose/pipelock.yml",
-          "line": 35,
-          "end_line": 39,
+          "line": 25,
+          "end_line": 41,
           "label": "named volume"
         },
         {
@@ -190,8 +191,8 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 436,
-          "end_line": 440,
+          "line": 757,
+          "end_line": 758,
           "label": "only garden-pipelock mounts it"
         }
       ]
@@ -212,14 +213,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1688,
-          "end_line": 1707,
+          "line": 1959,
+          "end_line": 1993,
           "label": "receipts: no network, read-only"
         },
         {
           "path": "lettucectl",
-          "line": 1580,
-          "end_line": 1582,
+          "line": 1799,
+          "end_line": 1799,
           "label": "backup mounts it read-only"
         }
       ]
@@ -301,6 +302,13 @@
       "variant": "emphasis"
     },
     {
+      "id": "letta-to-pipelock",
+      "from": "letta",
+      "to": "pipelock",
+      "label": "model provider calls",
+      "variant": "emphasis"
+    },
+    {
       "id": "search-to-pipelock",
       "from": "search",
       "to": "pipelock",
@@ -338,30 +346,6 @@
       "from": "agents",
       "to": "vault",
       "label": "NO_PROXY: direct"
-    },
-    {
-      "id": "letta-direct",
-      "from": "letta",
-      "to": "internet",
-      "label": "direct until Node 22.21+",
-      "variant": "dashed",
-      "fromSide": "right",
-      "toSide": "top",
-      "via": [
-        [
-          310,
-          132
-        ],
-        [
-          310,
-          24
-        ],
-        [
-          948,
-          24
-        ]
-      ],
-      "labelSegment": 2
     }
   ],
   "cards": [
@@ -369,7 +353,8 @@
       "dot": "rose",
       "title": "What pipelock checks",
       "items": [
-        "Destination of every proxied request: paste and file-drop blocklist, private and cloud-metadata addresses, data hidden in host names, 600 requests per minute per site",
+        "Destination of every proxied request: paste and file-drop blocklist, private and cloud-metadata addresses, data hidden in host names, 1200 requests per minute per site",
+        "letta-code's own calls too: a model server on a private address is refused unless it is in PIPELOCK_DIRECT or is host.docker.internal",
         "Page text and full URL only for pages read through /fetch (the fetching-web-pages skill); a page with prompt injection is blocked with a 403",
         "Every allow and block is a hash-chained receipt signed with the stack's own Ed25519 key"
       ]
@@ -380,7 +365,7 @@
       "items": [
         "Advisory, not a boundary: the stack network still reaches the internet, and any agent can unset HTTPS_PROXY",
         "No TLS interception: for HTTPS it sees the host name, not paths, bodies or responses",
-        "letta-code, the BFF, garden-vault, google-mcp and garden-gmail-triggers connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg and host.docker.internal direct"
+        "The BFF (its Remote Pi SSH runs included), garden-vault, google-mcp, garden-gmail-triggers and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct"
       ]
     },
     {

@@ -1,10 +1,10 @@
 # Garden executor
 
-The garden executor, `garden/executor/run.mjs`, is how the garden sidecars get anything done inside Lettuce's app-server. (Other code from this repo runs there too, at an agent's call: `vault-run` and the document tools.) The garden sidecars never connect to Lettuce; once a minute the executor asks them over HTTP on the stack network what they want, runs `letta` for them and sends the results back. It gives the landing page ([garden/](../garden/README.md)) the agent list and turns Gmail triggers' requests into one-off letta-code tasks ([docs/gmail-triggers.md](gmail-triggers.md)). This page is the maintainer's reference for how it is installed and what it says to whom. The diagram is in [garden/README.md](../garden/README.md).
+The garden executor, `garden/executor/run.mjs`, is how the garden sidecars get anything done inside Lettuce's app-server. (Other code from this repo runs there too, at an agent's call: `vault-run` and the document tools.) The garden sidecars never connect to Lettuce; once a minute the executor asks them over HTTP on the stack network what they want, runs `letta` for them and sends the results back. It gives the landing page ([garden/](../README.md)) the agent list and turns Gmail triggers' requests into one-off letta-code tasks ([docs/gmail-triggers.md](../../docs/gmail-triggers.md)). This page is the maintainer's reference for how it is installed and what it says to whom. The diagram is in [garden/README.md](../README.md).
 
 ## Install
 
-`lettucectl` installs it; nothing else writes it. `sync_executor` runs after `compose up` in `up` and `add`, and on every running stack in `profiles`:
+**The rule:** the executor is installed by `up`, only through `compose exec`, and the install replaces only its own files. `lettucectl` installs it; nothing else writes it. `sync_executor` runs after `compose up` in `up` and `add`, and on every running stack in `profiles`:
 
 - **When:** with `garden-gmail-triggers` or `garden-code-server` on (`executor_wanted`). The vault alone gives it no work. Otherwise it uninstalls when the host shows an install (`executor_installed`: the `bin` directory or the system-cron file under `letta-home`). `profiles` skips a stopped stack, whose next `up` installs or removes it.
 - **How:** a tar of `run.mjs` and the token (built in a private temp directory, never in argv) is streamed to `compose exec -T app-server sh -c "$GARDEN_INSTALL" sh install ...`. The in-container script puts each file in place by a rename from a dot file next to it, and changes nothing unless the stream holds both files. A failed install warns and fails `up`/`add`/`profiles` at the end, not in the middle.
@@ -16,7 +16,7 @@ What ends up in the app-server:
 |---|---|---|
 | `/root/.letta/garden/executor/bin/run.mjs` | 0644 | The executor, on the `letta-home` bind mount, so a restart keeps it. |
 | `/etc/lettuce-garden/executor-token` | 0600 (directory 0700) | The token, in the container layer: not under `state/`, not in backups. `up` reinstalls it after every recreate. |
-| `/root/.letta/system-cron/lettuce-garden-executor` | 0644 | The cron file; upstream's entrypoint copies `system-cron` to `/etc/cron.d` at every start. |
+| `/root/.letta/system-cron/lettuce-garden-executor` | 0644 | The cron file, named without a dot because cron skips such files; upstream's entrypoint copies `system-cron` to `/etc/cron.d` at every start. Since Lettuce v0.26 the BFF also lists every file there, read-only, in the Tasks tab; with no `# agent:` line, this one shows under every agent. |
 | `/etc/cron.d/lettuce-garden-executor` | 0644 | The same file, written too so it starts now. |
 | `/root/.letta/garden/executor/executor.log` | | Its output; truncated once it passes 256 KiB. |
 | `/root/.letta/garden/executor/.executor.lock` | 0700 | A lock directory, held for one run; taken over when older than 10 minutes. |
@@ -24,10 +24,10 @@ What ends up in the app-server:
 The cron line (`executor_cron`), with `--gmail-triggers` exactly when that profile is on:
 
 ```
-* * * * * root /usr/local/bin/agent-env node /root/.letta/garden/executor/bin/run.mjs --gmail-triggers >> /root/.letta/garden/executor/executor.log 2>&1
+* * * * * root /usr/local/bin/agent-env env -u NODE_USE_ENV_PROXY node /root/.letta/garden/executor/bin/run.mjs --gmail-triggers >> /root/.letta/garden/executor/executor.log 2>&1
 ```
 
-`agent-env` (upstream's) gives it PID 1's environment, so `node` and `letta` are on `PATH`. Uninstall removes both cron files, the token (and its directory once empty) and `bin/`.
+`agent-env` (upstream's) gives it PID 1's environment, so `node` and `letta` are on `PATH`. It drops `NODE_USE_ENV_PROXY`, which `garden-pipelock` sets: everything the executor calls is inside the stack, its token must never reach pipelock, and Node (from 22.21) would log a warning on every run. Uninstall removes both cron files, the token (and its directory once empty) and `bin/`.
 
 ## A run
 
@@ -76,13 +76,18 @@ The `--flag=value` form is needed because letta's argument parser refuses a sepa
 
 ## Trust
 
-Agents are root in the app-server, so they can read the token and the installed script and call the API themselves: read, claim or forge what the executor sees, or answer in a sidecar's place. The token keeps out the stack's other containers, not agents. So both sides treat the other's data as untrusted: the executor validates every field and runs `letta` from an argument array, the sidecars validate every body, and garden shows agent names only as escaped text and links only to ids shaped like agent ids. A claimed Gmail request is never offered twice (a lost turn beats a duplicate). The sidecars and the executor share no directory: a bind mount inside `letta-home` would be agent-writable. See [AGENTS.md](../AGENTS.md), "Key invariants", and the security model in [docs/gmail-triggers.md](gmail-triggers.md).
+Agents are root in the app-server, so they can read the token and the installed script and call the API themselves: read, claim or forge what the executor sees, or answer in a sidecar's place. The token keeps out the stack's other containers, not agents. So both sides treat the other's data as untrusted: the executor validates every field and runs `letta` from an argument array, the sidecars validate every body, and garden shows agent names only as escaped text and links only to ids shaped like agent ids. A claimed Gmail request is never offered twice (a lost turn beats a duplicate). **The sidecars and the executor share no directory.** A bind source inside `letta-home` would be agent-writable, and an agent could swap a component for a symlink that Docker follows on the host; so they talk over HTTP on the stack network. This holds for `garden` and `gmail-triggers` alike.
 
-## Testing
+The executor starts turns only through letta-code's own scheduler, the one written exception to "no second way into an agent" ([CONTRIBUTING.md](../../CONTRIBUTING.md#relationship-to-upstream), [gmail-triggers/README.md](../../gmail-triggers/README.md#rules)). What people are told: the security model in [docs/gmail-triggers.md](../../docs/gmail-triggers.md#security-model).
+
+## Build and test
 
 ```bash
 node --test 'garden/executor/tests/*.test.mjs'   # on the host: local node:http servers play garden and gmail-triggers, a fake letta records its argv
 tests/run-sidecar.sh garden                      # the garden service's tests, plus the executor's in node:22.22.0-slim
+tests/run-sidecar.sh gmail-triggers              # the other end of the Gmail request and claim protocol
+tests/run.sh executor                            # the CLI's install, removal and cron (stubbed docker)
 ```
+There is no build step: `sync_executor` installs `run.mjs` as it is.
 
 Overrides for tests only: `GARDEN_URL`, `GT_URL`, `GT_TOKEN_FILE`, `GT_LOCK`, `GT_LOG`.
