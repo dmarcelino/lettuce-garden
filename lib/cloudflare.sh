@@ -125,7 +125,7 @@ cf_tunnel_token() {
 PROFILE_ROUTES=(
   'garden-vault ^/vault(/|$) http://garden-vault:8000'
   'garden-gmail-triggers ^/gmail-triggers(/|$) http://garden-gmail-triggers:8000'
-  'garden-monitors ^/monitors(/|$) http://garden-monitors:8000'
+  'garden-watchlist ^/watchlist(/|$) http://garden-watchlist:8000'
   'garden-code-server ^/code-server(/|$) http://garden-code-server:8000'
 )
 # The landing page and its assets (any file under /assets/), served by the garden

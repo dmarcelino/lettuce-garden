@@ -262,7 +262,7 @@ case $args in
         cloudflared) echo cloudflared ;;
         garden-vault) echo garden-vault ;;
         garden-gmail-triggers) echo garden-gmail-triggers ;;
-        garden-monitors) echo garden-monitors ;;
+        garden-watchlist) echo garden-watchlist ;;
         garden-pipelock) echo garden-pipelock ;;
         garden-code-server) printf '%s\n' garden-code-server garden-code-server-editor garden-code-server-exec ;;
         garden-doc-tools) ;;

@@ -1,5 +1,5 @@
 """The executor's API at /executor/v1/, as the garden sidecars that the garden
-executor calls serve it (garden, gmail-triggers, monitors): the guard in front
+executor calls serve it (garden, gmail-triggers, watchlist): the guard in front
 of every route, the JSON body reader, the agent list and when to ask for a new
 one, and the request queue's routes (requests, results, agents, heartbeat) that
 every sidecar whose requests the executor turns into tasks serves.

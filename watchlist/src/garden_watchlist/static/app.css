@@ -1,0 +1,44 @@
+/* Watchlist only; the shared look is garden.css. */
+
+.intro {
+  margin-top: -8px;
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.item.off {
+  opacity: 0.75;
+}
+.item-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.item-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.item-desc {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.item-action {
+  flex: none;
+  margin: 0;
+}

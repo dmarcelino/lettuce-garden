@@ -22,16 +22,16 @@ lettuce-garden composes [Lettuce](https://github.com/dmarchevsky/lettuce) and ad
 **4. No second way into an agent.** The BFF owns the only connection to the app-server. No `lettucectl` command or sidecar opens another or starts a turn; `compose exec` for files and read-only CLI calls is the limit. *Breaking it:* a sidecar that connects to the app-server to send an agent a message.
 - **The one exception** is a garden sidecar starting a turn through letta-code's own scheduler, by a request the garden executor turns into `letta cron add --once`: it opens no connection, the scheduler fires the task on the BFF's connection, and agents get nothing new, since they can run `letta cron add` themselves. Two sidecars do this, each with its written reason:
   - Gmail triggers, for the rules the person made on its page, within each rule's hourly limit ([gmail-triggers/README.md](gmail-triggers/README.md#rules));
-  - monitors, at a monitor's schedule and only when something is new, within a daily cap per agent. Agents make these monitors, which gives them nothing `letta cron add` doesn't, and the person sees and deletes every one on its page ([monitors/README.md](monitors/README.md#rules)).
+  - the watchlist, at a monitor's schedule and only when something is new, within a daily cap per agent. Agents make these monitors, which gives them nothing `letta cron add` doesn't, and the person sees and deletes every one on its page ([watchlist/README.md](watchlist/README.md#rules)).
 - **Four features bypass the BFF**, each with its own UI and Access check, all on the stack's garden host (`<name>-garden.<domain>`, under its own Access application):
   - the vault's `/vault/`;
   - `/gmail-triggers/`, because trigger rules must live where agents can't edit them (inside Lettuce, they could);
-  - `/monitors/`, because a person must be able to see and stop what agents set up without going through an agent;
+  - `/watchlist/`, because a person must be able to see and stop what agents set up without going through an agent;
   - `/code-server/`, the code editor, because a person needs the workspaces' files and a terminal from anywhere, which Lettuce has no UI for. It opens no connection to the app-server or the BFF and starts no turn, and its terminal is a separate container no stronger than an agent.
 
   The garden host's root, the landing page linking to them, belongs to the `garden` service: behind the same Access check, it reads the agent list the executor sends and opens no connection to Lettuce. Another bypass, or another sidecar starting turns through the scheduler, needs a written reason here first. Garden sidecars go under `/<sidecar>/` on the garden host, never on Lettuce's.
 
-**5. Don't write into what Lettuce manages.** Its settings, MCP list, agent memory and workspaces are Lettuce's. Use its own mechanism where one exists; where we must write, own a namespace, as `skills` does with its manifest ([agent-skills/README.md](agent-skills/README.md#rules)). The one write into the MCP list is `lettucectl mcp`, since there is no supported way to set it across stacks: it owns exactly three kinds of entries ([lib/README.md](lib/README.md#mcp-registers-the-document-tools-the-vault-and-the-monitors-once-per-stack-and-only-those)). Never turn an upstream feature on by editing its files: a feature is on when its profile and its Settings switch are. *Breaking it:* editing Lettuce's settings file to turn Google on.
+**5. Don't write into what Lettuce manages.** Its settings, MCP list, agent memory and workspaces are Lettuce's. Use its own mechanism where one exists; where we must write, own a namespace, as `skills` does with its manifest ([agent-skills/README.md](agent-skills/README.md#rules)). The one write into the MCP list is `lettucectl mcp`, since there is no supported way to set it across stacks: it owns exactly three kinds of entries ([lib/README.md](lib/README.md#mcp-registers-the-document-tools-the-vault-and-the-watchlist-once-per-stack-and-only-those)). Never turn an upstream feature on by editing its files: a feature is on when its profile and its Settings switch are. *Breaking it:* editing Lettuce's settings file to turn Google on.
 
 **6. Keep upstream's defences on.**
 - Keep its auth settings at their strictest, and never disable a boot check.
@@ -54,7 +54,7 @@ These are the Lettuce internals lettuce-garden depends on today ("named today").
 | the garden executor | `letta cron add` with `--name=`, `--description=`, `--prompt=`, `--at=in 1m`, `--once`, `--agent=`, `--conversation=new\|default` (the `=` form, since letta-code's strict `parseArgs` misreads a value starting with `-`) and its JSON output (`.id`); `letta agents list` (`.items[]`); the scheduler picking up a changed task file without a restart; the app-server entrypoint copying `/root/.letta/system-cron` to `/etc/cron.d`; the image's `/usr/local/bin/agent-env` | [garden/](garden/README.md#upstream-seams), [executor](garden/executor/README.md) |
 | `lettucectl mcp` | the shared MCP list's file, `/root/.letta/mcp-home/.letta/settings.json`, and its shape; the BFF rendering it whole and reading it from disk before every change; the `mcp-servers` skill's description, which the BFF renders from the list only on a Settings -> MCP save and on every connect (`ensureMcpServers`), hence the BFF restart | [lib/](lib/README.md#upstream-seams) |
 | doc-tools | how `letta mcp call` runs a stdio server (per call, in the agent's cwd, a fixed environment, stdin closed then SIGTERM then SIGKILL, stderr piped and never read, 60 s per request; a bare `tools`/`search` starts every server); the `mcp-servers` skill wrapper `/root/.letta/skills/mcp-servers/scripts/mcp.sh`; workspaces at `/work/<agent-id>`; `/opt/lettuce-doc-tools` free in the app-server image, glibc >= 2.28 and system ICU, a `/tmp` that allows exec | [doc-tools/](doc-tools/README.md#upstream-seams) |
-| monitors and their skill | the monitors' `http` entry in the MCP list; the 120 s Lettuce's MCP bridge gives a tool call; through the executor, what Gmail triggers rely on (above); the `mcp-servers` skill wrapper | [monitors/](monitors/README.md#upstream-seams) |
+| the watchlist and its skill | the watchlist's `http` entry in the MCP list; the 120 s Lettuce's MCP bridge gives a tool call; through the executor, what Gmail triggers rely on (above); the `mcp-servers` skill wrapper | [watchlist/](watchlist/README.md#upstream-seams) |
 | the vault and its skill | the vault's `http` entry in the MCP list; letta-code telling the agent when a background command finishes, which is how an agent waiting for an approval gets a new turn; `MAX_WAIT_SECONDS` below the MCP bridge's 120 s | [vault/](vault/README.md#upstream-seams), [agent-skills/](agent-skills/README.md#upstream-seams) |
 | skills and `backup` | the global skills directory `/root/.letta/skills`, and the BFF rewriting upstream's `docker/agent-skills` there on every connect | [agent-skills/](agent-skills/README.md#upstream-seams), [backup/](backup/README.md#upstream-seams) |
 | Gmail triggers | the Google files the BFF writes on the `google-policy` and `google-creds` volumes | [gmail-triggers/](gmail-triggers/README.md#upstream-seams) |
@@ -89,8 +89,8 @@ Three helpers recur:
 | any published port in the rendered config | the host publishes nothing; cloudflared connects outbound |
 | `DISABLE_AUTOUPDATER` other than `1` on the app-server or channel-gateway | letta-code would reinstall itself over the pinned version |
 | the app-server, or any service with `network_mode: service:app-server`, keeping `NET_RAW` | agents could capture the Access JWT cloudflared sends the BFF ([vault/README.md](vault/README.md#rules)) |
-| `vault-data` mounted by anything but `garden-vault`, `pipelock-data` by anything but `garden-pipelock`, `monitors-data` by anything but `garden-monitors`, `google-creds` by anything but `bff`, `google-mcp` and `garden-gmail-triggers` | these volumes outlive their profile, so the rule holds whatever the profiles |
-| a `volumes_from` naming `garden-gmail-triggers`, `garden-vault`, `garden-pipelock`, `garden-monitors`, or a service that mounts `google-creds`, `vault-data`, `pipelock-data` or `monitors-data` | it would copy their mounts |
+| `vault-data` mounted by anything but `garden-vault`, `pipelock-data` by anything but `garden-pipelock`, `watchlist-data` by anything but `garden-watchlist`, `google-creds` by anything but `bff`, `google-mcp` and `garden-gmail-triggers` | these volumes outlive their profile, so the rule holds whatever the profiles |
+| a `volumes_from` naming `garden-gmail-triggers`, `garden-vault`, `garden-pipelock`, `garden-watchlist`, or a service that mounts `google-creds`, `vault-data`, `pipelock-data` or `watchlist-data` | it would copy their mounts |
 | a garden service on another Access audience or origin (`check_garden_audience`) | [garden/README.md](garden/README.md#rules) |
 | the code editor's volumes or namespaces shared, or the tools' volume or an image mount anywhere but the app-server | [code-server/](code-server/README.md#what-check_code_server-refuses), [doc-tools/](doc-tools/README.md#rules) |
 | a profile whose dependency is off (`profile_unmet`: `garden-gmail-triggers` needs `google`) | `profiles` checks it before writing too |
@@ -99,10 +99,10 @@ Three helpers recur:
 | Profile | It refuses | Details |
 |---|---|---|
 | `garden-vault` | a `garden-vault` service that is missing, not hardened (`check_hardened`) or with a host mount (`check_sidecar`) | [vault/](vault/README.md#rules) |
-| `garden-pipelock` | a `garden-pipelock` service that is missing, not hardened or with a host mount; an app-server whose `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY` or `http_proxy` is not `http://garden-pipelock:8888`, or whose `NO_PROXY` or `no_proxy` lacks `garden-vault`, `garden-gmail-triggers`, `garden-monitors` or `garden` (`check_pipelock`) | [pipelock/](pipelock/README.md#rules) |
-| any garden page (`garden-vault`, `garden-gmail-triggers`, `garden-monitors`, `garden-code-server`) | `check_garden` | [garden/](garden/README.md#what-check_garden-refuses) |
+| `garden-pipelock` | a `garden-pipelock` service that is missing, not hardened or with a host mount; an app-server whose `HTTPS_PROXY`, `https_proxy`, `HTTP_PROXY` or `http_proxy` is not `http://garden-pipelock:8888`, or whose `NO_PROXY` or `no_proxy` lacks `garden-vault`, `garden-gmail-triggers`, `garden-watchlist` or `garden` (`check_pipelock`) | [pipelock/](pipelock/README.md#rules) |
+| any garden page (`garden-vault`, `garden-gmail-triggers`, `garden-watchlist`, `garden-code-server`) | `check_garden` | [garden/](garden/README.md#what-check_garden-refuses) |
 | `garden-gmail-triggers` | `check_gmail_triggers` | [gmail-triggers/](gmail-triggers/README.md#what-check_gmail_triggers-refuses) |
-| `garden-monitors` | `check_monitors` | [monitors/](monitors/README.md#how-it-plugs-in) |
+| `garden-watchlist` | `check_watchlist` | [watchlist/](watchlist/README.md#how-it-plugs-in) |
 | `garden-doc-tools` | `check_doc_tools`, and `check_gotenberg` before Gotenberg starts | [doc-tools/](doc-tools/README.md#what-check_stack-refuses) |
 | `garden-code-server` | `check_code_server` | [code-server/](code-server/README.md#what-check_code_server-refuses) |
 
@@ -119,7 +119,7 @@ A new page on the garden host, `garden-<page>` at `/<page>/`. Each step is a rul
 3. **The route:** a `PROFILE_ROUTES` row in `lib/cloudflare.sh` (profile `garden-<page>` with its page at `/<page>/`, which a test checks), the profile in `compose/garden.yml`'s list (a test checks they match), and an entry in `LABELS` (`garden/src/garden_landing/`).
 4. **Checks:** a `check_<name>` for its hardening, mounts and networks, and its tests; `check_garden_audience` picks it up from `PROFILE_ROUTES`.
 5. **Pipelock:** if agents or the executor call it inside the stack, add it to `NO_PROXY` in `compose/pipelock-proxy.yml`, or pipelock refuses its private address. If what passes between it and the app-server must never reach pipelock (secret values, as with the vault, or a token, as with the executor's), also add it to the names `check_pipelock` requires in `NO_PROXY`.
-6. **An endpoint agents call:** keep it outside the tunnelled `/<page>/` prefix, so the tunnel never routes it, and refuse an `Origin` header and Cloudflare's tunnel headers, as the vault's `/mcp` and `/redeem` and the executor API (`guard`) do. Agents are root in the app-server, so such an endpoint authenticates nothing about them; approval, if any, happens on the page. Registering it in Settings -> MCP makes `mcp` own another kind of entry, as the vault's and the monitors' do: that changes [its rule](lib/README.md#mcp-registers-the-document-tools-the-vault-and-the-monitors-once-per-stack-and-only-those) and rule 5 above.
+6. **An endpoint agents call:** keep it outside the tunnelled `/<page>/` prefix, so the tunnel never routes it, and refuse an `Origin` header and Cloudflare's tunnel headers, as the vault's `/mcp` and `/redeem` and the executor API (`guard`) do. Agents are root in the app-server, so such an endpoint authenticates nothing about them; approval, if any, happens on the page. Registering it in Settings -> MCP makes `mcp` own another kind of entry, as the vault's and the watchlist's do: that changes [its rule](lib/README.md#mcp-registers-the-document-tools-the-vault-and-the-watchlist-once-per-stack-and-only-those) and rule 5 above.
 7. **Storage:** a named volume outlives its profile, so add whatever-the-profiles rules to `check_stack` (only this service mounts it, no `volumes_from` reaches it; `volume_users`), and decide whether `backup` copies it (today it copies the vault's and pipelock's volumes by name). Prefer no host path. If it needs one, it must sit outside everything the app-server mounts (never inside `letta-home`, which agents can write), get symlink checks like `check_gmail_triggers`'s, and stay out of `$LETTA_STATE_DIR/garden`, where `check_gmail_triggers` refuses any service but Gmail triggers.
 8. **The agent list:** if the page needs the agents' names, it answers the executor's status like `garden` does (`AgentAsks`), and `executor_wanted` must include its profile ([garden/executor/README.md](garden/executor/README.md)).
 9. **Upstream:** if it starts turns or bypasses the BFF, write the reason under [Relationship to upstream](#relationship-to-upstream) first. If it relies on a Lettuce internal, add a row to [Upstream seams](#upstream-seams).
@@ -136,7 +136,7 @@ A new page on the garden host, `garden-<page>` at `/<page>/`. Each step is a rul
   | [compose/](compose/README.md) | the overlays and their merge order, and the host's shared Gotenberg |
   | [vault/](vault/README.md) | the vault |
   | [gmail-triggers/](gmail-triggers/README.md) | Gmail triggers |
-  | [monitors/](monitors/README.md) | monitors |
+  | [watchlist/](watchlist/README.md) | watchlist |
   | [code-server/](code-server/README.md) | the code editor: the gate, the editor's image and the shell's image |
   | [garden/](garden/README.md) | the garden's landing page, and [garden/executor/](garden/executor/README.md), the executor that runs in the app-server |
   | [garden-common/](garden-common/README.md) | the sign-in and request checks, styles and icons the garden services share |
@@ -146,7 +146,7 @@ A new page on the garden host, `garden-<page>` at `/<page>/`. Each step is a rul
   | [backup/](backup/README.md) | the image `lettucectl backup` copies with |
   | [tests/](tests/README.md) | the CLI's offline tests: the stubs and helpers |
 
-- **Design records**, kept as written, with a note where the build later differed: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md), [garden/DESIGN.md](garden/DESIGN.md) (the garden host and the garden-wide executor), [monitors/DESIGN.md](monitors/DESIGN.md).
+- **Design records**, kept as written, with a note where the build later differed: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md), [garden/DESIGN.md](garden/DESIGN.md) (the garden host and the garden-wide executor), [watchlist/DESIGN.md](watchlist/DESIGN.md).
 - **The user and admin guides** in [docs/](docs/): each feature's security model (what it guarantees and what it does not) is there; the folder README says how it is enforced.
 
 ## Building and testing
@@ -158,7 +158,7 @@ shellcheck -x lettucectl lib/*.sh scripts/*.sh pipelock/entrypoint.sh tests/run.
 tests/run-sidecar.sh vault            # vault tests (pytest in its image's `test` stage; needs Docker)
 tests/run-sidecar.sh vault -k vault   # extra args go to pytest
 tests/run-sidecar.sh gmail-triggers    # Gmail triggers' tests (pytest; the executor's run with garden)
-tests/run-sidecar.sh monitors          # the monitors' tests (pytest: schedules, fetcher, extractors, reports, page)
+tests/run-sidecar.sh watchlist         # the watchlist's tests (pytest: schedules, fetcher, extractors, reports, page)
 tests/run-sidecar.sh code-server       # the code editor's gate (pytest), plus the editor image's tests when no args are given
 node --test 'garden/executor/tests/*.test.mjs'         # garden executor tests on the host
 tests/run-pipelock.sh                  # the pipelock image and config against a real pipelock (needs Docker, not the internet)
@@ -169,7 +169,7 @@ tests/run-sidecar.sh garden            # the landing page and its executor API (
 tests/run-sidecar.sh doc-tools         # the PDF MCP's tests (pytest in the doc-tools image's `test` stage, Debian 12 like the app-server)
 ```
 - **Before changing a folder, run every command in its README's "Build and test"**. Those sections are the one list of what covers what; they also name the suites another folder shares, such as the executor's and Gmail triggers' two ends of one protocol.
-- **`tests/run-sidecar.sh <dir>` takes a folder with a Dockerfile:** `vault`, `gmail-triggers`, `monitors`, `code-server`, `garden` or `doc-tools`. `garden-common/` has no image or tests of its own; before changing it, run the five suites that use it (its [Build and test](garden-common/README.md#build-and-test)).
+- **`tests/run-sidecar.sh <dir>` takes a folder with a Dockerfile:** `vault`, `gmail-triggers`, `watchlist`, `code-server`, `garden` or `doc-tools`. `garden-common/` has no image or tests of its own; before changing it, run the five suites that use it (its [Build and test](garden-common/README.md#build-and-test)).
 - **Before changing docs:** `node scripts/check-doc-links.mjs`.
 - **End to end**, against real images (Docker, and the internet for the first build; throwaway containers only): `scripts/doc-tools-e2e.sh`, and `scripts/code-server-e2e.sh --browser` before keeping a new code editor extension or setting.
 

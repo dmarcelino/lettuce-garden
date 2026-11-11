@@ -15,18 +15,18 @@
 #
 # NO_PROXY keeps stack-internal traffic away from pipelock: it refuses private
 # addresses, and it must never see the vault's values (vault), the
-# executor's token (gmail-triggers, monitors, garden) or the BFF and app-server on
+# executor's token (gmail-triggers, watchlist, garden) or the BFF and app-server on
 # localhost. host.docker.internal is a local model server, if any. `lettucectl
 # check` refuses an app-server without the proxy or without the vault,
-# gmail-triggers, monitors and garden in NO_PROXY. A new service agents call inside the
+# gmail-triggers, watchlist and garden in NO_PROXY. A new service agents call inside the
 # stack goes in this list too, or pipelock refuses its private address.
 x-proxy: &proxy
   HTTPS_PROXY: http://garden-pipelock:8888
   HTTP_PROXY: http://garden-pipelock:8888
   https_proxy: http://garden-pipelock:8888
   http_proxy: http://garden-pipelock:8888
-  NO_PROXY: localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-monitors,garden,searxng,ddg-mcp,google-mcp,gotenberg,host.docker.internal
-  no_proxy: localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-monitors,garden,searxng,ddg-mcp,google-mcp,gotenberg,host.docker.internal
+  NO_PROXY: localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-watchlist,garden,searxng,ddg-mcp,google-mcp,gotenberg,host.docker.internal
+  no_proxy: localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-watchlist,garden,searxng,ddg-mcp,google-mcp,gotenberg,host.docker.internal
 
 services:
   app-server:

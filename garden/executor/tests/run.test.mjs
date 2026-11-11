@@ -72,7 +72,7 @@ afterEach(async () => {
 });
 
 // A sidecar: `t[name]` says how to answer. For the request queues (gmail-triggers,
-// monitors), `requests` is the requests GET's list; for all, `agentsWanted` is the GET's
+// watchlist), `requests` is the requests GET's list; for all, `agentsWanted` is the GET's
 // agents_wanted (left out when undefined); `respond[route]` overrides an answer with
 // { status, body, hang }; `onResult(body)` runs before a result is answered.
 function startSidecar(t, name) {
@@ -151,7 +151,7 @@ async function setup(envExtra = {}) {
     lock: path.join(root, ".executor.lock"),
     "gmail-triggers": { requests: [], respond: {}, agentsWanted: true },
     garden: { respond: {}, agentsWanted: false },
-    monitors: { requests: [], respond: {}, agentsWanted: false },
+    watchlist: { requests: [], respond: {}, agentsWanted: false },
     args: ["--gmail-triggers"],
   };
   t.sidecar = t["gmail-triggers"];
@@ -162,7 +162,7 @@ async function setup(envExtra = {}) {
   t.env = { PATH: `${t.bin}:/usr/bin:/bin`, HOME: root, TMPDIR: t.tmp, FAKE_CALLS: t.calls, ...envExtra };
   t.url = await startSidecar(t, "gmail-triggers");
   t.gardenUrl = await startSidecar(t, "garden");
-  t.monUrl = await startSidecar(t, "monitors");
+  t.wlUrl = await startSidecar(t, "watchlist");
   return t;
 }
 
@@ -174,7 +174,7 @@ function run(t) {
         ...t.env,
         GARDEN_URL: t.gardenUrl,
         GT_URL: t.url,
-        MON_URL: t.monUrl,
+        WL_URL: t.wlUrl,
         GT_TOKEN_FILE: t.tokenFile,
         GT_LOCK: t.lock,
         GT_LOG: t.log,
@@ -703,14 +703,14 @@ test("without --gmail-triggers a missing letta is logged and nothing is called",
   assert.match(r.stdout, /error: letta not found on the PATH/);
 });
 
-for (const args of [["--gmail"], ["--gmail-triggers", "x"], ["--gmail-triggers=1"], ["--monitors", "--monitors"]]) {
+for (const args of [["--gmail"], ["--gmail-triggers", "x"], ["--gmail-triggers=1"], ["--watchlist", "--watchlist"]]) {
   test(`an unknown argument (${args.join(" ")}) stops the run before any call`, async () => {
     const t = await setup();
     t.args = args;
     const r = await run(t);
     assert.equal(r.status, 0);
     assert.deepEqual(calls(t), []);
-    assert.match(r.stdout, /usage: run.mjs \[--gmail-triggers\] \[--monitors\]/);
+    assert.match(r.stdout, /usage: run.mjs \[--gmail-triggers\] \[--watchlist\]/);
     assert.ok(!fs.existsSync(t.lock));
   });
 }
@@ -857,22 +857,22 @@ test("a symlinked log is not truncated through the link", async () => {
 
 // --- several request queues -------------------------------------------------------
 
-test("with --monitors only, monitors' requests run and gmail-triggers is never called", async () => {
+test("with --watchlist only, the watchlist's requests run and gmail-triggers is never called", async () => {
   const t = await setup();
-  t.args = ["--monitors"];
+  t.args = ["--watchlist"];
   t.sidecar.requests = [request()];
-  t.monitors.requests = [request({ name: "Monitors: 08:00", description: "Monitor report" }, ID2)];
+  t.watchlist.requests = [request({ name: "Watchlist: 08:00", description: "Monitor report" }, ID2)];
   const r = await run(t);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.deepEqual(sequence(t), [
     "garden GET /executor/v1/status",
-    "monitors GET /executor/v1/requests",
+    "watchlist GET /executor/v1/requests",
     "letta cron add",
-    "monitors POST /executor/v1/results",
-    "monitors POST /executor/v1/heartbeat",
+    "watchlist POST /executor/v1/results",
+    "watchlist POST /executor/v1/heartbeat",
   ]);
-  assert.deepEqual(cronCalls(t)[0].argv, cronArgv(t.monitors.requests[0]));
-  const [res] = posted(t, "monitors POST /executor/v1/results");
+  assert.deepEqual(cronCalls(t)[0].argv, cronArgv(t.watchlist.requests[0]));
+  const [res] = posted(t, "watchlist POST /executor/v1/results");
   assert.equal(res.id, ID2);
   assert.equal(res.ok, true);
   assert.match(res.task_id, /^task-\d+$/);
@@ -880,11 +880,11 @@ test("with --monitors only, monitors' requests run and gmail-triggers is never c
 
 test("both queues run in order, each gets its own results, the list and a heartbeat", async () => {
   const t = await setup();
-  t.args = ["--monitors", "--gmail-triggers"];
+  t.args = ["--watchlist", "--gmail-triggers"];
   t.sidecar.agentsWanted = false;
-  t.monitors.agentsWanted = true;
+  t.watchlist.agentsWanted = true;
   t.sidecar.requests = [request()];
-  t.monitors.requests = [request({}, ID2)];
+  t.watchlist.requests = [request({}, ID2)];
   const r = await run(t);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.deepEqual(sequence(t), [
@@ -892,41 +892,41 @@ test("both queues run in order, each gets its own results, the list and a heartb
     "gmail-triggers GET /executor/v1/requests",
     "letta cron add",
     "gmail-triggers POST /executor/v1/results",
-    "monitors GET /executor/v1/requests",
+    "watchlist GET /executor/v1/requests",
     "letta cron add",
-    "monitors POST /executor/v1/results",
+    "watchlist POST /executor/v1/results",
     "letta agents list",
     "garden PUT /executor/v1/agents",
     "gmail-triggers PUT /executor/v1/agents",
-    "monitors PUT /executor/v1/agents",
+    "watchlist PUT /executor/v1/agents",
     "gmail-triggers POST /executor/v1/heartbeat",
-    "monitors POST /executor/v1/heartbeat",
+    "watchlist POST /executor/v1/heartbeat",
   ]);
   assert.deepEqual(results(t).map((x) => x.id), [ID1]);
-  assert.deepEqual(posted(t, "monitors POST /executor/v1/results").map((x) => x.id), [ID2]);
-  assert.deepEqual(posted(t, "monitors POST /executor/v1/heartbeat"), [{ v: 1, letta_ok: true }]);
+  assert.deepEqual(posted(t, "watchlist POST /executor/v1/results").map((x) => x.id), [ID2]);
+  assert.deepEqual(posted(t, "watchlist POST /executor/v1/heartbeat"), [{ v: 1, letta_ok: true }]);
 });
 
-test("an unreachable monitors doesn't stop gmail-triggers", async () => {
+test("an unreachable watchlist doesn't stop gmail-triggers", async () => {
   const t = await setup();
-  t.args = ["--gmail-triggers", "--monitors"];
-  t.monUrl = await closedUrl();
+  t.args = ["--gmail-triggers", "--watchlist"];
+  t.wlUrl = await closedUrl();
   t.sidecar.requests = [request()];
   const r = await run(t);
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.match(r.stdout, /monitors unreachable: ECONNREFUSED/);
+  assert.match(r.stdout, /watchlist unreachable: ECONNREFUSED/);
   assert.equal(results(t)[0].ok, true);
   assert.deepEqual(heartbeats(t), [{ v: 1, letta_ok: true }]);
 });
 
 test("a missing letta sends each queue a heartbeat and claims nothing", async () => {
   const t = await setup();
-  t.args = ["--gmail-triggers", "--monitors"];
+  t.args = ["--gmail-triggers", "--watchlist"];
   t.env.PATH = "/nonexistent";
   const r = await run(t);
   assert.equal(r.status, 0);
-  assert.deepEqual(routes(t), ["gmail-triggers POST /executor/v1/heartbeat", "monitors POST /executor/v1/heartbeat"]);
-  for (const route of ["gmail-triggers POST /executor/v1/heartbeat", "monitors POST /executor/v1/heartbeat"]) {
+  assert.deepEqual(routes(t), ["gmail-triggers POST /executor/v1/heartbeat", "watchlist POST /executor/v1/heartbeat"]);
+  for (const route of ["gmail-triggers POST /executor/v1/heartbeat", "watchlist POST /executor/v1/heartbeat"]) {
     assert.deepEqual(posted(t, route), [{ v: 1, letta_ok: false, error: "letta not found on the PATH" }]);
   }
 });

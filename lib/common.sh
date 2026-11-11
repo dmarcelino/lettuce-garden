@@ -198,7 +198,7 @@ compose_env() {
     -f "$LETTUCE_HOME/compose/multi.yml" \
     -f "$LETTUCE_HOME/compose/vault.yml" \
     -f "$LETTUCE_HOME/compose/gmail-triggers.yml" \
-    -f "$LETTUCE_HOME/compose/monitors.yml" \
+    -f "$LETTUCE_HOME/compose/watchlist.yml" \
     -f "$LETTUCE_HOME/compose/pipelock.yml" \
     -f "$LETTUCE_HOME/compose/code-server.yml" \
     -f "$LETTUCE_HOME/compose/garden.yml" \
@@ -270,12 +270,12 @@ receipts_volume() { printf 'lettuce-%s_pipelock-data' "$1"; }
 # outlives the profile and goes with `compose down -v`
 has_receipts() { host_docker volume inspect "$(receipts_volume "$1")" >/dev/null 2>&1; }
 
-# monitors_volume NAME -> the Docker volume holding the stack's monitors, sources and items
-monitors_volume() { printf 'lettuce-%s_monitors-data' "$1"; }
+# watchlist_volume NAME -> the Docker volume holding the stack's monitors, sources and items
+watchlist_volume() { printf 'lettuce-%s_watchlist-data' "$1"; }
 
-# has_monitors NAME -> success when that volume exists; it outlives the profile
+# has_watchlist NAME -> success when that volume exists; it outlives the profile
 # and goes with `compose down -v`
-has_monitors() { host_docker volume inspect "$(monitors_volume "$1")" >/dev/null 2>&1; }
+has_watchlist() { host_docker volume inspect "$(watchlist_volume "$1")" >/dev/null 2>&1; }
 
 # compose_label_mask CONFIG -> `--label KEY=` for each Compose label of an
 # image's config (`image inspect`'s .Config, as JSON). A container inherits its
@@ -365,17 +365,17 @@ env_without_profile() {
   printf '%s' "$tmp"
 }
 
-# The admin's monitors settings: config.env keys that `up` copies into each
-# stack.env (compose/monitors.yml reads them from there); an empty or missing
+# The admin's watchlist settings: config.env keys that `up` copies into each
+# stack.env (compose/watchlist.yml reads them from there); an empty or missing
 # key leaves the service's default.
-MONITORS_SETTINGS=(MONITORS_DEFAULT_TIMES MONITORS_MAX_REPORTS_PER_DAY MONITORS_MIN_INTERVAL MONITORS_MAX_SOURCES MONITORS_MAX_MONITORS)
+WATCHLIST_SETTINGS=(WATCHLIST_DEFAULT_TIMES WATCHLIST_MAX_REPORTS_PER_DAY WATCHLIST_MIN_INTERVAL WATCHLIST_MAX_SOURCES WATCHLIST_MAX_MONITORS)
 
-# sync_monitors_settings NAME -> each MONITORS_SETTINGS key of config.env in the
+# sync_watchlist_settings NAME -> each WATCHLIST_SETTINGS key of config.env in the
 # stack's stack.env, and none that config.env lacks
-sync_monitors_settings() {
+sync_watchlist_settings() {
   local f k v
   f=$(stack_env "$1")
-  for k in "${MONITORS_SETTINGS[@]}"; do
+  for k in "${WATCHLIST_SETTINGS[@]}"; do
     v=$(cfg "$k")
     if [[ -n $v ]]; then
       [[ $(env_get "$f" "$k") == "$v" ]] || env_set "$f" "$k" "$v"
@@ -456,19 +456,19 @@ check_stack() {
   k=$(jq -r '([.services | to_entries[]
       | select([(.value.volumes // [])[] | select(.source == "google-creds" or .source == "vault-data"
         or .source == "pipelock-data" or .source == "code-server-data" or .source == "code-exec-keys"
-        or .source == "code-server-sock" or .source == "monitors-data")] | length > 0)
-      | .key] + ["garden-gmail-triggers", "garden-vault", "garden-pipelock", "garden-monitors", "garden-code-server", "garden-code-server-editor", "garden-code-server-exec"]) as $held
+        or .source == "code-server-sock" or .source == "watchlist-data")] | length > 0)
+      | .key] + ["garden-gmail-triggers", "garden-vault", "garden-pipelock", "garden-watchlist", "garden-code-server", "garden-code-server-editor", "garden-code-server-exec"]) as $held
     | [.services | to_entries[] | .key as $k | (.value.volumes_from // [])[]
       | sub("^service:"; "") | sub(":(ro|rw)$"; "") | select(. as $t | $held | index($t)) | "\($k) from \(.)"]
     | join(", ")' <<<"$rendered")
-  [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, the monitors or the code editor ($k)"
+  [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, the watchlist or the code editor ($k)"
   # Both volumes outlive their profile, so these hold whatever the profiles.
   k=$(volume_users "$rendered" vault-data garden-vault)
   [[ -z $k ]] || die "$name: $k mount(s) the vault's volume; only the vault service may"
   k=$(volume_users "$rendered" pipelock-data garden-pipelock)
   [[ -z $k ]] || die "$name: $k mount(s) pipelock's volume (its signing key and receipts); only garden-pipelock may"
-  k=$(volume_users "$rendered" monitors-data garden-monitors)
-  [[ -z $k ]] || die "$name: $k mount(s) the monitors' volume; only garden-monitors may"
+  k=$(volume_users "$rendered" watchlist-data garden-watchlist)
+  [[ -z $k ]] || die "$name: $k mount(s) the watchlist's volume; only garden-watchlist may"
   k=$(volume_users "$rendered" code-server-data garden-code-server-editor)
   [[ -z $k ]] || die "$name: $k mount(s) the code editor's volume (its state and SSH key); only garden-code-server-editor may"
   k=$(volume_users "$rendered" code-exec-keys garden-code-server-editor garden-code-server-exec)
@@ -492,8 +492,8 @@ check_stack() {
   if has_profile "$profiles" garden-gmail-triggers; then
     check_gmail_triggers "$name" "$rendered" "$(env_get "$f" LETTA_STATE_DIR)"
   fi
-  if has_profile "$profiles" garden-monitors; then
-    check_monitors "$name" "$rendered"
+  if has_profile "$profiles" garden-watchlist; then
+    check_watchlist "$name" "$rendered"
   fi
   k=$(garden_profiles "$profiles")
   if [[ -n $k ]]; then
@@ -630,7 +630,7 @@ check_sidecar() {
 # compose/pipelock.yml gives it (check_sidecar), and the app-server uses it
 # (compose/pipelock-proxy.yml) for everything but stack-internal traffic:
 # pipelock must never see the vault's values or the executor's token (which
-# goes to gmail-triggers, monitors and garden).
+# goes to gmail-triggers, watchlist and garden).
 check_pipelock() {
   local name=$1 rendered=$2 k v
   check_sidecar "$name" "$rendered" garden-pipelock garden-pipelock compose/pipelock.yml
@@ -640,7 +640,7 @@ check_pipelock() {
       die "$name: the app-server's $k must be http://garden-pipelock:8888 with the garden-pipelock profile (compose/pipelock-proxy.yml)"
   done
   for k in NO_PROXY no_proxy; do
-    for v in garden-vault garden-gmail-triggers garden-monitors garden; do
+    for v in garden-vault garden-gmail-triggers garden-watchlist garden; do
       jq -e --arg k "$k" --arg v "$v" '.services["app-server"].environment[$k] // "" | split(",") | index($v)' <<<"$rendered" >/dev/null ||
         die "$name: the app-server's $k must list $v; pipelock must not see its traffic (compose/pipelock-proxy.yml)"
     done
@@ -680,18 +680,18 @@ check_garden_audience() {
   done
 }
 
-# check_monitors NAME RENDERED -> the monitors service keeps what
-# compose/monitors.yml gives it: a hardened sidecar (check_sidecar) on the default
-# network only, mounting only its own volume, monitors-data, at /data.
-check_monitors() {
+# check_watchlist NAME RENDERED -> the watchlist service keeps what
+# compose/watchlist.yml gives it: a hardened sidecar (check_sidecar) on the default
+# network only, mounting only its own volume, watchlist-data, at /data.
+check_watchlist() {
   local name=$1 rendered=$2 svc
-  check_sidecar "$name" "$rendered" garden-monitors garden-monitors compose/monitors.yml
-  svc=$(jq -c '.services["garden-monitors"]' <<<"$rendered")
+  check_sidecar "$name" "$rendered" garden-watchlist garden-watchlist compose/watchlist.yml
+  svc=$(jq -c '.services["garden-watchlist"]' <<<"$rendered")
   jq -e '(.networks // {"default": null} | keys) == ["default"]' <<<"$svc" >/dev/null ||
-    die "$name: garden-monitors must be on the default network only"
+    die "$name: garden-watchlist must be on the default network only"
   jq -e '[(.volumes // [])[] | select(.type != "tmpfs") | {type, source, target}]
-    == [{"type": "volume", "source": "monitors-data", "target": "/data"}]' <<<"$svc" >/dev/null ||
-    die "$name: garden-monitors may mount only its volume monitors-data, at /data (compose/monitors.yml)"
+    == [{"type": "volume", "source": "watchlist-data", "target": "/data"}]' <<<"$svc" >/dev/null ||
+    die "$name: garden-watchlist may mount only its volume watchlist-data, at /data (compose/watchlist.yml)"
 }
 
 # check_gmail_triggers NAME RENDERED STATE_DIR -> the gmail-triggers service keeps
