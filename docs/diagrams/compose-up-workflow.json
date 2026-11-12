@@ -115,24 +115,24 @@
       "col": 1,
       "type": "backend",
       "label": "up_stack",
-      "sublabel": "keys, token, garden list",
+      "sublabel": "push contact, token, garden list",
       "sources": [
         {
           "path": "lettucectl",
-          "line": 396,
-          "end_line": 399,
+          "line": 400,
+          "end_line": 403,
           "label": "up_stack"
         },
         {
           "path": "lib/common.sh",
-          "line": 594,
-          "end_line": 620,
-          "label": "VAPID keys, executor token"
+          "line": 647,
+          "end_line": 664,
+          "label": "push contact, executor token"
         },
         {
           "path": "lib/common.sh",
-          "line": 641,
-          "end_line": 646,
+          "line": 685,
+          "end_line": 690,
           "label": "sync_garden_profiles"
         }
       ]

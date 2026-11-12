@@ -127,8 +127,9 @@ name_resolves() {
 }
 
 write_new_stack_env() {
-  local name=$1 host=$2 garden=$3 emails=$4 f
+  local name=$1 host=$2 garden=$3 emails=$4 f push
   f=$(stack_env "$name")
+  push=$(push_env_lines)
   (umask 077 && mkdir -p "$(stack_dir "$name")/state")
   chmod 700 "$(stack_dir "$name")"
   (
@@ -146,6 +147,7 @@ LETTA_STATE_DIR=$(stack_dir "$name")/state
 TZ=$(cfg TZ)
 SESSION_SECRET=$(openssl rand -hex 32)
 CF_ACCESS_TEAM_DOMAIN=$(cfg CF_TEAM_DOMAIN)
+$push
 EOF
   )
 }
@@ -396,7 +398,7 @@ executor_out_of_step() {
 
 # up_stack NAME -> checks one stack, then builds and starts it
 up_stack() {
-  ensure_push_keys "$1"
+  sync_push_contact "$1"
   ensure_executor_token "$1"
   sync_garden_profiles "$1"
   check_stack "$1"
@@ -839,6 +841,8 @@ cmd_add() {
   validate_name "$name"
   emails=$(normalise_emails "$2")
   require_initialised
+  # The new stack.env and the stack's up need it; checked before any Cloudflare call.
+  push_contact >/dev/null
   f=$(stack_env "$name")
   acc=$(cfg CF_ACCOUNT_ID)
 
@@ -1193,9 +1197,10 @@ cmd_profiles() {
 
   if [[ -n $changed ]]; then
     # Check every stack, as it will be under the new list, before writing
-    # anything, so one broken stack cannot leave the others half-switched.
+    # anything, so one broken stack cannot leave the others half-switched. The
+    # push contact too: every stack's up keeps it in step.
+    push_contact >/dev/null
     for n in "${stacks[@]}"; do
-      ensure_push_keys "$n"
       check_stack "$n" --profiles "$new"
     done
     for n in "${stacks[@]}"; do
