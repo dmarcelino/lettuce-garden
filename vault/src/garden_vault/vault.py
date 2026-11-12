@@ -53,9 +53,6 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 ASK, AUTO = "ask", "auto"
 KEY_AAD = b"vault-data-key"
-# The shape of the secrets' fields. Secrets of another format are deleted on
-# unlock: 2 is Bitwarden's item types (kinds.py).
-FORMAT = b"2"
 
 
 class VaultError(Exception):
@@ -269,7 +266,6 @@ class Vault:
                 raise VaultError("the vault already exists")
             key = crypto.new_key()
             self._store_wrapped(key, passphrase)
-            self._set_meta((("format", FORMAT),))
             self._state = _Unlocked(key, self._clock())
 
     def _store_wrapped(self, key: bytes, passphrase: str) -> None:
@@ -301,18 +297,7 @@ class Vault:
             # after the next lock without a new notice.
             cancelled = self.cancel_erase()
             self._state = _Unlocked(key, self._clock())
-            self._upgrade_format()
             return cancelled
-
-    def _upgrade_format(self) -> None:
-        """Secrets saved in an older shape are deleted, not converted."""
-        if self._meta("format") == FORMAT:
-            return
-        with self._transaction():
-            deleted = self._db.execute("DELETE FROM secrets").rowcount
-            self._db.execute("INSERT OR REPLACE INTO vault_meta (k, v) VALUES ('format', ?)", (FORMAT,))
-        if deleted:
-            self.audit("vault", f"deleted {deleted} secrets of an older format")
 
     def lock(self) -> None:
         with self._lock:

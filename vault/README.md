@@ -14,7 +14,7 @@ An interactive version, [vault-architecture.html](../docs/diagrams/vault-archite
 | `src/garden_vault/__main__.py` | Entry point: reads the settings, builds the store, service, pusher and app, runs uvicorn on port 8000 without an access log |
 | `src/garden_vault/config.py` | `PREFIX` (`/vault`), the limits (`REQUEST_TTL_SECONDS`, `HANDLE_TTL_SECONDS`, `MAX_HANDLES`, `MAX_PENDING`, `AUTO_LOCK_SECONDS`, `ERASE_DELAY_SECONDS`, `ERASE_GRACE_SECONDS`, `ERASE_REQUESTS_PER_HOUR`, ...) and `Settings` from the environment |
 | `src/garden_vault/crypto.py` | scrypt key derivation and AES-256-GCM; the data key is stored only wrapped |
-| `src/garden_vault/vault.py` | The encrypted SQLite store (`/data/vault.db`): setup, unlock, lock and auto-lock, erase (at once, or scheduled while locked), secrets (`build_fields`, custom fields included), audit log, push subscriptions. `FORMAT` in `vault_meta` is the fields' shape: an unlock that finds another one deletes every secret (no conversion) and records how many |
+| `src/garden_vault/vault.py` | The encrypted SQLite store (`/data/vault.db`): setup, unlock, lock and auto-lock, erase (at once, or scheduled while locked), secrets (`build_fields`, custom fields included), audit log, push subscriptions |
 | `src/garden_vault/kinds.py` | The secret kinds, Bitwarden's five item types with its fields: public and private fields, the private ones that may be shared without asking (`FieldSpec.auto`; a kind with any is `auto_allowed`), the ones masked on screen like Bitwarden's password fields (`FieldSpec.masked`), custom field keys (`custom_key`) and the preview |
 | `src/garden_vault/bitwarden.py` | Reads Bitwarden's unencrypted JSON export into kinds (`read_export`); refuses encrypted exports; per item, what was left out and why |
 | `src/garden_vault/service.py` | Agent requests, approvals, handles for the default `placeholders` delivery (in memory; `alias` prefixes their variable names), `text` delivery only with a `reason`, the `rules` sent with shared values, and the notices and audit entries of a scheduled erase |
@@ -61,7 +61,7 @@ That is the same JWT cloudflared sends the BFF in plain HTTP inside that namespa
 - `delivery: "text"` needs a `reason`, shown to the person and audited. Values shared as text always come with `rules` (`service.rules`): the approved purpose only, no outside service unless the purpose needs it, never repeated in a reply, memory or files. Those are instructions to the agent, not a boundary.
 
 ### Stored format
-Secrets are stored in the shape `vault.FORMAT` names. Changing a kind's fields means bumping it, and an unlock then deletes every secret (no migration). A new display-only attribute of a stored field takes a safe default instead: `Field.masked` missing reads as masked.
+Stored secrets carry no version, so a change to a kind's fields must read what is already stored. A missing attribute takes a safe default (`Field.masked` missing reads as masked); a change that cannot do that brings its migration in the same change.
 
 ### Masked is not private
 `sensitive` (private) decides what agents must ask for; `masked` decides what the person's own screen hides. Masked follows Bitwarden's form: its password-type fields (a login's password and TOTP, a card's number and code, an identity's SSN and passport number, an SSH private key) and Hidden custom fields. Masked values are never sent to the edit page (blank keeps them) and show as dots until "Show hidden fields", which History records. Every other value, private or not, is shown and prefilled.
