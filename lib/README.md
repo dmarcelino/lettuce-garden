@@ -20,7 +20,7 @@ An interactive version, [lettucectl-architecture.html](../docs/diagrams/lettucec
 - **`check_stack` gates every `up`.** It reads `stack.env`, renders the merged config and dies on the first unsafe setting. What it refuses, and which profile turns each check on: [CONTRIBUTING.md](../CONTRIBUTING.md#what-check_stack-enforces).
 - **Cloudflare.** `cf_api METHOD PATH [BODY]` prints `.result`, or the API's errors and returns 1. `init`, `add`, `users`, `remove` and `profiles` call it; `up` never does.
 - **The MCP list.** `mcp_servers` in `lettucectl` runs `compose NAME exec -T app-server node --input-type=module - add|remove FILE GROUP` with `mcp-servers.mjs` on stdin (the rules below).
-- **Other writers of `stack.env`:** `up` (VAPID keys, the executor token, `GARDEN_PROFILES`), `users` (`ALLOWED_USERS`, after the Access policy), `profiles` (`COMPOSE_PROFILES`, together with `config.env` `PROFILES`), and `mcp`, `add` and `up` (the MCP groups' markers). `init` writes `config.env`: the zone, account, Zero Trust team and Google login method ids, and `LETTA_IMAGE_NS` (as `upgrade` does). `add`, `users` and `remove` write `stacks.conf`.
+- **Other writers of `stack.env`:** `up` (the push contact address, the executor token, `GARDEN_PROFILES`), `users` (`ALLOWED_USERS`, after the Access policy), `profiles` (`COMPOSE_PROFILES`, together with `config.env` `PROFILES`), and `mcp`, `add` and `up` (the MCP groups' markers). `init` writes `config.env`: the zone, account, Zero Trust team and Google login method ids, and `LETTA_IMAGE_NS` (as `upgrade` does). `add`, `users` and `remove` write `stacks.conf`.
 
 ## Rules
 
@@ -90,7 +90,7 @@ Each stack has two Access applications, Lettuce's and the garden's (`lettuce-<na
 Google has no API for an OAuth client's redirect URIs. So with the `google` profile, `add` and `profiles` print each stack's URI, and `remove` reminds the operator to delete it (`google_redirect_uri`, `google_reminder`).
 
 ### VAPID keys are generated once per stack
-`ensure_push_keys` generates them on the first `up` and never rotates them: a new keypair invalidates every browser's push subscription. The BFF (`PUSH_VAPID_*`) and the vault (`VAULT_VAPID_*`) each have their own pair.
+`add` writes them into the new `stack.env` (`push_env_lines`), and nothing makes them again: a new keypair invalidates every browser's push subscription. The BFF (`PUSH_VAPID_*`) and the vault (`VAULT_VAPID_*`) each have their own pair. `up` only keeps `PUSH_VAPID_CONTACT_EMAIL` in step with `config.env` (`sync_push_contact`), and `check_stack` refuses a stack without its keys.
 
 ### Upstream's version moves only through `upgrade`
 `lettucectl upgrade <tag>` is the only way to move `LETTUCE_REF` (and `self-upgrade`, through it, to the tag a release was tested with, never back): Lettuce tags pin the letta-code server version the UI was compiled against. `fetch_upstream` downloads GitHub's archive of the tag into `upstream/<tag>.partial/` and renames it when complete, so `upstream/<tag>/` is always whole; `upgrade` removes the other tags once every stack is up. What to check on every upgrade: [CONTRIBUTING.md](../CONTRIBUTING.md#upgrading-lettuce_ref).
