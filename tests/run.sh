@@ -772,7 +772,19 @@ test_add_refuses_missing_push_contact() {
   bad_rc
   out_has "PUSH_CONTACT_EMAIL is empty in config.env"
   [[ ! -e $D/stacks/alfred ]] || fail "stack dir created without a push contact"
-  log_lacks "curl POST"
+  log_lacks "curl "
+}
+
+test_profiles_checks_the_push_contact_before_writing() {
+  added
+  sed -i 's/^PUSH_CONTACT_EMAIL=.*/PUSH_CONTACT_EMAIL=a@example.com,b@example.com/' "$D/config.env"
+  ctl profiles cloudflared,search,google
+  bad_rc
+  out_has "PUSH_CONTACT_EMAIL in config.env must be a single address"
+  eq "$(grep ^PROFILES= "$D/config.env")" PROFILES=cloudflared,search
+  eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
+  log_lacks "curl PUT"
+  log_lacks "up -d"
 }
 
 test_up_refuses_missing_push_contact() {

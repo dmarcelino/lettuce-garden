@@ -841,6 +841,8 @@ cmd_add() {
   validate_name "$name"
   emails=$(normalise_emails "$2")
   require_initialised
+  # The new stack.env and the stack's up need it; checked before any Cloudflare call.
+  push_contact >/dev/null
   f=$(stack_env "$name")
   acc=$(cfg CF_ACCOUNT_ID)
 
@@ -1195,7 +1197,9 @@ cmd_profiles() {
 
   if [[ -n $changed ]]; then
     # Check every stack, as it will be under the new list, before writing
-    # anything, so one broken stack cannot leave the others half-switched.
+    # anything, so one broken stack cannot leave the others half-switched. The
+    # push contact too: every stack's up keeps it in step.
+    push_contact >/dev/null
     for n in "${stacks[@]}"; do
       check_stack "$n" --profiles "$new"
     done
