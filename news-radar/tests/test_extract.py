@@ -597,13 +597,11 @@ async def test_a_followed_index_reads_the_newest_pages_across_its_files(fetcher,
     assert f"{SM}/events/older/" not in web.fetched()
 
 
-async def test_an_index_source_survives_one_unreadable_file(fetcher, web):
+async def test_an_index_source_survives_its_older_file_unreadable(fetcher, web):
     add_index(web)
-    web.add(f"{SM}/events-sitemap3.xml", "boom", "text/plain", status=500)
-    result = await run_source(spec(index_spec()), fetcher)
-    assert result.ok and [i.fields["title"] for i in result.items] == ["newer", "older"]
     web.add(f"{SM}/events-sitemap2.xml", "boom", "text/plain", status=500)
-    assert "HTTP 500" in (await run_source(spec(index_spec()), fetcher)).error
+    result = await run_source(spec(index_spec()), fetcher)
+    assert result.ok and [i.fields["title"] for i in result.items] == ["newest"]
 
 
 async def test_index_mistakes_say_what_to_do(fetcher, web):
@@ -614,7 +612,7 @@ async def test_index_mistakes_say_what_to_do(fetcher, web):
     wrong = await run_source(spec(index_spec(url=f"{SM}/one.xml")), fetcher)
     assert "is for a sitemap index" in wrong.error
     none = await run_source(spec(index_spec(extract={"sitemaps": ["film-sitemap"]})), fetcher)
-    assert "no sitemap in the index holds film-sitemap" in none.error and "events-sitemap" in none.error
+    assert "no sitemap family film-sitemap" in none.error and "events-sitemap" in none.error
 
 
 @pytest.mark.parametrize(
@@ -635,3 +633,65 @@ async def test_inspect_groups_an_index_into_families(fetcher, web):
     out = await inspect(fetcher, f"{SM}/sitemap_index.xml")
     assert out["sitemap_families"] == {"events-sitemap": 3, "post-sitemap": 1}
     assert "extract.sitemaps" in out["hint"]
+
+
+# -- rc.3 review: families, order, undated files, pauses ----------------------------------
+def test_sitemap_families_ignore_numbers_dates_and_order():
+    from garden_news_radar.extract import sitemap_family
+
+    assert sitemap_family(f"{SM}/events-sitemap2.xml") == ("events-sitemap", (2,))
+    assert sitemap_family(f"{SM}/events-sitemap.xml") == ("events-sitemap", ())
+    assert sitemap_family(f"{SM}/post-sitemap-2026-10.xml") == ("post-sitemap", (2026, 10))
+    assert sitemap_family(f"{SM}/tribe_events-sitemap.xml")[0] == "tribe_events-sitemap"
+
+
+async def test_an_index_source_picks_files_by_number_not_by_their_place(fetcher, web):
+    files = [f"sitemap-{n}.xml" for n in (1, 10, 11, 2, 3)] + ["tribe_events-sitemap.xml"]  # listed as text sorts
+    rows = "".join(f"<sitemap><loc>{SM}/{f}</loc></sitemap>" for f in files)
+    web.add(f"{SM}/sitemap_index.xml", f"<sitemapindex {NS}>{rows}</sitemapindex>", "application/xml")
+    for n in (1, 10, 11, 2, 3):
+        web.add(f"{SM}/sitemap-{n}.xml", urlset([(f"page-{n}", f"2027-01-{n:02d}")]), "application/xml")
+    result = await run_source(spec(index_spec(extract={"sitemaps": ["sitemap"]})), fetcher)
+    assert [i.fields["title"] for i in result.items] == ["page 11", "page 10"]
+
+
+async def test_an_index_reads_files_beyond_its_fiftieth(fetcher, web):
+    rows = "".join(f"<sitemap><loc>{SM}/post-sitemap{n}.xml</loc></sitemap>" for n in range(1, 81))
+    web.add(f"{SM}/sitemap_index.xml", f"<sitemapindex {NS}>{rows}</sitemapindex>", "application/xml")
+    web.add(f"{SM}/post-sitemap79.xml", urlset([("a", "2027-01-01")]), "application/xml")
+    web.add(f"{SM}/post-sitemap80.xml", urlset([("b", "2027-01-02")]), "application/xml")
+    result = await run_source(spec(index_spec(extract={"sitemaps": ["post-sitemap"]})), fetcher)
+    assert [i.fields["title"] for i in result.items] == ["b", "a"]
+
+
+async def test_undated_files_keep_their_newest_pages_last_listed(fetcher, web):
+    rows = "".join(f"<sitemap><loc>{SM}/{f}</loc></sitemap>" for f in ("events-sitemap2.xml", "events-sitemap3.xml"))
+    web.add(f"{SM}/sitemap_index.xml", f"<sitemapindex {NS}>{rows}</sitemapindex>", "application/xml")
+    old = "".join(f"<url><loc>{SM}/events/old-{i}/</loc></url>" for i in range(1000))
+    web.add(f"{SM}/events-sitemap2.xml", f"<urlset {NS}>{old}</urlset>", "application/xml")
+    new = "".join(f"<url><loc>{SM}/events/new-{i}/</loc></url>" for i in range(5))
+    web.add(f"{SM}/events-sitemap3.xml", f"<urlset {NS}>{new}</urlset>", "application/xml")
+    result = await run_source(spec(index_spec(extract={"sitemaps": ["events-sitemap"]})), fetcher)
+    titles = [i.fields["title"] for i in result.items]
+    assert titles[:6] == ["new 4", "new 3", "new 2", "new 1", "new 0", "old 999"]
+
+
+async def test_the_newest_file_of_a_family_must_be_read(fetcher, web):
+    add_index(web)
+    web.add(f"{SM}/events-sitemap2.xml", "boom", "text/plain", status=500)
+    assert (await run_source(spec(index_spec()), fetcher)).ok  # the older one may fail
+    add_index(web)
+    web.add(f"{SM}/events-sitemap3.xml", "slow down", "text/plain", status=429, **{"retry-after": "600"})
+    result = await run_source(spec(index_spec()), fetcher)
+    assert "HTTP 429" in result.error and result.retry_after == 600
+
+
+async def test_inspect_leaves_out_gzipped_files_and_says_so(fetcher, web):
+    from garden_news_radar.inspect import inspect
+
+    files = ("events-sitemap1.xml.gz", "events-sitemap2.xml.gz", "post-sitemap.xml")
+    rows = "".join(f"<sitemap><loc>{SM}/{f}</loc></sitemap>" for f in files)
+    web.add(f"{SM}/sitemap_index.xml", f"<sitemapindex {NS}>{rows}</sitemapindex>", "application/xml")
+    out = await inspect(fetcher, f"{SM}/sitemap_index.xml")
+    assert out["sitemap_families"] == {"post-sitemap": 1}
+    assert out["gzipped_left_out"] == 2

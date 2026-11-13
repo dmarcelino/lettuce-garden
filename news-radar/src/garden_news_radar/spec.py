@@ -12,7 +12,7 @@ from typing import Any
 import jmespath
 from cssselect import GenericTranslator, SelectorError
 
-from .config import MAX_FOLLOW, MAX_PAGES, MAX_URL, NAME, parse_duration
+from .config import MAX_FOLLOW, MAX_PAGES, MAX_URL, NAME, SITEMAPS_READ, parse_duration
 from .fetch import FetchError, check_url
 
 KINDS = ("rss", "json", "html", "schema_org", "ical", "sitemap")
@@ -243,8 +243,9 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
     if kind == "sitemap" and extract_in.get("sitemaps") is not None:
         extract["sitemaps"] = _url_texts(
             extract_in["sitemaps"],
-            f"extract.sitemaps is a list of 1 to {MAX_SITEMAP_NAMES} pieces of the names of a sitemap index's files, "
-            "such as events-sitemap (plain text): the last two files of the index holding one are read",
+            f"extract.sitemaps is a list of 1 to {MAX_SITEMAP_NAMES} families of a sitemap index's files, as "
+            "source_inspect lists them in sitemap_families (events-sitemap for events-sitemap2.xml): the "
+            f"{SITEMAPS_READ} highest-numbered files of each are read",
             MAX_SITEMAP_NAMES,
         )
     if kind in ("schema_org", "sitemap"):

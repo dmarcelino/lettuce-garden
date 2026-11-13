@@ -84,17 +84,17 @@ def sample_of(page: Page) -> str:
 
 
 async def _index_entries(spec: Spec, index: Page, fetcher: Fetcher, max_wait: float | None) -> list[tuple[str, str]]:
-    """A sitemap index's last files of the spec's family, read and combined. A file
-    that can't be read is skipped; ExtractError when none can."""
-    lists, last_error = [], ""
-    for url in pick_sitemaps(spec, index):
+    """A sitemap index's newest files of the spec's families, read and combined. The
+    newest must be read (its error, a pause included, is the run's: a file broken for
+    good must show); an older one that can't be is left out."""
+    lists = []
+    for rank, url in enumerate(pick_sitemaps(spec, index)):
         try:
             page = await fetcher.get(url, accept=ACCEPT["sitemap"], max_wait=max_wait)
             lists.append(sitemap_entries(spec, page))
-        except (FetchError, ExtractError) as e:
-            last_error = str(e)
-    if not lists:
-        raise ExtractError(f"no sitemap of the index could be read; the last: {last_error}")
+        except (FetchError, ExtractError):
+            if rank == 0:
+                raise
     return combine_entries(lists)
 
 
@@ -169,9 +169,10 @@ async def run_source(
                 found, sitemap_links = [], follow_links(spec, page)
             else:
                 found = extract(spec, page)
-        except ExtractError as e:
+        except (ExtractError, FetchError) as e:  # FetchError: an index's sitemap file
             if i == 0:
                 result.error = str(e)
+                result.retry_after = getattr(e, "retry_after", 0)
                 return result
             break
         fresh = [it for it in found if it.key not in items]

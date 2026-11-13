@@ -9,6 +9,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
+from .config import SITEMAPS_READ
 from .service import Service, ToolError
 
 INSTRUCTIONS = (
@@ -75,8 +76,8 @@ def build_server(service: Service) -> MCPServer:
         "(rss, json, html, schema_org, ical, sitemap), item_kind (event or article), every (like 6h; at least the "
         "admin's minimum), extract (json: items and fields as JMESPath; html: items and fields as CSS selectors, "
         "'sel@attr' for an attribute; schema_org: types; sitemap: match, plain pieces of URL to keep, sitemaps, "
-        "pieces of the names of a sitemap index's files to follow as the site adds more (the last two holding one "
-        "are read), and types; "
+        "families of a sitemap index's files to follow as the site adds more (as source_inspect's "
+        f"sitemap_families names them; the {SITEMAPS_READ} highest-numbered files of each are read), and types; "
         "any: key), pages ({param, start, step, max}), follow (schema_org: {links: CSS selector, max}; sitemap: "
         "{max}, its newest unseen pages read for schema.org data), dates ({languages}), "
         "watch (fields whose change makes an item changed), group_by (a field or extra whose value names one item "

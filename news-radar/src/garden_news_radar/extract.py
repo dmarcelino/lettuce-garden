@@ -22,7 +22,7 @@ import lxml.html
 from garden_common.text import one_line
 from lxml import etree
 
-from .config import MAX_FIELD, MAX_SUMMARY, MAX_URL
+from .config import MAX_FIELD, MAX_INDEX_FILES, MAX_SUMMARY, MAX_URL, SITEMAPS_READ
 from .fetch import Page
 from .spec import ITEM_FIELDS, Spec, split_selector
 
@@ -425,9 +425,8 @@ def read_sitemap(spec: Spec | None, page: Page) -> Sitemap:
     root = _sitemap_root(page)
     name = etree.QName(root).localname
     if name == "sitemapindex":
-        return Sitemap(
-            children=[u for u in (_local(e, "loc") for e in root.xpath("./*[local-name()='sitemap']")) if u][:50]
-        )
+        children = [u for u in (_local(e, "loc") for e in root.xpath("./*[local-name()='sitemap']")) if u]
+        return Sitemap(children=children[:MAX_INDEX_FILES])
     if name != "urlset":
         raise ExtractError("the response is not a sitemap")
     match = (spec.extract.get("match") if spec else None) or []
@@ -435,10 +434,12 @@ def read_sitemap(spec: Spec | None, page: Page) -> Sitemap:
     for element in root.xpath("./*[local-name()='url']"):
         loc = _local(element, "loc")
         if loc and (not match or any(m in loc for m in match)):
-            found.append((loc, _local(element, "lastmod")))
-    found.sort(key=lambda e: e[1], reverse=True)  # stable: undated ones keep their order, last
+            found.append((loc, _local(element, "lastmod"), len(found)))
+    # Newest first: by lastmod, then, among equal or missing ones, the last listed
+    # (sitemaps add pages at the end).
+    found.sort(key=lambda e: (e[1], e[2]), reverse=True)
     entries = []
-    for loc, lastmod in found[:MAX_SITEMAP_ITEMS]:
+    for loc, lastmod, _ in found[:MAX_SITEMAP_ITEMS]:
         url = canonical_url(loc, page.url)
         if url:
             entries.append((url, parse_date(lastmod, ())))
@@ -456,34 +457,44 @@ def sitemap_entries(spec: Spec | None, page: Page) -> list[tuple[str, str]]:
     return sitemap.entries
 
 
-# The files of a sitemap family read per run: the last two in the index, since a file
-# just begun holds only a few pages and the rest of the newest are at the end of the
-# one before. The index's own dates are no help: sites give every file the same one.
-SITEMAPS_READ = 2
+GZIPPED = re.compile(r"\.gz$", re.I)
+SITEMAP_FILE = re.compile(r"\.xml(\.gz)?$", re.I)
+NUMBER = re.compile(r"[-_.]?(\d+)")
+
+
+def sitemap_family(url: str) -> tuple[str, tuple[int, ...]]:
+    """A sitemap file's family and its place in it, from its name: "events-sitemap2.xml"
+    is ("events-sitemap", (2,)), "post-sitemap-2026-10.xml" ("post-sitemap", (2026, 10)),
+    "events-sitemap.xml" ("events-sitemap", ()), the first of its family."""
+    name = SITEMAP_FILE.sub("", urlsplit(url).path.rsplit("/", 1)[-1])
+    return NUMBER.sub("", name), tuple(int(n) for n in NUMBER.findall(name))
 
 
 def pick_sitemaps(spec: Spec, page: Page) -> list[str]:
-    """The index's files whose URL holds one of extract.sitemaps: the last
-    SITEMAPS_READ, in the index's order."""
+    """The index's files of the families in extract.sitemaps (gzipped ones left out),
+    the SITEMAPS_READ highest-numbered, newest first."""
     sitemap = read_sitemap(spec, page)
     if not sitemap.children:
         raise ExtractError("extract.sitemaps is for a sitemap index; this is a sitemap: drop it, or use the index")
     names = spec.extract["sitemaps"]
-    chosen = [u for u in sitemap.children if any(n in u for n in names)]
+    readable = [u for u in sitemap.children if not GZIPPED.search(urlsplit(u).path)]
+    chosen = [u for u in readable if sitemap_family(u)[0] in names]
     if not chosen:
-        listed = ", ".join(urlsplit(u).path.rsplit("/", 1)[-1] for u in sitemap.children[:8])
-        raise ExtractError(f"no sitemap in the index holds {', '.join(names)}; its sitemaps are {listed}")
-    return chosen[-SITEMAPS_READ:]
+        families = ", ".join(dict.fromkeys(sitemap_family(u)[0] for u in readable[:200]))
+        raise ExtractError(f"no sitemap family {', '.join(names)} in the index; its families are {families}")
+    chosen.sort(key=lambda u: sitemap_family(u)[1])  # stable: the index's order among equals
+    return chosen[-SITEMAPS_READ:][::-1]
 
 
 def combine_entries(lists: list[list[tuple[str, str]]]) -> list[tuple[str, str]]:
-    """Several sitemaps' entries as one: each page once, newest first (undated
-    last), at most MAX_SITEMAP_ITEMS."""
-    seen: dict[str, str] = {}
-    for entries in lists:
-        for url, lastmod in entries:
-            seen.setdefault(url, lastmod)
-    return sorted(seen.items(), key=lambda e: e[1], reverse=True)[:MAX_SITEMAP_ITEMS]
+    """Several sitemaps' entries (each newest first; the files newest first) as one:
+    each page once, newest first by lastmod, then the newer file's and the later
+    listed, at most MAX_SITEMAP_ITEMS."""
+    ranked: dict[str, tuple[str, int, int]] = {}
+    for file_rank, entries in enumerate(lists):
+        for position, (url, lastmod) in enumerate(entries):
+            ranked.setdefault(url, (lastmod, -file_rank, -position))
+    return [(url, key[0]) for url, key in sorted(ranked.items(), key=lambda e: e[1], reverse=True)][:MAX_SITEMAP_ITEMS]
 
 
 def sitemap_items(entries: list[tuple[str, str]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:

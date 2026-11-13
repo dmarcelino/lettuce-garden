@@ -13,13 +13,11 @@ from garden_common.text import one_line
 from lxml import etree
 
 from .blocks import repeated_blocks
-from .extract import ExtractError, html_document, read_sitemap, schema_types
+from .config import SITEMAPS_READ
+from .extract import GZIPPED, ExtractError, html_document, read_sitemap, schema_types, sitemap_family
 from .fetch import Fetcher, FetchError, Page, host_of
 from .runner import sample_of
 
-# A sitemap file's name without its number and extension: "events-sitemap2.xml" is
-# of the family "events-sitemap".
-SITEMAP_NUMBER = re.compile(r"\d*\.xml(\.gz)?$", re.I)
 # Same-site scripts read for data URLs, after the library and tracking ones are
 # left out; at the host's pacing (2 s apart) they fit well inside a tool call.
 MAX_SCRIPTS = 6
@@ -130,15 +128,23 @@ def _sitemap(page: Page) -> dict[str, Any]:
         return {"error": str(e)}
     if sitemap.children:
         families: dict[str, int] = {}
+        gzipped = 0
         for url in sitemap.children:
-            name = SITEMAP_NUMBER.sub("", urlsplit(url).path.rsplit("/", 1)[-1])
+            if GZIPPED.search(urlsplit(url).path):
+                gzipped += 1  # never read: gzipped sitemaps are not
+                continue
+            name = sitemap_family(url)[0]
             families[name] = families.get(name, 0) + 1
-        return {
-            "sitemap_index": sitemap.children,
+        out: dict[str, Any] = {
+            "sitemap_index": sitemap.children[:50],
+            "sitemap_files": len(sitemap.children),
             "sitemap_families": families,
             "hint": "a source can follow a family as it grows (new numbered files): url this index, "
-            'kind sitemap, extract.sitemaps ["<family>"]; each run reads its last two files',
+            f'kind sitemap, extract.sitemaps ["<family>"]; each run reads its {SITEMAPS_READ} highest-numbered files',
         }
+        if gzipped:
+            out["gzipped_left_out"] = gzipped
+        return out
     return {"sitemap_pages": sitemap.total, "newest": [{"url": u, "lastmod": m} for u, m in sitemap.entries[:10]]}
 
 

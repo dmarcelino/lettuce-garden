@@ -116,9 +116,10 @@ skips the turn when there is nothing to report.
      Many sites split their sitemap into numbered files listed in a sitemap index
      (`events-sitemap.xml`, `events-sitemap2.xml`...; `source_inspect` on the index shows them
      as `sitemap_families`) and start a new file as they grow. **Point the source at the index**
-     with `extract.sitemaps` naming the family, such as `["events-sitemap"]`: each run reads its
-     last two files, so the source keeps up when a new one appears. Never point it at one
-     numbered file: it stops seeing new pages once the site moves on to the next.
+     with `extract.sitemaps` naming the family exactly as `sitemap_families` shows it, such as
+     `["events-sitemap"]`: each run reads its two highest-numbered files, so the source keeps up
+     when a new one appears. Never point it at one numbered file: it stops seeing new pages once
+     the site moves on to the next. Gzipped sitemaps (`gzipped_left_out`) can't be read.
    - Item fields: `title` (required), `url`, `start`, `end`, `venue`, `summary`, `image`,
      `published`, `outlet`; anything else goes under `extra`. `item_kind` is `event` (the
      default) or `article` (the default for `rss`).
