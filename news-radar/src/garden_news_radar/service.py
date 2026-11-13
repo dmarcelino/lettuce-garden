@@ -15,6 +15,7 @@ from garden_common.executor import AGENT_ID
 from garden_common.text import encodable, one_line
 
 from .config import (
+    CARRY_SECONDS,
     FETCH_AHEAD_SECONDS,
     FOLLOW_REFRESH_SECONDS,
     MAX_DAYS_AHEAD,
@@ -33,7 +34,7 @@ from .config import (
     Settings,
 )
 from .cron import Schedule, ScheduleError, max_fires_per_day
-from .digest import MonitorDigest, group_value, monitor_digest, more, render, term_counts
+from .digest import MonitorDigest, considered_since, group_value, monitor_digest, more, render, term_counts
 from .extract import fill_rates, run_problem, window_warning
 from .fetch import Fetcher
 from .inspect import inspect
@@ -181,7 +182,7 @@ class Service:
         """A site that asked for a pause: when to try it again, said so an agent
         doesn't poll a host that answers nothing but this until then."""
         if retry_after > 0:
-            at = datetime.fromtimestamp(self.store.now() + retry_after, self.settings.tz)
+            at = self._local(self.store.now() + retry_after)
             out["retry_after"] = retry_after
             out["next"] = (
                 f"do not call source_test or source_inspect for this site before {at:%H:%M} ({retry_after} s): "
@@ -445,7 +446,7 @@ class Service:
             "they can change where reports go on the News Radar page",
         }
         if from_now:
-            at = datetime.fromtimestamp(now, self.settings.tz)
+            at = self._local(now)
             out["from_now"] = (
                 f"reports start from now ({at:%H:%M}): what the sources held before is not reported, only what "
                 "they list or change after"
@@ -508,6 +509,10 @@ class Service:
         if not isinstance(from_now, bool):
             raise ToolError("from_now must be true or false")
         now = self.store.now()
+        # Where a saved monitor's report starts, and what became of its last one:
+        # without them an empty preview reads as something lost.
+        since = considered_since(m, now) if not draft and not from_now else None
+        last = self.store.last_report(m.id) if not draft else None
         states = self.store.source_states()
         skipped = 0
         if from_now:
@@ -527,6 +532,23 @@ class Service:
         }
         if from_now:
             out["existing_skipped"] = skipped
+        if since is not None:
+            out["shows_since"] = f"{self._local(since):%Y-%m-%d %H:%M}"
+            why = (
+                "earlier rows were already reported, or skipped with from_now"
+                if m.delivered_upto >= now - CARRY_SECONDS
+                else f"a report reaches back at most {CARRY_SECONDS // 86400} days"
+            )
+            notes.append(
+                f"only what is new or changed since {out['shows_since']} shows: {why}. Preview with sources to see "
+                "what a new monitor with these filters would report"
+            )
+        if last:
+            out["last_report"] = {
+                "at": f"{self._local(last.at):%Y-%m-%d %H:%M}",
+                "status": last.status,
+                "to": conversation_in_words(dataclasses.replace(m, conversation=last.conversation)),
+            }
         if d.left_out:
             out["over_cap"] = {"cap": MAX_ITEMS_PER_MONITOR, "left_out": d.left_out}
             notes.append(
@@ -539,6 +561,10 @@ class Service:
             notes.append("sources are fetched within a minute of source_put: preview again then")
         out["note"] = "; ".join(notes)
         return out
+
+    def _local(self, ts: int) -> datetime:
+        """A timestamp in the stack's timezone, the one people and schedules use."""
+        return datetime.fromtimestamp(ts, self.settings.tz)
 
     def _not_fetched(self, sources: list[str]) -> list[str]:
         """Sources saved but not fetched yet: a preview can't show what they hold."""

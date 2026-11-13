@@ -307,12 +307,16 @@ def alerts_for(monitor: Monitor, states: dict[str, SourceState], now: int) -> li
     return out
 
 
+def considered_since(monitor: Monitor, now: int) -> int:
+    """Where a report starts: the last delivered report, at most CARRY_SECONDS back."""
+    return max(monitor.delivered_upto, now - CARRY_SECONDS)
+
+
 def considered(store: Store, monitor: Monitor, now: int, tz: ZoneInfo) -> tuple[list[StoredItem], date]:
     """The items a report considers, before its filters (first seen or changed since
-    the last delivered report, at most CARRY_SECONDS back), and today's date: one
-    definition for reports and for what a preview says each term did."""
-    since = max(monitor.delivered_upto, now - CARRY_SECONDS)
-    return store.items_changed(monitor.sources, since), datetime.fromtimestamp(now, tz).date()
+    considered_since), and today's date: one definition for reports and for what a
+    preview says each term did."""
+    return store.items_changed(monitor.sources, considered_since(monitor, now)), datetime.fromtimestamp(now, tz).date()
 
 
 def monitor_digest(

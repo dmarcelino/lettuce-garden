@@ -666,6 +666,15 @@ class Store:
                 out[mid] = report
         return out
 
+    def last_report(self, monitor_id: str) -> Report | None:
+        """The monitor's latest report, whatever its status."""
+        row = self._db.execute(
+            "SELECT * FROM reports WHERE EXISTS (SELECT 1 FROM json_each(reports.monitors) WHERE value = ?) "
+            "ORDER BY at DESC, rowid DESC LIMIT 1",
+            (monitor_id,),
+        ).fetchone()
+        return self._report(row) if row else None
+
     def failures_since(self, since: int) -> int:
         return self._db.execute(
             "SELECT COUNT(*) FROM reports WHERE status IN (?, ?) AND at > ?", (FAILED, LOST, since)

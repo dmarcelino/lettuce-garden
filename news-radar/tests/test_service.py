@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 from conftest import AGENT, EVENTS_JSON, OTHER_AGENT, json_spec
 
-from garden_news_radar.config import MAX_PROMPT
+from garden_news_radar.config import CARRY_SECONDS, MAX_PROMPT
 from garden_news_radar.service import ToolError, minutes_between
 from garden_news_radar.store import CLAIMED, FAILED, LOST, OK, QUEUED
 
@@ -900,6 +900,73 @@ async def test_from_now_reports_only_what_comes_after(service, web, store, clock
     )
     await service.fetch_source("city-agenda")
     assert [r["title"] for r in service.monitor_preview(AGENT, "news")["rows"]] == ["Fresh"]
+
+
+def local(service, ts):
+    return datetime.fromtimestamp(ts, service.settings.tz).strftime("%Y-%m-%d %H:%M")
+
+
+async def test_a_saved_monitors_preview_says_since_when_and_its_last_report(service, web, store, clock):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *", set_up_in="conv-1")
+    # Never reported: it shows what a report reaches back to, and has no last report.
+    fresh = service.monitor_preview(AGENT, "films")
+    assert len(fresh["rows"]) == 2
+    assert fresh["shows_since"] == local(service, store.now() - CARRY_SECONDS)
+    assert "last_report" not in fresh
+    clock.t += 60
+    [rid] = fire_at(service, "2027-01-15T09:00")
+    store.claim(20)
+    assert store.finish(rid, True, "task-1", "")
+    out = service.monitor_preview(AGENT, "films")
+    assert out["rows"] == []
+    report = store.report(rid)
+    assert out["shows_since"] == local(service, report.upto)
+    [listed] = service.monitor_list(AGENT)["monitors"]
+    assert out["last_report"] == {
+        "at": local(service, report.at),
+        "status": OK,
+        "to": listed["conversation_in_words"],
+    }
+    assert f"since {out['shows_since']}" in out["note"] and "already reported" in out["note"]
+    # A draft is not the saved monitor: neither.
+    draft = service.monitor_preview(AGENT, "films", sources=["city-agenda"])
+    assert len(draft["rows"]) == 2
+    assert "shows_since" not in draft and "last_report" not in draft
+    # With from_now the preview starts now: existing_skipped says so, not shows_since.
+    skipping = service.monitor_preview(AGENT, "films", from_now=True)
+    assert "shows_since" not in skipping and "existing_skipped" in skipping
+    # Moved elsewhere after the report: the last report still says where it went.
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *", conversation="new")
+    assert service.monitor_preview(AGENT, "films")["last_report"]["to"] == "this conversation (where it was set up)"
+    # Long after the last report, a report reaches back only so far, and says so.
+    clock.t += CARRY_SECONDS + 86400
+    late = service.monitor_preview(AGENT, "films")
+    assert late["shows_since"] == local(service, store.now() - CARRY_SECONDS)
+    assert f"{CARRY_SECONDS // 86400} days" in late["note"]
+
+
+async def test_a_failed_report_shows_in_the_preview(service, web, store, clock):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *")
+    clock.t += 60
+    [rid] = fire_at(service, "2027-01-15T09:00")
+    store.claim(20)
+    assert store.finish(rid, False, "", "no such conversation")
+    out = service.monitor_preview(AGENT, "films")
+    assert out["last_report"]["status"] == FAILED
+    assert len(out["rows"]) == 2  # nothing delivered: the rows come again
+
+
+async def test_a_from_now_monitors_preview_says_where_it_starts(service, web, store):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    service.monitor_put(AGENT, "news", ["city-agenda"], schedule="0 9 * * *", from_now=True)
+    out = service.monitor_preview(AGENT, "news")
+    assert out["rows"] == [] and out["shows_since"] == local(service, store.now())
+    assert "last_report" not in out
 
 
 async def test_a_preview_says_what_is_not_fetched_yet_and_over_the_cap(service, web, store):

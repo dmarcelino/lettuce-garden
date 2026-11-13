@@ -150,8 +150,8 @@ skips the turn when there is nothing to report.
      me when new shows are announced"): reports then hold only what the sources list or change
      after saving, not everything already there. Leave it off when they want to know what's on.
      It is refused until every source has been fetched once;
-   - **`set_up_in`: always your `$LETTA_CONVERSATION_ID`**. Reports then come to this
-     conversation, where the person asked;
+   - **`set_up_in`: always your `$LETTA_CONVERSATION_ID`** for a new monitor. Reports then come
+     to this conversation, where the person asked (to change a saved one, see below);
    - `include` / `exclude`: up to 60 words or phrases an item must have / must not have. They
      are found as whole words anywhere in the title, summary, venue, outlet and extra fields,
      ignoring case and accents ("Cuaron" finds "Cuarón"; "tool" does not find "toolbox";
@@ -167,11 +167,29 @@ skips the turn when there is nothing to report.
    - `conversation`: leave it out. A new monitor then reports here (with `set_up_in`), and a
      saved one keeps where it reports, which the person may have chosen on the page. Only when
      the person asks: `here` (move it to this conversation), `new` (a fresh conversation for
-     each report) or `default` (your main conversation).
+     each report) or `default` (your main conversation); see "Changing a monitor".
 5. **Confirm with the person**: the schedule in words with the timezone (`schedule_in_words`),
    where reports go (`conversation_in_words`), and what `monitor_preview` shows now. On the
    garden's News Radar page they can see every monitor, change where its reports go, and
    delete it.
+
+## Changing a monitor
+
+`monitor_put` replaces a saved monitor whole. Take its fields from `monitor_list` and send back
+every one `monitor_put` takes, changing only what the person asked: a field left out goes back
+to its default (the admin's schedule, no filters, no `days_ahead`). `conversation` and
+`set_up_in` are the exception: a saved monitor keeps them, so leave both out unless the person
+asks where reports go. Saving also unpauses a paused monitor: if `monitor_list` shows it
+`paused`, say so to the person.
+- "Report here", "in this chat": `"conversation": "here"` with `"set_up_in":
+  "$LETTA_CONVERSATION_ID"`. A fresh conversation each time is `"new"`, your main one
+  `"default"`. Then check the result's `conversation_in_words` says what the person asked.
+- `monitor_preview` by name shows only what its next report would: what is new or changed
+  since `shows_since` (its last report, or at most 7 days back). An empty preview after a
+  report is normal, nothing was lost. `last_report` says when its last report ran, its
+  `status` and where it went; a `failed` one explains a monitor that stays silent.
+- Never delete and recreate a monitor to change it: it would report again everything it
+  already reported.
 
 ## News on a topic
 
