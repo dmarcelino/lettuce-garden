@@ -1,10 +1,12 @@
 import json
 import logging
+import os
 
 import pytest
 
-from gmail_triggers.config import MAX_FETCH_PER_POLL, MAX_LISTED_MESSAGES, RESUME_AFTER_SECONDS
-from gmail_triggers.store import GAP_DROPPED, GAP_PAUSED, GAP_SKIPPED, Rule, Store
+from gmail_triggers.config import CATCH_UP_SECONDS, MAX_FETCH_PER_POLL, MAX_LISTED_MESSAGES, RESUME_AFTER_SECONDS
+from gmail_triggers.google import credential_file_name
+from gmail_triggers.store import GAP_DROPPED, GAP_EXPIRED, GAP_PAUSED, GAP_SKIPPED, Rule, Store
 from gmail_triggers.triggers import BLOCK_END, BLOCK_START, EPILOGUE, PROLOGUE, TEST_MARKER, send_test
 
 from .conftest import AGENT, BODY, EMAIL, make_env, write_creds, write_policy
@@ -195,7 +197,13 @@ async def test_expired_history_resets_and_records_the_gap(env):
     env.fake.expired = True
     await env.poller.run_once()
     assert env.store.get("history_id") == str(env.fake.history_id)
-    assert env.store.gaps_since(0) == [{"start": last_ok, "end": int(env.clock.t), "kind": "expired", "skipped": 0}]
+    [gap] = env.store.gaps_since(0)
+    assert {k: gap[k] for k in ("start", "end", "kind", "skipped")} == {
+        "start": last_ok,
+        "end": int(env.clock.t),
+        "kind": "expired",
+        "skipped": 0,
+    }
     assert env.requests() == []
     env.fake.expired = False
     env.fake.add()
@@ -344,7 +352,8 @@ async def test_google_back_after_a_long_pause_starts_from_now(env, settings):
     await env.poller.run_once()
     assert env.store.get("paused_since") is not None
     env.fake.add()
-    env.clock.t += RESUME_AFTER_SECONDS
+    # Switched off for more than 30 minutes, counted from the first poll that saw it.
+    env.clock.t += RESUME_AFTER_SECONDS + 60
     write_policy(settings.policy_dir)
     await env.poller.run_once()
     assert env.requests() == []
@@ -370,6 +379,176 @@ async def test_google_back_after_a_short_pause_catches_up(env, settings):
     env.clock.t += 600
     await env.poller.run_once()
     assert len(env.requests()) == 1 and env.store.gaps_since(0) == []
+    assert env.store.get("paused_since") is None
+
+
+def expire_sign_in(env, settings):
+    env.fake.token_error = "invalid_grant"
+    write_creds(settings.creds_dir, refresh_token="refresh-token-2")
+
+
+def reconnect(env, settings):
+    env.fake.token_error = None
+    write_creds(settings.creds_dir, refresh_token="refresh-token-3")
+
+
+async def test_an_expired_sign_in_is_caught_up_within_the_catch_up_window(env, settings):
+    add_rule(env)
+    await started(env)
+    expire_sign_in(env, settings)
+    env.clock.t += 600
+    await env.poller.run_once()
+    assert env.store.get("paused_since") is not None
+    env.fake.add()
+    env.clock.t += 12 * 3600
+    await env.poller.run_once()
+    assert env.requests() == []
+    reconnect(env, settings)
+    await env.poller.run_once()
+    assert len(env.requests()) == 1 and env.store.gaps_since(0) == []
+    assert env.store.get("paused_since") is None and env.store.get("pause_chosen") is None
+
+
+async def test_an_expired_sign_in_past_the_catch_up_window_starts_from_now(env, settings):
+    add_rule(env)
+    await started(env)
+    last_ok = int(env.store.get("last_ok"))
+    expire_sign_in(env, settings)
+    env.clock.t += 600
+    await env.poller.run_once()
+    env.fake.add()
+    env.clock.t += CATCH_UP_SECONDS
+    reconnect(env, settings)
+    await env.poller.run_once()
+    assert env.requests() == []
+    [gap] = env.store.gaps_since(0)
+    assert gap["kind"] == GAP_PAUSED and gap["start"] == last_ok
+
+
+def disconnect(settings):
+    os.remove(os.path.join(settings.creds_dir, credential_file_name(EMAIL)))
+
+
+async def poll_after(env, seconds: int):
+    env.clock.t += seconds
+    await env.poller.run_once()
+
+
+async def expired_for_hours(env, settings, hours: int):
+    """The sign-in expires, mail arrives, and the poller keeps finding it expired."""
+    expire_sign_in(env, settings)
+    await poll_after(env, 600)
+    env.fake.add()
+    for _ in range(hours):
+        await poll_after(env, 3600)
+    assert env.requests() == [] and env.store.get("paused_since") is not None
+
+
+def caught_up(env) -> bool:
+    return len(env.requests()) == 1 and env.store.gaps_since(0) == []
+
+
+def dropped(env) -> bool:
+    gaps = env.store.gaps_since(0)
+    return env.requests() == [] and len(gaps) == 1 and gaps[0]["kind"] == GAP_PAUSED
+
+
+async def test_a_token_file_unreadable_for_one_poll_does_not_drop_the_catch_up(env, settings):
+    add_rule(env)
+    await started(env)
+    await expired_for_hours(env, settings, 12)
+    disconnect(settings)
+    await poll_after(env, 120)
+    expire_sign_in(env, settings)
+    await poll_after(env, 120)
+    reconnect(env, settings)
+    await poll_after(env, 120)
+    assert caught_up(env)
+    for key in ("paused_since", "pause_chosen", "chosen_since"):
+        assert env.store.get(key) is None, key
+
+
+async def test_disconnect_then_connect_to_fix_the_sign_in_is_caught_up(env, settings):
+    add_rule(env)
+    await started(env)
+    await expired_for_hours(env, settings, 12)
+    disconnect(settings)
+    await poll_after(env, 120)
+    await poll_after(env, 120)
+    reconnect(env, settings)
+    await poll_after(env, 120)
+    assert caught_up(env)
+
+
+async def test_switching_google_off_briefly_during_an_expired_sign_in_is_caught_up(env, settings):
+    add_rule(env)
+    await started(env)
+    await expired_for_hours(env, settings, 12)
+    write_policy(settings.policy_dir, enabled=False)
+    await poll_after(env, 120)
+    await poll_after(env, 600)
+    write_policy(settings.policy_dir)
+    reconnect(env, settings)
+    await poll_after(env, 120)
+    assert caught_up(env)
+
+
+async def test_switched_off_for_over_30_minutes_is_not_caught_up(env, settings):
+    add_rule(env)
+    await started(env)
+    await expired_for_hours(env, settings, 1)
+    write_policy(settings.policy_dir, enabled=False)
+    await poll_after(env, 120)
+    await poll_after(env, RESUME_AFTER_SECONDS + 60)
+    write_policy(settings.policy_dir)
+    reconnect(env, settings)
+    await poll_after(env, 120)
+    assert dropped(env)
+    assert env.store.get("pause_chosen") is None and env.store.get("chosen_since") is None
+
+
+async def test_switched_off_for_over_30_minutes_counts_even_if_the_sign_in_expires_after(env, settings):
+    add_rule(env)
+    await started(env)
+    write_policy(settings.policy_dir, enabled=False)
+    await poll_after(env, 120)
+    env.fake.add()
+    await poll_after(env, RESUME_AFTER_SECONDS + 60)
+    write_policy(settings.policy_dir)
+    expire_sign_in(env, settings)
+    await poll_after(env, 3600)
+    reconnect(env, settings)
+    await poll_after(env, 120)
+    assert dropped(env)
+
+
+async def test_gmail_unticked_in_settings_is_not_caught_up(env, settings):
+    add_rule(env)
+    await started(env)
+    write_policy(settings.policy_dir, permissions=("calendar:readonly",))
+    await poll_after(env, 120)
+    env.fake.add()
+    for _ in range(9):
+        await poll_after(env, 3600)
+    write_policy(settings.policy_dir)
+    await poll_after(env, 120)
+    assert dropped(env)
+
+
+async def test_a_caught_up_pause_whose_history_expired_records_the_gap(env, settings):
+    add_rule(env)
+    await started(env)
+    expire_sign_in(env, settings)
+    env.clock.t += 600
+    await env.poller.run_once()
+    env.fake.add()
+    env.fake.expired = True
+    env.clock.t += 12 * 3600
+    reconnect(env, settings)
+    await env.poller.run_once()
+    assert env.requests() == []
+    [gap] = env.store.gaps_since(0)
+    assert gap["kind"] == GAP_EXPIRED
     assert env.store.get("paused_since") is None
 
 
