@@ -1,8 +1,7 @@
 # Installing without a clone: design
 
 Status: implemented on branch `install-without-clone` (2026-11-07), apart from the steps noted
-below; nothing is published yet, and the existing install has not been moved. The plan below stays
-as the design record. Where the build differs from it:
+below, and released. The plan below stays as the design record. Where the build differs from it:
 
 - **The shell builds on the app-server's image by name, not `service:app-server`.** The spike
   showed that building a service with `additional_contexts: base: service:app-server` makes Compose
@@ -31,8 +30,7 @@ as the design record. Where the build differs from it:
 - **The GHCR packages needed no step by hand.** `publish.yml`'s first run (`v0.1.0-rc.1`)
   created them public, as the repository is, so hosts pull without credentials; the release
   steps now check this instead ([release/README.md](../release/README.md#cutting-a-release)).
-- **Not done:** moving the existing install ([below](#moving-the-existing-install); the operator's
-  to do), and `init` creating the Google login method through the API (unverified, optional).
+- **Not done:** `init` creating the Google login method through the API (unverified, optional).
   `init` checks the other scopes by reads, which cannot tell a read scope from an edit one.
 
 The checks under [Verified so far](#verified-so-far) ran on 2026-11-07, and so did the spike's
@@ -81,7 +79,6 @@ against a data directory of its own.
 | Are profiles declarative? | No: they keep changing only through `lettucectl profiles` ([lib/README.md](README.md#rules)). `apply` reports a stack out of step, and never changes a profile. |
 | A daemon that reconciles on its own? | No: `apply` is a command the admin runs. |
 | Terraform or OpenTofu for Cloudflare? | No: `lib/cloudflare.sh` stays (see [Not in scope](#not-in-scope)). |
-| Backwards compatibility | None. The one existing install is moved once, by hand or with a throwaway script ([Moving the existing install](#moving-the-existing-install)). |
 
 ## The data directory
 
@@ -129,8 +126,8 @@ Compose, as it passes `DOC_TOOLS_NETWORK` today, and the overlays use `${LETTUCE
 also refuse one inside `LETTUCE_DATA`, where a backup would back up its own earlier backups.
 
 `.gitignore` keeps `/config.env`, `/.secrets/`, `/upstream/` and `/stacks/`, and adds `/data/`. A
-clone no longer holds instance data by design, but an old clone, or a `LETTUCE_DATA` pointed inside
-one, still must not be committable.
+clone no longer holds instance data by design, but a `LETTUCE_DATA` pointed inside one still must
+not be committable.
 
 ## Lettuce without a clone
 
@@ -421,32 +418,6 @@ a walk through `docs/cloudflare-setup.md`, keeping the guide's step numbers:
 The Cloudflare account, the zone, the Zero Trust plan and the Google OAuth client stay manual: they
 need payment details or a browser sign-in.
 
-## Moving the existing install
-
-There is one existing install, so there is no migration code. Once, by hand or with a throwaway
-script that is not committed, at a quiet time:
-
-1. Tell everyone with a stack: their stack restarts, and their vault must be unlocked again. Every
-   garden image is renamed (from `lettuce-<name>:local` to its published name), and so is upstream's
-   when `LETTA_IMAGE_NS` is set, so Compose recreates every container once.
-2. `lettucectl down all` from the clone.
-3. Create `/srv/lettuce-garden/bin`, owned by the admin, mode 700.
-4. Move `config.env`, `.secrets/` and `stacks/` into `/srv/lettuce-garden`. Delete `upstream/`;
-   `init` downloads it.
-5. In each `stacks/<name>/stack.env`, rewrite `LETTA_STATE_DIR` to the new path (it is absolute),
-   and delete any `LETTA_IMAGE_TAG` set by hand (a test stack may have one, to keep its builds of
-   upstream's images apart). Upstream's images are then named by `LETTUCE_REF` (`app_server_image`),
-   and pulled when `LETTA_IMAGE_NS` is set, where no such tag exists; `check` refuses a stack whose
-   app-server's image is named otherwise.
-6. Write `stacks.conf` from `lettucectl list`.
-7. Install the wrapper, then run `lettucectl init` and `lettucectl apply --dry-run`. The plan should
-   show no Cloudflare change and no address gained or lost.
-8. `lettucectl apply`.
-
-Named volumes are named after the Compose project (`lettuce-<name>`), which does not change, so the
-vault, the BFF's data and the rest are kept. The doc-tools volume is labelled by its content hash and
-is kept.
-
 ## This repo's rules, checked
 
 - **Overlays restrict, never redefine.** Only the garden's own services change `image:` and
@@ -520,9 +491,8 @@ is kept.
 4. The `lettucectl` image, the wrapper, `self-upgrade`, the same-path check, and the `backup`,
    `receipts` and `toolbox` mounts.
 5. `stacks.conf`, the commands that keep it in step, and `apply`.
-6. Move the existing install.
-7. Docs.
-8. The guided `init`.
+6. Docs.
+7. The guided `init`.
 
 ## Verified so far
 

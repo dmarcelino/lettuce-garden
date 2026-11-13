@@ -374,7 +374,17 @@ def create_app(
             )
         for gap in store.gaps_since(now - 7 * 86400)[:3]:
             title, text = gap_text(gap)
-            out.append({"level": "warn", "title": title, "text": text})
+            start, end = _fmt_time(gap["start"]), _fmt_time(gap["end"])
+            when = f"at {end}" if start == end else f"from {start} to {end}"
+            out.append(
+                {
+                    "level": "warn",
+                    "title": title,
+                    "text": text,
+                    "dismiss": str(gap["id"]),
+                    "dismiss_label": f"Dismiss: {title}, {when}",
+                }
+            )
         return out
 
     # -- pages ----------------------------------------------------------------
@@ -476,6 +486,12 @@ def create_app(
         store.delete_rule(rule.id)
         return back("/?done=deleted")
 
+    async def dismiss_gap(request: Request, email: str) -> Response:
+        gid = request.path_params["gid"]
+        if not (gid.isascii() and gid.isdigit() and len(gid) <= 18 and store.dismiss_gap(int(gid))):
+            raise FormError("This notice doesn't exist (any more).")
+        return back("/")
+
     async def history(request: Request, email: str) -> Response:
         rule = get_rule(request)
         store.expire_claims(LOST_AFTER_SECONDS)
@@ -525,6 +541,7 @@ def create_app(
         Route("/r/{rid}/delete", page(delete, post=True), methods=["POST"]),
         Route("/r/{rid}/history", page(history)),
         Route("/r/{rid}/test", page(test, post=True), methods=["POST"]),
+        Route("/gaps/{gid}/dismiss", page(dismiss_gap, post=True), methods=["POST"]),
         Route("/garden.css", page(static(garden_css, "text/css"), asset=True)),
         Route("/app.css", page(static(app_css, "text/css"), asset=True)),
         Route("/icon-192.png", page(icon(192), asset=True)),

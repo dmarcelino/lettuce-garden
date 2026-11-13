@@ -71,6 +71,8 @@ CREATE TABLE IF NOT EXISTS gaps (
   kind TEXT NOT NULL,
   skipped INTEGER NOT NULL DEFAULT 0
 );
+-- Gaps the person dismissed: kept in gaps, hidden from the page.
+CREATE TABLE IF NOT EXISTS dismissed_gaps (gap_id INTEGER PRIMARY KEY, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, name TEXT NOT NULL, pos INTEGER NOT NULL);
 """
 
@@ -79,6 +81,8 @@ QUEUED, CLAIMED, OK, FAILED, LOST = "queued", "claimed", "ok", "failed", "lost"
 # Gap kinds: Gmail's history expired; Google was unusable for a while; too many
 # at once; matches dropped because too many were waiting.
 GAP_EXPIRED, GAP_PAUSED, GAP_SKIPPED, GAP_DROPPED = "expired", "paused", "skipped", "dropped"
+# State keys of a pause (see poller.py), all cleared once Gmail is read again.
+PAUSE_CLEARED: dict[str, str | None] = {"paused_since": None, "pause_chosen": None, "chosen_since": None}
 
 
 @dataclass
@@ -483,11 +487,15 @@ class Store:
                 self._db.execute(
                     "INSERT INTO gaps (start, end, kind, skipped) VALUES (?, ?, ?, ?)", (now, now, GAP_DROPPED, dropped)
                 )
-            self._set({"history_id": history_id, "last_ok": str(now), "paused_since": None})
+            self._set({"history_id": history_id, "last_ok": str(now), **PAUSE_CLEARED})
             self._prune(now)
 
     def _prune(self, now: int) -> None:
         self._db.execute("DELETE FROM handled WHERE at < ?", (now - HANDLED_KEEP_SECONDS,))
+        self._db.execute(
+            "DELETE FROM dismissed_gaps WHERE gap_id IN (SELECT id FROM gaps WHERE end < ?)",
+            (now - HANDLED_KEEP_SECONDS,),
+        )
         self._db.execute("DELETE FROM gaps WHERE end < ?", (now - HANDLED_KEEP_SECONDS,))
         self._db.execute(
             "DELETE FROM runs WHERE rowid IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER "
@@ -503,10 +511,23 @@ class Store:
         last_ok = int(self.get("last_ok") or now)
         with self._db:
             self._db.execute("INSERT INTO gaps (start, end, kind) VALUES (?, ?, ?)", (last_ok, now, kind))
-            self._set({"history_id": history_id, "last_ok": str(now), "paused_since": None})
+            self._set({"history_id": history_id, "last_ok": str(now), **PAUSE_CLEARED})
 
     def gaps_since(self, since: int) -> list[dict[str, Any]]:
+        """Gaps that ended after `since` and were not dismissed, newest first."""
         rows = self._db.execute(
-            "SELECT start, end, kind, skipped FROM gaps WHERE end > ? ORDER BY end DESC, id DESC", (since,)
+            "SELECT id, start, end, kind, skipped FROM gaps WHERE end > ? "
+            "AND id NOT IN (SELECT gap_id FROM dismissed_gaps) ORDER BY end DESC, id DESC",
+            (since,),
         )
-        return [{"start": r[0], "end": r[1], "kind": r[2], "skipped": r[3]} for r in rows]
+        return [{"id": r[0], "start": r[1], "end": r[2], "kind": r[3], "skipped": r[4]} for r in rows]
+
+    def dismiss_gap(self, gap_id: int) -> bool:
+        """Hides a gap from the page; False if there is no such gap."""
+        with self._db:
+            if self._db.execute("SELECT 1 FROM gaps WHERE id = ?", (gap_id,)).fetchone() is None:
+                return False
+            self._db.execute(
+                "INSERT OR IGNORE INTO dismissed_gaps (gap_id, at) VALUES (?, ?)", (gap_id, self.now())
+            )
+        return True

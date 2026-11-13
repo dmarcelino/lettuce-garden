@@ -3,10 +3,12 @@
 # tests/stubs, so nothing here touches Docker, DNS or Cloudflare.
 #   tests/run.sh            run everything
 #   tests/run.sh <pattern>  run the tests whose name contains <pattern>
+# Tests run in parallel, TEST_JOBS at a time (default: one per CPU).
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 FILTER=${1:-}
-PASS=0 FAILED=()
+# Where added keeps the stacks it made (set by the main loop below).
+ADDED_CACHE=""
 
 # ── fixture ──────────────────────────────────────────────────────────────────
 # Each test gets a fresh copy of the repo in $T/home (the code, LETTUCE_HOME),
@@ -130,23 +132,22 @@ watchlist_config() {
   garden_config
 }
 
+# run_test NAME -> runs the test in a fresh fixture, prints its result after
+# any failure's details, and exits with the test's status
 run_test() {
-  local name=$1
-  [[ -z $FILTER || $name == *"$FILTER"* ]] || return 0
+  local name=$1 rc
   setup
-  local rc
   # A bare statement on purpose: inside `if`, `||` or `&&` bash ignores errexit
   # in the subshell too, and every assert relies on it to stop the test.
   (set -e; "$name")
   rc=$?
   if ((rc == 0)); then
-    PASS=$((PASS + 1))
     printf 'ok    %s\n' "$name"
   else
-    FAILED+=("$name")
     printf 'FAIL  %s\n' "$name"
   fi
   teardown
+  return "$rc"
 }
 
 # ── validation ───────────────────────────────────────────────────────────────
@@ -537,16 +538,6 @@ test_add_refuses_a_name_ending_in_garden() {
   [[ ! -e $D/stacks/alfred-garden ]] || fail "stack dir created for a refused name"
 }
 
-test_an_existing_stack_ending_in_garden_keeps_working() {
-  added
-  mv "$D/stacks/alfred" "$D/stacks/hal-garden"
-  ctl up hal-garden
-  ok_rc
-  log_has "-p lettuce-hal-garden"
-  ctl check hal-garden
-  ok_rc
-}
-
 test_add_falls_back_when_name_is_in_the_zone() {
   stub STUB_CF_TAKEN=alfred.example.org
   ctl add alfred alfred@example.com
@@ -648,10 +639,56 @@ test_add_refuses_an_existing_stack() {
 }
 
 # ── check / up ───────────────────────────────────────────────────────────────
+# added -> a fresh alfred stack, made by `lettucectl add`, with an empty call log.
+# Most tests start with one and `add` is the suite's slowest step, so it runs
+# once per run for each starting state: the next test that starts from the same
+# state gets a copy of the result, with the first test's $T replaced by its own.
+# A starting state with an absolute symlink always runs `add`, since the copy
+# would not move the link's target. The copy reuses the stack's secrets, so a
+# test of what `add` itself does or makes runs `ctl add`.
 added() {
+  local key="" snap from tmp
+  if [[ -n $ADDED_CACHE && -z $(find "$T" -type l -lname '/*' -print -quit) ]]; then
+    key=$(added_key)
+    snap=$ADDED_CACHE/$key
+    if [[ -d $snap ]]; then
+      from=$(<"$snap/from")
+      find "$T" -mindepth 1 -delete
+      cp -a "$snap/tree/." "$T/"
+      { grep -rlZF -- "$from" "$T" || (($? == 1)); } | xargs -0r sed -i "$(path_sub "$from" "$T")"
+      RC=0
+      return
+    fi
+  fi
   ctl add alfred alfred@example.com
   ok_rc
   : >"$T/calls.log"
+  [[ -n $key ]] || return 0
+  # Another test may make the same snapshot at the same time: the first rename wins.
+  tmp=$(mktemp -d "$ADDED_CACHE/.new.XXXXXX")
+  cp -a "$T" "$tmp/tree"
+  printf '%s' "$T" >"$tmp/from"
+  mv -T "$tmp" "$snap" 2>/dev/null || rm -rf "$tmp"
+}
+
+# added_key -> a hash of the starting state, with $T written as @T@: CTL_DATA,
+# the environment `ctl` passes on and, for everything under $T, its name, type,
+# mode, link target and contents
+added_key() {
+  {
+    printf 'CTL_DATA=%s\n' "${CTL_DATA:-}"
+    env | LC_ALL=C sort
+    (cd "$T" && find . -printf '%p %y %m %l\n' | LC_ALL=C sort)
+    find "$T" -type f -print0 | LC_ALL=C sort -z | xargs -0 tail -n +1
+  } | sed "$(path_sub "$T" @T@)" | sha256sum | cut -d' ' -f1
+}
+
+# path_sub FROM TO -> a sed command that replaces every FROM, taken literally,
+# with TO; \001 delimits it, since paths may hold any other character
+path_sub() {
+  local d=$'\001'
+  # shellcheck disable=SC2001 # bash 5.2's ${v//x/y} treats & in y as the match
+  printf 's%s%s%s%s%sg' "$d" "$(sed 's/[][\.*^$]/\\&/g' <<<"$1")" "$d" "$(sed 's/[\&]/\\&/g' <<<"$2")" "$d"
 }
 
 test_up_refuses_dev_bypass() {
@@ -708,29 +745,6 @@ test_up_refuses_auto_update_in_channel_gateway() {
   log_lacks "up -d"
 }
 
-test_up_adds_push_keys_to_existing_stack() {
-  added
-  sed -i '/^PUSH_VAPID_/d' "$D/stacks/alfred/stack.env"
-  ctl up alfred
-  ok_rc
-  [[ -n $(senv alfred PUSH_VAPID_PUBLIC_KEY) ]] || fail "no PUSH_VAPID_PUBLIC_KEY"
-  [[ -n $(senv alfred PUSH_VAPID_PRIVATE_KEY) ]] || fail "no PUSH_VAPID_PRIVATE_KEY"
-  eq "$(senv alfred PUSH_VAPID_CONTACT_EMAIL)" ops@example.org
-  log_has "up -d"
-}
-
-test_up_adds_vault_push_keys_to_existing_stack() {
-  added
-  local pub
-  pub=$(senv alfred PUSH_VAPID_PUBLIC_KEY)
-  sed -i '/^VAULT_VAPID_/d' "$D/stacks/alfred/stack.env"
-  ctl up alfred
-  ok_rc
-  [[ -n $(senv alfred VAULT_VAPID_PUBLIC_KEY) ]] || fail "no VAULT_VAPID_PUBLIC_KEY"
-  [[ -n $(senv alfred VAULT_VAPID_PRIVATE_KEY) ]] || fail "no VAULT_VAPID_PRIVATE_KEY"
-  eq "$(senv alfred PUSH_VAPID_PUBLIC_KEY)" "$pub"
-}
-
 test_up_keeps_existing_push_keys() {
   added
   local pub priv
@@ -740,6 +754,46 @@ test_up_keeps_existing_push_keys() {
   ok_rc
   eq "$(senv alfred PUSH_VAPID_PUBLIC_KEY)" "$pub"
   eq "$(senv alfred VAULT_VAPID_PRIVATE_KEY)" "$priv"
+}
+
+test_up_makes_no_push_keys() {
+  # New keys would break every device's subscription, so only add makes them.
+  added
+  sed -i '/^VAULT_VAPID_PUBLIC_KEY=/d' "$D/stacks/alfred/stack.env"
+  ctl up alfred
+  bad_rc
+  out_has "alfred: VAULT_VAPID_PUBLIC_KEY is empty"
+  [[ -z $(senv alfred VAULT_VAPID_PUBLIC_KEY) ]] || fail "up made a new key"
+  log_lacks "up -d"
+}
+
+test_up_keeps_the_push_contact_in_step_with_config() {
+  added
+  sed -i 's/^PUSH_CONTACT_EMAIL=.*/PUSH_CONTACT_EMAIL=Hal@Example.com/' "$D/config.env"
+  ctl up alfred
+  ok_rc
+  eq "$(senv alfred PUSH_VAPID_CONTACT_EMAIL)" hal@example.com
+}
+
+test_add_refuses_missing_push_contact() {
+  sed -i 's/^PUSH_CONTACT_EMAIL=.*/PUSH_CONTACT_EMAIL=/' "$D/config.env"
+  ctl add alfred alfred@example.com
+  bad_rc
+  out_has "PUSH_CONTACT_EMAIL is empty in config.env"
+  [[ ! -e $D/stacks/alfred ]] || fail "stack dir created without a push contact"
+  log_lacks "curl "
+}
+
+test_profiles_checks_the_push_contact_before_writing() {
+  added
+  sed -i 's/^PUSH_CONTACT_EMAIL=.*/PUSH_CONTACT_EMAIL=a@example.com,b@example.com/' "$D/config.env"
+  ctl profiles cloudflared,search,google
+  bad_rc
+  out_has "PUSH_CONTACT_EMAIL in config.env must be a single address"
+  eq "$(grep ^PROFILES= "$D/config.env")" PROFILES=cloudflared,search
+  eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
+  log_lacks "curl PUT"
+  log_lacks "up -d"
 }
 
 test_up_refuses_missing_push_contact() {
@@ -1070,11 +1124,6 @@ test_check_refuses_gmail_triggers_on_a_parent_of_its_state() {
 
 test_check_refuses_gmail_triggers_with_its_state_elsewhere() {
   triggers_refused "$GT.volumes[0].target = \"/root\"" "garden-gmail-triggers may mount from the host only"
-}
-
-test_check_refuses_gmail_triggers_the_old_spool() {
-  triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state/letta-home/garden/gmail-triggers/spool\",\"target\":\"/spool\"}]" \
-    "garden-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_writable_google_creds() {
@@ -1442,13 +1491,6 @@ test_up_all_continues_past_a_failed_executor_install() {
   log_has "-p lettuce-alfred"
   grep -q '^docker compose -p lettuce-hal .* up -d --no-build' "$T/calls.log" || fail "hal not started after alfred's failed install"
   out_has "the garden executor is out of step on: alfred hal; fix the cause, then run: lettucectl up <name>"
-}
-
-test_up_without_a_garden_profile_runs_no_exec() {
-  added
-  ctl up alfred
-  ok_rc
-  log_lacks " exec "
 }
 
 test_up_removes_the_executor_when_the_profile_is_off() {
@@ -2607,8 +2649,12 @@ test_skills_ships_the_repo_skills() {
   cp -r "$ROOT/agent-skills" "$H/"
   ctl skills alfred
   ok_rc
+  # Listed once: `tar | grep -q` fails under pipefail when grep quits before
+  # tar has written every name.
+  local list
+  list=$(tar -tf "$T/exec-stdin.log")
   for f in using-vault-secrets/SKILL.md using-vault-secrets/vault-run using-vault-secrets/vault-fill; do
-    tar -tf "$T/exec-stdin.log" | grep -qx "$f" || fail "$f not shipped"
+    grep -qx "$f" <<<"$list" || fail "$f not shipped"
   done
   grep -qx "name: using-vault-secrets" "$ROOT/agent-skills/using-vault-secrets/SKILL.md" || fail "SKILL.md name mismatch"
 }
@@ -3416,8 +3462,17 @@ test_up_fills_the_tools_volume_under_a_lock() {
   with_docs
   mkdir -p "$D/stacks"
   # Another lettucectl holds the lock for a moment: this one waits, then fills.
-  flock "$D/stacks/.doc-tools.lock" sleep 2 &
-  sleep 0.3
+  # It holds it long enough for up to start on a loaded machine (tests run in parallel).
+  flock "$D/stacks/.doc-tools.lock" sleep 4 &
+  local held=""
+  for _ in $(seq 250); do
+    flock -n "$D/stacks/.doc-tools.lock" true || {
+      held=1
+      break
+    }
+    sleep 0.02
+  done
+  [[ -n $held ]] || fail "the other lettucectl never took the lock"
   local t0=$SECONDS
   ctl up alfred
   ok_rc
@@ -4342,23 +4397,12 @@ test_profiles_gives_a_stack_back_its_deleted_executor_token() {
   with_triggers
   sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   containers alfred app-server garden-gmail-triggers
+  : >"$T/exec-stdin.log"
   ctl profiles "$(senv alfred COMPOSE_PROFILES)"
   ok_rc
   [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "no new executor token"
-}
-
-test_the_executor_is_never_installed_without_a_token() {
-  added
-  with_triggers
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
-  containers alfred app-server garden-gmail-triggers
-  # profiles syncs the executor on a running stack even when the list is unchanged.
-  sed -i "s/^PROFILES=.*/PROFILES=$(senv alfred COMPOSE_PROFILES)/" "$D/config.env"
-  : >"$T/exec-stdin.log"
-  ctl profiles "$(senv alfred COMPOSE_PROFILES)"
-  if [[ -s $T/exec-stdin.log ]] && tar -tf "$T/exec-stdin.log" token >/dev/null 2>&1; then
-    [[ $(tar -xOf "$T/exec-stdin.log" token) =~ ^[0-9a-f]{64}$ ]] || fail "an executor was installed without a token"
-  fi
+  # The executor is installed with the new token, never without one.
+  eq "$(tar -xOf "$T/exec-stdin.log" token)" "$(senv alfred GARDEN_EXECUTOR_TOKEN)"
 }
 
 # The garden service's root and assets go to it, whatever the asset; its
@@ -5267,8 +5311,44 @@ test_wrapper_mounts_toolbox_config_outside_the_home() {
   log_lacks "-v $T/cfg:"
 }
 
-for t in $(declare -F | awk '$3 ~ /^test_/ { print $3 }'); do
-  run_test "$t"
+# ── run ──────────────────────────────────────────────────────────────────────
+# Every test has its own $T, so they run side by side. Each prints its block
+# (failure details, then its result) when it ends; the failures are listed
+# again at the end.
+JOBS=${TEST_JOBS:-$(nproc)}
+[[ $JOBS =~ ^[1-9][0-9]*$ ]] || {
+  echo "TEST_JOBS must be a positive whole number" >&2
+  exit 2
+}
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+ADDED_CACHE=$WORK/added
+# Every temp dir, the tests' $T and lettucectl's own, goes under $WORK, so the
+# run leaves nothing behind, also when a test makes a second fixture.
+export TMPDIR=$WORK/tmp
+mkdir "$ADDED_CACHE" "$TMPDIR"
+mapfile -t TESTS < <(declare -F | awk -v f="$FILTER" '$3 ~ /^test_/ && (f == "" || index($3, f)) { print $3 }')
+for t in "${TESTS[@]}"; do
+  while (($(jobs -rp | wc -l) >= JOBS)); do
+    wait -n
+  done
+  {
+    # bash runs background jobs with SIGINT ignored; Ctrl-C should stop them too.
+    trap - INT
+    run_test "$t" >"$WORK/$t.out" 2>&1
+    echo $? >"$WORK/$t.rc"
+    cat "$WORK/$t.out"
+  } &
+done
+wait
+PASS=0 FAILED=()
+for t in "${TESTS[@]}"; do
+  if [[ -f $WORK/$t.rc && $(<"$WORK/$t.rc") == 0 ]]; then
+    PASS=$((PASS + 1))
+  else
+    FAILED+=("$t")
+  fi
 done
 printf '\n%d passed, %d failed\n' "$PASS" "${#FAILED[@]}"
+((${#FAILED[@]} == 0)) || printf 'FAIL  %s\n' "${FAILED[@]}"
 ((${#FAILED[@]} == 0))

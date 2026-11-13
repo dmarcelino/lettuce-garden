@@ -181,6 +181,7 @@ connection could therefore end up owning scheduled turns that are not even its o
 | Sender filter | Exact addresses; per-rule "only if Gmail verified the sender" (DMARC pass in `Authentication-Results`), on by default when senders are set | `From` alone is easy to forge |
 | Bursts | One request per rule per poll with up to 30 matches, oldest first; hourly limit per rule (default 6); matches over either wait for the next allowed run, at most 500 per rule (newer ones are dropped and recorded as a gap the page shows) | Bounds model cost and keeps every id in the request |
 | Missed history | When the stored `historyId` has expired (Gmail 404), start again from now and show "mail between A and B was not checked" | Never replay old mail |
+| Google paused | Switched off, disconnected or Gmail not allowed in Settings -> Google for more than 30 minutes in a row (counted from the first poll that sees it): start again from now and show "mail between A and B was not checked". Otherwise (the sign-in expired, `invalid_grant`, perhaps with a shorter spell of those): read on from the stored `historyId` if Google is back within 48 hours of the last good poll; past that, or when the history has expired meanwhile, start again from now and show the gap | Mail the person turned off is not replayed; mail they expected to be handled is, within a bound so an agent never acts on very old mail. A short spell (a token file caught mid-write, Disconnect then Connect to fix the sign-in) is not a choice |
 | Spool file handling | Write `tmp` with `O_CREAT|O_EXCL|O_NOFOLLOW`, then `rename`; read only regular files, never through symlinks, with a size cap; validate every field | Agents can plant symlinks or junk in the spool |
 | Executor | A small Node script (Node is in the image, as letta-code needs it). It runs `letta` with an argument array (no shell), with the environment of PID 1 (`/proc/1/environ`) so `LETTA_LOCAL_BACKEND_*` match the server | Request text is untrusted; cron jobs get an empty environment |
 | Sidecar user | uid 0 with `cap_drop: [ALL]`, `no-new-privileges`, read-only root filesystem | The state directories are root-owned (the app-server runs as root). Without `CAP_DAC_OVERRIDE`, root can write only what root owns, and only what is mounted. The vault's named volume lets it run as uid 10001; host paths would need a chown step |
@@ -238,7 +239,10 @@ need CSRF and answer with a 303 redirect, like the vault. The page needs no Java
   - Gmail not allowed in Settings -> Google;
   - Google needs reconnecting (refresh failed with `invalid_grant`);
   - Lettuce not picking up requests (no executor heartbeat in the spool for 3 minutes);
-  - the executor reporting CLI failures.
+  - the executor reporting CLI failures;
+  - mail that wasn't checked or matches that were dropped (gaps from the last 7 days, the
+    three newest). Each has a Dismiss button that hides it from the page; the gap's record
+    stays until it is pruned after 30 days.
 - **New / edit trigger** (one form):
   - Name.
   - **When mail arrives in**: labels from `labels.list`, Inbox included.
@@ -383,7 +387,9 @@ Sidecar (pytest, no network):
 - **Batching and limits**: one request per rule per poll; the hourly limit holds back
   matches and sends them later.
 - **Restarts and history**: nothing is handled twice after a restart; an expired
-  `historyId` resets and records the gap.
+  `historyId` resets and records the gap; an expired sign-in is caught up within 48 hours,
+  also across a brief disconnect or switch-off; switched off, disconnected or Gmail not
+  allowed for more than 30 minutes is not.
 - **What reaches the agent**:
   - the request file never contains a fake body or snippet (fixed test value, asserted
     absent);
@@ -396,6 +402,7 @@ Sidecar (pytest, no network):
 - **Pages**:
   - every route refuses a missing or invalid Access JWT, GETs included;
   - POSTs refuse a missing CSRF token or a foreign Origin.
+  - a dismissed gap notice leaves the page and its record stays.
 - **Google**:
   - disabled in policy means no Gmail calls;
   - a token refresh never writes to `/creds` (read-only in tests too);

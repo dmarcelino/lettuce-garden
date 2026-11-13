@@ -10,9 +10,17 @@
 <p class="muted intro">When an email arrives in a label you choose, ask an agent to do something about it. Gmail is checked every few minutes.</p>
 {% if notice %}<div class="banner ok" role="status"><p>{{ notice }}</p></div>{% endif %}
 {% for b in banners %}
-<div class="banner {{ b.level }}" role="status">
-  <strong class="banner-title">{{ b.title }}</strong>
-  <p>{{ b.text }}</p>
+<div class="banner {{ b.level }}">
+  <div role="status">
+    <strong class="banner-title">{{ b.title }}</strong>
+    <p>{{ b.text }}</p>
+  </div>
+  {% if b.dismiss %}
+  <form method="post" action="{{ base }}/gaps/{{ b.dismiss }}/dismiss" class="banner-dismiss">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit" class="button ghost" aria-label="{{ b.dismiss_label }}">Dismiss</button>
+  </form>
+  {% endif %}
 </div>
 {% endfor %}
 {% if rules %}

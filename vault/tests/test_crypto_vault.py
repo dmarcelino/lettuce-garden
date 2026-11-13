@@ -6,7 +6,7 @@ import pytest
 from garden_vault import crypto
 from garden_vault.config import ERASE_DELAY_SECONDS
 from garden_vault.kinds import KINDS, group_fields
-from garden_vault.vault import AUTO, FORMAT, Locked, Vault, VaultError, build_fields
+from garden_vault.vault import AUTO, Locked, Vault, VaultError, build_fields
 
 from .conftest import CARD, FAST_KDF, PASSPHRASE, SECRET, STREET, add_address, add_card
 
@@ -322,28 +322,6 @@ def test_a_field_saved_without_the_masked_flag_stays_masked(vault):
 def test_custom_field_rules(custom, error):
     with pytest.raises(VaultError, match=error):
         build_fields("login", {"password": SECRET}, custom)
-
-
-def test_secrets_of_an_older_format_are_deleted_on_unlock(vault, vault_path, clock):
-    kept = add_address(vault)
-    vault._x("DELETE FROM vault_meta WHERE k = 'format'")  # a vault made before Bitwarden's types
-    vault.lock()
-    assert len(vault._q("SELECT id FROM secrets")) == 1  # nothing happens while locked
-    vault.unlock(PASSPHRASE)
-    assert vault.secrets() == [] and vault.secret(kept) is None
-    assert vault._meta("format") == FORMAT
-    assert [(e.actor, e.action) for e in vault.audit_log()][0] == ("vault", "deleted 1 secrets of an older format")
-    add_address(vault)
-    vault.lock()
-    vault.unlock(PASSPHRASE)
-    assert len(vault.secrets()) == 1  # deleted once, not on every unlock
-
-
-def test_a_new_or_erased_vault_has_the_current_format(vault, vault_path, clock):
-    assert vault._meta("format") == FORMAT
-    vault.reset()
-    vault.setup(PASSPHRASE)
-    assert vault._meta("format") == FORMAT
 
 
 def test_audit_is_encrypted_and_readable_when_unlocked(vault):

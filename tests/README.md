@@ -17,6 +17,7 @@ No build step. Before changing a file here, run what it runs: `tests/run.sh` for
 
 ## How `run.sh` works
 - Each test gets a copy of the repo in a temp dir: the code in `$H` (`$T/home`, `LETTUCE_HOME`), its data in `$D` (`$H/data`, a clone's default `LETTUCE_DATA`) and Lettuce's source at `config.env.example`'s tag in `$U` (`$D/upstream/$REF`). It runs under `set -e`, so a failing assert ends it.
+- Tests run in parallel, `TEST_JOBS` at a time (default: one per CPU; `TEST_JOBS=1` runs them one by one). Each prints its block, failure details then `ok` or `FAIL`, when it ends, so the order varies; the failures are listed again at the end. A test therefore keeps everything it writes under its own `$T` and never relies on another test's files or on timing. `TMPDIR` points into the run's own folder, removed when it ends, so every temp dir (the tests' and lettucectl's) goes with it.
 - `ctl` runs `lettucectl` with `LETTUCE_DATA` set to `$CTL_DATA`, empty by default, so the tester's own environment never reaches it. `release_on` turns the copy into a released lettucectl: a `$H/RELEASE`, `CTL_DATA=$D`, and its container's mounts (`mounts PATH...`, in `$T/mounts.json`). `wrapper_in DIR` and `wctl DIR ARGS...` run the release wrapper from `DIR/bin`.
 - `tests/stubs/{docker,curl,dig,gh,secret-tool}` come first on `PATH`. Nothing reaches the network, Docker or the real home.
 - `lettucectl` runs docker under `env -i`, so the stubs read their settings from `$T/stub.env`, not the environment. Write one with `stub KEY=value`. Stub values can't hold spaces, since `stub.env` is sourced.
@@ -61,7 +62,7 @@ No build step. Before changing a file here, run what it runs: `tests/run.sh` for
 - `ctl` runs lettucectl, sets `$RC` and puts its output in `$OUT`.
 - Asserts: `ok_rc`/`bad_rc`, `out_has`/`out_lacks`, `log_has`/`log_lacks`, `eq`.
 - `calls` prints the Cloudflare calls (`METHOD PATH`), `body_of METHOD PATH` the last such call's body, `senv NAME KEY` a `stack.env` value.
-- `added` makes a fresh `alfred` stack.
+- `added` makes a fresh `alfred` stack. `add` runs once per run for each starting state (everything under `$T`, and `CTL_DATA`); later tests that start from the same state get a copy, with the first test's `$T` replaced by theirs. The copy has the same secrets, so a test of what `add` itself does or makes, or of secrets differing, runs `ctl add`.
 - `config_edit` applies a jq filter to the rendered config; `line_of TEXT` orders calls.
 - Toolbox tests run with `HOME=$T/u` (helper `tb`), so the real home is never read.
 

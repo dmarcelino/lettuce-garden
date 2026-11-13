@@ -627,25 +627,37 @@ vapid_keypair() {
 
 base64url() { base64 -w0 | tr '+/' '-_' | tr -d '='; }
 
-# ensure_push_keys NAME -> gives the stack its VAPID keypairs once and keeps
-# them: a new keypair would invalidate every browser subscription. The BFF and
-# the vault each get their own, so neither holds the other's private
-# key. The contact address follows config.env.
-ensure_push_keys() {
-  local f contact pair prefix
-  f=$(stack_env "$1")
+# push_contact -> config.env's PUSH_CONTACT_EMAIL, the single address push
+# services may write to about the stacks' notifications
+push_contact() {
+  local contact
   contact=$(cfg PUSH_CONTACT_EMAIL)
   [[ -n $contact ]] || die "PUSH_CONTACT_EMAIL is empty in config.env; set it to the operator's email address"
   contact=$(normalise_emails "$contact")
   [[ $contact != *,* ]] || die "PUSH_CONTACT_EMAIL in config.env must be a single address"
+  printf '%s' "$contact"
+}
+
+# push_env_lines -> the stack.env lines of a new stack's push notifications: the
+# contact address and a VAPID keypair each for the BFF (PUSH_) and the vault
+# (VAULT_), so neither holds the other's private key. Nothing makes them again:
+# a new keypair would invalidate every browser subscription.
+push_env_lines() {
+  local contact push vault
+  # Run inside $(...), where errexit is off: each failure ends it by hand.
+  contact=$(push_contact) || exit 1
+  push=$(vapid_keypair) || exit 1
+  vault=$(vapid_keypair) || exit 1
+  printf 'PUSH_VAPID_CONTACT_EMAIL=%s\nPUSH_VAPID_PUBLIC_KEY=%s\nPUSH_VAPID_PRIVATE_KEY=%s\nVAULT_VAPID_PUBLIC_KEY=%s\nVAULT_VAPID_PRIVATE_KEY=%s\n' \
+    "$contact" "${push% *}" "${push#* }" "${vault% *}" "${vault#* }"
+}
+
+# sync_push_contact NAME -> the stack's PUSH_VAPID_CONTACT_EMAIL follows config.env
+sync_push_contact() {
+  local f contact
+  f=$(stack_env "$1")
+  contact=$(push_contact)
   [[ $(env_get "$f" PUSH_VAPID_CONTACT_EMAIL) == "$contact" ]] || env_set "$f" PUSH_VAPID_CONTACT_EMAIL "$contact"
-  for prefix in PUSH VAULT; do
-    if [[ -z $(env_get "$f" "${prefix}_VAPID_PUBLIC_KEY") || -z $(env_get "$f" "${prefix}_VAPID_PRIVATE_KEY") ]]; then
-      pair=$(vapid_keypair)
-      env_set "$f" "${prefix}_VAPID_PUBLIC_KEY" "${pair% *}"
-      env_set "$f" "${prefix}_VAPID_PRIVATE_KEY" "${pair#* }"
-    fi
-  done
 }
 
 # ensure_executor_token NAME -> gives the stack, once, the token the garden
