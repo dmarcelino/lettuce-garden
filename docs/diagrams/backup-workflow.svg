@@ -1201,7 +1201,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
 
 
         <!-- Legend -->
-        <g data-legend="">
+        <g data-legend="" style="">
           <text x="20" y="686" class="t-primary" font-size="12" font-weight="650">Legend</text>
           <g data-legend-semantic-kind="backend" data-legend-x="20" data-legend-baseline="706" data-legend-width="113">
             <rect x="20" y="698" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>

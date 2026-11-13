@@ -1130,7 +1130,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" x="575" y="579" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">request queues</text>
-        <text x="575" y="595" class="t-muted" font-size="8.7" text-anchor="middle">gmail-triggers, news-radar + API</text>
+        <text x="575" y="595" class="t-muted" font-size="8.4" text-anchor="middle">gmail-triggers, news-radar + API</text>
         </g>
 
         <g id="node-cron" data-node-id="cron" data-node-label="system cron" tabindex="0" role="button" aria-label="Focus system cron, lettuce-garden-executor, Compose project lettuce-&lt;name&gt; › app-server: agents run as root" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="lettuce-garden-executor" data-node-context="Compose project lettuce-&lt;name&gt; › app-server: agents run as root">
@@ -1231,8 +1231,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <text x="715" y="394" class="t-edge-security" font-size="8" text-anchor="middle">status, agents</text>
         </g>
         <g data-edge-from="executor" data-edge-to="queues" data-edge-label="--gmail-triggers, --news-radar" data-edge-key="9">
-          <rect x="630.8" y="497" width="149.2" height="14" rx="3" class="c-mask"/>
-          <text x="705.4" y="507" class="t-edge-security" font-size="8" text-anchor="middle">--gmail-triggers, --news-radar</text>
+          <rect x="626" y="497" width="154" height="14" rx="3" class="c-mask"/>
+          <text x="703" y="507" class="t-edge-security" font-size="8" text-anchor="middle">--gmail-triggers, --news-radar</text>
         </g>
         <g data-edge-from="executor" data-edge-to="letta" data-edge-label="argv" data-edge-key="10">
           <rect x="947" y="546" width="30" height="14" rx="3" class="c-mask"/>
