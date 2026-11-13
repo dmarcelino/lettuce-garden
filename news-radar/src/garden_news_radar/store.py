@@ -526,9 +526,10 @@ class Store:
     def count_monitors(self) -> int:
         return self._db.execute("SELECT COUNT(*) FROM monitors").fetchone()[0]
 
-    def put_monitor(self, m: Monitor) -> Monitor:
+    def put_monitor(self, m: Monitor, delivered_upto: int | None = None) -> Monitor:
         """Creates or replaces the agent's monitor of that name. A replaced one
-        keeps what it has delivered, and comes back from a pause."""
+        keeps what it has delivered, and comes back from a pause. delivered_upto,
+        when given, is where its next report starts (from_now)."""
         now = self.now()
         values = (
             json.dumps(m.sources),
@@ -557,6 +558,8 @@ class Store:
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (*values, m.set_up_in, now, now, monitor_id, m.agent_id, m.name),
                 )
+            if delivered_upto is not None:
+                self._db.execute("UPDATE monitors SET delivered_upto = ? WHERE id = ?", (delivered_upto, monitor_id))
         stored = self.monitor(monitor_id)
         assert stored is not None
         return stored

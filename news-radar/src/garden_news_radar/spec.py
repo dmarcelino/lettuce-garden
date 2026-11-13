@@ -61,6 +61,15 @@ class SpecError(ValueError):
     pass
 
 
+# Fields that belong inside another one, for the error that says where.
+PLACES = {
+    **{f: f"extract.{f}" for f in ("types", "items", "fields", "extra", "match", "key")},
+    "languages": "dates.languages",
+    "links": "follow.links",
+    "param": "pages.param",
+}
+
+
 @dataclass(frozen=True)
 class Spec:
     name: str
@@ -159,7 +168,8 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
     allowed = {"name", "url", "kind", "item_kind", "every", "extract", "pages", "follow", "dates", "watch", "group_by"}
     unknown = sorted(set(obj) - allowed)
     if unknown:
-        raise SpecError(f"unknown field(s): {', '.join(unknown)}")
+        hints = [f"{u} (it goes inside {PLACES[u].split('.')[0]}: {PLACES[u]})" if u in PLACES else u for u in unknown]
+        raise SpecError(f"unknown field(s): {', '.join(hints)}")
     name = _text(obj, "name", 64)
     if not NAME.fullmatch(name):
         raise SpecError("name must be lowercase letters, digits and -, starting with a letter or digit")

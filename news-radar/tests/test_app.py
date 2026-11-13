@@ -200,3 +200,12 @@ async def test_the_page_shows_where_a_monitor_looks(client, service, web):
     await setup_monitor(service, web)
     service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * 1-5", where=["northtown", "easttown"])
     assert "only at: northtown, easttown" in client.get(f"{B}/").text
+
+
+@pytest.mark.anyio
+async def test_the_page_marks_unused_sources(client, service, web):
+    web.add("https://agenda.example.org/api/events", EVENTS_JSON, "application/json")
+    assert (await service.source_test(json_spec()))["passed"]
+    service.source_put(json_spec())
+    page = client.get(f"{B}/").text
+    assert "Unused" in page and "not fetched until a monitor uses it" in page

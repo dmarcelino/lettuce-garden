@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -141,6 +142,11 @@ def test_helpers():
         ({**json_spec(), "code": "import os"}, "unknown"),
         ({**json_spec(), "follow": {"links": "a"}}, "schema_org"),
         ({**json_spec(kind="html"), "extract": {"items": "li", "fields": {"title": "[["}}}, "extract.fields.title"),
+        (
+            {**json_spec(kind="schema_org"), "extract": {}, "types": ["Event"]},
+            r"types \(it goes inside extract: extract.types\)",
+        ),
+        ({**json_spec(), "languages": ["pt"]}, r"dates.languages"),
     ],
 )
 def test_bad_specs_are_refused(obj, message):
@@ -454,3 +460,91 @@ async def test_inspect_keeps_listing_urls_that_share_a_word_with_account_ones(fe
         "https://site.example.org/api/artists/profile.json",
     ]
     assert out["data_urls_left_out"] == 1
+
+
+# -- rc.2: text, dates and listings -----------------------------------------------------
+def test_text_from_json_and_json_ld_is_decoded():
+    body = json.dumps(
+        {
+            "data": {
+                "list": {
+                    "items": [
+                        {
+                            "name": "Exposição: &#8220;Ecos&#8221; &amp; Co",
+                            "date": "2027-02-01",
+                            "link": "/e/1",
+                            "place": {"name": "Hall &amp; Bar"},
+                            "about": "<p>Doors at 19:00 &amp; more</p>",
+                        }
+                    ]
+                }
+            }
+        }
+    )
+    s = spec(
+        json_spec(
+            extract={
+                "items": "data.list.items",
+                "fields": {"title": "name", "start": "date", "url": "link", "venue": "place.name", "summary": "about"},
+            }
+        )
+    )
+    [item] = extract(s, page("https://agenda.example.org/api/events", body, "application/json"))
+    assert item.fields["title"] == "Exposição: “Ecos” & Co"
+    assert item.fields["venue"] == "Hall & Bar"
+    assert item.fields["summary"] == "Doors at 19:00 & more"
+    ld = (
+        '<html><script type="application/ld+json">'
+        '{"@type": "Event", "name": "&#8220;Quietude&#8221;", "startDate": "2027-03-01"}</script></html>'
+    )
+    [event] = extract(
+        spec({"name": "v", "url": "https://v.example.org/", "kind": "schema_org"}), page("https://v.example.org/", ld)
+    )
+    assert event.fields["title"] == "“Quietude”"
+
+
+@pytest.mark.parametrize(
+    "text, languages, expected",
+    [
+        ("27 Outubro", ("pt",), "2026-10-27"),  # started recently: this year
+        ("sáb 14 nov", ("pt",), "2026-11-14"),
+        ("15 Janeiro", ("pt",), "2027-01-15"),  # long past this year: next year's
+        ("Nov 20", ("en",), "2026-11-20"),
+        ("12 de fevereiro de 2026", ("pt",), "2026-02-12"),  # a year given is kept
+    ],
+)
+def test_dates_without_a_year_take_the_nearest_upcoming_year(text, languages, expected):
+    from datetime import date
+
+    assert parse_date(text, languages, today=date(2026, 11, 13)) == expected
+
+
+def test_blocks_see_dates_written_without_a_year():
+    import lxml.html
+
+    from garden_news_radar.blocks import repeated_blocks
+
+    cards = "".join(f'<article class="card"><a href="/e/{i}">Show {i}</a> sáb {i + 10} nov</article>' for i in range(4))
+    cards += "".join(f'<div class="tile"><a href="/x/{i}">Show {i}</a> 2{i} de Outubro</div>' for i in range(4))
+    blocks = {
+        b["items"]: b for b in repeated_blocks(lxml.html.document_fromstring(f"<html><body>{cards}</body></html>"))
+    }
+    assert blocks["article.card"]["with_date"] == 1.0 and blocks["div.tile"]["with_date"] == 1.0
+
+
+async def test_a_sitemap_follows_only_its_newest_pages(fetcher, web):
+    urls = "".join(
+        f"<url><loc>https://v.example.org/events/e{i}/</loc><lastmod>2027-01-{i + 1:02d}</lastmod></url>"
+        for i in range(30)
+    )
+    web.add(
+        "https://v.example.org/sitemap.xml",
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
+        "application/xml",
+    )
+    s = spec({"name": "v", "url": "https://v.example.org/sitemap.xml", "kind": "sitemap", "follow": {"max": 5}})
+    newest = {f"https://v.example.org/events/e{i}/" for i in range(25, 30)}
+    result = await run_source(s, fetcher, known_url=lambda u: u in newest)
+    assert result.followed == 0 and web.fetched() == ["https://v.example.org/sitemap.xml"]  # the backlog is never read
+    result = await run_source(s, fetcher, known_url=lambda u: u in newest - {"https://v.example.org/events/e29/"})
+    assert web.fetched()[-1] == "https://v.example.org/events/e29/"

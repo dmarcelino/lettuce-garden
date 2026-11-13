@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import calendar
 import hashlib
+import html
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -84,9 +86,17 @@ def canonical_url(href: str, base: str) -> str:
     return url if len(url) <= MAX_URL else ""
 
 
-def parse_date(value: str, languages: tuple[str, ...]) -> str:
+# A date written without a year further back than this is next year's: a listing's
+# yearless dates are upcoming, or ongoing since a little while.
+YEARLESS_PAST_DAYS = 90
+YEAR = re.compile(r"\b\d{4}\b")
+
+
+def parse_date(value: str, languages: tuple[str, ...], today: date | None = None) -> str:
     """ISO 8601 ("2026-11-08" or "2026-11-08T21:00", with the offset when given),
-    or "" when the text is not a date this can read."""
+    or "" when the text is not a date this can read. A date without a year
+    ("27 Outubro", "sáb 14 nov") is this year's, or next year's when this year's
+    is more than YEARLESS_PAST_DAYS before `today` (default: the real today)."""
     text = value.strip()
     if not text:
         return ""
@@ -101,10 +111,20 @@ def parse_date(value: str, languages: tuple[str, ...]) -> str:
             return parsed.isoformat(timespec="minutes")
     import dateparser  # slow to import; only text dates need it
 
-    settings = {"RETURN_AS_TIMEZONE_AWARE": False, "PREFER_DAY_OF_MONTH": "first"}
+    today = today or date.today()
+    settings = {
+        "RETURN_AS_TIMEZONE_AWARE": False,
+        "PREFER_DAY_OF_MONTH": "first",
+        "RELATIVE_BASE": datetime(today.year, today.month, today.day),
+    }
     parsed = dateparser.parse(text[:120], languages=list(languages) or None, settings=settings)
     if parsed is None:
         return ""
+    if not YEAR.search(text) and parsed.date() < today - timedelta(days=YEARLESS_PAST_DAYS):
+        try:
+            parsed = parsed.replace(year=parsed.year + 1)
+        except ValueError:  # 29 February
+            pass
     if parsed.hour == 0 and parsed.minute == 0 and not re.search(r"\d:\d", text):
         return parsed.date().isoformat()
     return parsed.isoformat(timespec="minutes")
@@ -127,6 +147,12 @@ def _date_value(value: Any) -> str:
     return _scalar(value)
 
 
+def fold(text: str) -> str:
+    """Text compared without case or accents: "Cuarón" and "CUARON" are the same."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+
 def outlet_of(title: str) -> tuple[str, str]:
     """A news title "Headline - Outlet" as (headline, outlet); outlet "" when there is none."""
     m = OUTLET_SUFFIX.search(title)
@@ -135,8 +161,25 @@ def outlet_of(title: str) -> tuple[str, str]:
     return title[: m.start()].strip(), m.group(1).strip()
 
 
+# Kinds whose text comes as the site stored it, HTML codes and tags included (JSON
+# APIs, JSON-LD); html, rss and ical text is already decoded.
+ENCODED_KINDS = ("json", "schema_org", "sitemap")
+MARKUP = re.compile(r"<[A-Za-z/!][^>]*>")
+
+
+def _plain(text: str) -> str:
+    """Text without HTML tags or codes: "<p>Doors &amp; more</p>" is "Doors & more"."""
+    if MARKUP.search(text):
+        try:
+            return lxml.html.fromstring(text).text_content()
+        except (etree.ParserError, ValueError):
+            pass
+    return html.unescape(text)
+
+
 def normalize(raw: dict[str, Any], extra: dict[str, Any], spec: Spec, base: str) -> Item | None:
     """One item, cleaned; None without a title."""
+    decode = _plain if spec.kind in ENCODED_KINDS else (lambda text: text)
     fields: dict[str, str] = {}
     for name in ITEM_FIELDS:
         value = raw.get(name)
@@ -146,7 +189,7 @@ def normalize(raw: dict[str, Any], extra: dict[str, Any], spec: Spec, base: str)
         elif name in URL_FIELDS:
             fields[name] = canonical_url(_scalar(value), base) if _scalar(value) else ""
         else:
-            fields[name] = one_line(_scalar(value), MAX_SUMMARY if name == "summary" else MAX_FIELD)
+            fields[name] = one_line(decode(_scalar(value)), MAX_SUMMARY if name == "summary" else MAX_FIELD)
     if not fields["title"]:
         return None
     if spec.item_kind == "article" and not fields["outlet"]:
@@ -154,7 +197,7 @@ def normalize(raw: dict[str, Any], extra: dict[str, Any], spec: Spec, base: str)
         if outlet:
             fields["outlet"] = outlet
             fields["title"] = headline
-    extra_out = {k: one_line(_extra_scalar(v), MAX_FIELD) for k, v in extra.items()}
+    extra_out = {k: one_line(decode(_extra_scalar(v)), MAX_FIELD) for k, v in extra.items()}
     key_raw = raw.get("_key")
     if spec.key:
         parts = [fields.get(k) or extra_out.get(k, "") for k in spec.key]

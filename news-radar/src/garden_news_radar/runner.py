@@ -6,11 +6,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from garden_common.text import one_line
 from lxml import etree
 
+from .blocks import repeated_blocks
 from .extract import (
     ExtractError,
     Item,
@@ -48,6 +50,8 @@ class RunResult:
     pages: int = 0
     followed: int = 0
     follow_errors: int = 0
+    # The first page's most likely listing blocks (blocks.repeated_blocks), when asked for.
+    largest_block: dict[str, Any] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -84,8 +88,11 @@ async def run_source(
     max_pages: int | None = None,
     max_follow: int | None = None,
     max_wait: float | None = None,
+    look_for_blocks: bool = False,
 ) -> RunResult:
-    """Never raises for what a site does: the result's error says why the run failed."""
+    """Never raises for what a site does: the result's error says why the run failed.
+    look_for_blocks (source_test): keep the first page's top repeated block, to
+    compare with the items found."""
     result = RunResult()
     accept = ACCEPT[spec.kind]
     # Conditional requests only make sense for a source that is a single request.
@@ -122,6 +129,12 @@ async def run_source(
             first = page
             result.sample = sample_of(page)
             result.etag, result.last_modified = page.etag, page.last_modified
+            if look_for_blocks and spec.kind in ("html", "schema_org") and spec.follow is None:
+                try:
+                    blocks = repeated_blocks(html_document(page))
+                except (etree.ParserError, ValueError):
+                    blocks = []
+                result.largest_block = blocks[0] if blocks else {}
         try:
             # A followed sitemap's items come from its pages; its own entries are only links,
             # read here once so that a page that is not a sitemap fails the run.
@@ -142,7 +155,11 @@ async def run_source(
     if spec.follow and first is not None:
         most = min(spec.follow["max"], max_follow or spec.follow["max"])
         try:
-            listed = sitemap_links if spec.kind == "sitemap" else follow_links(spec, first)
+            if spec.kind == "sitemap":
+                # Only the newest pages: digging further would bring a sitemap's backlog in as new.
+                listed = sitemap_links[: spec.follow["max"]]
+            else:
+                listed = follow_links(spec, first)
             links = [u for u in listed if not known_url(u)][:most]
         except ExtractError:
             links = []

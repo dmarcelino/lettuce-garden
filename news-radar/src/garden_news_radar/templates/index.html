@@ -58,8 +58,8 @@
   {% for s in sources %}
   <li class="item">
     <div class="item-main">
-      <span class="item-name">{{ s.name }} {% if s.healthy %}<span class="pill ok">Working</span>{% else %}<span class="pill bad">Broken</span>{% endif %}</span>
-      <span class="item-desc">{{ s.kind }} from {{ s.host }} &middot; every {{ s.every }}{% if s.used_by %} &middot; used by {{ s.used_by | join(", ") }}{% endif %}</span>
+      <span class="item-name">{{ s.name }} {% if s.unused %}<span class="pill">Unused</span>{% elif s.healthy %}<span class="pill ok">Working</span>{% else %}<span class="pill bad">Broken</span>{% endif %}</span>
+      <span class="item-desc">{{ s.kind }} from {{ s.host }} &middot; {% if s.unused %}not fetched until a monitor uses it{% else %}every {{ s.every }}{% endif %}{% if s.used_by %} &middot; used by {{ s.used_by | join(", ") }}{% endif %}</span>
       <span class="item-desc">{% if s.last_ok %}Last read {{ s.last_ok | time }}{% else %}<span class="muted">Not read yet</span>{% endif %}{% if s.reason %} &middot; {{ s.reason }}{% endif %}</span>
     </div>
     {% if not s.used_by %}

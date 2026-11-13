@@ -4,6 +4,7 @@ schedule that fires into a report for the executor."""
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 from datetime import date, datetime, timedelta
@@ -17,6 +18,7 @@ from .config import (
     FETCH_AHEAD_SECONDS,
     FOLLOW_REFRESH_SECONDS,
     MAX_DAYS_AHEAD,
+    MAX_ITEMS_PER_MONITOR,
     MAX_NAME,
     MAX_SCHEDULE,
     MAX_SOURCES_PER_MONITOR,
@@ -52,6 +54,22 @@ TEST_ITEMS = 10
 # answer within the MCP call's time.
 TEST_PAGES = 3
 TEST_FOLLOW = 5
+
+
+def _block_warning(spec: Spec, result: RunResult) -> str:
+    """A page whose blocks link to far more pages than the items a spec reads
+    probably lists more than the spec sees (schema.org data on a few cards only).
+    Pages linked, not blocks: a calendar repeats one event in every day's cell."""
+    block, found = result.largest_block, len(result.items)
+    if not block or block["links"] < 2 * found or block["links"] - found < 10:
+        return ""
+    if spec.kind == "html" and block["items"] == spec.extract["items"]:
+        return ""
+    return (
+        f"{found} items, but the page repeats {block['items']} {block['count']} times, linking to {block['links']} "
+        "different pages: this spec may read only part of the listing. Try kind html with extract.items set to "
+        "those blocks, or the site's sitemap with follow"
+    )
 
 
 class ToolError(Exception):
@@ -185,7 +203,12 @@ class Service:
         out: dict[str, Any] = {"name": spec.name, "kind": spec.kind}
         with anyio.move_on_after(TOOL_SECONDS):
             result = await run_source(
-                spec, self.fetcher, max_pages=TEST_PAGES, max_follow=TEST_FOLLOW, max_wait=TOOL_WAIT
+                spec,
+                self.fetcher,
+                max_pages=TEST_PAGES,
+                max_follow=TEST_FOLLOW,
+                max_wait=TOOL_WAIT,
+                look_for_blocks=True,
             )
             return self._test_result(spec, result, out)
         out.update(passed=False, error=f"took too long (over {int(TOOL_SECONDS)} s); try fewer pages or follows")
@@ -218,9 +241,9 @@ class Service:
             fill_rates=rates,
             items=[i.as_dict() for i in items[:TEST_ITEMS]],
         )
-        warning = window_warning(items, spec, today)
-        if warning:
-            out["warnings"] = [warning]
+        warnings = [w for w in (window_warning(items, spec, today), _block_warning(spec, result)) if w]
+        if warnings:
+            out["warnings"] = warnings
         if problems:
             out["problems"] = problems
             out["sample"] = result.sample
@@ -272,6 +295,8 @@ class Service:
                     "every": raw.get("every", ""),
                     "healthy": st.healthy if st else True,
                     "used_by": users.get(name, []),
+                    # Fetched once after source_put, then only while a monitor uses it.
+                    "unused": not users.get(name),
                 }
             )
         return {"sources": out}
@@ -377,6 +402,7 @@ class Service:
         news: Any = False,
         set_up_in: Any = None,
         where: Any = None,
+        from_now: Any = False,
     ) -> dict[str, Any]:
         """conversation left out: a monitor saved again keeps where it reports (the
         person may have chosen on the page); a new one reports here. "here" is
@@ -399,7 +425,16 @@ class Service:
                 f"{self.settings.max_reports_per_day} per agent. Share a schedule and conversation with another "
                 "monitor, or fire less often"
             )
-        stored = self.store.put_monitor(monitor)
+        if not isinstance(from_now, bool):
+            raise ToolError("from_now must be true or false")
+        unfetched = self._not_fetched(monitor.sources)
+        if from_now and unfetched:
+            raise ToolError(
+                f"these sources have not been fetched yet: {', '.join(unfetched)}. They are fetched within a minute "
+                "of source_put; save again then, or from_now would let what they already hold through as new"
+            )
+        now = self.store.now()
+        stored = self.store.put_monitor(monitor, delivered_upto=now if from_now else None)
         out = {
             "saved": stored.name,
             "schedule": stored.schedule,
@@ -409,6 +444,14 @@ class Service:
             "next": "show the person monitor_preview, and tell them the schedule and where reports go, in words; "
             "they can change where reports go on the News Radar page",
         }
+        if from_now:
+            at = datetime.fromtimestamp(now, self.settings.tz)
+            out["from_now"] = (
+                f"reports start from now ({at:%H:%M}): what the sources held before is not reported, only what "
+                "they list or change after"
+            )
+        if unfetched:
+            out["not_fetched_yet"] = unfetched
         if conversation == HERE and not stored.set_up_in:
             out["note"] = (
                 "reports go to a new conversation each time: to have them in this one, save it again with "
@@ -451,18 +494,29 @@ class Service:
         days_ahead: Any = None,
         news: Any = False,
         where: Any = None,
+        from_now: Any = False,
     ) -> dict[str, Any]:
         """The saved monitor's next report; with sources, a draft's (checked as
         monitor_put would, never saved): what its first report would hold, and what
-        each filter term did."""
+        each filter term did. from_now: as if saved with it (existing_skipped says
+        how many rows that leaves out)."""
         draft = sources is not None
         if draft:
             m, _ = self._draft(agent_id, name, sources, None, "new", include, exclude, days_ahead, news, where=where)
         else:
             m = self._monitor(agent_id, name)
+        if not isinstance(from_now, bool):
+            raise ToolError("from_now must be true or false")
         now = self.store.now()
-        d = monitor_digest(self.store, m, now, self.settings.tz, self.store.source_states())
-        return {
+        states = self.store.source_states()
+        skipped = 0
+        if from_now:
+            before = monitor_digest(self.store, m, now, self.settings.tz, states)
+            skipped = len(before.rows) + before.left_out
+            m = dataclasses.replace(m, delivered_upto=now)
+        d = monitor_digest(self.store, m, now, self.settings.tz, states)
+        notes = ["a preview: nothing is marked as reported"]
+        out: dict[str, Any] = {
             "monitor": m.name,
             "draft": draft,
             "would_report": d.worth_reporting,
@@ -470,8 +524,26 @@ class Service:
             "rows_total": len(d.rows) + d.left_out,
             "needs_repair": [{"source": a.source, "reason": a.reason} for a in d.alerts],
             "terms": term_counts(self.store, m, now, self.settings.tz),
-            "note": "a preview: nothing is marked as reported",
         }
+        if from_now:
+            out["existing_skipped"] = skipped
+        if d.left_out:
+            out["over_cap"] = {"cap": MAX_ITEMS_PER_MONITOR, "left_out": d.left_out}
+            notes.append(
+                f"a report holds at most {MAX_ITEMS_PER_MONITOR} rows, the newest: narrow the filters, or save with "
+                "from_now if only what is announced from now on matters"
+            )
+        unfetched = self._not_fetched(m.sources)
+        if unfetched:
+            out["not_fetched_yet"] = unfetched
+            notes.append("sources are fetched within a minute of source_put: preview again then")
+        out["note"] = "; ".join(notes)
+        return out
+
+    def _not_fetched(self, sources: list[str]) -> list[str]:
+        """Sources saved but not fetched yet: a preview can't show what they hold."""
+        states = self.store.source_states()
+        return [s for s in sources if s not in states or states[s].last_run is None]
 
     def digest_more(self, digest_id: Any, offset: Any = 0) -> dict[str, Any]:
         report = self.store.report(digest_id) if isinstance(digest_id, str) else None
@@ -492,6 +564,7 @@ class Service:
             schedule = self._schedule(m)
             if not m.paused and schedule and schedule.fires_within(local, FETCH_AHEAD_SECONDS):
                 soon.update(m.sources)
+        used = {s for m in self.store.monitors() for s in m.sources}
         due = []
         for name in self.store.source_specs():
             spec = self._stored_spec(name)
@@ -499,6 +572,8 @@ class Service:
                 continue
             st = states.get(name)
             last = st.last_run if st else None
+            if last is not None and name not in used:
+                continue  # unused: fetched once after source_put, for previews, then left alone
             # The admin's minimum applies to sources saved before it was raised, too.
             every = max(spec.every, self.settings.min_interval)
             if last is None or now - last >= every or (name in soon and now - last >= FETCH_AHEAD_SECONDS):

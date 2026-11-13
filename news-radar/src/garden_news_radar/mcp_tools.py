@@ -98,6 +98,7 @@ def build_server(service: Service) -> MCPServer:
 
     @server.tool(
         description="Every source of this stack: name, URL, kind, interval, health and the monitors using it. "
+        "An unused source is fetched once after source_put (for previews), then not until a monitor uses it. "
         "Check it before adding a source another monitor already reads.",
         annotations=ToolAnnotations(title="List sources", **ro),
     )
@@ -130,7 +131,9 @@ def build_server(service: Service) -> MCPServer:
         "have, found as whole words anywhere in its title, summary, venue, outlet or extra fields, ignoring case "
         "and accents ('tool' does not find 'toolbox'; end a term with * for a prefix: 'caric*'). where: places an "
         "event's venue must name (whole words, as above); events without a venue are kept. days_ahead: only "
-        "events starting within that many days. "
+        "events starting within that many days. from_now: true to report only what the sources list or change "
+        "from now on, not what they already hold (for 'tell me about new announcements'); refused until every "
+        "source has been fetched once (not_fetched_yet). "
         "news: true to group articles into stories by how many outlets carry them. Preview it as a draft with "
         "monitor_preview first.",
         annotations=ToolAnnotations(title="Save a monitor", read_only_hint=False, open_world_hint=False),
@@ -147,6 +150,7 @@ def build_server(service: Service) -> MCPServer:
         news: bool = False,
         set_up_in: str | None = None,
         where: list[str] | None = None,
+        from_now: bool = False,
     ) -> dict[str, Any]:
         return _call(
             service.monitor_put,
@@ -161,6 +165,7 @@ def build_server(service: Service) -> MCPServer:
             news=news,
             set_up_in=set_up_in,
             where=where,
+            from_now=from_now,
         )
 
     @server.tool(
@@ -180,10 +185,13 @@ def build_server(service: Service) -> MCPServer:
     @server.tool(
         description="What one of your monitors would report if its schedule fired now, without starting a turn "
         "or marking anything reported: show it to the person when setting a monitor up. With sources (and "
-        "optionally include, exclude, where, days_ahead, news, as for monitor_put), it previews that draft "
-        "instead, saving nothing: test a filter before monitor_put. A draft's rows are what its first report "
-        "would hold. terms says what each term did: items each include and where term finds, and items each "
-        "exclude term removes, with examples; read it rather than trying term after term.",
+        "optionally include, exclude, where, days_ahead, news, from_now, as for monitor_put), it previews that "
+        "draft instead, saving nothing: test a filter before monitor_put. A draft's rows are what its first report "
+        "would hold; a row with also_in is one event other sources list too. terms says what each term did: items "
+        "each include and where term finds, and items each exclude term removes, with examples; read it rather "
+        "than trying term after term. over_cap: more rows than a report holds. not_fetched_yet: sources whose "
+        "items aren't in yet; preview again in a minute. existing_skipped (with from_now): rows left out as "
+        "already there.",
         annotations=ToolAnnotations(title="Preview a monitor", **ro),
     )
     async def monitor_preview(
@@ -195,8 +203,20 @@ def build_server(service: Service) -> MCPServer:
         days_ahead: int | None = None,
         news: bool = False,
         where: list[str] | None = None,
+        from_now: bool = False,
     ) -> dict[str, Any]:
-        return _call(service.monitor_preview, agent_id, name, sources, include, exclude, days_ahead, news, where=where)
+        return _call(
+            service.monitor_preview,
+            agent_id,
+            name,
+            sources,
+            include,
+            exclude,
+            days_ahead,
+            news,
+            where=where,
+            from_now=from_now,
+        )
 
     @server.tool(
         description="The rows of a report that did not fit in its prompt: the report says its digest_id and the "
