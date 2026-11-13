@@ -10,6 +10,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -73,12 +74,22 @@ def _text_of(data: dict[str, Any]) -> str:
     return fold(" ".join(str(p) for p in parts))
 
 
-def passes(monitor: Monitor, item: StoredItem, today: date) -> bool:
-    text = _text_of(item.data)
-    if monitor.include and not any(fold(term) in text for term in monitor.include):
-        return False
-    if any(fold(term) in text for term in monitor.exclude):
-        return False
+@lru_cache(maxsize=1024)
+def term_pattern(term: str) -> re.Pattern[str]:
+    """A term as whole words, ignoring case and accents: "tool" finds "Tool live"
+    but not "Toolbox", "punk" finds "post-punk". A trailing * makes it a prefix:
+    "caric*" finds "caricaturas". The term is escaped: never a pattern of the agent's."""
+    text = fold(term.strip())
+    prefix = text.endswith("*")
+    body = re.escape(text.rstrip("*").strip())
+    return re.compile(rf"(?<![^\W_]){body}" + ("" if prefix else r"(?![^\W_])"))
+
+
+def matches(term: str, text: str) -> bool:
+    return bool(term_pattern(term).search(text))
+
+
+def _in_window(monitor: Monitor, item: StoredItem, today: date) -> bool:
     if monitor.days_ahead is not None and item.data.get("start"):
         try:
             start = date.fromisoformat(str(item.data["start"])[:10])
@@ -92,6 +103,54 @@ def passes(monitor: Monitor, item: StoredItem, today: date) -> bool:
         if end < today or start > today + timedelta(days=monitor.days_ahead):
             return False
     return True
+
+
+def _at_place(monitor: Monitor, item: StoredItem) -> bool:
+    """Where: the venue names one of the places; an item without a venue may be
+    anywhere, so it is kept."""
+    venue = fold(str(item.data.get("venue") or ""))
+    return not monitor.where or not venue or any(matches(t, venue) for t in monitor.where)
+
+
+def passes(monitor: Monitor, item: StoredItem, today: date) -> bool:
+    if not _in_window(monitor, item, today) or not _at_place(monitor, item):
+        return False
+    text = _text_of(item.data)
+    if monitor.include and not any(matches(t, text) for t in monitor.include):
+        return False
+    return not any(matches(t, text) for t in monitor.exclude)
+
+
+# Titles shown per exclude term in a preview.
+TERM_EXAMPLES = 3
+
+
+def term_counts(store: Store, monitor: Monitor, now: int, tz: ZoneInfo) -> dict[str, Any]:
+    """What each filter term does to the items a report would consider (in its date
+    window): items each include term finds, items the where filter keeps per place,
+    and items each exclude term removes from what include and where let through,
+    with a few of their titles. A term that finds nothing, or removes what was
+    wanted, shows here before the monitor is saved."""
+    candidates, today = considered(store, monitor, now, tz)
+    items = [i for i in candidates if _in_window(monitor, i, today)]
+    texts = [(i, _text_of(i.data)) for i in items]
+    out: dict[str, Any] = {}
+    if monitor.include:
+        out["include"] = {t: sum(1 for _, x in texts if matches(t, x)) for t in monitor.include}
+    if monitor.where:
+        venues = [fold(str(i.data.get("venue") or "")) for i in items]
+        out["where"] = {t: sum(1 for v in venues if v and matches(t, v)) for t in monitor.where}
+    wanted = [
+        (i, x)
+        for i, x in texts
+        if _at_place(monitor, i) and (not monitor.include or any(matches(t, x) for t in monitor.include))
+    ]
+    if monitor.exclude:
+        out["exclude"] = {}
+        for t in monitor.exclude:
+            removed = [str(i.data.get("title", "")) for i, x in wanted if matches(t, x)]
+            out["exclude"][t] = {"removed": len(removed), "examples": removed[:TERM_EXAMPLES]}
+    return out
 
 
 def item_row(item: StoredItem, delivered_upto: int) -> dict[str, Any]:
@@ -219,12 +278,19 @@ def alerts_for(monitor: Monitor, states: dict[str, SourceState], now: int) -> li
     return out
 
 
+def considered(store: Store, monitor: Monitor, now: int, tz: ZoneInfo) -> tuple[list[StoredItem], date]:
+    """The items a report considers, before its filters (first seen or changed since
+    the last delivered report, at most CARRY_SECONDS back), and today's date: one
+    definition for reports and for what a preview says each term did."""
+    since = max(monitor.delivered_upto, now - CARRY_SECONDS)
+    return store.items_changed(monitor.sources, since), datetime.fromtimestamp(now, tz).date()
+
+
 def monitor_digest(
     store: Store, monitor: Monitor, now: int, tz: ZoneInfo, states: dict[str, SourceState]
 ) -> MonitorDigest:
-    since = max(monitor.delivered_upto, now - CARRY_SECONDS)
-    today = datetime.fromtimestamp(now, tz).date()
-    items = [i for i in store.items_changed(monitor.sources, since) if passes(monitor, i, today)]
+    candidates, today = considered(store, monitor, now, tz)
+    items = [i for i in candidates if passes(monitor, i, today)]
     if monitor.news:
         rows = stories(items, tz)
         left_out = 0

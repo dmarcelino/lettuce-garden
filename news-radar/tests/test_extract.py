@@ -152,7 +152,9 @@ def test_fingerprint_ignores_key_order():
     a = spec(json_spec())
     reordered = dict(reversed(list(json_spec().items())))
     assert spec(reordered).fingerprint == a.fingerprint
-    assert spec(json_spec(every="12h")).fingerprint != a.fingerprint
+    # How often it runs is not what a test checked: changing it needs no new test.
+    assert spec(json_spec(every="12h")).fingerprint == a.fingerprint
+    assert spec(json_spec(url="https://agenda.example.org/api/other")).fingerprint != a.fingerprint
 
 
 async def test_pages_stop_when_nothing_new(fetcher, web):
@@ -223,3 +225,232 @@ async def test_inspect_reads_at_most_its_cap_of_scripts(fetcher, web):
     out = await inspect(fetcher, f"{site}/")
     assert out["scripts_read"] == MAX_SCRIPTS and out["scripts_skipped"] == 3
     assert len(out["data_urls"]) == MAX_SCRIPTS
+
+
+# -- text encodings -------------------------------------------------------------------
+CARDS = "<html><body><h3>Programação</h3><h3>Música clássica</h3></body></html>"
+
+
+def html_spec(**over: Any) -> dict[str, Any]:
+    return {
+        "name": "venue",
+        "url": "https://venue.example.org/agenda",
+        "kind": "html",
+        "item_kind": "article",
+        "extract": {"items": "h3", "fields": {"title": "*"}},
+        **over,
+    }
+
+
+@pytest.mark.parametrize(
+    "body, content_type",
+    [
+        (CARDS.encode("utf-8"), "text/html; charset=utf-8"),  # the charset only in the header
+        (CARDS.encode("utf-8"), "text/html"),  # no charset anywhere: UTF-8 when it decodes as such
+        (CARDS.encode("iso-8859-1"), 'text/html; charset="ISO-8859-1"'),
+    ],
+)
+async def test_pages_are_read_in_their_encoding(fetcher, web, body, content_type):
+    web.add("https://venue.example.org/agenda", body, content_type)
+    result = await run_source(spec(html_spec()), fetcher)
+    assert [i.fields["title"] for i in result.items] == ["Programação", "Música clássica"]
+    assert "Programação" in result.sample
+
+
+async def test_inspect_reads_the_header_charset(fetcher, web):
+    from garden_news_radar.inspect import inspect
+
+    web.add("https://venue.example.org/", CARDS.encode("utf-8"), "text/html; charset=utf-8")
+    out = await inspect(fetcher, "https://venue.example.org/")
+    assert "Programação" in out["sample"]
+
+
+# -- sitemaps -------------------------------------------------------------------------
+SITEMAP = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://venue.example.org/events/old-band-northtown/</loc><lastmod>2027-01-02</lastmod></url>
+  <url><loc>https://venue.example.org/events/the-new-band-northtown-2027/</loc><lastmod>2027-01-14T10:00:00Z</lastmod></url>
+  <url><loc>https://venue.example.org/about/</loc><lastmod>2027-01-15</lastmod></url>
+</urlset>"""
+
+
+async def test_a_sitemap_lists_its_newest_pages(fetcher, web):
+    web.add("https://venue.example.org/sitemap.xml", SITEMAP, "application/xml")
+    s = spec(
+        {
+            "name": "v",
+            "url": "https://venue.example.org/sitemap.xml",
+            "kind": "sitemap",
+            "extract": {"match": ["/events/"]},
+        }
+    )
+    assert s.item_kind == "article"
+    result = await run_source(s, fetcher)
+    assert [i.fields["title"] for i in result.items] == ["the new band northtown 2027", "old band northtown"]
+    assert result.items[0].fields["published"] == "2027-01-14T10:00+00:00"
+
+
+async def test_a_followed_sitemap_reads_its_pages(fetcher, web):
+    web.add("https://venue.example.org/sitemap.xml", SITEMAP, "application/xml")
+    web.add(
+        "https://venue.example.org/events/the-new-band-northtown-2027/",
+        '<html><script type="application/ld+json">{"@type": "MusicEvent", "name": "The New Band", '
+        '"startDate": "2027-04-01", "location": {"name": "Big Room"}}</script></html>',
+    )
+    web.add("https://venue.example.org/events/old-band-northtown/", "<html><title>Old Band</title></html>")
+    s = spec(
+        {
+            "name": "v",
+            "url": "https://venue.example.org/sitemap.xml",
+            "kind": "sitemap",
+            "extract": {"match": ["/events/"]},
+            "follow": {"max": 5},
+        }
+    )
+    assert s.item_kind == "event"
+    result = await run_source(s, fetcher, known_url=lambda u: False)
+    by_title = {i.fields["title"]: i.fields for i in result.items}
+    assert by_title["The New Band"]["start"] == "2027-04-01" and by_title["The New Band"]["venue"] == "Big Room"
+    assert "Old Band" in by_title  # no schema.org data: still seen, by its title
+    assert "https://venue.example.org/about/" not in web.fetched()
+
+
+async def test_a_sitemap_index_and_unsafe_xml_are_refused(fetcher, web):
+    index = (
+        '<?xml version="1.0"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<sitemap><loc>https://venue.example.org/events-sitemap.xml</loc></sitemap></sitemapindex>"
+    )
+    web.add("https://venue.example.org/sitemap.xml", index, "application/xml")
+    s = spec({"name": "v", "url": "https://venue.example.org/sitemap.xml", "kind": "sitemap"})
+    assert "sitemap index" in (await run_source(s, fetcher)).error
+    entity = (
+        '<?xml version="1.0"?><!DOCTYPE u [<!ENTITY x SYSTEM "file:///etc/passwd">]>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>&x;</loc></url></urlset>'
+    )
+    web.add("https://venue.example.org/sitemap.xml", entity, "application/xml")
+    result = await run_source(s, fetcher)
+    assert not any("root:" in i.fields["title"] for i in result.items)
+
+
+@pytest.mark.parametrize(
+    "obj, message",
+    [
+        ({"name": "v", "url": "https://v.example.org/s.xml", "kind": "sitemap", "extract": {"match": "/e/"}}, "match"),
+        ({"name": "v", "url": "https://v.example.org/s.xml", "kind": "sitemap", "follow": {"links": "a"}}, "only max"),
+        ({"name": "v", "url": "https://v.example.org/s.xml", "kind": "sitemap", "pages": {"param": "p"}}, "pages"),
+    ],
+)
+def test_bad_sitemap_specs_are_refused(obj, message):
+    with pytest.raises(SpecError, match=message):
+        spec(obj)
+
+
+# -- source_inspect -------------------------------------------------------------------
+async def test_inspect_offers_sitemaps_and_reads_them(fetcher, web):
+    from garden_news_radar.inspect import inspect
+
+    web.add(
+        "https://venue.example.org/robots.txt",
+        "User-agent: *\nAllow: /\nSitemap: https://venue.example.org/sitemap.xml\n",
+        "text/plain",
+    )
+    web.add("https://venue.example.org/", "<html><body>Home</body></html>")
+    web.add("https://venue.example.org/sitemap.xml", SITEMAP, "application/xml")
+    out = await inspect(fetcher, "https://venue.example.org/")
+    assert out["sitemaps"] == ["https://venue.example.org/sitemap.xml"]
+    sm = await inspect(fetcher, "https://venue.example.org/sitemap.xml")
+    assert sm["suggested_kind"] == "sitemap" and sm["sitemap_pages"] == 3
+    assert sm["newest"][0]["url"] == "https://venue.example.org/about/"
+
+
+async def test_inspect_cleans_and_ranks_data_urls(fetcher, web):
+    from garden_news_radar.inspect import inspect
+
+    script = (
+        'a("https://site.example.org/api/account/delete\\\\"); b(`https://${host}/api/oembed.json`);'
+        'c("https://site.example.org/api/user/login"); d("https://site.example.org/api/list/latest");'
+        'e("https://site.example.org/api/events?from=today")'
+    )
+    web.add("https://site.example.org/", f"<html><body><script>{script}</script></body></html>")
+    out = await inspect(fetcher, "https://site.example.org/")
+    assert out["data_urls"] == [
+        "https://site.example.org/api/events?from=today",
+        "https://site.example.org/api/list/latest",
+    ]
+    assert out["data_urls_left_out"] == 2
+
+
+async def test_inspect_offers_repeated_blocks_for_html(fetcher, web):
+    from garden_news_radar.inspect import inspect
+
+    cards = "".join(
+        f'<div class="event-card big"><h3>Band {i}</h3><p class="when">2{i}.11.2027</p><a href="/e/{i}">more</a></div>'
+        for i in range(4)
+    )
+    nav = "".join(f'<li class="menu-item"><a href="/m/{i}">Menu entry {i}</a></li>' for i in range(5))
+    web.add("https://venue.example.org/agenda", f"<html><body><nav><ul>{nav}</ul></nav>{cards}</body></html>")
+    out = await inspect(fetcher, "https://venue.example.org/agenda")
+    first = out["repeated_blocks"][0]
+    assert first["items"] == "div.event-card" and first["count"] == 4
+    assert first["with_date"] == 1.0 and first["heading"] == "h3"
+    assert not any(b["items"] == "li.menu-item" for b in out["repeated_blocks"])
+
+
+@pytest.mark.parametrize("charset", ["EUC-JP", "base64", "rot13", "x-unknown"])
+async def test_any_declared_charset_is_read_or_ignored_without_crashing(fetcher, web, charset):
+    from garden_news_radar.fetch import charset_of
+    from garden_news_radar.inspect import inspect
+
+    body = '<?xml version="1.0" encoding="EUC-JP"?><html><body><h3>日本の夜</h3><h3>Late Set</h3></body></html>'
+    data = body.encode("euc_jp")
+    web.add("https://venue.example.org/agenda", data, f"text/html; charset={charset}")
+    result = await run_source(spec(html_spec()), fetcher)
+    assert result.ok and len(result.items) == 2
+    if charset == "EUC-JP":
+        assert result.items[0].fields["title"] == "日本の夜"
+    else:
+        assert charset_of(f"text/html; charset={charset}") == ""  # not a text encoding Python knows
+    assert "error" not in await inspect(fetcher, "https://venue.example.org/agenda")
+
+
+def test_only_unfollowed_listings_are_judged_by_past_events():
+    from datetime import date
+
+    from garden_news_radar.extract import Item, run_problem
+
+    past = [Item("k", {"title": "Old", "start": "2027-01-01"})]
+    today = date(2027, 1, 15)
+    assert "in the past" in run_problem(past, spec(json_spec()), today)
+    # A followed listing's run holds only the pages read in it, which can be old ones read again.
+    followed = spec({"name": "v", "url": "https://v.example.org/list", "kind": "schema_org", "follow": {"links": "a"}})
+    assert run_problem(past, followed, today) == ""
+
+
+async def test_inspect_counts_a_whole_sitemap(fetcher, web):
+    from garden_news_radar.extract import MAX_SITEMAP_ITEMS
+    from garden_news_radar.inspect import inspect
+
+    urls = "".join(f"<url><loc>https://big.example.org/e/{i}</loc></url>" for i in range(MAX_SITEMAP_ITEMS + 50))
+    web.add(
+        "https://big.example.org/sitemap.xml",
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
+        "application/xml",
+    )
+    out = await inspect(fetcher, "https://big.example.org/sitemap.xml")
+    assert out["sitemap_pages"] == MAX_SITEMAP_ITEMS + 50 and len(out["newest"]) == 10
+
+
+async def test_inspect_keeps_listing_urls_that_share_a_word_with_account_ones(fetcher, web):
+    from garden_news_radar.inspect import inspect
+
+    script = (
+        'a("https://site.example.org/api/events?category=piano"); b("https://site.example.org/api/artists/profile.json");'
+        'c("https://site.example.org/api/piano/payment/get"); d("https://[cdn/api/events.json")'
+    )
+    web.add("https://site.example.org/", f"<html><body><script>{script}</script></body></html>")
+    out = await inspect(fetcher, "https://site.example.org/")
+    assert out["data_urls"] == [
+        "https://site.example.org/api/events?category=piano",
+        "https://site.example.org/api/artists/profile.json",
+    ]
+    assert out["data_urls_left_out"] == 1

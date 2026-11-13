@@ -8,11 +8,19 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-import lxml.html
 from garden_common.text import one_line
 from lxml import etree
 
-from .extract import ExtractError, Item, extract, follow_links, normalize, schema_items
+from .extract import (
+    ExtractError,
+    Item,
+    extract,
+    follow_links,
+    html_document,
+    normalize,
+    schema_items,
+    slug_title,
+)
 from .fetch import Fetcher, FetchError, Page
 from .spec import Spec
 
@@ -22,6 +30,7 @@ ACCEPT = {
     "html": "text/html, application/xhtml+xml, */*;q=0.5",
     "schema_org": "text/html, application/xhtml+xml, */*;q=0.5",
     "ical": "text/calendar, */*;q=0.5",
+    "sitemap": "application/xml, text/xml;q=0.9, */*;q=0.5",
 }
 SAMPLE = 600
 
@@ -34,6 +43,8 @@ class RunResult:
     etag: str = ""
     last_modified: str = ""
     sample: str = ""
+    # Seconds the site asked to be left alone (a 429 or 503, or a pause still running).
+    retry_after: int = 0
     pages: int = 0
     followed: int = 0
     follow_errors: int = 0
@@ -54,7 +65,7 @@ def sample_of(page: Page) -> str:
     """A short look at what was fetched, for an agent repairing a source."""
     if page.content_type in ("text/html", "application/xhtml+xml"):
         try:
-            root = lxml.html.document_fromstring(page.body)
+            root = html_document(page)
             for bad in root.xpath("//script|//style|//noscript"):
                 bad.drop_tree()
             return one_line(root.text_content(), SAMPLE)
@@ -86,6 +97,7 @@ async def run_source(
         urls = [page_url(spec.url, param, int(start) + i * int(step)) for i in range(count)]
     items: dict[str, Item] = {}
     first: Page | None = None
+    sitemap_links: list[str] = []
     for i, url in enumerate(urls):
         try:
             page = await fetcher.get(
@@ -98,6 +110,7 @@ async def run_source(
         except FetchError as e:
             if i == 0:
                 result.error = str(e)
+                result.retry_after = e.retry_after
                 return result
             break  # a later page failing ends the paging, not the run
         result.pages += 1
@@ -110,7 +123,12 @@ async def run_source(
             result.sample = sample_of(page)
             result.etag, result.last_modified = page.etag, page.last_modified
         try:
-            found = extract(spec, page)
+            # A followed sitemap's items come from its pages; its own entries are only links,
+            # read here once so that a page that is not a sitemap fails the run.
+            if spec.kind == "sitemap" and spec.follow:
+                found, sitemap_links = [], follow_links(spec, page)
+            else:
+                found = extract(spec, page)
         except ExtractError as e:
             if i == 0:
                 result.error = str(e)
@@ -124,18 +142,24 @@ async def run_source(
     if spec.follow and first is not None:
         most = min(spec.follow["max"], max_follow or spec.follow["max"])
         try:
-            links = [u for u in follow_links(spec, first) if not known_url(u)][:most]
+            listed = sitemap_links if spec.kind == "sitemap" else follow_links(spec, first)
+            links = [u for u in listed if not known_url(u)][:most]
         except ExtractError:
             links = []
         for link in links:
             try:
                 page = await fetcher.get(link, accept=ACCEPT["html"], max_wait=max_wait)
-                root = lxml.html.document_fromstring(page.body, base_url=page.url)
+                root = html_document(page)
             except (FetchError, etree.ParserError, ValueError):
                 result.follow_errors += 1
                 continue
             result.followed += 1
-            for raw, extra in schema_items(root, spec.extract["types"]):
+            described = schema_items(root, spec.extract["types"])
+            if not described and spec.kind == "sitemap":
+                # A page without schema.org data still counts as seen: its title, or its URL's words.
+                title = one_line(" ".join(root.xpath("//title//text()")), 300) or slug_title(link)
+                described = [({"title": title, "url": link}, {})]
+            for raw, extra in described:
                 if not raw.get("url"):
                     raw["url"] = link
                 item = normalize(raw, extra, spec, page.url)

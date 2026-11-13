@@ -52,7 +52,7 @@ These checks ran from a workstation. Four of the sites sit behind a CDN that oft
 |---|---|---|
 | **Source** | One URL and how to read it: an extractor kind, its spec, a fetch interval. It yields **items**. Sources belong to the stack and can be reused by several monitors | The agent (MCP); the person can delete an unused one on the page |
 | **Item** | One event or article, normalised: `title`, `url`, `start`, `end`, `venue`, `summary`, `image`, plus `extra` fields the spec names. It has a stable key and remembers when it was first seen and last changed | The service |
-| **Monitor** | What one agent wants from some sources: a name, the sources, simple deterministic filters (keywords to include or exclude, a date window for events), whether it is a news monitor, its **schedule**, and the conversation its reports go to (`new` each time, or the agent's `default`) | The agent (MCP); the person can delete it on the page |
+| **Monitor** | What one agent wants from some sources: a name, the sources, simple deterministic filters (words to include or exclude, matched as whole words with `*` for a prefix; places an event's venue must name; a date window for events), whether it is a news monitor, its **schedule**, and the conversation its reports go to (`new` each time, or the agent's `default`) | The agent (MCP); the person can delete it on the page |
 | **Schedule** | A 5-field numeric cron expression in the stack's timezone (`TZ`), for example `0 9 * * 1-5`. The service keeps it and fires it | The agent, from what the person said, or the admin's default |
 | **Report** | One turn: when a schedule fires, the monitors of one agent on that schedule and conversation are reported together, if any of them has something to say | The service decides; the executor hands it to Lettuce |
 | **Digest** | The data in a report: per monitor, the new and changed items since its last delivered report, the news stories, and the sources that need repair | The service |
@@ -119,10 +119,11 @@ A source spec is declarative JSON, never code. Every kind takes the same outer f
 | `html` | Server-rendered HTML (`lxml`, `cssselect`) | `items`, a CSS selector; `fields`, CSS selectors with `@attr` for attributes |
 | `schema_org` | JSON-LD (`<script type="application/ld+json">`, `@graph` walked) and microdata (`itemscope`/`itemprop`) | `types`, the schema.org types to keep (default: `Event` and its subtypes such as `MusicEvent`, `TheaterEvent`, `ScreeningEvent`, `Festival`; also `Movie`, `NewsArticle`); schema.org's own properties map to the item fields |
 | `ical` | iCalendar feeds (`icalendar`) | nothing by default: each `VEVENT` is an item |
+| `sitemap` | XML sitemaps (`lxml`, no entities, DTD or network) | `match`, plain pieces of URL text a page's URL must hold; `types` as for `schema_org`. Without `follow`, each page is an article titled from its URL, dated by its `lastmod`; with `follow`, its newest unseen pages are read for schema.org data. The newest 200 entries count. It reaches sites whose listings need a browser, without running one |
 
 Shared options:
 - **`pages`:** a page or offset parameter and a maximum (at most 10).
-- **`follow`:** for `html` and `schema_org` listings whose details live on each item's own page, follow up to 20 unseen item URLs per run and extract from those. Pages already seen are not fetched again.
+- **`follow`:** for `schema_org` listings whose details live on each item's own page, and for `sitemap`, follow up to 20 unseen item URLs per run and extract from those. Pages already seen are not fetched again.
 - **`dates`:** ISO 8601 is parsed directly; anything else goes through `dateparser` with the spec's languages. A date that fails to parse leaves the field empty and counts against the source's health.
 - **`key`:** the fields that identify an item. Default: the canonical URL (fragment and `utm_*` parameters dropped), else a hash of title and start.
 - **`watch`:** the fields whose change makes an item "changed" (default `title`, `start`, `venue`). Anything else may change silently.
@@ -221,12 +222,12 @@ Served at `http://garden-watchlist:8000/mcp`, outside the tunnelled `/watchlist/
 | Tool | Does |
 |---|---|
 | `settings` | The admin's default times, caps and the stack's timezone |
-| `source_inspect(url)` | Fetches a page and reports, deterministically, what it offers: declared feeds (`<link rel="alternate">`), WordPress REST routes when `/wp-json/` answers, JSON-LD and microdata types, iCalendar links, `.json`, `/api/` and `graphql` URLs found in the page's scripts, and a short sample of the visible text. This is the part an agent's normal page fetch misses |
-| `source_test(spec)` | Runs a spec once, without storing anything, and returns up to 10 items, the field fill rates and any failure. Finishes within 60 s |
-| `source_put(spec)` | Creates or replaces a source; needs a passing test of the same spec (above). `revert` restores one of the last 5 specs |
+| `source_inspect(url)` | Fetches a page and reports, deterministically, what it offers: declared feeds (`<link rel="alternate">`), WordPress REST routes when `/wp-json/` answers, JSON-LD and microdata types, iCalendar links, the sitemaps robots.txt lists, `.json`, `/api/` and `graphql` URLs found in the page's scripts (account, login and payment ones left out, script code dropped, listing-like ones first), repeated blocks with links (candidate `extract.items` for `html`), a sitemap's newest pages, and a short sample of the visible text. This is the part an agent's normal page fetch misses |
+| `source_test(spec)` | Runs a spec once, without storing anything, and returns up to 10 items, the field fill rates and any failure. It fails on what would make a scheduled run unhealthy (events without dates; every event in the past, for a listing read whole rather than followed) and warns when upcoming events span under 14 days (a listing cut by a page size). A site's pause comes back as `retry_after` with the time to try again, so an agent doesn't poll. Finishes within 90 s |
+| `source_put(spec)` | Creates or replaces a source; needs a passing test of the same spec, `every` aside (above). `revert` restores one of the last 5 specs |
 | `source_list`, `source_status(name)`, `source_delete(name)` | Sources with their health and history; delete refuses a source a monitor uses |
 | `monitor_put`, `monitor_list`, `monitor_delete` | Monitors of the given agent, with their schedule and conversation |
-| `monitor_preview(name)` | What that monitor would report if its schedule fired now, without a turn and without marking anything delivered: how the agent checks a new monitor with the person |
+| `monitor_preview(name)` | What that monitor would report if its schedule fired now, without a turn and without marking anything delivered: how the agent checks a new monitor with the person. `terms` says what each filter term did (items each include and where term finds, items each exclude term removes, with examples) |
 | `digest_more(digest_id)` | The rows of a report that didn't fit in its prompt |
 
 Every tool takes `agent_id`, and the service cannot verify it: agents are root in the app-server and can name any agent of the stack. Within one person's stack that is accepted, and the docs say so.

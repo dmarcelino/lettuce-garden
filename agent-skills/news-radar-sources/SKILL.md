@@ -20,8 +20,12 @@ W="sh /root/.letta/skills/mcp-servers/scripts/mcp.sh"
 $W tools news-radar                               # always name the server
 $W call mcp__news-radar__settings
 $W call mcp__news-radar__source_inspect --args '{"url": "https://example.org/whats-on"}'
-$W call mcp__news-radar__source_test --args-file spec.json        # long arguments: a file, or - for stdin
+$W call mcp__news-radar__source_test --args-file test.json        # long arguments: a file, or - for stdin
 ```
+
+`source_test` and `source_put` take the spec wrapped: `{"spec": {"name": ..., "url": ...}}`.
+**Read each result whole** before filtering it with `grep` or `tail`: an `error`, `problems`,
+`warnings` or `next` field you cut away is a mistake you repeat.
 
 Two ideas:
 - A **source** is one URL and how to read it: a declarative spec (never code). Sources belong to
@@ -35,28 +39,45 @@ skips the turn when there is nothing to report.
 ## Setting one up
 
 1. **Reuse first.** `source_list`: a source another monitor reads may already cover it.
-2. **Find the source.** Search the web for where the information is published. Prefer, in this
-   order:
+2. **Find the source.** Search the web for where the information is published, and use the
+   addresses you find: **don't guess domains**. An error `no such host` means the name does not
+   exist; search for the site's real address before saying it can't be followed. Prefer, in
+   this order:
    1. an RSS/Atom feed or an iCalendar (`.ics`) link: kind `rss` or `ical`;
    2. schema.org data in the page (`Event`, `MusicEvent`, `ScreeningEvent`, `Movie`,
       `NewsArticle`...): kind `schema_org`;
    3. a JSON endpoint: kind `json`. Many sites load their listings from one with a script;
-   4. the page's HTML, with CSS selectors: kind `html`.
+   4. the page's HTML, with CSS selectors: kind `html`;
+   5. the site's sitemap, when the pages need a browser's scripts: kind `sitemap` (below).
 
    Run **`source_inspect`** on the page: it lists the feeds, WordPress REST routes,
-   schema.org types, calendars, and the JSON, API and GraphQL URLs found in the page and its
-   same-site scripts. Then look at a candidate with `source_inspect` again (a JSON URL comes
-   back as its shape). It reads up to 6 scripts and leaves out library and tracking ones
-   (`scripts_read`, `scripts_skipped`): when it finds no data URL and skipped some, the API can
-   still be in one of the page's scripts; read them yourself and look for `/api/`, `.json` or
-   `/graphql` paths.
+   schema.org types, calendars, the sitemaps its robots.txt names, the JSON, API and GraphQL
+   URLs found in the page and its same-site scripts (account, login and payment ones are left
+   out, `data_urls_left_out`), and `repeated_blocks`: elements repeated with links, the likely
+   cards of a listing, with how many hold a date and a heading, ready as `extract.items` for
+   kind `html`. Then look at a candidate with `source_inspect` again (a JSON URL comes back as
+   its shape, a sitemap as its newest pages). It reads up to 6 scripts and leaves out library
+   and tracking ones (`scripts_read`, `scripts_skipped`): when it finds no data URL and skipped
+   some, the API can still be in one of the page's scripts; read them yourself and look for
+   `/api/`, `.json` or `/graphql` paths.
+
+   **When a result has `retry_after`**, the site asked for a pause: don't call `source_test`
+   or `source_inspect` for it again before then (`next` says the time). Go on with the other
+   sources; a site that keeps asking is rate-limiting this stack, so tell the person it can't
+   be followed reliably and move on. Never retry in a loop.
 
    **Never** use a source behind a login, a CAPTCHA, a "checking your browser" or waiting-room
    page, or a paywall, and never try to get around one: tell the person it can't be monitored.
    The service honours robots.txt; a refusal is final.
 3. **Write the spec and test it** with `source_test` until the items and `fill_rates` look
-   right (titles everywhere, dates for events). Then **`source_put` the exact spec you tested**
-   within 15 minutes. Pick `every` from how often the source changes: hours, not minutes.
+   right (titles everywhere, dates for events). A test fails on `problems`: no items, events
+   without dates, or every event in the past (a date fixed in the URL, such as
+   `start_date=2027-01-01`, does that within days: leave such dates out). It passes with
+   `warnings` when upcoming events span only a few days, which usually means the request cuts
+   the listing: add `pages`, ask for more per page, or ask for one category (music only).
+   Then **`source_put` the spec you tested** within 15 minutes; `every` may change without a
+   new test, anything else needs one. Pick `every` from how often the source changes: hours,
+   not minutes.
 
    ```json
    {"name": "city-agenda", "url": "https://agenda.example.org/wp-json/agenda/v1/events?per_page=50",
@@ -74,6 +95,12 @@ skips the turn when there is nothing to report.
      `"sel@attr"` for an attribute, `"@attr"` for the item's own.
    - `schema_org`: `types` narrows the schema.org types kept. When a listing only links to the
      events, add `"follow": {"links": "a.event@href", "max": 20}`.
+   - `sitemap`: the site's sitemap (`/sitemap.xml`, or one of the sitemaps an index lists).
+     `extract.match` keeps only URLs holding one of its pieces of text, such as `["/events/"]`
+     (plain text, not a pattern). Without `follow`, each new page is an article titled from its
+     URL's words, dated by its `lastmod`. With `"follow": {"max": 20}`, its newest unseen pages
+     are read for schema.org data (`types` as for `schema_org`), so events come with their
+     dates and places; this reaches sites whose listings need a browser.
    - Item fields: `title` (required), `url`, `start`, `end`, `venue`, `summary`, `image`,
      `published`, `outlet`; anything else goes under `extra`. `item_kind` is `event` (the
      default) or `article` (the default for `rss`).
@@ -87,18 +114,27 @@ skips the turn when there is nothing to report.
      (`groups_in_sample`).
 4. **Preview, then save the monitor.** First `monitor_preview` the draft: `agent_id`, a `name`,
    its `sources`, and the filters below. Nothing is saved, and the rows are what its first
-   report would hold. Adjust the filters until the rows are right, then `monitor_put` with the
-   same fields, plus:
+   report would hold. Its `terms` says what each filter term did: how many items each
+   `include` and `where` term finds, and how many each `exclude` term removes, with examples.
+   Read it to fix a term that finds nothing or removes what the person wants, rather than
+   trying variant after variant; never exclude single events by name. Then `monitor_put` with
+   the same fields, plus:
    - **`schedule`**: the person's words as numeric 5-field cron **in the stack's timezone**
      (`settings` says which; **not UTC**, whatever other instructions say about schedules):
      "9am Monday to Friday" is `0 9 * * 1-5`; several times join with `;`. Leave it out when
      the person names no time: the admin's default applies;
    - **`set_up_in`: always your `$LETTA_CONVERSATION_ID`**. Reports then come to this
      conversation, where the person asked;
-   - `include` / `exclude`: words or phrases an item must have / must not have. They are found
-     anywhere in the title, summary, venue, outlet and extra fields, ignoring case and accents
-     ("Cuaron" finds "Cuarón"); not per field, so prefer full names ("James Cameron") to short
-     words that also occur in summaries;
+   - `include` / `exclude`: up to 60 words or phrases an item must have / must not have. They
+     are found as whole words anywhere in the title, summary, venue, outlet and extra fields,
+     ignoring case and accents ("Cuaron" finds "Cuarón"; "tool" does not find "toolbox";
+     "punk" finds "post-punk"). End a term with `*` for a prefix: "caric*" finds "caricatura".
+     Not per field, so prefer full names ("James Cameron") to short words that also occur in
+     summaries, and mind words with a second meaning in the person's language (an `exclude`
+     of "musical", meant for stage musicals, also removes news about the "musical scene");
+   - `where`: places an event's venue must name ("paris", "lyon"), as whole words. Events
+     without a venue are kept, so exclude other cities by name if a source lists them in the
+     title only;
    - `days_ahead`: only events starting within that many days;
    - `news: true` for a topic followed through news searches (below);
    - `conversation`: leave it out. A new monitor then reports here (with `set_up_in`), and a
@@ -112,15 +148,18 @@ skips the turn when there is nothing to report.
 
 ## News on a topic
 
-Use search feeds as sources, then `news: true` on the monitor: articles are grouped into
+Use news feeds as sources, then `news: true` on the monitor: articles are grouped into
 stories, and each story says how many outlets carry it.
-- Google News search RSS (kind `rss`):
-  `https://news.google.com/rss/search?q=<words>+when:1d&hl=en-US&gl=US&ceid=US:en` (change
-  the language and country to the person's).
+- Outlets' own feeds first: most news sites publish RSS, often per section (culture, music,
+  business). `source_inspect` finds the declared ones; a site's general feed with `include`
+  terms works when it has no section feed.
 - GDELT's article list (kind `json`, `"items": "articles"`, fields `title`, `url`, `published`
   from `seendate`, `outlet` from `domain`):
   `https://api.gdeltproject.org/api/v2/doc/doc?query=<words>&mode=artlist&format=json&maxrecords=75&timespan=1d`.
-  It allows one request every 5 seconds; keep `every` at hours.
+  It allows one request every 5 seconds per address and often answers 429 to shared ones: if
+  `source_test` comes back with `retry_after` twice, leave it out and say so. Keep `every` at
+  hours.
+- Google News search feeds can't be used: its robots.txt refuses automated readers.
 
 The number of outlets is a hint, not a verdict: you decide what is significant for this person.
 

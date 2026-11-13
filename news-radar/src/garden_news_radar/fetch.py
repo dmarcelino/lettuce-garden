@@ -17,6 +17,7 @@ boundary: it keeps a scheduled job from walking the stack's services or the host
 
 from __future__ import annotations
 
+import codecs
 import ipaddress
 import math
 import socket
@@ -65,7 +66,12 @@ WAITING_ROOM_HOSTS = ("queue-it.net",)
 
 
 class FetchError(Exception):
-    """A fetch that yields nothing; the message says why, in a few words."""
+    """A fetch that yields nothing; the message says why, in a few words.
+    retry_after: the seconds the site asked to be left alone, when it asked."""
+
+    def __init__(self, message: str, retry_after: int = 0):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class HostBusy(FetchError):
@@ -75,6 +81,10 @@ class HostBusy(FetchError):
 
 class BlockedAddress(Exception):
     pass
+
+
+class UnknownHost(Exception):
+    """A name that does not resolve: said as such, not as a failed connection."""
 
 
 def is_public(address: str) -> bool:
@@ -112,9 +122,9 @@ class PublicOnlyBackend(httpcore.AsyncNetworkBackend):
         try:
             addresses = await self._resolve(host, port)
         except OSError as e:
-            raise httpcore.ConnectError(f"cannot resolve {host}") from e
+            raise UnknownHost(host) from e
         if not addresses:
-            raise httpcore.ConnectError(f"cannot resolve {host}")
+            raise UnknownHost(host)
         if not all(is_public(a) for a in addresses):
             raise BlockedAddress(host)
         last: Exception | None = None
@@ -193,13 +203,30 @@ class Page:
     body: bytes
     etag: str = ""
     last_modified: str = ""
+    # The encoding the Content-Type header names, when it names one Python knows.
+    charset: str = ""
 
     @property
     def not_modified(self) -> bool:
         return self.status == 304
 
     def text(self) -> str:
-        return self.body.decode("utf-8", errors="replace")
+        return self.body.decode(self.charset or "utf-8", errors="replace")
+
+
+def charset_of(content_type: str) -> str:
+    """The charset parameter of a Content-Type header, if Python has that codec."""
+    for part in content_type.split(";")[1:]:
+        name, _, value = part.partition("=")
+        if name.strip().lower() == "charset":
+            value = value.strip().strip("\"'").lower()
+            try:
+                info = codecs.lookup(value) if value else None
+            except LookupError:
+                return ""
+            # Only text encodings: base64 or rot13 are codecs too, but not a page's charset.
+            return info.name if info is not None and info._is_text_encoding else ""
+    return ""
 
 
 def check_url(url: str) -> str:
@@ -299,13 +326,15 @@ class Fetcher:
                 continue
             if status == 304:
                 return Page(url, 304, "", b"", etag, last_modified)
+            pause = 0
             if status in (429, 503):
-                self._back_off(url, response_headers.get("retry-after", ""))
+                pause = self._back_off(url, response_headers.get("retry-after", ""))
             if status in (401, 402, 403, 407, 429, 503) and looks_challenged(body):
-                raise FetchError(f"HTTP {status}: a challenge or waiting room")
+                raise FetchError(f"HTTP {status}: a challenge or waiting room", retry_after=pause)
             if not 200 <= status < 300:
-                raise FetchError(f"HTTP {status}")
-            content_type = response_headers.get("content-type", "").split(";")[0].strip().lower()
+                raise FetchError(f"HTTP {status}", retry_after=pause)
+            header = response_headers.get("content-type", "")
+            content_type = header.split(";")[0].strip().lower()
             if content_type in ("text/html", "application/xhtml+xml") and looks_challenged(body):
                 raise FetchError("a challenge or waiting room instead of the page")
             return Page(
@@ -315,6 +344,7 @@ class Fetcher:
                 body,
                 response_headers.get("etag", ""),
                 response_headers.get("last-modified", ""),
+                charset_of(header),
             )
         raise FetchError(f"more than {MAX_REDIRECTS} redirects")
 
@@ -328,7 +358,8 @@ class Fetcher:
             if wait > max_wait:
                 raise HostBusy(
                     f"the site asked to wait {math.ceil(wait)} s more (a 429 or 503, or its Crawl-delay); "
-                    "trying again later"
+                    "nothing was fetched",
+                    retry_after=math.ceil(wait),
                 )
             if wait > 0:
                 await self._sleep(wait)
@@ -345,6 +376,8 @@ class Fetcher:
                     return response.status_code, response.headers, bytes(body)
             except BlockedAddress as e:
                 raise FetchError("not a public address") from e
+            except UnknownHost as e:
+                raise FetchError(f"no such host: {e} (the name does not resolve; check the address)") from e
             except httpx.TimeoutException as e:
                 raise FetchError("timed out") from e
             except httpx.HTTPError as e:
@@ -353,7 +386,8 @@ class Fetcher:
                 delay = max(self._spacing, self._crawl_delay(host))
                 self._next_at[host] = max(self._next_at.get(host, 0.0), self._clock() + delay)
 
-    def _back_off(self, url: str, retry_after: str) -> None:
+    def _back_off(self, url: str, retry_after: str) -> int:
+        """Pauses the host for its Retry-After, or HOST_BACKOFF; returns the seconds."""
         delay = HOST_BACKOFF
         if retry_after.isdigit():
             delay = min(max(int(retry_after), 1), 3600)
@@ -364,6 +398,13 @@ class Fetcher:
                 pass
         host = host_of(url)
         self._next_at[host] = max(self._next_at.get(host, 0.0), self._clock() + delay)
+        return math.ceil(delay)
+
+    def sitemaps(self, url: str) -> list[str]:
+        """The sitemaps the robots.txt of this URL's host lists, once it has been read."""
+        entry = self._robots.get(host_of(url))
+        parser = entry[1] if entry else None
+        return list(dict.fromkeys(parser.site_maps() or []))[:10] if parser else []
 
     def _crawl_delay(self, host: str) -> float:
         entry = self._robots.get(host)

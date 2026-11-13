@@ -36,7 +36,8 @@ async def test_put_needs_a_passing_test_of_that_exact_spec(service, web, clock):
     assert result["passed"] and result["items_found"] == 2
     assert result["fill_rates"]["title"] == 1.0
     with pytest.raises(ToolError, match="source_test"):
-        service.source_put(json_spec(every="12h"))
+        service.source_put(json_spec(url="https://agenda.example.org/api/other"))
+    assert service.source_put(json_spec(every="12h"))["spec"]["every"] == "12h"  # only how often: no new test
     clock.t += 16 * 60
     with pytest.raises(ToolError, match="source_test"):
         service.source_put(json_spec())
@@ -693,3 +694,130 @@ async def test_saving_again_keeps_where_reports_go(service, web, store):
     # "here" without set_up_in means where it was set up, when that is known.
     out = service.monitor_put(AGENT, "films", ["city-agenda"], conversation="here")
     assert out["monitor"]["conversation"] == "local-conv-12" and "note" not in out
+
+
+# -- what source_test and health catch -------------------------------------------------------
+def events_body(dates, venue="Hall A"):
+    items = [{"name": f"E{i}", "date": d, "link": f"/e/{i}", "place": {"name": venue}} for i, d in enumerate(dates)]
+    return json.dumps({"data": {"list": {"items": items}}})
+
+
+async def test_a_listing_of_past_events_fails_its_test_and_makes_its_source_unhealthy(service, web, store, clock):
+    web.add(URL, events_body(["2027-01-10", "2027-01-12"]), "application/json")  # T0 is 2027-01-15
+    out = await service.source_test(json_spec())
+    assert not out["passed"] and "every event is in the past" in out["problems"][0]
+    await add_source(service, web, body=events_body(["2027-01-20"]))
+    await service.fetch_source("city-agenda")
+    assert store.source_state("city-agenda").healthy
+    clock.t += 10 * 86400  # a date fixed in the URL: the listing stops moving
+    await service.fetch_source("city-agenda")
+    st = store.source_state("city-agenda")
+    assert not st.healthy and "every event is in the past" in st.unhealthy_reason
+
+
+async def test_event_sources_need_their_dates(service, web):
+    web.add(URL, json.dumps({"data": {"list": {"items": [{"name": f"E{i}", "link": f"/e/{i}"} for i in range(4)]}}}))
+    out = await service.source_test(json_spec())
+    assert not out["passed"] and out["problems"] == ["4 of 4 items have no start"]
+
+
+async def test_a_listing_cut_short_is_flagged(service, web):
+    web.add(URL, events_body([f"2027-01-{d:02d}" for d in range(16, 28)]), "application/json")
+    out = await service.source_test(json_spec())
+    assert out["passed"] and "span only 12 days" in out["warnings"][0]
+    web.add(URL, events_body([f"2027-{m:02d}-01" for m in range(2, 13)]), "application/json")
+    assert "warnings" not in await service.source_test(json_spec())
+
+
+async def test_a_paused_site_says_when_to_try_again(service, web):
+    web.add(URL, "slow down", "text/plain", status=429, **{"retry-after": "300"})
+    first = await service.source_test(json_spec())
+    second = await service.source_test(json_spec())
+    for out in (first, second):
+        assert not out["passed"] and out["retry_after"] > 0
+        assert "do not call source_test or source_inspect for this site before" in out["next"]
+    inspected = await service.source_inspect(URL)
+    assert inspected["retry_after"] > 0 and "before" in inspected["next"]
+
+
+# -- filters ------------------------------------------------------------------------------------
+TITLES = [
+    "Tool live in Northtown",
+    "Toolbox workshop",
+    "Post-punk night",
+    "Caricaturas ao vivo",
+    "Cinderela, o musical",
+    "Panorama musical: The Example Band confirmed",
+]
+
+
+async def add_titles(service, web, titles=TITLES, venues=None):
+    items = [
+        {"name": t, "date": "2027-02-01", "link": f"/e/{i}", "place": {"name": (venues or {}).get(t, "")}}
+        for i, t in enumerate(titles)
+    ]
+    await add_source(service, web, body=json.dumps({"data": {"list": {"items": items}}}))
+    await service.fetch_source("city-agenda")
+
+
+def titles_of(service, **filters):
+    return [r["title"] for r in service.monitor_preview(AGENT, "x", sources=["city-agenda"], **filters)["rows"]]
+
+
+async def test_terms_match_whole_words_and_star_makes_a_prefix(service, web):
+    await add_titles(service, web)
+    assert titles_of(service, include=["tool"]) == ["Tool live in Northtown"]
+    assert titles_of(service, include=["punk"]) == ["Post-punk night"]
+    assert titles_of(service, include=["caric"]) == []
+    assert titles_of(service, include=["caric*"]) == ["Caricaturas ao vivo"]
+    assert titles_of(service, include=["The Example Band"]) == ["Panorama musical: The Example Band confirmed"]
+
+
+async def test_a_preview_says_what_each_term_did(service, web):
+    await add_titles(service, web)
+    out = service.monitor_preview(
+        AGENT, "x", sources=["city-agenda"], include=["tool", "musical", "shoegaze"], exclude=["musical"]
+    )
+    assert [r["title"] for r in out["rows"]] == ["Tool live in Northtown"]
+    terms = out["terms"]
+    assert terms["include"] == {"tool": 1, "musical": 2, "shoegaze": 0}
+    assert terms["exclude"]["musical"]["removed"] == 2
+    assert "Panorama musical: The Example Band confirmed" in terms["exclude"]["musical"]["examples"]
+
+
+async def test_where_keeps_events_at_the_places_named(service, web):
+    venues = {TITLES[0]: "Arena, Southtown", TITLES[2]: "Hall One, Northtown"}
+    await add_titles(service, web, venues=venues)
+    kept = titles_of(service, where=["northtown", "easttown"])
+    assert TITLES[0] not in kept and TITLES[2] in kept
+    assert TITLES[1] in kept  # no venue: kept, since it may be anywhere
+    out = service.monitor_preview(AGENT, "x", sources=["city-agenda"], where=["northtown"])
+    assert out["terms"]["where"] == {"northtown": 1}
+    service.monitor_put(AGENT, "lx", ["city-agenda"], where=["northtown"], schedule="0 9 * * *")
+    assert service.monitor_list(AGENT)["monitors"][0]["where"] == ["northtown"]
+
+
+async def test_monitors_take_up_to_sixty_terms(service, web):
+    await add_source(service, web)
+    service.monitor_put(AGENT, "many", ["city-agenda"], include=[f"t{i}" for i in range(60)])
+    with pytest.raises(ToolError, match="at most 60"):
+        service.monitor_put(AGENT, "many", ["city-agenda"], include=[f"t{i}" for i in range(61)])
+
+
+def test_a_store_from_before_where_gains_the_column(settings, clock):
+    import sqlite3
+
+    from garden_news_radar.store import Store
+
+    Store(settings.db_path, clock=clock)
+    db = sqlite3.connect(settings.db_path)
+    db.execute("ALTER TABLE monitors DROP COLUMN where_terms")
+    db.execute(
+        "INSERT INTO monitors (id, agent_id, name, sources, include, exclude, news, schedule, conversation, "
+        f"created, updated) VALUES ('0123456789abcdef', '{AGENT}', 'films', '[\"a\"]', '[]', '[]', 0, "
+        "'0 9 * * *', 'default', 1, 1)"
+    )
+    db.commit()
+    db.close()
+    [m] = Store(settings.db_path, clock=clock).monitors()
+    assert m.where == []

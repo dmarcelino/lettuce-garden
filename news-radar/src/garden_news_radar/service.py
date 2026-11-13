@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import anyio
@@ -31,8 +31,8 @@ from .config import (
     Settings,
 )
 from .cron import Schedule, ScheduleError, max_fires_per_day
-from .digest import MonitorDigest, group_value, monitor_digest, more, render
-from .extract import fill_rates
+from .digest import MonitorDigest, group_value, monitor_digest, more, render, term_counts
+from .extract import fill_rates, run_problem, window_warning
 from .fetch import Fetcher
 from .inspect import inspect
 from .runner import RunResult, run_source
@@ -71,7 +71,7 @@ def _terms(value: Any, what: str) -> list[str]:
         raise ToolError(f"{what} must be a list of at most {MAX_TERMS} words or phrases")
     out = []
     for term in value:
-        if not isinstance(term, str) or not term.strip() or len(term) > MAX_TERM:
+        if not isinstance(term, str) or not term.strip("* \t") or len(term) > MAX_TERM:
             raise ToolError(f"each of {what} must be text of 1 to {MAX_TERM} characters")
         out.append(one_line(term, MAX_TERM))
     return list(dict.fromkeys(out))
@@ -107,10 +107,6 @@ def reports_per_day(store: Store, settings: Settings, m: Monitor) -> int:
     groups.add((m.schedule, m.conversation))
     today = datetime.now(settings.tz).date()
     return max_fires_per_day([Schedule.parse(s) for s, _ in groups], today)
-
-
-def _required(spec: Spec) -> tuple[str, ...]:
-    return ("title", "start") if spec.item_kind == "event" else ("title",)
 
 
 class Service:
@@ -160,11 +156,28 @@ class Service:
             return None
 
     # -- sources ----------------------------------------------------------------------
+    def _today(self) -> date:
+        return datetime.fromtimestamp(self.store.now(), self.settings.tz).date()
+
+    def _retry_note(self, out: dict[str, Any], retry_after: int) -> dict[str, Any]:
+        """A site that asked for a pause: when to try it again, said so an agent
+        doesn't poll a host that answers nothing but this until then."""
+        if retry_after > 0:
+            at = datetime.fromtimestamp(self.store.now() + retry_after, self.settings.tz)
+            out["retry_after"] = retry_after
+            out["next"] = (
+                f"do not call source_test or source_inspect for this site before {at:%H:%M} ({retry_after} s): "
+                "until then it only answers this. Go on with other sources; if it keeps asking for pauses, it "
+                "is rate-limiting this stack: tell the person it can't be followed reliably"
+            )
+        return out
+
     async def source_inspect(self, url: Any) -> dict[str, Any]:
         if not isinstance(url, str) or not url.strip():
             raise ToolError("url is required")
         with anyio.move_on_after(TOOL_SECONDS):
-            return await inspect(self.fetcher, url.strip(), max_wait=TOOL_WAIT)
+            out = await inspect(self.fetcher, url.strip(), max_wait=TOOL_WAIT)
+            return self._retry_note(out, int(out.pop("retry_after", 0) or 0))
         return {"url": url.strip(), "error": f"took too long (over {int(TOOL_SECONDS)} s); try a narrower page"}
 
     async def source_test(self, spec_obj: Any) -> dict[str, Any]:
@@ -181,16 +194,19 @@ class Service:
     def _test_result(self, spec: Spec, result: RunResult, out: dict[str, Any]) -> dict[str, Any]:
         if result.error:
             out.update(passed=False, error=result.error, sample=result.sample)
-            return out
+            return self._retry_note(out, result.retry_after)
         items = result.items
         rates = fill_rates(items, spec)
+        today = self._today()
         problems = []
         if not items:
             problems.append("no items found")
         else:
-            titled = sum(1 for i in items if i.fields.get("title")) / len(items)
-            if titled < 0.8:
-                problems.append("fewer than 8 in 10 items have a title")
+            # What would make a scheduled run unhealthy fails the test too (items without a
+            # title are never kept, so a title is not checked here).
+            problem = run_problem(items, spec, today)
+            if problem:
+                problems.append(problem)
         if spec.group_by:
             values = [group_value({**i.fields, "extra": i.extra}, spec.group_by) for i in items]
             out["groups_in_sample"] = len({v for v in values if v}) + values.count("")
@@ -202,6 +218,9 @@ class Service:
             fill_rates=rates,
             items=[i.as_dict() for i in items[:TEST_ITEMS]],
         )
+        warning = window_warning(items, spec, today)
+        if warning:
+            out["warnings"] = [warning]
         if problems:
             out["problems"] = problems
             out["sample"] = result.sample
@@ -299,6 +318,7 @@ class Service:
         days_ahead: Any = None,
         news: Any = False,
         set_up_in: Any = None,
+        where: Any = None,
     ) -> tuple[Monitor, Schedule]:
         """A checked monitor, not saved: what monitor_put saves and a draft preview shows."""
         agent = _agent(agent_id)
@@ -337,6 +357,7 @@ class Service:
             conversation=conversation,
             include=_terms(include, "include"),
             exclude=_terms(exclude, "exclude"),
+            where=_terms(where, "where"),
             days_ahead=days_ahead,
             news=news,
             set_up_in=here,
@@ -355,6 +376,7 @@ class Service:
         days_ahead: Any = None,
         news: Any = False,
         set_up_in: Any = None,
+        where: Any = None,
     ) -> dict[str, Any]:
         """conversation left out: a monitor saved again keeps where it reports (the
         person may have chosen on the page); a new one reports here. "here" is
@@ -366,7 +388,7 @@ class Service:
         if conversation is None:
             conversation = current.conversation if current else HERE
         monitor, parsed = self._draft(
-            agent, name, sources, schedule, conversation, include, exclude, days_ahead, news, set_up_in
+            agent, name, sources, schedule, conversation, include, exclude, days_ahead, news, set_up_in, where
         )
         if current is None and self.store.count_monitors() >= self.settings.max_monitors:
             raise ToolError(f"this stack has {self.settings.max_monitors} monitors, the most allowed; delete one")
@@ -428,12 +450,14 @@ class Service:
         exclude: Any = None,
         days_ahead: Any = None,
         news: Any = False,
+        where: Any = None,
     ) -> dict[str, Any]:
         """The saved monitor's next report; with sources, a draft's (checked as
-        monitor_put would, never saved): what its first report would hold."""
+        monitor_put would, never saved): what its first report would hold, and what
+        each filter term did."""
         draft = sources is not None
         if draft:
-            m, _ = self._draft(agent_id, name, sources, None, "new", include, exclude, days_ahead, news)
+            m, _ = self._draft(agent_id, name, sources, None, "new", include, exclude, days_ahead, news, where=where)
         else:
             m = self._monitor(agent_id, name)
         now = self.store.now()
@@ -445,6 +469,7 @@ class Service:
             "rows": d.rows[:20],
             "rows_total": len(d.rows) + d.left_out,
             "needs_repair": [{"source": a.source, "reason": a.reason} for a in d.alerts],
+            "terms": term_counts(self.store, m, now, self.settings.tz),
             "note": "a preview: nothing is marked as reported",
         }
 
@@ -498,7 +523,7 @@ class Service:
             name,
             items=None if result.error or result.not_modified else result.items,
             watch=spec.watch,
-            required=_required(spec),
+            problem=run_problem(result.items, spec, self._today()),
             error=result.error,
             not_modified=result.not_modified,
             etag=result.etag,

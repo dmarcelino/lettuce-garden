@@ -9,9 +9,9 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urljoin, urlsplit, urlunsplit
 
 import feedparser
 import icalendar
@@ -188,11 +188,30 @@ def _json(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]
     return out
 
 
+XML_DECLARATION = re.compile(r"^\s*<\?xml[^>]*\?>")
+
+
+def html_document(page: Page) -> Any:
+    """The page parsed in its encoding: the header's charset, else UTF-8 when the
+    bytes are UTF-8, else what the page itself declares (lxml reads its meta tag).
+    Python decodes, not libxml2, which lacks some of Python's codecs; lxml refuses
+    decoded text with an XML declaration, so one is dropped. Raises
+    etree.ParserError or ValueError for what is not HTML."""
+    if page.charset:
+        text = page.body.decode(page.charset, errors="replace")
+    else:
+        try:
+            text = page.body.decode("utf-8")
+        except UnicodeDecodeError:
+            return lxml.html.document_fromstring(page.body, base_url=page.url)
+    return lxml.html.document_fromstring(XML_DECLARATION.sub("", text, count=1), base_url=page.url)
+
+
 def _html_root(page: Page) -> Any:
     if not page.body.strip():
         raise ExtractError("the page is empty")
     try:
-        return lxml.html.document_fromstring(page.body, base_url=page.url)
+        return html_document(page)
     except (etree.ParserError, ValueError) as e:
         raise ExtractError("the page is not HTML") from e
 
@@ -324,9 +343,96 @@ def _schema_org(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, 
     return schema_items(_html_root(page), spec.extract["types"])
 
 
+# -- sitemaps ----------------------------------------------------------------------
+# The newest entries of a sitemap kept per run: a site's sitemap can list tens of thousands.
+MAX_SITEMAP_ITEMS = 200
+# Parsing XML from the web: no entities, no DTD, no network.
+SAFE_XML = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False)
+
+
+def _sitemap_root(page: Page) -> Any:
+    if not page.body.strip():
+        raise ExtractError("the sitemap is empty")
+    try:
+        return etree.fromstring(page.body, SAFE_XML)
+    except (etree.XMLSyntaxError, ValueError) as e:
+        raise ExtractError("the response is not a sitemap (gzipped sitemaps are not read)") from e
+
+
+def _local(element: Any, name: str) -> str:
+    found = element.xpath(f"./*[local-name()='{name}']/text()")
+    return str(found[0]).strip() if found else ""
+
+
+@dataclass
+class Sitemap:
+    # A sitemap index's sitemaps; empty for a sitemap of pages.
+    children: list[str] = field(default_factory=list)
+    # (url, lastmod) of the newest pages, at most MAX_SITEMAP_ITEMS.
+    entries: list[tuple[str, str]] = field(default_factory=list)
+    # How many pages it lists (that hold one of extract.match).
+    total: int = 0
+
+
+def read_sitemap(spec: Spec | None, page: Page) -> Sitemap:
+    """A sitemap index's sitemaps, or the pages of a sitemap whose URL holds one of
+    extract.match: newest first (undated ones last, in the sitemap's order), cut to
+    MAX_SITEMAP_ITEMS before any date is parsed, since a sitemap can list tens of
+    thousands. W3C dates sort as text."""
+    root = _sitemap_root(page)
+    name = etree.QName(root).localname
+    if name == "sitemapindex":
+        return Sitemap(
+            children=[u for u in (_local(e, "loc") for e in root.xpath("./*[local-name()='sitemap']")) if u][:50]
+        )
+    if name != "urlset":
+        raise ExtractError("the response is not a sitemap")
+    match = (spec.extract.get("match") if spec else None) or []
+    found = []
+    for element in root.xpath("./*[local-name()='url']"):
+        loc = _local(element, "loc")
+        if loc and (not match or any(m in loc for m in match)):
+            found.append((loc, _local(element, "lastmod")))
+    found.sort(key=lambda e: e[1], reverse=True)  # stable: undated ones keep their order, last
+    entries = []
+    for loc, lastmod in found[:MAX_SITEMAP_ITEMS]:
+        url = canonical_url(loc, page.url)
+        if url:
+            entries.append((url, parse_date(lastmod, ())))
+    return Sitemap(entries=entries, total=len(found))
+
+
+def sitemap_entries(spec: Spec | None, page: Page) -> list[tuple[str, str]]:
+    """A sitemap's newest pages (read_sitemap); an index is an error that says what to do."""
+    sitemap = read_sitemap(spec, page)
+    if sitemap.children:
+        raise ExtractError(
+            "a sitemap index, not a sitemap: use one of its sitemaps (source_inspect lists them) as the url"
+        )
+    return sitemap.entries
+
+
+def slug_title(url: str) -> str:
+    """A page's title guessed from its URL: "/e/the-band-tour-2027/" is "the band tour 2027"."""
+    segments = [p for p in urlsplit(url).path.split("/") if p]
+    if not segments:
+        return ""
+    slug = re.sub(r"\.(html?|php|aspx?)$", "", unquote(segments[-1]), flags=re.I)
+    return " ".join(re.split(r"[-_+]+", slug)).strip()
+
+
+def _sitemap(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    return [
+        ({"title": slug_title(url), "url": url, "published": lastmod}, {})
+        for url, lastmod in sitemap_entries(spec, page)
+    ]
+
+
 def follow_links(spec: Spec, page: Page) -> list[str]:
-    """For schema_org with follow: the item pages a listing links to, in order."""
+    """For follow: the item pages a listing links to, or a sitemap lists, in order."""
     assert spec.follow is not None
+    if spec.kind == "sitemap":
+        return [url for url, _ in sitemap_entries(spec, page)]
     css, attr = split_selector(spec.follow["links"])
     root = _html_root(page)
     urls: dict[str, None] = {}
@@ -344,7 +450,11 @@ def _struct_time(value: Any) -> str:
 
 
 def _rss(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    feed = feedparser.parse(page.body, sanitize_html=True, resolve_relative_uris=False)
+    # The header's charset wins over the feed's own declaration, as it does for a browser.
+    headers = {"content-type": f"{page.content_type or 'application/xml'}; charset={page.charset}"}
+    feed = feedparser.parse(
+        page.body, sanitize_html=True, resolve_relative_uris=False, response_headers=headers if page.charset else {}
+    )
     if feed.bozo and not feed.entries:
         raise ExtractError("the response is not an RSS or Atom feed")
     out = []
@@ -394,7 +504,14 @@ def _ical(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]
     return out
 
 
-KIND_EXTRACTORS = {"json": _json, "html": _html, "schema_org": _schema_org, "rss": _rss, "ical": _ical}
+KIND_EXTRACTORS = {
+    "json": _json,
+    "html": _html,
+    "schema_org": _schema_org,
+    "rss": _rss,
+    "ical": _ical,
+    "sitemap": _sitemap,
+}
 
 
 def extract(spec: Spec, page: Page) -> list[Item]:
@@ -415,3 +532,64 @@ def fill_rates(items: list[Item], spec: Spec) -> dict[str, float]:
     if not items:
         return {n: 0.0 for n in names}
     return {n: round(sum(1 for i in items if i.fields.get(n) or i.extra.get(n)) / len(items), 2) for n in names}
+
+
+# -- what a run's items say about the source ----------------------------------------
+# Upcoming events spanning fewer days than this, in a listing this long, look cut short.
+SHORT_WINDOW_DAYS = 14
+SHORT_WINDOW_ITEMS = 10
+
+
+def _required(spec: Spec) -> tuple[str, ...]:
+    return ("title", "start") if spec.item_kind == "event" else ("title",)
+
+
+def _dated(spec: Spec) -> bool:
+    """Whether start is when the event happens: an RSS item's start is when it was posted."""
+    return spec.item_kind == "event" and spec.kind != "rss"
+
+
+def _whole_listing(spec: Spec) -> bool:
+    """Whether a run's items are the whole listing: a followed one's are only the
+    pages read in that run, which can be old ones read again."""
+    return spec.follow is None
+
+
+def run_problem(items: list[Item], spec: Spec, today: date) -> str:
+    """Why a run's items would make its source unhealthy, or "": the same rule for
+    source_test and the scheduled runs. An empty run is judged against earlier runs
+    (Store.record_run), not here."""
+    if not items:
+        return ""
+    for f in _required(spec):
+        missing = sum(1 for i in items if not i.fields.get(f))
+        if missing * 2 > len(items):
+            return f"{missing} of {len(items)} items have no {f}"
+    if _dated(spec) and _whole_listing(spec):
+        ends = [(i.fields.get("end") or i.fields["start"])[:10] for i in items if i.fields.get("start")]
+        if ends and max(ends) < today.isoformat():
+            return (
+                f"every event is in the past (the latest on {max(ends)}): a date fixed in the URL, "
+                "or a listing the site moved"
+            )
+    return ""
+
+
+def window_warning(items: list[Item], spec: Spec, today: date) -> str:
+    """A listing whose upcoming events span only a few days is often cut by a page
+    size; "" when it looks whole (or is too short to tell)."""
+    if not _dated(spec):
+        return ""
+    starts = sorted(s[:10] for i in items if (s := i.fields.get("start", "")) and s[:10] >= today.isoformat())
+    if len(starts) < SHORT_WINDOW_ITEMS:
+        return ""
+    try:
+        span = (date.fromisoformat(starts[-1]) - date.fromisoformat(starts[0]) + timedelta(days=1)).days
+    except ValueError:
+        return ""
+    if span >= SHORT_WINDOW_DAYS:
+        return ""
+    return (
+        f"the upcoming events span only {span} days ({starts[0]} to {starts[-1]}): if the site lists further "
+        "ahead, this request cuts its list. Add pages, ask for more per page, or a narrower list (one category)"
+    )

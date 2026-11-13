@@ -81,7 +81,7 @@ HISTORY_RUNS = 10
 
 # -- sizes of what agents and people send ---------------------------------------
 MAX_NAME = 64
-MAX_TERMS = 30
+MAX_TERMS = 60
 MAX_TERM = 80
 MAX_SOURCES_PER_MONITOR = 20
 MAX_SCHEDULE = 200
