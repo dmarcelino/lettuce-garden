@@ -194,3 +194,32 @@ async def test_inspect_keeps_to_its_cap_of_data_urls(fetcher, web):
     web.add("https://site.example.org/", f"<html><body>{attrs}</body></html>")
     out = await inspect(fetcher, "https://site.example.org/")
     assert len(out["data_urls"]) == MAX_CANDIDATES
+
+
+async def test_inspect_reads_the_app_script_behind_library_and_tracking_ones(fetcher, web):
+    from garden_news_radar.inspect import inspect
+
+    site = "https://cinema.example.org"
+    scripts = ["/.rum/micro.js", "/libs/jquery.min.js", "/libs/granite/csrf.js", "/clientlibs/site.min.js"]
+    tags = "".join(f'<script src="{s}"></script>' for s in scripts)
+    web.add(f"{site}/", f"<html><head>{tags}</head><body>Films</body></html>")
+    for s in scripts[:3]:
+        web.add(site + s, 'var x = "/libs/token.json";', "application/javascript")
+    web.add(site + scripts[3], 'fetch("/graphql/execute.json/site/getAllMovies")', "application/javascript")
+    out = await inspect(fetcher, f"{site}/")
+    assert f"{site}/graphql/execute.json/site/getAllMovies" in out["data_urls"]
+    assert out["scripts_read"] == 1 and out["scripts_skipped"] == 3
+    assert f"{site}/libs/jquery.min.js" not in web.fetched()
+
+
+async def test_inspect_reads_at_most_its_cap_of_scripts(fetcher, web):
+    from garden_news_radar.inspect import MAX_SCRIPTS, inspect
+
+    site = "https://many.example.org"
+    tags = "".join(f'<script src="/app/part-{i}.js"></script>' for i in range(MAX_SCRIPTS + 3))
+    web.add(f"{site}/", f"<html><head>{tags}</head><body>x</body></html>")
+    for i in range(MAX_SCRIPTS + 3):
+        web.add(f"{site}/app/part-{i}.js", f'get("/api/part/{i}")', "application/javascript")
+    out = await inspect(fetcher, f"{site}/")
+    assert out["scripts_read"] == MAX_SCRIPTS and out["scripts_skipped"] == 3
+    assert len(out["data_urls"]) == MAX_SCRIPTS

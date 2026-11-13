@@ -17,13 +17,23 @@ from .extract import schema_types
 from .fetch import Fetcher, FetchError, Page, host_of
 from .runner import sample_of
 
-MAX_SCRIPTS = 3
+# Same-site scripts read for data URLs, after the library and tracking ones are
+# left out; at the host's pacing (2 s apart) they fit well inside a tool call.
+MAX_SCRIPTS = 6
 MAX_SCRIPT_BYTES = 2 * 1024 * 1024
+MAX_SCRIPTS_BYTES = 8 * 1024 * 1024
+# Script paths that are libraries, consent banners or tracking, never a site's own
+# data calls: skipped so the app's bundle is among those read.
+LIBRARY_SCRIPT = re.compile(
+    r"/\.rum/|jquery|csrf|granite|consent|cookie|analytics|gtm|gtag|tracking|polyfill|recaptcha|matomo|hotjar",
+    re.I,
+)
 MAX_CANDIDATES = 40
 MAX_ROUTES = 40
 # URLs in script text that look like data: JSON files, APIs, GraphQL (persisted queries too).
+# A root-relative one is matched from its first "/", so "/api/..." counts too.
 CANDIDATE = re.compile(
-    r"""["'`]((?:https?://[^"'`\s]{1,300}|/)[^"'`\s]{0,300}?(?:\.json|/api/|/graphql|/wp-json/|/feed)[^"'`\s]{0,200})["'`]"""
+    r"""["'`]((?:https?://[^"'`\s]{1,300}|(?=/))[^"'`\s]{0,300}?(?:\.json|/api/|/graphql|/wp-json/|/feed)[^"'`\s]{0,200})["'`]"""
 )
 ROUTE_HINT = re.compile(r"event|agenda|calend|concert|show|movie|film|session|program|ticket|news|post", re.I)
 FEED_TYPES = (
@@ -81,7 +91,7 @@ async def inspect(fetcher: Fetcher, url: str, max_wait: float | None = None) -> 
         {urljoin(page.url, h) for h in root.xpath("//a/@href") if h.lower().split("?")[0].endswith(".ics")}
     )[:10]
     out["schema_org_types"] = schema_types(root)
-    out["data_urls"] = await _data_urls(fetcher, root, page, max_wait)
+    out["data_urls"], out["scripts_read"], out["scripts_skipped"] = await _data_urls(fetcher, root, page, max_wait)
     out["wordpress_routes"] = await _wordpress(fetcher, page, max_wait)
     out["sample"] = sample_of(page)
     return out
@@ -97,7 +107,9 @@ def _feeds(root: Any, page: Page) -> list[dict[str, str]]:
     return feeds[:20]
 
 
-async def _data_urls(fetcher: Fetcher, root: Any, page: Page, max_wait: float | None) -> list[str]:
+async def _data_urls(fetcher: Fetcher, root: Any, page: Page, max_wait: float | None) -> tuple[list[str], int, int]:
+    """Data URLs in the page and its same-site scripts; how many scripts were read
+    and how many were left out (libraries, tracking, or past the cap)."""
     texts = [s.text or "" for s in root.xpath("//script[not(@src)]")]
     for el in root.xpath("//*"):
         for name, value in el.attrib.items():
@@ -106,23 +118,31 @@ async def _data_urls(fetcher: Fetcher, root: Any, page: Page, max_wait: float | 
     site = urlsplit(page.url).hostname or ""
     scripts = [urljoin(page.url, s) for s in root.xpath("//script/@src")]
     same_site = [s for s in scripts if (urlsplit(s).hostname or "").endswith(site.removeprefix("www."))]
-    for src in same_site[:MAX_SCRIPTS]:
+    candidates = [s for s in dict.fromkeys(same_site) if not LIBRARY_SCRIPT.search(urlsplit(s).path)]
+    skipped = len(set(same_site)) - len(candidates)
+    read = budget = 0
+    for i, src in enumerate(candidates):
+        if read >= MAX_SCRIPTS or budget >= MAX_SCRIPTS_BYTES:
+            skipped += len(candidates) - i
+            break
         try:
             js = await fetcher.get(src, accept="*/*", max_bytes=MAX_SCRIPT_BYTES, max_wait=max_wait)
         except FetchError:
             continue
+        read += 1
+        budget += len(js.body)
         texts.append(js.text())
     found: dict[str, None] = {}
     for text in texts:
         for m in CANDIDATE.finditer(text):
             if len(found) >= MAX_CANDIDATES:
-                return list(found)
+                return list(found), read, skipped
             candidate = m.group(1)
             if candidate.startswith("/") and not candidate.startswith("//"):
                 candidate = urljoin(page.url, candidate)
             if candidate.startswith("http"):
                 found[candidate] = None
-    return list(found)
+    return list(found), read, skipped
 
 
 async def _wordpress(fetcher: Fetcher, page: Page, max_wait: float | None) -> list[str]:

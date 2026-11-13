@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS monitors (
   failures INTEGER NOT NULL DEFAULT 0,
   paused INTEGER NOT NULL DEFAULT 0,
   last_empty INTEGER,
+  set_up_in TEXT NOT NULL DEFAULT '',
   UNIQUE (agent_id, name)
 );
 CREATE TABLE IF NOT EXISTS reports (
@@ -138,6 +139,17 @@ class Monitor:
     failures: int = 0
     paused: bool = False
     last_empty: int | None = None
+    # The conversation the agent saved it from, when it said: one of the choices
+    # the page offers for where reports go.
+    set_up_in: str = ""
+
+    @property
+    def reports_to(self) -> str:
+        """Where reports go, as a choice: here (where it was set up), new, default,
+        or other (another conversation the agent named)."""
+        if self.set_up_in and self.conversation == self.set_up_in:
+            return "here"
+        return self.conversation if self.conversation in ("new", "default") else "other"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -146,6 +158,7 @@ class Monitor:
             "sources": self.sources,
             "schedule": self.schedule,
             "conversation": self.conversation,
+            "set_up_in": self.set_up_in,
             "include": self.include,
             "exclude": self.exclude,
             "days_ahead": self.days_ahead,
@@ -228,6 +241,11 @@ class Store:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL" if path != ":memory:" else "PRAGMA journal_mode=MEMORY")
         self._db.executescript(SCHEMA)
+        # Stores made before set_up_in existed: add the column, keeping their monitors.
+        columns = {r["name"] for r in self._db.execute("PRAGMA table_info(monitors)")}
+        if "set_up_in" not in columns:
+            with self._db:
+                self._db.execute("ALTER TABLE monitors ADD COLUMN set_up_in TEXT NOT NULL DEFAULT ''")
 
     def now(self) -> int:
         return int(self._clock())
@@ -479,6 +497,7 @@ class Store:
             failures=row["failures"],
             paused=bool(row["paused"]),
             last_empty=row["last_empty"],
+            set_up_in=row["set_up_in"],
         )
 
     def monitors(self, agent_id: str | None = None) -> list[Monitor]:
@@ -519,20 +538,29 @@ class Store:
             if current:
                 self._db.execute(
                     "UPDATE monitors SET sources=?, include=?, exclude=?, days_ahead=?, news=?, schedule=?, "
-                    "conversation=?, updated=?, paused=0, failures=0 WHERE id=?",
-                    (*values, now, current.id),
+                    "conversation=?, set_up_in=?, updated=?, paused=0, failures=0 WHERE id=?",
+                    (*values, m.set_up_in, now, current.id),
                 )
                 monitor_id = current.id
             else:
                 monitor_id = uuid.uuid4().hex[:16]
                 self._db.execute(
                     "INSERT INTO monitors (sources, include, exclude, days_ahead, news, schedule, conversation, "
-                    "created, updated, id, agent_id, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (*values, now, now, monitor_id, m.agent_id, m.name),
+                    "set_up_in, created, updated, id, agent_id, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (*values, m.set_up_in, now, now, monitor_id, m.agent_id, m.name),
                 )
         stored = self.monitor(monitor_id)
         assert stored is not None
         return stored
+
+    def set_monitor_conversation(self, monitor_id: str, conversation: str) -> None:
+        """Where a monitor's reports go, as the person chose on the page; a monitor
+        paused by failures (a deleted conversation, say) comes back."""
+        with self._db:
+            self._db.execute(
+                "UPDATE monitors SET conversation = ?, updated = ?, paused = 0, failures = 0 WHERE id = ?",
+                (conversation, self.now(), monitor_id),
+            )
 
     def delete_monitor(self, monitor_id: str) -> None:
         with self._db:

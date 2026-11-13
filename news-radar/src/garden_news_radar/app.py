@@ -11,6 +11,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import datetime
 from importlib import resources
 from typing import Any
@@ -31,8 +32,8 @@ from . import icons
 from .config import HEARTBEAT_STALE_SECONDS, INTERNAL_NAME, LOST_AFTER_SECONDS, MAX_CLAIM, NAME, PREFIX
 from .cron import Schedule
 from .mcp_tools import build_server
-from .service import Service
-from .store import MONITOR_ID, ExecutorQueue
+from .service import Service, reports_per_day
+from .store import MONITOR_ID, ExecutorQueue, Monitor
 
 log = logging.getLogger("garden_news_radar.app")
 
@@ -50,8 +51,18 @@ SECURITY_HEADERS = {
 
 Handler = Callable[[Request, str], Awaitable[Response]]
 
-NOTICES = {"deleted": "Monitor deleted.", "source-deleted": "Source deleted."}
-CONVERSATIONS = {"new": "a new conversation each report", "default": "the agent's main conversation"}
+NOTICES = {
+    "deleted": "Monitor deleted.",
+    "source-deleted": "Source deleted.",
+    "conversation": "Where its reports go is changed.",
+}
+# What the page offers for where a monitor's reports go; "here" is the
+# conversation the agent set it up in, offered only when the agent said which.
+CONVERSATION_CHOICES = {
+    "here": "in the conversation it was set up in",
+    "new": "in a new conversation each report",
+    "default": "in the agent's main conversation",
+}
 STATUS_TEXT = {
     "queued": ("", "waiting for Lettuce"),
     "claimed": ("", "sent to Lettuce"),
@@ -66,6 +77,18 @@ SCHEDULE_TICK = 20.0
 
 class FormError(Exception):
     pass
+
+
+def where_reports_go(m: Monitor) -> str:
+    return CONVERSATION_CHOICES.get(m.reports_to) or f"in another conversation ({m.conversation})"
+
+
+def conversation_choices(m: Monitor) -> list[tuple[str, str, bool]]:
+    """(value, label, selected) for the monitor's form."""
+    out = [(v, t, v == m.reports_to) for v, t in CONVERSATION_CHOICES.items() if v != "here" or m.set_up_in]
+    if m.reports_to == "other":
+        out.append(("keep", where_reports_go(m), True))
+    return out
 
 
 def _fmt_time(ts: float | None) -> str:
@@ -83,11 +106,14 @@ def create_app(
     service: Service, authenticator: Authenticator, executor_token: str, run_loops: bool = True
 ) -> Starlette:
     store = service.store
-    env = Environment(loader=PackageLoader("garden_news_radar", "templates"), autoescape=select_autoescape(default=True))
+    env = Environment(
+        loader=PackageLoader("garden_news_radar", "templates"), autoescape=select_autoescape(default=True)
+    )
     env.filters["time"] = _fmt_time
     env.globals.update(
         base=PREFIX,
-        conversations=CONVERSATIONS,
+        where_reports_go=where_reports_go,
+        conversation_choices=conversation_choices,
         describe=_describe,
         status_text=lambda s: STATUS_TEXT.get(s, ("", s)),
     )
@@ -211,6 +237,31 @@ def create_app(
         log.info("monitor deleted on the page")
         return back("/?done=deleted")
 
+    async def set_conversation(request: Request, email: str) -> Response:
+        mid = request.path_params["mid"]
+        m = store.monitor(mid) if MONITOR_ID.fullmatch(mid) else None
+        if m is None:
+            raise FormError("This monitor doesn't exist (any more).")
+        choice = (await request.form()).get("conversation")
+        if choice == "keep":
+            return back("/")
+        if choice == "here" and m.set_up_in:
+            conversation = m.set_up_in
+        elif choice in ("new", "default"):
+            conversation = str(choice)
+        else:
+            raise FormError("Choose where its reports go from the list.")
+        most = reports_per_day(store, service.settings, replace(m, conversation=conversation))
+        if most > service.settings.max_reports_per_day:
+            raise FormError(
+                f"With that choice the agent's monitors would report up to {most} times a day, and this garden "
+                f"allows {service.settings.max_reports_per_day}. Monitors on the same schedule that report to the "
+                "same place share one report: choose where another of them reports."
+            )
+        store.set_monitor_conversation(m.id, conversation)
+        log.info("monitor conversation changed on the page")
+        return back("/?done=conversation")
+
     async def delete_source(request: Request, email: str) -> Response:
         name = request.path_params["name"]
         if not NAME.fullmatch(name) or store.source_spec(name) is None:
@@ -243,6 +294,7 @@ def create_app(
     ui = [
         Route("/", page(index)),
         Route("/m/{mid}/delete", page(delete_monitor, post=True), methods=["POST"]),
+        Route("/m/{mid}/conversation", page(set_conversation, post=True), methods=["POST"]),
         Route("/s/{name}/delete", page(delete_source, post=True), methods=["POST"]),
         Route("/garden.css", page(static(garden_css, "text/css"), asset=True)),
         Route("/app.css", page(static(app_css, "text/css"), asset=True)),

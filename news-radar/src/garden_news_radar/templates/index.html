@@ -2,7 +2,7 @@
 {% block title %}News Radar{% endblock %}
 {% block content %}
 <h1>News Radar</h1>
-<p class="muted intro">What your agents keep an eye on for you. They check the sources without a model, and report at the scheduled times ({{ timezone }}) only when something is new. Ask an agent to set up or change a monitor; here you can see them all and delete any.</p>
+<p class="muted intro">What your agents keep an eye on for you. They check the sources without a model, and report at the scheduled times ({{ timezone }}) only when something is new. Ask an agent to set up or change a monitor; here you can see them all, choose where their reports go, and delete any.</p>
 {% if notice %}<div class="banner ok" role="status"><p>{{ notice }}</p></div>{% endif %}
 {% for b in banners %}
 <div class="banner {{ b.level }}" role="status">
@@ -19,12 +19,24 @@
   <li class="item{% if m.paused %} off{% endif %}">
     <div class="item-main">
       <span class="item-name">{{ m.name }}{% if m.paused %} <span class="pill warn">Paused</span>{% endif %}{% if m.news %} <span class="pill">News</span>{% endif %}</span>
-      <span class="item-desc">{{ describe(m.schedule) }} &middot; {{ conversations[m.conversation] }}</span>
+      <span class="item-desc">{{ describe(m.schedule) }} &middot; Reports: {{ where_reports_go(m) }}</span>
       <span class="item-desc">Sources: {{ m.sources | join(", ") }}{% if m.include %} &middot; only with: {{ m.include | join(", ") }}{% endif %}{% if m.exclude %} &middot; never with: {{ m.exclude | join(", ") }}{% endif %}{% if m.days_ahead is not none %} &middot; events in the next {{ m.days_ahead }} days{% endif %}</span>
       <span class="item-desc">
         {% if last %}Last report: {{ status_text(last.status)[1] }} <span class="muted">{{ last.at | time }}</span>{% if last.error %} <span class="muted">({{ last.error }})</span>{% endif %}{% else %}<span class="muted">No report yet</span>{% endif %}
         {% if m.last_empty %} &middot; <span class="muted">nothing new at {{ m.last_empty | time }}</span>{% endif %}
       </span>
+      {% if last and last.status in ("failed", "lost") %}<span class="item-desc muted">If its conversation was deleted, choose another below.</span>{% endif %}
+      <form method="post" action="{{ base }}/m/{{ m.id }}/conversation" class="item-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>Reports go
+          <select name="conversation">
+            {% for value, text, selected in conversation_choices(m) %}
+            <option value="{{ value }}"{% if selected %} selected{% endif %}>{{ text }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="button ghost" aria-label="Save where {{ m.name }} reports">Save</button>
+      </form>
     </div>
     <form method="post" action="{{ base }}/m/{{ m.id }}/delete" class="item-action">
       <input type="hidden" name="csrf" value="{{ csrf }}">

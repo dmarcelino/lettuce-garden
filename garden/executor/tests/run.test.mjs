@@ -297,12 +297,27 @@ test("shell metacharacters and leading dashes stay literal", async () => {
   assert.equal(results(t)[0].ok, true);
 });
 
+test("a conversation id reaches letta as the task's conversation", async () => {
+  const t = await setup();
+  const req = request({ conversation: "local-conv-12" });
+  t.sidecar.requests = [req];
+  assert.equal((await run(t)).status, 0);
+  const [call] = cronCalls(t);
+  assert.deepEqual(call.argv, cronArgv(req));
+  assert.ok(call.argv.includes("--conversation=local-conv-12"));
+  assert.equal(results(t)[0].ok, true);
+});
+
 const INVALID = [
   ["agent id", { agent_id: "agent-x;rm" }, "agent_id is invalid"],
   ["agent id prefix", { agent_id: "--help" }, "agent_id is invalid"],
   ["long agent id", { agent_id: `agent-${"a".repeat(81)}` }, "agent_id is invalid"],
-  ["conversation", { conversation: "conv-123" }, "conversation must be new or default"],
-  ["missing conversation", { conversation: undefined }, "conversation must be new or default"],
+  ["conversation flag", { conversation: "--help" }, "conversation must be new, default or a conversation id"],
+  ["conversation with a space", { conversation: "conv 1" }, "conversation must be new, default or a conversation id"],
+  ["conversation with a semicolon", { conversation: "conv;rm" }, "conversation must be new, default or a conversation id"],
+  ["long conversation", { conversation: `c${"a".repeat(100)}` }, "conversation must be new, default or a conversation id"],
+  ["conversation not a string", { conversation: 5 }, "conversation must be new, default or a conversation id"],
+  ["missing conversation", { conversation: undefined }, "conversation must be new, default or a conversation id"],
   ["oversized prompt", { prompt: "p".repeat(8001) }, "prompt is over 8000 characters"],
   ["empty prompt", { prompt: "" }, "prompt is missing"],
   ["NUL in prompt", { prompt: "a\u0000b" }, "prompt contains a NUL character"],

@@ -72,6 +72,9 @@ class Spec:
     languages: tuple[str, ...] = ()
     watch: tuple[str, ...] = DEFAULT_WATCH
     key: tuple[str, ...] = ()
+    # A field or extra whose value names one item seen several times (a film in
+    # several formats): a report shows such items as one row with its variants.
+    group_by: str = ""
     raw: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @property
@@ -149,7 +152,7 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
     """A validated Spec, or SpecError saying what is wrong."""
     if not isinstance(obj, dict):
         raise SpecError("a spec is a JSON object")
-    allowed = {"name", "url", "kind", "item_kind", "every", "extract", "pages", "follow", "dates", "watch"}
+    allowed = {"name", "url", "kind", "item_kind", "every", "extract", "pages", "follow", "dates", "watch", "group_by"}
     unknown = sorted(set(obj) - allowed)
     if unknown:
         raise SpecError(f"unknown field(s): {', '.join(unknown)}")
@@ -276,6 +279,12 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
                 raise SpecError(f"watch: {name_!r} is not a field")
         watch = tuple(dict.fromkeys(w))
 
+    group_by = obj.get("group_by")
+    if group_by is not None and (
+        not isinstance(group_by, str) or (group_by not in ITEM_FIELDS and group_by not in extra_names)
+    ):
+        raise SpecError(f"group_by: {group_by!r:.40} is not a field or extra of this source")
+
     raw: dict[str, Any] = {
         "name": name,
         "url": url,
@@ -292,4 +301,6 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
         raw["dates"] = {"languages": list(languages)}
     if watch != DEFAULT_WATCH:
         raw["watch"] = list(watch)
-    return Spec(name, url, kind, item_kind, every, extract, pages, follow, languages, watch, key, raw)
+    if group_by:
+        raw["group_by"] = group_by
+    return Spec(name, url, kind, item_kind, every, extract, pages, follow, languages, watch, key, group_by or "", raw)

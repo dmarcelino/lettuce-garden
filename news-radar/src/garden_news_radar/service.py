@@ -5,6 +5,7 @@ schedule that fires into a report for the executor."""
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -30,7 +31,7 @@ from .config import (
     Settings,
 )
 from .cron import Schedule, ScheduleError, max_fires_per_day
-from .digest import MonitorDigest, monitor_digest, more, render
+from .digest import MonitorDigest, group_value, monitor_digest, more, render
 from .extract import fill_rates
 from .fetch import Fetcher
 from .inspect import inspect
@@ -40,7 +41,12 @@ from .store import QUEUED, Monitor, Report, Store, new_report_id
 
 log = logging.getLogger("garden_news_radar.service")
 
-CONVERSATIONS = ("new", "default")
+# Where a monitor's reports go: new (a new conversation each report), default (the
+# agent's main one), or the id of one of its conversations, as letta-code gives it
+# in $LETTA_CONVERSATION_ID. The executor checks the same shape.
+CONVERSATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}")
+# Said for the conversation an agent saves a monitor from (set_up_in).
+HERE = "here"
 TEST_ITEMS = 10
 # A test fetches fewer pages and follows fewer links than a scheduled run, to
 # answer within the MCP call's time.
@@ -69,6 +75,38 @@ def _terms(value: Any, what: str) -> list[str]:
             raise ToolError(f"each of {what} must be text of 1 to {MAX_TERM} characters")
         out.append(one_line(term, MAX_TERM))
     return list(dict.fromkeys(out))
+
+
+def _conversation_id(value: Any, what: str) -> str:
+    if not isinstance(value, str) or not CONVERSATION_ID.fullmatch(value):
+        raise ToolError(
+            f"{what} must be new, default or a conversation id such as your $LETTA_CONVERSATION_ID"
+            if what == "conversation"
+            else f"{what} must be your conversation id, $LETTA_CONVERSATION_ID"
+        )
+    return value
+
+
+# Where a monitor's reports go, in the agent's words (the page has its own).
+REPORTS_TO_WORDS = {
+    "here": "this conversation (where it was set up)",
+    "new": "a new conversation each report",
+    "default": "your main conversation",
+}
+
+
+def conversation_in_words(m: Monitor) -> str:
+    return REPORTS_TO_WORDS.get(m.reports_to) or f"another conversation ({m.conversation})"
+
+
+def reports_per_day(store: Store, settings: Settings, m: Monitor) -> int:
+    """The most reports a day the agent's monitors would make with `m` as given:
+    one report per schedule and conversation, as fire groups them. The admin's
+    max_reports_per_day bounds it."""
+    groups = {(o.schedule, o.conversation) for o in store.monitors(m.agent_id) if o.name != m.name}
+    groups.add((m.schedule, m.conversation))
+    today = datetime.now(settings.tz).date()
+    return max_fires_per_day([Schedule.parse(s) for s, _ in groups], today)
 
 
 def _required(spec: Spec) -> tuple[str, ...]:
@@ -153,6 +191,9 @@ class Service:
             titled = sum(1 for i in items if i.fields.get("title")) / len(items)
             if titled < 0.8:
                 problems.append("fewer than 8 in 10 items have a title")
+        if spec.group_by:
+            values = [group_value({**i.fields, "extra": i.extra}, spec.group_by) for i in items]
+            out["groups_in_sample"] = len({v for v in values if v}) + values.count("")
         out.update(
             passed=not problems,
             items_found=len(items),
@@ -246,18 +287,20 @@ class Service:
         return {"deleted": name}
 
     # -- monitors ---------------------------------------------------------------------
-    def monitor_put(
+    def _draft(
         self,
         agent_id: Any,
         name: Any,
         sources: Any,
         schedule: Any = None,
-        conversation: Any = "new",
+        conversation: Any = HERE,
         include: Any = None,
         exclude: Any = None,
         days_ahead: Any = None,
         news: Any = False,
-    ) -> dict[str, Any]:
+        set_up_in: Any = None,
+    ) -> tuple[Monitor, Schedule]:
+        """A checked monitor, not saved: what monitor_put saves and a draft preview shows."""
         agent = _agent(agent_id)
         if not isinstance(name, str) or not NAME.fullmatch(name) or len(name) > MAX_NAME:
             raise ToolError("name must be lowercase letters, digits and -")
@@ -275,8 +318,11 @@ class Service:
             parsed = Schedule.parse(schedule)
         except ScheduleError as e:
             raise ToolError(f"schedule: {e}") from e
-        if conversation not in CONVERSATIONS:
-            raise ToolError("conversation must be new (a new conversation each report) or default")
+        here = "" if set_up_in is None else _conversation_id(set_up_in, "set_up_in")
+        if conversation == HERE:
+            # Without set_up_in the service can't know where "here" is.
+            conversation = here or "new"
+        conversation = _conversation_id(conversation, "conversation")
         if days_ahead is not None and (
             not isinstance(days_ahead, int) or isinstance(days_ahead, bool) or not 0 <= days_ahead <= MAX_DAYS_AHEAD
         ):
@@ -293,36 +339,70 @@ class Service:
             exclude=_terms(exclude, "exclude"),
             days_ahead=days_ahead,
             news=news,
+            set_up_in=here,
         )
-        current = self.store.monitor_named(agent, name)
+        return monitor, parsed
+
+    def monitor_put(
+        self,
+        agent_id: Any,
+        name: Any,
+        sources: Any,
+        schedule: Any = None,
+        conversation: Any = None,
+        include: Any = None,
+        exclude: Any = None,
+        days_ahead: Any = None,
+        news: Any = False,
+        set_up_in: Any = None,
+    ) -> dict[str, Any]:
+        """conversation left out: a monitor saved again keeps where it reports (the
+        person may have chosen on the page); a new one reports here. "here" is
+        set_up_in, or the one already known for this monitor."""
+        agent = _agent(agent_id)
+        current = self.store.monitor_named(agent, name) if isinstance(name, str) else None
+        if set_up_in is None and current and current.set_up_in:
+            set_up_in = current.set_up_in
+        if conversation is None:
+            conversation = current.conversation if current else HERE
+        monitor, parsed = self._draft(
+            agent, name, sources, schedule, conversation, include, exclude, days_ahead, news, set_up_in
+        )
         if current is None and self.store.count_monitors() >= self.settings.max_monitors:
             raise ToolError(f"this stack has {self.settings.max_monitors} monitors, the most allowed; delete one")
-        # One report per schedule and conversation (as fire groups them), so a
-        # schedule used with both conversations counts twice.
-        groups = {(m.schedule, m.conversation) for m in self.store.monitors(agent) if m.name != name}
-        groups.add((parsed.text, conversation))
-        today = datetime.now(self.settings.tz).date()
-        most = max_fires_per_day([Schedule.parse(s) for s, _ in groups], today)
+        most = reports_per_day(self.store, self.settings, monitor)
         if most > self.settings.max_reports_per_day:
             raise ToolError(
                 f"your monitors' schedules would report up to {most} times a day; the admin allows "
-                f"{self.settings.max_reports_per_day} per agent. Share a schedule with another monitor, "
-                "or fire less often"
+                f"{self.settings.max_reports_per_day} per agent. Share a schedule and conversation with another "
+                "monitor, or fire less often"
             )
         stored = self.store.put_monitor(monitor)
-        return {
+        out = {
             "saved": stored.name,
             "schedule": stored.schedule,
             "schedule_in_words": parsed.describe() + f" ({self.settings.timezone})",
+            "conversation_in_words": conversation_in_words(stored),
             "monitor": stored.as_dict(),
-            "next": "show the person monitor_preview, and tell them the schedule in words",
+            "next": "show the person monitor_preview, and tell them the schedule and where reports go, in words; "
+            "they can change where reports go on the News Radar page",
         }
+        if conversation == HERE and not stored.set_up_in:
+            out["note"] = (
+                "reports go to a new conversation each time: to have them in this one, save it again with "
+                'set_up_in ($LETTA_CONVERSATION_ID) and conversation "here"'
+            )
+        return out
 
     def monitor_list(self, agent_id: Any) -> dict[str, Any]:
         agent = _agent(agent_id)
         return {
             "monitors": [
-                {**m.as_dict(), "schedule_in_words": Schedule.parse(m.schedule).describe()}
+                {
+                    **m.as_dict(),
+                    "schedule_in_words": Schedule.parse(m.schedule).describe(),
+                    "conversation_in_words": conversation_in_words(m),
+                }
                 for m in self.store.monitors(agent)
             ]
         }
@@ -339,12 +419,28 @@ class Service:
         self.store.delete_monitor(m.id)
         return {"deleted": m.name}
 
-    def monitor_preview(self, agent_id: Any, name: Any) -> dict[str, Any]:
-        m = self._monitor(agent_id, name)
+    def monitor_preview(
+        self,
+        agent_id: Any,
+        name: Any,
+        sources: Any = None,
+        include: Any = None,
+        exclude: Any = None,
+        days_ahead: Any = None,
+        news: Any = False,
+    ) -> dict[str, Any]:
+        """The saved monitor's next report; with sources, a draft's (checked as
+        monitor_put would, never saved): what its first report would hold."""
+        draft = sources is not None
+        if draft:
+            m, _ = self._draft(agent_id, name, sources, None, "new", include, exclude, days_ahead, news)
+        else:
+            m = self._monitor(agent_id, name)
         now = self.store.now()
         d = monitor_digest(self.store, m, now, self.settings.tz, self.store.source_states())
         return {
             "monitor": m.name,
+            "draft": draft,
             "would_report": d.worth_reporting,
             "rows": d.rows[:20],
             "rows_total": len(d.rows) + d.left_out,
@@ -476,7 +572,7 @@ class Service:
                 # A second early: an item a fetch records later in this same second
                 # comes again rather than never (a repeat beats a gap).
                 upto=now - 1,
-                items=sum(len(d.rows) + d.left_out for d in digests),
+                items=sum(d.items for d in digests),
                 status=QUEUED,
                 request=request,
                 digest=rows,

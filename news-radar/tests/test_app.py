@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import re
 
 import pytest
@@ -121,3 +122,74 @@ def test_mcp_refuses_browsers_and_the_tunnel_host(service, authenticator):
 
 def test_healthz(internal):
     assert internal.get("/healthz").text == "ok"
+
+
+@pytest.mark.anyio
+async def test_the_person_chooses_where_reports_go(client, service, web, store):
+    await setup_monitor(service, web)
+    service.monitor_put(
+        AGENT, "films", ["city-agenda"], schedule="0 9 * * 1-5", conversation="here", set_up_in="local-conv-12"
+    )
+    page = client.get(f"{B}/")
+    assert "Reports: in the conversation it was set up in" in page.text
+    assert 'value="here" selected' in page.text
+    token = csrf_of(page.text)
+    mid = store.monitors()[0].id
+    post = lambda value, **h: client.post(  # noqa: E731
+        f"{B}/m/{mid}/conversation", data={"csrf": token, "conversation": value}, headers={"origin": ORIGIN, **h}
+    )
+    assert post("default", origin="https://evil.example.org").status_code == 403
+    assert store.monitors()[0].conversation == "local-conv-12"
+    assert post("default").status_code == 303
+    assert store.monitors()[0].conversation == "default"
+    assert "Reports: in the agent&#39;s main conversation" in client.get(f"{B}/").text
+    assert post("here").status_code == 303
+    assert store.monitors()[0].conversation == "local-conv-12"
+    # Only the choices the page offers: never an id typed in.
+    assert post("local-conv-7").status_code == 400
+    assert post("").status_code == 400
+    assert store.monitors()[0].conversation == "local-conv-12"
+
+
+@pytest.mark.anyio
+async def test_a_choice_on_the_page_keeps_within_the_daily_cap(client, service, web, store):
+    await setup_monitor(service, web)
+    service.monitor_put(AGENT, "plays", ["city-agenda"], schedule="0 9 * * 1-5")
+    service.settings = dataclasses.replace(service.settings, max_reports_per_day=1)
+    # Both report together, once a day; apart they would report twice.
+    page = client.get(f"{B}/")
+    mid = store.monitor_named(AGENT, "plays").id
+    r = client.post(
+        f"{B}/m/{mid}/conversation",
+        data={"csrf": csrf_of(page.text), "conversation": "default"},
+        headers={"origin": ORIGIN},
+    )
+    assert r.status_code == 400 and "a day" in r.text
+    assert store.monitor_named(AGENT, "plays").conversation == "new"
+
+
+@pytest.mark.anyio
+async def test_the_set_up_conversation_is_offered_only_when_known(client, service, web, store):
+    await setup_monitor(service, web)
+    page = client.get(f"{B}/")
+    assert 'value="here"' not in page.text and "Reports: in a new conversation each report" in page.text
+    token = csrf_of(page.text)
+    mid = store.monitors()[0].id
+    r = client.post(
+        f"{B}/m/{mid}/conversation", data={"csrf": token, "conversation": "here"}, headers={"origin": ORIGIN}
+    )
+    assert r.status_code == 400 and store.monitors()[0].conversation == "new"
+
+
+def test_the_tools_offer_set_up_in_drafts_and_any_conversation(service, authenticator):
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
+    with TestClient(
+        create_app(service, authenticator, TOKEN, run_loops=False), base_url="http://garden-news-radar:8000"
+    ) as c:
+        tools = {t["name"]: t for t in c.post("/mcp", json=body, headers=headers).json()["result"]["tools"]}
+    put = tools["monitor_put"]["inputSchema"]["properties"]
+    assert "set_up_in" in put and "enum" not in str(put["conversation"])
+    preview = tools["monitor_preview"]["inputSchema"]["properties"]
+    assert {"sources", "include", "exclude", "days_ahead", "news"} <= set(preview)
+    assert "group_by" in tools["source_test"]["description"]

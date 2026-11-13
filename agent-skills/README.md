@@ -43,5 +43,6 @@ There is no build step: `lettucectl skills all` pushes a changed skill to the ru
 Listed in [CONTRIBUTING.md](../CONTRIBUTING.md#upstream-seams):
 - the global skills directory `/root/.letta/skills`, and the BFF rewriting upstream's `docker/agent-skills` there on every connect (why a shared name is refused);
 - the `mcp-servers` skill's wrapper, `/root/.letta/skills/mcp-servers/scripts/mcp.sh`, named in `working-with-documents`, `using-vault-secrets` and `news-radar-sources`;
+- letta-code setting `$LETTA_CONVERSATION_ID` in the agent's shell, which `news-radar-sources` passes as a monitor's `set_up_in`;
 - letta-code telling the agent when a background command finishes, which is how an agent waiting for a vault approval gets a new turn (`using-vault-secrets`);
 - `letta mcp call <tool> --args-file -` reading the arguments from stdin and exiting 2 when the tool reports an error (the skill's email recipe pipes `vault-fill` into it, under `bash` for `pipefail`).

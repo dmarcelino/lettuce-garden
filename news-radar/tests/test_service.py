@@ -406,3 +406,290 @@ async def test_tools_answer_within_the_mcp_call_limit(service, monkeypatch):
     monkeypatch.setattr(service_module, "TOOL_SECONDS", 0.2)
     out = await service.source_inspect("https://slow.example.org/")
     assert "took too long" in out["error"]
+
+
+# -- where reports go -----------------------------------------------------------------
+async def test_a_monitor_reports_into_the_conversation_it_was_set_up_in(service, web, store, clock):
+    await add_source(service, web)
+    out = service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *", set_up_in="local-conv-12")
+    assert out["monitor"]["conversation"] == "local-conv-12"
+    assert out["monitor"]["set_up_in"] == "local-conv-12"
+    assert out["conversation_in_words"] == "this conversation (where it was set up)"
+    await service.fetch_source("city-agenda")
+    clock.t += 60
+    fire_at(service, "2027-01-15T09:00")
+    [request] = store.claim(20)
+    assert request["conversation"] == "local-conv-12"
+
+
+async def test_without_its_conversation_a_monitor_reports_in_a_new_one_and_says_so(service, web):
+    await add_source(service, web)
+    out = service.monitor_put(AGENT, "films", ["city-agenda"])
+    assert out["monitor"]["conversation"] == "new"
+    assert out["conversation_in_words"] == "a new conversation each report"
+    assert "set_up_in" in out["note"] and 'conversation "here"' in out["note"]
+    # Following the note moves it here.
+    out = service.monitor_put(AGENT, "films", ["city-agenda"], set_up_in="local-conv-12", conversation="here")
+    assert out["monitor"]["conversation"] == "local-conv-12" and "note" not in out
+
+
+async def test_a_monitor_can_report_elsewhere_and_keeps_where_it_was_set_up(service, web, store):
+    await add_source(service, web)
+    out = service.monitor_put(AGENT, "films", ["city-agenda"], conversation="default", set_up_in="local-conv-12")
+    assert out["monitor"]["conversation"] == "default"
+    assert out["conversation_in_words"] == "your main conversation"
+    assert store.monitors()[0].set_up_in == "local-conv-12"
+    out = service.monitor_put(AGENT, "films", ["city-agenda"], conversation="local-conv-7")
+    assert out["monitor"]["conversation"] == "local-conv-7"
+    # Saving again without set_up_in keeps the one already known.
+    assert store.monitors()[0].set_up_in == "local-conv-12"
+    assert service.monitor_list(AGENT)["monitors"][0]["conversation_in_words"] == "another conversation (local-conv-7)"
+
+
+@pytest.mark.parametrize("bad", ["--help", "conv 1", "conv;rm", "c" * 101, 5, ""])
+async def test_conversations_and_set_up_in_are_checked(service, web, bad):
+    await add_source(service, web)
+    with pytest.raises(ToolError, match="conversation"):
+        service.monitor_put(AGENT, "films", ["city-agenda"], conversation=bad)
+    with pytest.raises(ToolError, match="set_up_in"):
+        service.monitor_put(AGENT, "films", ["city-agenda"], set_up_in=bad)
+
+
+def test_a_store_from_before_set_up_in_gains_the_column(settings, clock):
+    import sqlite3
+
+    from garden_news_radar.store import Store
+
+    db = sqlite3.connect(settings.db_path)
+    db.executescript(
+        "CREATE TABLE monitors (id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, name TEXT NOT NULL, "
+        "sources TEXT NOT NULL, include TEXT NOT NULL, exclude TEXT NOT NULL, days_ahead INTEGER, "
+        "news INTEGER NOT NULL, schedule TEXT NOT NULL, conversation TEXT NOT NULL, created INTEGER NOT NULL, "
+        "updated INTEGER NOT NULL, delivered_upto INTEGER NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0, "
+        "paused INTEGER NOT NULL DEFAULT 0, last_empty INTEGER, UNIQUE (agent_id, name));"
+        f"INSERT INTO monitors (id, agent_id, name, sources, include, exclude, news, schedule, conversation, "
+        f"created, updated) VALUES ('0123456789abcdef', '{AGENT}', 'films', '[\"a\"]', '[]', '[]', 0, "
+        "'0 9 * * *', 'default', 1, 1);"
+    )
+    db.commit()
+    db.close()
+    [m] = Store(settings.db_path, clock=clock).monitors()
+    assert m.conversation == "default" and m.set_up_in == ""
+    Store(settings.db_path, clock=clock)  # a second start leaves it be
+
+
+# -- previewing a monitor before it is saved -----------------------------------------------
+async def test_a_draft_previews_without_being_saved(service, web, store):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    out = service.monitor_preview(AGENT, "night", sources=["city-agenda"], include=["night"])
+    assert [r["title"] for r in out["rows"]] == ["The Long Night"]
+    assert out["draft"] is True
+    assert store.monitors() == []
+    with pytest.raises(ToolError, match="no such source"):
+        service.monitor_preview(AGENT, "night", sources=["nope"])
+    with pytest.raises(ToolError, match="days_ahead"):
+        service.monitor_preview(AGENT, "night", sources=["city-agenda"], days_ahead=-1)
+    with pytest.raises(ToolError, match="no monitor"):
+        service.monitor_preview(AGENT, "night")  # without sources: the saved monitor, which doesn't exist
+
+
+# -- matching -------------------------------------------------------------------------------
+async def test_terms_match_whatever_the_accents(service, web, store):
+    body = json.dumps(
+        {
+            "data": {
+                "list": {
+                    "items": [
+                        {"id": 1, "name": "Roma, de Alfonso Cuarón", "date": "2027-02-01", "link": "/e/1"},
+                        {"id": 2, "name": "Cafe society", "date": "2027-02-02", "link": "/e/2"},
+                    ]
+                }
+            }
+        }
+    )
+    await add_source(service, web, body=body)
+    await service.fetch_source("city-agenda")
+    titles = lambda include: [  # noqa: E731
+        r["title"] for r in service.monitor_preview(AGENT, "x", sources=["city-agenda"], include=include)["rows"]
+    ]
+    assert titles(["cuaron"]) == ["Roma, de Alfonso Cuarón"]
+    assert titles(["CUARÓN"]) == ["Roma, de Alfonso Cuarón"]
+    assert titles(["café"]) == ["Cafe society"]
+
+
+# -- variants of one item -------------------------------------------------------------------
+FILMS = [
+    ("1", "Dune: Part Three", "Dune Part Three", "Soon"),
+    ("2", "Dune: Part Three (IMAX)", "Dune Part Three", "Soon"),
+    ("3", "Dune: Part Three (4DX)", "Dune Part Three", "PreSale"),
+    ("4", "A Quiet Film", "", "InTheaters"),
+    ("5", "Another Quiet Film", "", "InTheaters"),
+]
+
+
+def films_body(films=FILMS):
+    return json.dumps(
+        {
+            "data": {
+                "list": {
+                    "items": [
+                        {"id": i, "name": t, "date": "2027-02-01", "link": f"/f/{i}", "group": g, "state": s}
+                        for i, t, g, s in films
+                    ]
+                }
+            }
+        }
+    )
+
+
+async def add_films(service, web, **over):
+    extract = {
+        "items": "data.list.items",
+        "fields": {"title": "name", "start": "date", "url": "link"},
+        "extra": {"original": "group", "state": "state"},
+    }
+    return await add_source(service, web, body=films_body(), extract=extract, watch=["title", "state"], **over)
+
+
+async def test_variants_of_one_item_make_one_row(service, web, store, clock):
+    await add_films(service, web, group_by="original")
+    await service.fetch_source("city-agenda")
+    rows = service.monitor_preview(AGENT, "films", sources=["city-agenda"])["rows"]
+    assert len(rows) == 3
+    [dune] = [r for r in rows if r.get("variants_total")]
+    # The row is one listing; variants are the others, with only what differs.
+    assert dune["variants_total"] == 2 and len(dune["variants"]) == 2
+    assert {dune["title"]} | {v["title"] for v in dune["variants"]} == {
+        "Dune: Part Three",
+        "Dune: Part Three (IMAX)",
+        "Dune: Part Three (4DX)",
+    }
+    assert all("when" not in v and "extra" not in v or "original" not in v["extra"] for v in dune["variants"])
+    # Items without a value stay apart.
+    assert sorted(r["title"] for r in rows if not r.get("variants_total")) == ["A Quiet Film", "Another Quiet Film"]
+    # Two variants changing make one changed row.
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *")
+    clock.t += 60
+    [rid] = fire_at(service, "2027-01-15T09:00")
+    # A report counts the items it holds, not its rows.
+    assert store.report(rid).items == 5
+    store.claim(20)
+    assert store.finish(rid, True, "task-1", "")
+    clock.t += 7 * 3600
+    changed = [(i, t, g, "PreSale" if i in ("1", "2") else s) for i, t, g, s in FILMS]
+    web.add(URL, films_body(changed), "application/json")
+    await service.fetch_source("city-agenda")
+    [row] = service.monitor_preview(AGENT, "films")["rows"]
+    assert row["status"] == "changed" and row["variants_total"] == 1
+
+
+async def test_variants_keep_their_own_dates_and_places(service, web):
+    body = json.dumps(
+        {
+            "data": {
+                "list": {
+                    "items": [
+                        {
+                            "id": i,
+                            "name": "Hamlet",
+                            "date": f"2027-02-0{i}",
+                            "link": f"/s/{i}",
+                            "hall": f"Hall {i % 2}",
+                            "play": "hamlet",
+                        }
+                        for i in (1, 2, 3)
+                    ]
+                }
+            }
+        }
+    )
+    extract = {
+        "items": "data.list.items",
+        "fields": {"title": "name", "start": "date", "url": "link", "venue": "hall"},
+        "extra": {"play": "play"},
+    }
+    await add_source(service, web, body=body, extract=extract, group_by="play")
+    await service.fetch_source("city-agenda")
+    [row] = service.monitor_preview(AGENT, "plays", sources=["city-agenda"])["rows"]
+    sessions = [row, *row["variants"]]
+    assert sorted(s["when"] for s in sessions) == ["2027-02-01", "2027-02-02", "2027-02-03"]
+    assert len({s["url"] for s in sessions}) == 3
+    # A variant leaves out what it shares with the row: here the title.
+    assert all("title" not in v for v in row["variants"])
+    assert {row.get("where"), *(v.get("where", row.get("where")) for v in row["variants"])} == {"Hall 0", "Hall 1"}
+
+
+async def test_long_variants_are_cut_before_rows_are_left_out(service, web, store, clock):
+    items = [
+        {
+            "id": f"{g}-{n}",
+            "name": f"Show {g} " + "w" * 150,
+            "date": f"2027-02-{n + 1:02}",
+            "link": f"/s/{g}/{n}",
+            "show": f"show-{g}",
+        }
+        for g in range(8)
+        for n in range(11)
+    ]
+    extract = {
+        "items": "data.list.items",
+        "fields": {"title": "name", "start": "date", "url": "link"},
+        "extra": {"show": "show"},
+    }
+    await add_source(
+        service, web, body=json.dumps({"data": {"list": {"items": items}}}), extract=extract, group_by="show"
+    )
+    service.monitor_put(AGENT, "shows", ["city-agenda"], schedule="0 9 * * *")
+    await service.fetch_source("city-agenda")
+    clock.t += 60
+    [rid] = fire_at(service, "2027-01-15T09:00")
+    [request] = store.claim(20)
+    assert len(request["prompt"]) <= MAX_PROMPT
+    assert "digest_more" not in request["prompt"] and request["prompt"].count('"variants_total": 10') == 8
+    # digest_more still has every variant.
+    assert all(len(r["variants"]) == 10 for r in service.digest_more(rid, 0)["rows"])
+
+
+async def test_group_by_names_a_field_of_the_source(service, web):
+    with pytest.raises(ToolError, match="group_by"):
+        await add_films(service, web, group_by="nope")
+    spec = await add_films(service, web, group_by="original")
+    out = await service.source_test(spec)
+    # Dune's three formats are one group; the two items without a value are one each.
+    assert out["passed"] and out["groups_in_sample"] == 3
+
+
+async def test_true_and_false_values_are_kept_as_text(service, web):
+    body = json.dumps(
+        {
+            "data": {
+                "list": {
+                    "items": [
+                        {"id": 1, "name": "A", "date": "2027-02-01", "link": "/e/1", "soon": True},
+                        {"id": 2, "name": "B", "date": "2027-02-02", "link": "/e/2", "soon": False},
+                    ]
+                }
+            }
+        }
+    )
+    web.add(URL, body, "application/json")
+    extract = {
+        "items": "data.list.items",
+        "fields": {"title": "name", "start": "date", "url": "link"},
+        "extra": {"soon": "soon"},
+    }
+    out = await service.source_test(json_spec(extract=extract))
+    assert out["fill_rates"]["soon"] == 1
+    assert [i["extra"]["soon"] for i in out["items"]] == ["true", "false"]
+
+
+async def test_saving_again_keeps_where_reports_go(service, web, store):
+    await add_source(service, web)
+    service.monitor_put(AGENT, "films", ["city-agenda"], set_up_in="local-conv-12")
+    store.set_monitor_conversation(store.monitors()[0].id, "default")  # the person's choice on the page
+    out = service.monitor_put(AGENT, "films", ["city-agenda"], include=["night"])
+    assert out["monitor"]["conversation"] == "default" and "note" not in out
+    # "here" without set_up_in means where it was set up, when that is known.
+    out = service.monitor_put(AGENT, "films", ["city-agenda"], conversation="here")
+    assert out["monitor"]["conversation"] == "local-conv-12" and "note" not in out

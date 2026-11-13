@@ -110,6 +110,15 @@ def parse_date(value: str, languages: tuple[str, ...]) -> str:
     return parsed.isoformat(timespec="minutes")
 
 
+def _extra_scalar(value: Any) -> str:
+    """An extra's text. True and false are kept, as "true" and "false", so a flag
+    such as "in theatres" can be watched and matched; item fields still drop them
+    (a flag is never a title, a date or a link)."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return _scalar(value)
+
+
 def _date_value(value: Any) -> str:
     if isinstance(value, datetime):
         return value.isoformat(timespec="minutes")
@@ -145,7 +154,7 @@ def normalize(raw: dict[str, Any], extra: dict[str, Any], spec: Spec, base: str)
         if outlet:
             fields["outlet"] = outlet
             fields["title"] = headline
-    extra_out = {k: one_line(_scalar(v), MAX_FIELD) for k, v in extra.items()}
+    extra_out = {k: one_line(_extra_scalar(v), MAX_FIELD) for k, v in extra.items()}
     key_raw = raw.get("_key")
     if spec.key:
         parts = [fields.get(k) or extra_out.get(k, "") for k in spec.key]

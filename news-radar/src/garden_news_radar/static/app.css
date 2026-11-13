@@ -42,3 +42,15 @@
   flex: none;
   margin: 0;
 }
+.item-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+.item-form select {
+  margin-left: 6px;
+  font: inherit;
+}

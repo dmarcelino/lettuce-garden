@@ -16,15 +16,15 @@ An interactive version, [news-radar-architecture.html](../docs/diagrams/news-rad
 | `src/garden_news_radar/config.py` | `PREFIX` (`/news-radar`), `INTERNAL_NAME`, every limit, `Settings` from the environment (the `NEWS_RADAR_*` keys included), `default_schedule` |
 | `src/garden_news_radar/cron.py` | Schedules: numeric 5-field cron expressions joined by `;`, matched in the stack's timezone, in words for the page, fires per day for the cap |
 | `src/garden_news_radar/fetch.py` | The fetcher: `PublicOnlyBackend` (connects only to checked public addresses), `PublicTransport` (httpx over it), robots.txt, per-host spacing and back-off, redirects by hand, size caps, challenge pages |
-| `src/garden_news_radar/spec.py` | Source specs: validation of what an agent sends (kinds, JMESPath, CSS selectors, pages, follow, dates, watch), and the spec's fingerprint |
+| `src/garden_news_radar/spec.py` | Source specs: validation of what an agent sends (kinds, JMESPath, CSS selectors, pages, follow, dates, watch, group_by), and the spec's fingerprint |
 | `src/garden_news_radar/extract.py` | One extractor per kind (`rss`, `json`, `html`, `schema_org`, `ical`) and the same clean-up for all: one-line capped text, canonical URLs, dates, stable keys |
 | `src/garden_news_radar/runner.py` | One run of a source: its pages, `follow`, extraction; shared by the scheduler and `source_test` |
-| `src/garden_news_radar/inspect.py` | `source_inspect`: feeds, WordPress routes, schema.org types, calendars and data URLs in a page's scripts |
-| `src/garden_news_radar/store.py` | SQLite on `/data`: sources and their last 5 specs, items, health, monitors, reports (the executor's queue), passing tests, agents and heartbeat; `ExecutorQueue` |
-| `src/garden_news_radar/digest.py` | What a report holds (filters, news stories, sources needing repair) and its prompt within 8000 characters |
+| `src/garden_news_radar/inspect.py` | `source_inspect`: feeds, WordPress routes, schema.org types, calendars and data URLs in a page and up to 6 of its same-site scripts (library and tracking scripts left out) |
+| `src/garden_news_radar/store.py` | SQLite on `/data`: sources and their last 5 specs, items, health, monitors (with the conversation each was set up in), reports (the executor's queue), passing tests, agents and heartbeat; `ExecutorQueue`. A column added later is added to an older store when it opens |
+| `src/garden_news_radar/digest.py` | What a report holds (filters matched without case or accents, variants grouped by the source's `group_by`, news stories, sources needing repair) and its prompt within 8000 characters |
 | `src/garden_news_radar/service.py` | What the MCP tools, the page and the loops do: sources, monitors, due fetches, `fire` (a schedule into a report) |
 | `src/garden_news_radar/mcp_tools.py` | The MCP tools |
-| `src/garden_news_radar/app.py` | The page under `/news-radar/` (no JavaScript), `/mcp`, the executor routes, `/healthz`, and the fetch and schedule loops in its lifespan |
+| `src/garden_news_radar/app.py` | The page under `/news-radar/` (no JavaScript; it deletes monitors and sources and sets where a monitor's reports go), `/mcp`, the executor routes, `/healthz`, and the fetch and schedule loops in its lifespan |
 | `src/garden_news_radar/logs.py`, `icons.py` | Logging to stdout (never text from websites), the app icon drawn at first use |
 | `src/garden_news_radar/templates/`, `static/` | The page (Jinja) and its stylesheet |
 | `tests/` | pytest: schedules, the fetcher (with a fake resolver and `httpx.MockTransport`), every extractor on synthetic pages, the service, the app |
@@ -72,6 +72,7 @@ Run them before changing this directory; a change to `garden-common/` runs the s
 
 ## Upstream seams
 These are the Lettuce behaviours News Radar depends on (all of them are listed in [CONTRIBUTING.md](../CONTRIBUTING.md#upstream-seams)):
-- Through the executor: `letta cron add --once` with its flags and JSON output, `letta agents list`, as for Gmail triggers ([garden/executor/README.md](../garden/executor/README.md)).
+- Through the executor: `letta cron add --once` with its flags and JSON output, `letta agents list`, as for Gmail triggers ([garden/executor/README.md](../garden/executor/README.md)); and `--conversation=<id>`, to report into one conversation.
+- letta-code giving the agent's shell its conversation id as `$LETTA_CONVERSATION_ID`: the skill tells agents to pass it as `set_up_in`. Without it, a monitor reports in a new conversation each time and says so.
 - The shared MCP list accepting an `http` entry of `name`, `transport` and `url`, as for the vault; the 120 s Lettuce's MCP bridge gives a tool call (`source_test` and `source_inspect` stay well inside it).
 - The `mcp-servers` skill's wrapper, named in the `news-radar-sources` skill.

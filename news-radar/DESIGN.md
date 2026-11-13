@@ -8,6 +8,7 @@ Status: implemented (2026-11-08), except the spikes against a running stack (Pla
 - A review added: a call fails rather than wait out a pause over 60 s (10 s in a tool call, which ends after 90 s); a report's items are those changed before the second it was built; followed item pages are read again once their item is a week old; a raised `WATCHLIST_MIN_INTERVAL` applies to saved sources too; a source or schedule that no longer validates is skipped, not fatal.
 - The developer reference is [README.md](README.md); the guide for users and admins is [docs/news-radar.md](../docs/news-radar.md).
 - Renamed News Radar (2026-11-13): the folder `news-radar/`, the `garden-news-radar` profile and service, the `/news-radar/` page, the `news-radar` MCP server (its tools unchanged), the `news-radar-data` volume, the `NEWS_RADAR_*` settings, the `news-radar-sources` skill and the executor's `--news-radar`. The record below keeps the names it was reviewed with.
+- After the first live monitor (2026-11-13): a monitor reports by default into the conversation the agent set it up in (`set_up_in`, from `$LETTA_CONVERSATION_ID`; the executor takes a conversation id as well as `new` and `default`), and the person changes where on the page. `monitor_preview` previews a draft before it is saved. A source's `group_by` makes one row of an item listed several times. Filters ignore accents as well as case; extras keep true and false as text. `source_inspect` reads up to 6 same-site scripts, leaving out library and tracking ones.
 
 ## Goal
 

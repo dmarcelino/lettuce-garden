@@ -54,7 +54,9 @@ const AGENTS_MAX = 1000;
 const TOKEN = /^[0-9a-f]{64}$/;
 const ID = /^[0-9a-f]{32}$/;
 const AGENT_ID = /^agent-[A-Za-z0-9-]{1,80}$/;
-const CONVERSATIONS = new Set(["new", "default"]);
+// new, default, or the id of one of the agent's conversations (an agent passes
+// its own $LETTA_CONVERSATION_ID). Never a leading "-", so it can't read as a flag.
+const CONVERSATION = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/;
 // C0, DEL and C1 control characters.
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
@@ -380,7 +382,9 @@ function validate(req) {
   if (typeof req.agent_id !== "string" || !AGENT_ID.test(req.agent_id)) {
     return "agent_id is invalid";
   }
-  if (!CONVERSATIONS.has(req.conversation)) return "conversation must be new or default";
+  if (typeof req.conversation !== "string" || !CONVERSATION.test(req.conversation)) {
+    return "conversation must be new, default or a conversation id";
+  }
   return (
     textField(req, "name", 100, false) ||
     textField(req, "description", 200, false) ||
