@@ -25,6 +25,7 @@ SCHEMA_TYPE = re.compile(r"[A-Za-z]{1,60}")
 MAX_EXTRA = 10
 MAX_MATCH = 10
 MAX_MATCH_TEXT = 200
+MAX_SITEMAP_NAMES = 5
 MAX_EXPRESSION = 300
 MAX_EVERY = 7 * 86400
 
@@ -63,7 +64,7 @@ class SpecError(ValueError):
 
 # Fields that belong inside another one, for the error that says where.
 PLACES = {
-    **{f: f"extract.{f}" for f in ("types", "items", "fields", "extra", "match", "key")},
+    **{f: f"extract.{f}" for f in ("types", "items", "fields", "extra", "match", "sitemaps", "key")},
     "languages": "dates.languages",
     "links": "follow.links",
     "param": "pages.param",
@@ -161,6 +162,17 @@ def _mapping(obj: Any, where: str, check: Any, names: tuple[str, ...] | None) ->
     return out
 
 
+def _url_texts(value: Any, message: str, most: int) -> list[str]:
+    """A list of plain pieces of URL text (extract.match, extract.sitemaps): never patterns."""
+    if (
+        not isinstance(value, list)
+        or not 1 <= len(value) <= most
+        or not all(isinstance(m, str) and 0 < len(m.strip()) <= MAX_MATCH_TEXT for m in value)
+    ):
+        raise SpecError(message)
+    return [m.strip() for m in value]
+
+
 def parse_spec(obj: Any, min_interval: int) -> Spec:
     """A validated Spec, or SpecError saying what is wrong."""
     if not isinstance(obj, dict):
@@ -203,7 +215,7 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
         "rss": {"key"},
         "ical": {"key"},
         "schema_org": {"types", "key"},
-        "sitemap": {"match", "types", "key"},
+        "sitemap": {"match", "sitemaps", "types", "key"},
     }.get(kind, {"items", "fields", "extra", "key"})
     unknown = sorted(set(extract_in) - allowed_extract)
     if unknown:
@@ -222,17 +234,19 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
     if kind in ("json", "html") and "title" not in extract["fields"]:
         raise SpecError("extract.fields needs at least title")
     if kind == "sitemap" and extract_in.get("match") is not None:
-        match = extract_in["match"]
-        if (
-            not isinstance(match, list)
-            or not 1 <= len(match) <= MAX_MATCH
-            or not all(isinstance(m, str) and 0 < len(m.strip()) <= MAX_MATCH_TEXT for m in match)
-        ):
-            raise SpecError(
-                f"extract.match is a list of 1 to {MAX_MATCH} pieces of URL text, such as /events/ (plain text, "
-                "not a pattern): only the sitemap's URLs holding one are kept"
-            )
-        extract["match"] = [m.strip() for m in match]
+        extract["match"] = _url_texts(
+            extract_in["match"],
+            f"extract.match is a list of 1 to {MAX_MATCH} pieces of URL text, such as /events/ (plain text, "
+            "not a pattern): only the sitemap's URLs holding one are kept",
+            MAX_MATCH,
+        )
+    if kind == "sitemap" and extract_in.get("sitemaps") is not None:
+        extract["sitemaps"] = _url_texts(
+            extract_in["sitemaps"],
+            f"extract.sitemaps is a list of 1 to {MAX_SITEMAP_NAMES} pieces of the names of a sitemap index's files, "
+            "such as events-sitemap (plain text): the last two files of the index holding one are read",
+            MAX_SITEMAP_NAMES,
+        )
     if kind in ("schema_org", "sitemap"):
         types = extract_in.get("types", list(DEFAULT_SCHEMA_TYPES))
         if not isinstance(types, list) or not 1 <= len(types) <= 40:

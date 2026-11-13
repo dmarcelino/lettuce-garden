@@ -113,6 +113,12 @@ skips the turn when there is nothing to report.
      URL's words, dated by its `lastmod`. With `"follow": {"max": 20}`, its newest unseen pages
      are read for schema.org data (`types` as for `schema_org`), so events come with their
      dates and places; this reaches sites whose listings need a browser.
+     Many sites split their sitemap into numbered files listed in a sitemap index
+     (`events-sitemap.xml`, `events-sitemap2.xml`...; `source_inspect` on the index shows them
+     as `sitemap_families`) and start a new file as they grow. **Point the source at the index**
+     with `extract.sitemaps` naming the family, such as `["events-sitemap"]`: each run reads its
+     last two files, so the source keeps up when a new one appears. Never point it at one
+     numbered file: it stops seeing new pages once the site moves on to the next.
    - Item fields: `title` (required), `url`, `start`, `end`, `venue`, `summary`, `image`,
      `published`, `outlet`; anything else goes under `extra`. `item_kind` is `event` (the
      default) or `article` (the default for `rss`).

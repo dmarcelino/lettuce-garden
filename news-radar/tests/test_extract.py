@@ -548,3 +548,90 @@ async def test_a_sitemap_follows_only_its_newest_pages(fetcher, web):
     assert result.followed == 0 and web.fetched() == ["https://v.example.org/sitemap.xml"]  # the backlog is never read
     result = await run_source(s, fetcher, known_url=lambda u: u in newest - {"https://v.example.org/events/e29/"})
     assert web.fetched()[-1] == "https://v.example.org/events/e29/"
+
+
+# -- rc.3: a sitemap source that follows a sitemap index ----------------------------------
+SM = "https://site.example.org"
+NS = 'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
+
+
+def urlset(entries):
+    rows = "".join(f"<url><loc>{SM}/events/{slug}/</loc><lastmod>{day}</lastmod></url>" for slug, day in entries)
+    return f"<urlset {NS}>{rows}</urlset>"
+
+
+def add_index(web, files=("events-sitemap.xml", "events-sitemap2.xml", "events-sitemap3.xml", "post-sitemap.xml")):
+    rows = "".join(f"<sitemap><loc>{SM}/{f}</loc><lastmod>2027-01-14</lastmod></sitemap>" for f in files)
+    web.add(f"{SM}/sitemap_index.xml", f"<sitemapindex {NS}>{rows}</sitemapindex>", "application/xml")
+    web.add(f"{SM}/events-sitemap.xml", urlset([("ancient", "2025-01-01")]), "application/xml")
+    web.add(f"{SM}/post-sitemap.xml", urlset([("a-post", "2027-01-14")]), "application/xml")
+    # The newest pages straddle the files: a new file has just begun.
+    web.add(f"{SM}/events-sitemap2.xml", urlset([("older", "2027-01-10"), ("newer", "2027-01-12")]), "application/xml")
+    web.add(f"{SM}/events-sitemap3.xml", urlset([("newest", "2027-01-14")]), "application/xml")
+
+
+def index_spec(**over: Any) -> dict[str, Any]:
+    return {
+        "name": "site",
+        "url": f"{SM}/sitemap_index.xml",
+        "kind": "sitemap",
+        "extract": {"sitemaps": ["events-sitemap"], "match": ["/events/"]},
+        **over,
+    }
+
+
+async def test_an_index_source_reads_the_last_two_files_of_its_family(fetcher, web):
+    add_index(web)
+    result = await run_source(spec(index_spec()), fetcher)
+    assert result.ok
+    assert [i.fields["title"] for i in result.items] == ["newest", "newer", "older"]
+    assert f"{SM}/events-sitemap.xml" not in web.fetched() and f"{SM}/post-sitemap.xml" not in web.fetched()
+
+
+async def test_a_followed_index_reads_the_newest_pages_across_its_files(fetcher, web):
+    add_index(web)
+    for slug in ("newest", "newer", "older"):
+        web.add(f"{SM}/events/{slug}/", f"<html><title>{slug.title()}</title></html>")
+    result = await run_source(spec(index_spec(follow={"max": 2})), fetcher)
+    assert {i.fields["title"] for i in result.items} == {"Newest", "Newer"}
+    assert f"{SM}/events/older/" not in web.fetched()
+
+
+async def test_an_index_source_survives_one_unreadable_file(fetcher, web):
+    add_index(web)
+    web.add(f"{SM}/events-sitemap3.xml", "boom", "text/plain", status=500)
+    result = await run_source(spec(index_spec()), fetcher)
+    assert result.ok and [i.fields["title"] for i in result.items] == ["newer", "older"]
+    web.add(f"{SM}/events-sitemap2.xml", "boom", "text/plain", status=500)
+    assert "HTTP 500" in (await run_source(spec(index_spec()), fetcher)).error
+
+
+async def test_index_mistakes_say_what_to_do(fetcher, web):
+    add_index(web)
+    plain = await run_source(spec(index_spec(extract={"match": ["/events/"]})), fetcher)
+    assert "extract.sitemaps" in plain.error  # an index without it
+    web.add(f"{SM}/one.xml", urlset([("x", "2027-01-01")]), "application/xml")
+    wrong = await run_source(spec(index_spec(url=f"{SM}/one.xml")), fetcher)
+    assert "is for a sitemap index" in wrong.error
+    none = await run_source(spec(index_spec(extract={"sitemaps": ["film-sitemap"]})), fetcher)
+    assert "no sitemap in the index holds film-sitemap" in none.error and "events-sitemap" in none.error
+
+
+@pytest.mark.parametrize(
+    "extract_in, message",
+    [({"sitemaps": "events"}, "extract.sitemaps"), ({"sitemaps": [""]}, "extract.sitemaps")],
+)
+def test_bad_sitemaps_are_refused(extract_in, message):
+    with pytest.raises(SpecError, match=message):
+        spec(index_spec(extract=extract_in))
+    with pytest.raises(SpecError, match="sitemaps"):
+        spec({**json_spec(), "extract": {"items": "a", "fields": {"title": "t"}, "sitemaps": ["x"]}})
+
+
+async def test_inspect_groups_an_index_into_families(fetcher, web):
+    from garden_news_radar.inspect import inspect
+
+    add_index(web)
+    out = await inspect(fetcher, f"{SM}/sitemap_index.xml")
+    assert out["sitemap_families"] == {"events-sitemap": 3, "post-sitemap": 1}
+    assert "extract.sitemaps" in out["hint"]

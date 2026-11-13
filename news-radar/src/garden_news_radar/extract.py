@@ -450,9 +450,45 @@ def sitemap_entries(spec: Spec | None, page: Page) -> list[tuple[str, str]]:
     sitemap = read_sitemap(spec, page)
     if sitemap.children:
         raise ExtractError(
-            "a sitemap index, not a sitemap: use one of its sitemaps (source_inspect lists them) as the url"
+            "a sitemap index, not a sitemap: point the source at it with extract.sitemaps naming the files to "
+            "read (source_inspect lists them as sitemap_families), or use one of its sitemaps as the url"
         )
     return sitemap.entries
+
+
+# The files of a sitemap family read per run: the last two in the index, since a file
+# just begun holds only a few pages and the rest of the newest are at the end of the
+# one before. The index's own dates are no help: sites give every file the same one.
+SITEMAPS_READ = 2
+
+
+def pick_sitemaps(spec: Spec, page: Page) -> list[str]:
+    """The index's files whose URL holds one of extract.sitemaps: the last
+    SITEMAPS_READ, in the index's order."""
+    sitemap = read_sitemap(spec, page)
+    if not sitemap.children:
+        raise ExtractError("extract.sitemaps is for a sitemap index; this is a sitemap: drop it, or use the index")
+    names = spec.extract["sitemaps"]
+    chosen = [u for u in sitemap.children if any(n in u for n in names)]
+    if not chosen:
+        listed = ", ".join(urlsplit(u).path.rsplit("/", 1)[-1] for u in sitemap.children[:8])
+        raise ExtractError(f"no sitemap in the index holds {', '.join(names)}; its sitemaps are {listed}")
+    return chosen[-SITEMAPS_READ:]
+
+
+def combine_entries(lists: list[list[tuple[str, str]]]) -> list[tuple[str, str]]:
+    """Several sitemaps' entries as one: each page once, newest first (undated
+    last), at most MAX_SITEMAP_ITEMS."""
+    seen: dict[str, str] = {}
+    for entries in lists:
+        for url, lastmod in entries:
+            seen.setdefault(url, lastmod)
+    return sorted(seen.items(), key=lambda e: e[1], reverse=True)[:MAX_SITEMAP_ITEMS]
+
+
+def sitemap_items(entries: list[tuple[str, str]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """A sitemap's pages as raw items: titled from their URL, dated by their lastmod."""
+    return [({"title": slug_title(url), "url": url, "published": lastmod}, {}) for url, lastmod in entries]
 
 
 def slug_title(url: str) -> str:
@@ -465,10 +501,7 @@ def slug_title(url: str) -> str:
 
 
 def _sitemap(spec: Spec, page: Page) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    return [
-        ({"title": slug_title(url), "url": url, "published": lastmod}, {})
-        for url, lastmod in sitemap_entries(spec, page)
-    ]
+    return sitemap_items(sitemap_entries(spec, page))
 
 
 def follow_links(spec: Spec, page: Page) -> list[str]:
@@ -557,14 +590,19 @@ KIND_EXTRACTORS = {
 }
 
 
-def extract(spec: Spec, page: Page) -> list[Item]:
-    """Items of one page, in page order; a repeated key counts once."""
+def items_of(raws: list[tuple[dict[str, Any], dict[str, Any]]], spec: Spec, base: str) -> list[Item]:
+    """Raw items cleaned, in order; a repeated key counts once."""
     items: dict[str, Item] = {}
-    for raw, extra in KIND_EXTRACTORS[spec.kind](spec, page):
-        item = normalize(raw, extra, spec, page.url)
+    for raw, extra in raws:
+        item = normalize(raw, extra, spec, base)
         if item is not None and item.key not in items:
             items[item.key] = item
     return list(items.values())
+
+
+def extract(spec: Spec, page: Page) -> list[Item]:
+    """Items of one page, in page order; a repeated key counts once."""
+    return items_of(KIND_EXTRACTORS[spec.kind](spec, page), spec, page.url)
 
 
 def fill_rates(items: list[Item], spec: Spec) -> dict[str, float]:

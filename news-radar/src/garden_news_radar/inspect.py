@@ -17,6 +17,9 @@ from .extract import ExtractError, html_document, read_sitemap, schema_types
 from .fetch import Fetcher, FetchError, Page, host_of
 from .runner import sample_of
 
+# A sitemap file's name without its number and extension: "events-sitemap2.xml" is
+# of the family "events-sitemap".
+SITEMAP_NUMBER = re.compile(r"\d*\.xml(\.gz)?$", re.I)
 # Same-site scripts read for data URLs, after the library and tracking ones are
 # left out; at the host's pacing (2 s apart) they fit well inside a tool call.
 MAX_SCRIPTS = 6
@@ -126,7 +129,16 @@ def _sitemap(page: Page) -> dict[str, Any]:
     except ExtractError as e:
         return {"error": str(e)}
     if sitemap.children:
-        return {"sitemap_index": sitemap.children}
+        families: dict[str, int] = {}
+        for url in sitemap.children:
+            name = SITEMAP_NUMBER.sub("", urlsplit(url).path.rsplit("/", 1)[-1])
+            families[name] = families.get(name, 0) + 1
+        return {
+            "sitemap_index": sitemap.children,
+            "sitemap_families": families,
+            "hint": "a source can follow a family as it grows (new numbered files): url this index, "
+            'kind sitemap, extract.sitemaps ["<family>"]; each run reads its last two files',
+        }
     return {"sitemap_pages": sitemap.total, "newest": [{"url": u, "lastmod": m} for u, m in sitemap.entries[:10]]}
 
 

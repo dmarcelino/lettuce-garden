@@ -16,11 +16,16 @@ from .blocks import repeated_blocks
 from .extract import (
     ExtractError,
     Item,
+    combine_entries,
     extract,
     follow_links,
     html_document,
+    items_of,
     normalize,
+    pick_sitemaps,
     schema_items,
+    sitemap_entries,
+    sitemap_items,
     slug_title,
 )
 from .fetch import Fetcher, FetchError, Page
@@ -78,6 +83,21 @@ def sample_of(page: Page) -> str:
     return one_line(page.text(), SAMPLE)
 
 
+async def _index_entries(spec: Spec, index: Page, fetcher: Fetcher, max_wait: float | None) -> list[tuple[str, str]]:
+    """A sitemap index's last files of the spec's family, read and combined. A file
+    that can't be read is skipped; ExtractError when none can."""
+    lists, last_error = [], ""
+    for url in pick_sitemaps(spec, index):
+        try:
+            page = await fetcher.get(url, accept=ACCEPT["sitemap"], max_wait=max_wait)
+            lists.append(sitemap_entries(spec, page))
+        except (FetchError, ExtractError) as e:
+            last_error = str(e)
+    if not lists:
+        raise ExtractError(f"no sitemap of the index could be read; the last: {last_error}")
+    return combine_entries(lists)
+
+
 async def run_source(
     spec: Spec,
     fetcher: Fetcher,
@@ -96,7 +116,8 @@ async def run_source(
     result = RunResult()
     accept = ACCEPT[spec.kind]
     # Conditional requests only make sense for a source that is a single request.
-    conditional = spec.pages is None and spec.follow is None
+    # A sitemap index's 304 must not hide a changed file of it: never conditional.
+    conditional = spec.pages is None and spec.follow is None and not spec.extract.get("sitemaps")
     urls = [spec.url]
     if spec.pages:
         count = min(spec.pages["max"], max_pages or spec.pages["max"])
@@ -138,7 +159,13 @@ async def run_source(
         try:
             # A followed sitemap's items come from its pages; its own entries are only links,
             # read here once so that a page that is not a sitemap fails the run.
-            if spec.kind == "sitemap" and spec.follow:
+            if spec.kind == "sitemap" and spec.extract.get("sitemaps"):
+                entries = await _index_entries(spec, page, fetcher, max_wait)
+                if spec.follow:
+                    found, sitemap_links = [], [url for url, _ in entries]
+                else:
+                    found = items_of(sitemap_items(entries), spec, page.url)
+            elif spec.kind == "sitemap" and spec.follow:
                 found, sitemap_links = [], follow_links(spec, page)
             else:
                 found = extract(spec, page)
