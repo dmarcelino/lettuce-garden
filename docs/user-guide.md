@@ -11,6 +11,7 @@ This page is for you if someone runs lettuce-garden and has given you a stack. I
   |---|---|---|
   | Vault, `/vault/` | Keeps your logins, cards, identities, notes and SSH keys encrypted with your own passphrase (you can import them from Bitwarden). Agents ask to use one, and you approve each request, unless you let an everyday detail such as an address be used without asking. By default agents fill the values in without reading them. | [Using the vault](vault.md#using-it) |
   | Gmail triggers, `/gmail-triggers/` | Rules such as "when an email arrives in label X, ask agent Y to do Z". | [Using Gmail triggers](gmail-triggers.md#using-it) |
+  | News Radar, `/news-radar/` | What your agents keep an eye on for you (films, concerts, news on a topic) and when they report; ask an agent to set one up. | [Using News Radar](news-radar.md#using-it) |
   | Code editor, `/code-server/` | VS Code in the browser on your agents' workspaces, with a terminal that has the agents' tools. | [Using the code editor](code-server.md#using-it) |
 
   Two more features have no page: your agents may have Office and PDF tools ([document tools](doc-tools.md#using-it)), and their web traffic may go through a proxy that checks where it goes and records it, which catches mistakes but is not a wall: an agent can go around it ([egress proxy](egress-firewall.md)). Ask your admin which are on.

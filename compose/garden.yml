@@ -17,7 +17,7 @@
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
   garden:
-    profiles: ["garden-vault", "garden-gmail-triggers", "garden-code-server"]
+    profiles: ["garden-vault", "garden-gmail-triggers", "garden-news-radar", "garden-code-server"]
     build:
       context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden
       additional_contexts:

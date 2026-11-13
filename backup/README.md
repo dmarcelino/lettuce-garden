@@ -20,7 +20,7 @@ Every container of it runs with `BACKUP_RUN`: `--rm --init` (as PID 1, sh would 
 1. Refuses a destination that is not a directory, contains `:` or `,`, or lies inside this repo (it is public, and a backup holds `stack.env` and the agents' logins), and needs `flock`.
 2. Runs `backup_stack` for each stack in its own subshell, so one failing stack does not stop the others; the failed ones are listed at the end and the command exits 1.
 3. Takes `flock -n` on `<dir>/<name>/.lock`; a second backup of the same stack stops there, so it cannot delete the first one's `.partial-*`.
-4. Mounts, read-only: the state at `/src/state`, `stack.env` at `/src/stack.env`, and `lettuce-<name>_vault-data` at `/src/vault` and `lettuce-<name>_pipelock-data` at `/src/pipelock` when the volume exists (checked with `volume inspect` first, since `run -v` would create a missing one), whatever the profiles. It leaves out caches, upstream's skills (the BFF reinstalls them), the skills `lettucectl skills` installed, and with `--no-tools` `state/tools`.
+4. Mounts, read-only: the state at `/src/state`, `stack.env` at `/src/stack.env`, and `lettuce-<name>_vault-data` at `/src/vault`, `lettuce-<name>_pipelock-data` at `/src/pipelock` and `lettuce-<name>_news-radar-data` at `/src/news-radar` when the volume exists (checked with `volume inspect` first, since `run -v` would create a missing one), whatever the profiles. It leaves out caches, upstream's skills (the BFF reinstalls them), the skills `lettucectl skills` installed, and with `--no-tools` `state/tools`.
 5. Removes any `.partial-*` an interrupted run left, from inside a container (a snapshot can hold read-only directories the operator cannot empty).
 6. For a running stack, asks: pause, copy live, or abort; `--pause` or `--live` answers ahead of time. With pause, the `EXIT` trap that unpauses the stack is set before `compose pause`, so a pause that fails partway is undone too.
 7. Copies with `rsync -aH --numeric-ids --chown=<operator uid:gid>` into `<dir>/<name>/.partial-<TS>` (`<TS>` is the UTC start time, `YYYYMMDDTHHMMSSZ`), with `--link-dest` to the newest earlier snapshot, so unchanged files are hard links. rsync's code 24 (files vanished, as in a live copy) is a warning.
@@ -39,7 +39,7 @@ The state is root-owned and holds every stack's secrets, so the operator's shell
 
 - **The destination may not be inside this repo:** the repo is public, and backups hold secrets.
 - **Snapshots are complete or absent.** They are written as the operator (`--chown`), hard-linked to the previous one (`--link-dest`), and renamed from `.partial-<TS>` only when complete. A `flock` on `<dir>/<name>/.lock` keeps a second run from deleting the first one's `.partial-*`.
-- **The vault and pipelock's receipts are copied whenever their volume exists**, whatever the profiles. Check `volume inspect` before mounting one, since `run -v` creates a missing volume.
+- **The vault, pipelock's receipts and News Radar are copied whenever their volume exists**, whatever the profiles. Check `volume inspect` before mounting one, since `run -v` creates a missing volume.
 - **A running stack is copied only after `--pause`, `--live` or the operator's answer**, and the `EXIT` trap that unpauses it is set before pausing.
 - **With `all`, each stack runs in its own subshell**, and a failure does not stop the rest.
 

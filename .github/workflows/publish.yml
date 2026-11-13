@@ -3,15 +3,24 @@
 # there is no `latest`: the lettucectl image holds the Docker socket, so a
 # moving tag would let one push reach every host.
 #
+# Each platform builds on a runner of its own architecture (ubuntu-24.04 for
+# linux/amd64, ubuntu-24.04-arm for linux/arm64), never under emulation, which
+# was ten times slower; a job per image then joins the two into one image.
+#
 # 1. plan: the images, from release/images (the one list).
-# 2. image (one job per image): its content tag (release/content-tag); built for
-#    linux/amd64 and linux/arm64 and pushed only when that tag is not in the
-#    registry yet, so an unchanged image keeps its name and digest; with an SBOM,
-#    BuildKit provenance and a GitHub attestation.
-# 3. release: RELEASE (the version, the tested Lettuce tag, each image's full
-#    name), the lettucectl image, the wrapper pinned to its digest, SHA256SUMS,
-#    the release notes (which images changed, and so which sidecars restart),
-#    and the GitHub release.
+# 2. build (one job per image and platform): its content tag
+#    (release/content-tag); when that tag is not in the registry yet, the
+#    image for that platform, pushed by digest only, with an SBOM and BuildKit
+#    provenance.
+# 3. image (one job per image): the content tag on both platforms' digests, so
+#    an unchanged image keeps its name and digest; and a GitHub attestation.
+# 4. release-file: RELEASE (the version, the tested Lettuce tag, each image's
+#    full name), once every image is published for both platforms.
+# 5. ctl (one job per platform): the lettucectl image, carrying RELEASE, pushed
+#    by digest.
+# 6. release: the lettucectl image's tag on both digests, the wrapper pinned to
+#    its digest, SHA256SUMS, the release notes (which images changed, and so
+#    which sidecars restart), and the GitHub release.
 # The GHCR packages it creates come out public, as this repository is, so hosts
 # pull without credentials (release/README.md, "Cutting a release", step 3).
 name: Publish
@@ -56,10 +65,63 @@ jobs:
           printf 'images=%s\n' "$(awk '!/^[[:space:]]*(#|$)/ { print $1, $2, $3 }' release/images |
             jq -Rnc '[inputs | split(" ") | {image: .[0], context: .[1], shared: .[2]}]')" >>"$GITHUB_OUTPUT"
 
-  image:
+  build:
     needs: plan
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.images) }}
+        platform:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    env:
+      IMAGE: ${{ matrix.target.image }}
+      CONTEXT: ${{ matrix.target.context }}
+      SHARED: ${{ matrix.target.shared }}
+      ARCH: ${{ matrix.platform.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push by digest, unless this content is published already
+        run: |
+          set -euo pipefail
+          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lettuce-$IMAGE
+          tag=$(release/content-tag "$IMAGE")
+          mkdir -p "$RUNNER_TEMP/digest"
+          if docker buildx imagetools inspect "$name:$tag" >/dev/null 2>&1; then
+            echo "$IMAGE: $name:$tag is published; reused"
+            echo reused >"$RUNNER_TEMP/digest/$ARCH"
+            exit 0
+          fi
+          args=(--platform "linux/$ARCH" --provenance mode=max --sbom true
+            --output "type=image,name=$name,push-by-digest=true,name-canonical=true,push=true"
+            --metadata-file "$RUNNER_TEMP/meta.json" -f "$CONTEXT/Dockerfile")
+          [[ $SHARED == - ]] || args+=(--build-context "$SHARED=$SHARED")
+          docker buildx build "${args[@]}" "$CONTEXT"
+          jq -er '."containerimage.digest"' "$RUNNER_TEMP/meta.json" >"$RUNNER_TEMP/digest/$ARCH"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.target.image }}-${{ matrix.platform.arch }}
+          path: ${{ runner.temp }}/digest/${{ matrix.platform.arch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  image:
+    needs: [plan, build]
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -71,20 +133,22 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.images) }}
     env:
       IMAGE: ${{ matrix.image }}
-      CONTEXT: ${{ matrix.context }}
-      SHARED: ${{ matrix.shared }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push, unless this content is published already
+      - name: Tag both platforms' digests, unless this content is published already
         id: build
         run: |
           set -euo pipefail
@@ -94,11 +158,14 @@ jobs:
             echo "$IMAGE: $name:$tag is published; reused"
             built=false
           else
-            args=(--platform linux/amd64,linux/arm64 --push --provenance mode=max --sbom true
-              --metadata-file "$RUNNER_TEMP/meta.json" -t "$name:$tag" -f "$CONTEXT/Dockerfile")
-            [[ $SHARED == - ]] || args+=(--build-context "$SHARED=$SHARED")
-            docker buildx build "${args[@]}" "$CONTEXT"
-            digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/meta.json")
+            refs=()
+            for f in "$RUNNER_TEMP"/digests/*; do
+              d=$(cat "$f")
+              [[ $d =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::$IMAGE has no $(basename "$f") build ($d)"; exit 1; }
+              refs+=("$name@$d")
+            done
+            docker buildx imagetools create -t "$name:$tag" "${refs[@]}"
+            digest=$(docker buildx imagetools inspect "$name:$tag" --format '{{json .Manifest}}' | jq -er .digest)
             built=true
           fi
           {
@@ -121,18 +188,15 @@ jobs:
           path: ${{ runner.temp }}/ref/${{ matrix.image }}.env
           retention-days: 1
 
-  release:
+  release-file:
     needs: image
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 10
     permissions:
-      contents: write
-      packages: write
-      id-token: write
-      attestations: write
+      contents: read
+      packages: read
     env:
       TAG: ${{ github.ref_name }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -142,7 +206,6 @@ jobs:
           pattern: ref-*
           path: ${{ runner.temp }}/ref
           merge-multiple: true
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
@@ -167,14 +230,102 @@ jobs:
             p=$(docker buildx imagetools inspect --raw "$ref" | jq -r '[.manifests[].platform | "\(.os)/\(.architecture)"] | join(" ")')
             [[ " $p " == *" linux/amd64 "* && " $p " == *" linux/arm64 "* ]] || { echo "::error::$ref is not published for both platforms ($p)"; exit 1; }
           done
-      - name: Build and push the lettucectl image
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: RELEASE
+          path: RELEASE
+          if-no-files-found: error
+          retention-days: 1
+
+  ctl:
+    needs: release-file
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    env:
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: RELEASE
+          path: .
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build the lettucectl image and push it by digest
+        run: |
+          set -euo pipefail
+          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lettucectl
+          mkdir -p "$RUNNER_TEMP/digest"
+          docker buildx build --platform "linux/$ARCH" --provenance mode=max --sbom true \
+            --output "type=image,name=$name,push-by-digest=true,name-canonical=true,push=true" \
+            --metadata-file "$RUNNER_TEMP/ctl.json" -f release/lettucectl.Dockerfile .
+          jq -er '."containerimage.digest"' "$RUNNER_TEMP/ctl.json" >"$RUNNER_TEMP/digest/$ARCH"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ctl-digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digest/${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: ctl
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: RELEASE
+          path: .
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ctl-digest-*
+          path: ${{ runner.temp }}/ctl
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag the lettucectl image on both platforms' digests
         id: ctl
         run: |
           set -euo pipefail
           name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lettucectl
-          docker buildx build --platform linux/amd64,linux/arm64 --push --provenance mode=max --sbom true \
-            --metadata-file "$RUNNER_TEMP/ctl.json" -t "$name:$TAG" -f release/lettucectl.Dockerfile .
-          digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/ctl.json")
+          refs=()
+          for arch in amd64 arm64; do
+            d=$(cat "$RUNNER_TEMP/ctl/$arch")
+            [[ $d =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no lettucectl build for $arch"; exit 1; }
+            refs+=("$name@$d")
+          done
+          docker buildx imagetools create -t "$name:$TAG" "${refs[@]}"
+          digest=$(docker buildx imagetools inspect "$name:$TAG" --format '{{json .Manifest}}' | jq -er .digest)
           echo "name=$name" >>"$GITHUB_OUTPUT"
           echo "digest=$digest" >>"$GITHUB_OUTPUT"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -190,7 +341,7 @@ jobs:
           mkdir -p dist
           sed -e "s|@VERSION@|$TAG|" -e "s|@IMAGE@|$IMAGE|" -e "s|@REPOSITORY@|$GITHUB_REPOSITORY|" \
             release/lettucectl-wrapper.sh >dist/lettucectl
-          ! grep -q '@[A-Z]*@' dist/lettucectl
+          if grep -q '@[A-Z]*@' dist/lettucectl; then echo "::error::the wrapper still has a placeholder"; exit 1; fi
           cp RELEASE dist/RELEASE
           (cd dist && sha256sum lettucectl RELEASE >SHA256SUMS)
           # The images whose name changed since the last release: their

@@ -17,6 +17,9 @@ below, and released. The plan below stays as the design record. Where the build 
 - **`publish.yml` builds one image per job**, from a matrix it reads from `release/images`, since
   GitHub's attestation action takes one image per step; the last job collects their names into
   `RELEASE`. One `docker buildx build` per image, no `bake`.
+  *(2026-11-13: arm64 built under QEMU took ten times as long as amd64, most of a release's eight
+  minutes, so each platform now builds on a runner of its own architecture and pushes by digest,
+  and the job per image puts the content tag on both: [release/README.md](../release/README.md#how-it-plugs-in).)*
 - **`toolbox` in release mode:** the wrapper runs the toolbox file's `secret` lines on the host
   too, and passes their values by name; a toolbox mount outside the operator's home is refused,
   since only the home is mounted.

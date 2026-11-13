@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "f8563bfc55ffeeada10efbe046a47c964413bb38"
+      "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
     }
   },
   "components": [
@@ -19,10 +19,21 @@
       "type": "external",
       "label": "agent-skills/",
       "sublabel": "one directory per skill",
-      "pos": [40, 40],
-      "size": [180, 64],
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        180,
+        64
+      ],
       "sources": [
-        { "path": "lettucectl", "line": 227, "end_line": 239, "label": "sync_skills: */SKILL.md, names checked" }
+        {
+          "path": "lettucectl",
+          "line": 233,
+          "end_line": 245,
+          "label": "sync_skills: */SKILL.md, names checked"
+        }
       ]
     },
     {
@@ -30,11 +41,27 @@
       "type": "external",
       "label": "lettucectl skills",
       "sublabel": "sync_skills, per stack",
-      "pos": [380, 40],
-      "size": [190, 64],
+      "pos": [
+        380,
+        40
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "lettucectl", "line": 1774, "end_line": 1782, "label": "cmd_skills" },
-        { "path": "lettucectl", "line": 240, "end_line": 246, "label": "tar into compose exec" }
+        {
+          "path": "lettucectl",
+          "line": 2016,
+          "end_line": 2024,
+          "label": "cmd_skills"
+        },
+        {
+          "path": "lettucectl",
+          "line": 246,
+          "end_line": 252,
+          "label": "tar into compose exec"
+        }
       ]
     },
     {
@@ -42,11 +69,27 @@
       "type": "external",
       "label": "upstream agent-skills",
       "sublabel": "upstream/docker/agent-skills",
-      "pos": [720, 40],
-      "size": [190, 64],
+      "pos": [
+        720,
+        40
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "lettucectl", "line": 236, "end_line": 237, "label": "a shared name is refused" },
-        { "path": "lettucectl", "line": 1584, "end_line": 1590, "label": "backup skips upstream's" }
+        {
+          "path": "lettucectl",
+          "line": 242,
+          "end_line": 243,
+          "label": "a shared name is refused"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1838,
+          "end_line": 1844,
+          "label": "backup skips upstream's"
+        }
       ]
     },
     {
@@ -54,11 +97,26 @@
       "type": "frontend",
       "label": "BFF",
       "sublabel": "upstream's skills, mcp-servers",
-      "pos": [40, 230],
-      "size": [180, 64],
+      "pos": [
+        40,
+        230
+      ],
+      "size": [
+        180,
+        64
+      ],
       "sources": [
-        { "path": "lettucectl", "line": 236, "label": "rewrites its skills on connect" },
-        { "path": "lettucectl", "line": 641, "end_line": 646, "label": "renders the mcp-servers skill" }
+        {
+          "path": "lettucectl",
+          "line": 242,
+          "label": "rewrites its skills on connect"
+        },
+        {
+          "path": "lettucectl",
+          "line": 706,
+          "end_line": 711,
+          "label": "renders the mcp-servers skill"
+        }
       ]
     },
     {
@@ -66,11 +124,27 @@
       "type": "database",
       "label": "/root/.letta/skills",
       "sublabel": ".lettucectl-skills manifest",
-      "pos": [380, 230],
-      "size": [190, 64],
+      "pos": [
+        380,
+        230
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "lettucectl", "line": 206, "end_line": 225, "label": "SKILLS_INSTALL" },
-        { "path": "lettucectl", "line": 1471, "end_line": 1489, "label": "backup leaves them out" }
+        {
+          "path": "lettucectl",
+          "line": 212,
+          "end_line": 231,
+          "label": "SKILLS_INSTALL"
+        },
+        {
+          "path": "lettucectl",
+          "line": 1719,
+          "end_line": 1737,
+          "label": "backup leaves them out"
+        }
       ]
     },
     {
@@ -78,11 +152,27 @@
       "type": "backend",
       "label": "office, pdf",
       "sublabel": "stdio MCP, garden-doc-tools",
-      "pos": [720, 230],
-      "size": [190, 64],
+      "pos": [
+        720,
+        230
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "lib/mcp-servers.mjs", "line": 36, "end_line": 45, "label": "registered entries" },
-        { "path": "doc-tools/lib/launch.sh", "line": 1, "end_line": 8, "label": "one process per call" }
+        {
+          "path": "lib/mcp-servers.mjs",
+          "line": 45,
+          "end_line": 54,
+          "label": "registered entries"
+        },
+        {
+          "path": "doc-tools/lib/launch.sh",
+          "line": 1,
+          "end_line": 8,
+          "label": "one process per call"
+        }
       ]
     },
     {
@@ -90,12 +180,33 @@
       "type": "backend",
       "label": "using-vault-secrets",
       "sublabel": "SKILL.md, vault-run, vault-fill",
-      "pos": [380, 420],
-      "size": [190, 64],
+      "pos": [
+        380,
+        420
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "agent-skills/using-vault-secrets/SKILL.md", "line": 1, "end_line": 126, "label": "placeholders; waiting for approval" },
-        { "path": "agent-skills/using-vault-secrets/vault-run", "line": 42, "end_line": 70, "label": "POST /redeem, no proxy" },
-        { "path": "agent-skills/using-vault-secrets/vault-fill", "line": 2, "end_line": 15, "label": "vault-fill: a template, filled" }
+        {
+          "path": "agent-skills/using-vault-secrets/SKILL.md",
+          "line": 1,
+          "end_line": 126,
+          "label": "placeholders; waiting for approval"
+        },
+        {
+          "path": "agent-skills/using-vault-secrets/vault-run",
+          "line": 42,
+          "end_line": 70,
+          "label": "POST /redeem, no proxy"
+        },
+        {
+          "path": "agent-skills/using-vault-secrets/vault-fill",
+          "line": 2,
+          "end_line": 15,
+          "label": "vault-fill: a template, filled"
+        }
       ]
     },
     {
@@ -103,10 +214,21 @@
       "type": "backend",
       "label": "working-with-documents",
       "sublabel": "which server, how to check",
-      "pos": [720, 420],
-      "size": [190, 64],
+      "pos": [
+        720,
+        420
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "agent-skills/working-with-documents/SKILL.md", "line": 1, "end_line": 26, "label": "the mcp-servers wrapper" }
+        {
+          "path": "agent-skills/working-with-documents/SKILL.md",
+          "line": 1,
+          "end_line": 26,
+          "label": "the mcp-servers wrapper"
+        }
       ]
     },
     {
@@ -114,10 +236,21 @@
       "type": "backend",
       "label": "fetching-web-pages",
       "sublabel": "only when HTTPS_PROXY is set",
-      "pos": [1000, 420],
-      "size": [190, 64],
+      "pos": [
+        1000,
+        420
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "agent-skills/fetching-web-pages/SKILL.md", "line": 1, "end_line": 25, "label": "/fetch for reading pages" }
+        {
+          "path": "agent-skills/fetching-web-pages/SKILL.md",
+          "line": 1,
+          "end_line": 25,
+          "label": "/fetch for reading pages"
+        }
       ]
     },
     {
@@ -125,11 +258,27 @@
       "type": "security",
       "label": "garden-vault",
       "sublabel": "/mcp, /redeem",
-      "pos": [380, 610],
-      "size": [190, 64],
+      "pos": [
+        380,
+        610
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "vault/src/garden_vault/app.py", "line": 1, "end_line": 4, "label": "internal /mcp and /redeem" },
-        { "path": "vault/src/garden_vault/app.py", "line": 543, "end_line": 550, "label": "routes" }
+        {
+          "path": "vault/src/garden_vault/app.py",
+          "line": 1,
+          "end_line": 4,
+          "label": "internal /mcp and /redeem"
+        },
+        {
+          "path": "vault/src/garden_vault/app.py",
+          "line": 546,
+          "end_line": 553,
+          "label": "routes"
+        }
       ]
     },
     {
@@ -137,11 +286,71 @@
       "type": "security",
       "label": "garden-pipelock",
       "sublabel": ":8888 proxy and /fetch",
-      "pos": [1000, 610],
-      "size": [190, 64],
+      "pos": [
+        1000,
+        610
+      ],
+      "size": [
+        190,
+        64
+      ],
       "sources": [
-        { "path": "pipelock/pipelock.yaml", "line": 1, "end_line": 4, "label": "one listener for both" },
-        { "path": "compose/pipelock-proxy.yml", "line": 23, "end_line": 29, "label": "HTTPS_PROXY in the app-server" }
+        {
+          "path": "pipelock/pipelock.yaml",
+          "line": 1,
+          "end_line": 4,
+          "label": "one listener for both"
+        },
+        {
+          "path": "compose/pipelock-proxy.yml",
+          "line": 31,
+          "end_line": 43,
+          "label": "HTTPS_PROXY in the app-server"
+        }
+      ]
+    },
+    {
+      "id": "monskill",
+      "type": "backend",
+      "label": "news-radar-sources",
+      "sublabel": "set up, report, repair",
+      "pos": [
+        1280,
+        420
+      ],
+      "size": [
+        190,
+        64
+      ],
+      "sources": [
+        {
+          "path": "agent-skills/news-radar-sources/SKILL.md",
+          "line": 8,
+          "end_line": 23,
+          "label": "the News Radar server, through the wrapper"
+        }
+      ]
+    },
+    {
+      "id": "news-radar",
+      "type": "backend",
+      "label": "garden-news-radar",
+      "sublabel": "/mcp",
+      "pos": [
+        1280,
+        610
+      ],
+      "size": [
+        190,
+        64
+      ],
+      "sources": [
+        {
+          "path": "news-radar/src/garden_news_radar/app.py",
+          "line": 253,
+          "end_line": 264,
+          "label": "internal /mcp only"
+        }
       ]
     }
   ],
@@ -149,30 +358,86 @@
     {
       "kind": "region",
       "label": "operator's host",
-      "wraps": ["repo", "ctl", "upstream"],
+      "wraps": [
+        "repo",
+        "ctl",
+        "upstream"
+      ],
       "pad": 16
     },
     {
       "kind": "security-group",
       "label": "shared network namespace",
-      "wraps": ["bff", "dir", "docs", "vaultskill", "docskill", "fetchskill"],
+      "wraps": [
+        "bff",
+        "dir",
+        "docs",
+        "vaultskill",
+        "docskill",
+        "fetchskill",
+        "monskill"
+      ],
       "pad": 30
     },
     {
       "kind": "security-group",
       "label": "app-server container: agents run as root",
-      "wraps": ["dir", "docs", "vaultskill", "docskill", "fetchskill"],
+      "wraps": [
+        "dir",
+        "docs",
+        "vaultskill",
+        "docskill",
+        "fetchskill",
+        "monskill"
+      ],
       "pad": 14
     }
   ],
   "connections": [
-    { "from": "repo", "to": "ctl", "label": "*/SKILL.md dirs" },
-    { "from": "ctl", "to": "upstream", "label": "same name: refused", "variant": "dashed" },
-    { "from": "ctl", "to": "dir", "label": "tar | compose exec app-server", "variant": "emphasis" },
-    { "from": "bff", "to": "dir", "label": "its skills, on connect" },
-    { "from": "docskill", "to": "docs", "label": "mcp.sh: letta mcp call" },
-    { "from": "vaultskill", "to": "vault", "label": "mcp.sh call; vault-run /redeem", "variant": "security" },
-    { "from": "fetchskill", "to": "pipelock", "label": "curl /fetch?url=", "variant": "security" }
+    {
+      "from": "repo",
+      "to": "ctl",
+      "label": "*/SKILL.md dirs"
+    },
+    {
+      "from": "ctl",
+      "to": "upstream",
+      "label": "same name: refused",
+      "variant": "dashed"
+    },
+    {
+      "from": "ctl",
+      "to": "dir",
+      "label": "tar | compose exec app-server",
+      "variant": "emphasis"
+    },
+    {
+      "from": "bff",
+      "to": "dir",
+      "label": "its skills, on connect"
+    },
+    {
+      "from": "docskill",
+      "to": "docs",
+      "label": "mcp.sh: letta mcp call"
+    },
+    {
+      "from": "vaultskill",
+      "to": "vault",
+      "label": "mcp.sh call; vault-run /redeem",
+      "variant": "security"
+    },
+    {
+      "from": "fetchskill",
+      "to": "pipelock",
+      "label": "curl /fetch?url=",
+      "variant": "security"
+    },
+    {
+      "from": "monskill",
+      "to": "news-radar",
+      "label": "mcp.sh call"
+    }
   ],
   "cards": [
     {
@@ -198,7 +463,8 @@
       "items": [
         "using-vault-secrets: the vault MCP server (garden-vault profile)",
         "working-with-documents: office and pdf in Settings -> MCP (garden-doc-tools)",
-        "fetching-web-pages: HTTPS_PROXY pointing at garden-pipelock (garden-pipelock)"
+        "fetching-web-pages: HTTPS_PROXY pointing at garden-pipelock (garden-pipelock)",
+        "news-radar-sources: News Radar MCP server (garden-news-radar)"
       ]
     }
   ]

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 1036 912" data-reader-fit="width-first" data-layout-contract="readable-v2" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-node-ui="" style="--flow-cycle: 7.214s; width: 1036px; height: 912px; min-width: 0px;" width="1036" height="912" xmlns="http://www.w3.org/2000/svg"><style>
+<svg viewBox="0 0 1152 912" data-reader-fit="width-first" data-layout-contract="readable-v2" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-node-ui="" style="--flow-cycle: 7.284s; width: 1152px; height: 912px; min-width: 0px;" width="1152" height="912" xmlns="http://www.w3.org/2000/svg"><style>
 /*
 JetBrains Mono variable WOFF2 subsets from Google Fonts service revision v24.
 These fixed bytes are shared by the viewer and its SVG/raster exports.
@@ -399,194 +399,222 @@ svg[data-preset="editorial"] { --flow-halo-peak: 0.07; --flow-glow-peak: 0.28; -
 }
 @keyframes archify-relay-ripple { 
   0% { r: 2px; opacity: var(--flow-peak, 0.6); }
-  10.396%, 100% { r: 20px; opacity: 0; }
+  10.296%, 100% { r: 20px; opacity: 0; }
 }
 @keyframes archify-relay-comet-0 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.663% { opacity: var(--flow-peak, 0.9); }
-  9.901% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  12.119%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.647% { opacity: var(--flow-peak, 0.9); }
+  9.806% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  12.003%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-0 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  9.901% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  22.376%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  9.806% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.162%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-1 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.164% { opacity: var(--flow-peak, 0.9); }
-  5.822% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  8.04%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.153% { opacity: var(--flow-peak, 0.9); }
+  5.766% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  7.962%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-1 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  5.822% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  18.297%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  5.766% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  18.121%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-2 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.164% { opacity: var(--flow-peak, 0.9); }
-  5.822% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  8.04%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.647% { opacity: var(--flow-peak, 0.9); }
+  10.619% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  12.816%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-2 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  5.822% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  18.297%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  10.619% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  22.975%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-3 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.164% { opacity: var(--flow-peak, 0.9); }
-  5.822% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  8.04%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.153% { opacity: var(--flow-peak, 0.9); }
+  5.766% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  7.962%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-3 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  5.822% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  18.297%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  5.766% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  18.121%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-4 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.663% { opacity: var(--flow-peak, 0.9); }
-  13.91% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  16.128%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.153% { opacity: var(--flow-peak, 0.9); }
+  5.766% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  7.962%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-4 { 
-  0%, 4.173% { opacity: 0; }
-  13.91% { opacity: var(--flow-peak, 0.3); }
-  26.385%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  5.766% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  18.121%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-5 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.164% { opacity: var(--flow-peak, 0.9); }
-  5.822% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  8.04%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.153% { opacity: var(--flow-peak, 0.9); }
+  5.766% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  7.962%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-5 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  5.822% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  18.297%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  5.766% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  18.121%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-6 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.164% { opacity: var(--flow-peak, 0.9); }
-  5.822% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  8.04%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.647% { opacity: var(--flow-peak, 0.9); }
+  20.593% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  22.789%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-6 { 
-  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  5.822% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  18.297%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0%, 6.178% { opacity: 0; }
+  20.593% { opacity: var(--flow-peak, 0.3); }
+  32.948%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-7 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.164% { opacity: var(--flow-peak, 0.9); }
-  5.822% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  8.04%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.153% { opacity: var(--flow-peak, 0.9); }
+  5.766% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  7.962%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-7 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  5.822% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  18.297%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  5.766% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  18.121%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-8 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.663% { opacity: var(--flow-peak, 0.9); }
-  10.96% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  13.178%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.153% { opacity: var(--flow-peak, 0.9); }
+  5.766% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  7.962%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-8 { 
-  0%, 3.288% { opacity: 0; }
-  10.96% { opacity: var(--flow-peak, 0.3); }
-  23.435%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  5.766% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  18.121%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-9 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.164% { opacity: var(--flow-peak, 0.9); }
-  5.822% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  8.04%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.153% { opacity: var(--flow-peak, 0.9); }
+  5.766% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  7.962%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-9 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  5.822% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  18.297%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  5.766% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  18.121%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-comet-10 { 
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.663% { opacity: var(--flow-peak, 0.9); }
-  20.792% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  23.01%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.647% { opacity: var(--flow-peak, 0.9); }
+  13.247% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  15.444%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
 @keyframes archify-relay-wake-10 { 
+  0%, 3.974% { opacity: 0; }
+  13.247% { opacity: var(--flow-peak, 0.3); }
+  25.603%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+}
+@keyframes archify-relay-comet-11 { 
+  0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  1.153% { opacity: var(--flow-peak, 0.9); }
+  5.766% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  7.962%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+}
+@keyframes archify-relay-wake-11 { 
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  20.792% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  33.267%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  5.766% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  18.121%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+}
+@keyframes archify-relay-comet-12 { 
+  0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  1.647% { opacity: var(--flow-peak, 0.9); }
+  14.413% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  16.61%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+}
+@keyframes archify-relay-wake-12 { 
+  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  14.413% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  26.769%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
 @keyframes archify-relay-node-0 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
   0% { filter: var(--ambient-node-base-filter, none); }
-  1.663%, 5.822% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  16.634% { filter: var(--ambient-node-base-filter, none); }
+  1.647%, 5.766% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  16.474% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-1 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  20.792% { filter: var(--ambient-node-base-filter, none); }
-  22.455%, 26.614% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  37.426% { filter: var(--ambient-node-base-filter, none); }
+  14.413% { filter: var(--ambient-node-base-filter, none); }
+  16.061%, 20.179% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  30.887% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-2 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  28% { filter: var(--ambient-node-base-filter, none); }
-  29.663%, 33.822% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  44.634% { filter: var(--ambient-node-base-filter, none); }
+  21.552% { filter: var(--ambient-node-base-filter, none); }
+  23.2%, 27.318% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  38.026% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-3 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  35.208% { filter: var(--ambient-node-base-filter, none); }
-  36.871%, 41.03% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  51.842% { filter: var(--ambient-node-base-filter, none); }
+  28.691% { filter: var(--ambient-node-base-filter, none); }
+  30.338%, 34.457% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  45.165% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-4 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  40.346% { filter: var(--ambient-node-base-filter, none); }
-  42.009%, 46.168% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  56.979% { filter: var(--ambient-node-base-filter, none); }
+  36.172% { filter: var(--ambient-node-base-filter, none); }
+  37.82%, 41.938% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  52.646% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-5 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  42.416% { filter: var(--ambient-node-base-filter, none); }
-  44.079%, 48.238% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  59.05% { filter: var(--ambient-node-base-filter, none); }
+  35.83% { filter: var(--ambient-node-base-filter, none); }
+  37.477%, 41.596% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  52.304% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-6 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  42.416% { filter: var(--ambient-node-base-filter, none); }
-  44.079%, 48.238% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  59.05% { filter: var(--ambient-node-base-filter, none); }
+  40.683% { filter: var(--ambient-node-base-filter, none); }
+  42.33%, 46.449% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  57.157% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-7 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  49.624% { filter: var(--ambient-node-base-filter, none); }
-  51.287%, 55.446% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  66.257% { filter: var(--ambient-node-base-filter, none); }
+  42.968% { filter: var(--ambient-node-base-filter, none); }
+  44.616%, 48.734% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  59.442% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-8 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  49.624% { filter: var(--ambient-node-base-filter, none); }
-  51.287%, 55.446% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  66.257% { filter: var(--ambient-node-base-filter, none); }
+  50.107% { filter: var(--ambient-node-base-filter, none); }
+  51.755%, 55.873% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  66.581% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-9 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  60.911% { filter: var(--ambient-node-base-filter, none); }
-  62.574%, 66.733% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  77.545% { filter: var(--ambient-node-base-filter, none); }
+  50.107% { filter: var(--ambient-node-base-filter, none); }
+  51.755%, 55.873% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  66.581% { filter: var(--ambient-node-base-filter, none); }
 }
 @keyframes archify-relay-node-10 { 
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  68.119% { filter: var(--ambient-node-base-filter, none); }
-  69.782%, 73.941% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  84.752% { filter: var(--ambient-node-base-filter, none); }
+  61.286% { filter: var(--ambient-node-base-filter, none); }
+  62.933%, 67.052% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  77.76% { filter: var(--ambient-node-base-filter, none); }
+}
+@keyframes archify-relay-node-11 { 
+  0%, 100% { filter: var(--ambient-node-base-filter, none); }
+  68.425% { filter: var(--ambient-node-base-filter, none); }
+  70.072%, 74.191% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  84.899% { filter: var(--ambient-node-base-filter, none); }
 }
 svg[data-node-ui] [data-node-id] &gt; rect:not(.c-mask) { stroke-width: 1.25px; }
 :is([data-theme="dark"] svg[data-node-ui], svg[data-node-ui][data-theme="dark"]) [data-node-id] &gt; rect:not(.c-mask).c-frontend { fill: color-mix(in srgb, var(--frontend-stroke) 13%, var(--mask)); stroke: color-mix(in srgb, var(--frontend-stroke) 72%, var(--mask)); }
@@ -612,7 +640,7 @@ svg[data-node-ui][data-preset="editorial"] :is([data-graph-role="structural-fram
 svg[data-theme="light"] { --bg: #f4f5f7; --grid: #e9edf2; --canvas-dot: #e2e7ec; --text: #111827; --text-muted: #5b6474; --text-dim: #9aa3b2; --text-faint: #6b7280; --panel: #ffffff; --panel-border: #e5e7eb; --lane-fill: rgba(248, 250, 252, 0.65); --lane-stroke: #cbd5e1; --arrow: #64748b; --arrow-emphasis: #059669; --mask: #ffffff; --frontend-fill: rgba(34, 211, 238, 0.15); --frontend-stroke: #0891b2; --backend-fill: rgba(52, 211, 153, 0.18); --backend-stroke: #059669; --database-fill: rgba(167, 139, 250, 0.2); --database-stroke: #7c3aed; --cloud-fill: rgba(251, 191, 36, 0.18); --cloud-stroke: #d97706; --security-fill: rgba(251, 113, 133, 0.15); --security-stroke: #e11d48; --messagebus-fill: rgba(251, 146, 60, 0.15); --messagebus-stroke: #ea580c; --external-fill: rgba(148, 163, 184, 0.18); --external-stroke: #64748b; --toolbar-bg: rgba(255, 255, 255, 0.92); --toolbar-border: #cbd5e1; --toolbar-text: #334155; --toolbar-hover: #ffffff; --toolbar-menu-bg: #ffffff; --flow-cycle: ; --flow-halo-peak: ; --flow-glow-peak: ; --flow-tail-peak: ; --flow-head-peak: ; --flow-wake-peak: ; --flow-ripple-peak: ; --flow-peak: ; }
 svg[data-theme="dark"] { --bg: #020617; --grid: #1e293b; --canvas-dot: rgba(148, 163, 184, 0.16); --text: #ffffff; --text-muted: #94a3b8; --text-dim: #475569; --text-faint: #7d8da1; --panel: rgba(15, 23, 42, 0.5); --panel-border: #1e293b; --lane-fill: rgba(15, 23, 42, 0.22); --lane-stroke: #334155; --arrow: #94a3b8; --arrow-emphasis: #34d399; --mask: #0f172a; --frontend-fill: rgba(8, 51, 68, 0.4); --frontend-stroke: #22d3ee; --backend-fill: rgba(6, 78, 59, 0.4); --backend-stroke: #34d399; --database-fill: rgba(76, 29, 149, 0.4); --database-stroke: #a78bfa; --cloud-fill: rgba(120, 53, 15, 0.3); --cloud-stroke: #fbbf24; --security-fill: rgba(136, 19, 55, 0.4); --security-stroke: #fb7185; --messagebus-fill: rgba(251, 146, 60, 0.3); --messagebus-stroke: #fb923c; --external-fill: rgba(30, 41, 59, 0.5); --external-stroke: #94a3b8; --toolbar-bg: rgba(15, 23, 42, 0.8); --toolbar-border: #334155; --toolbar-text: #e2e8f0; --toolbar-hover: rgba(15, 23, 42, 0.95); --toolbar-menu-bg: #0f172a; --flow-cycle: ; --flow-halo-peak: ; --flow-glow-peak: ; --flow-tail-peak: ; --flow-head-peak: ; --flow-wake-peak: ; --flow-ripple-peak: ; --flow-peak: ; }
 rect.c-bg-rect { fill: var(--bg); }
-</style><rect x="0" y="0" width="1036" height="912" class="c-bg-rect"/><metadata id="archify-software-notices">NOTICE
+</style><rect x="0" y="0" width="1152" height="912" class="c-bg-rect"/><metadata id="archify-software-notices">NOTICE
 Archify
 Copyright (c) 2026 tt-a1i (Archify)
 Copyright (c) 2025 Cocoon AI
@@ -993,215 +1021,237 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <rect width="100%" height="100%" fill="url(#grid)"/>
 
         <!-- Swimlanes -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="980" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="1096" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="74" class="t-muted" font-size="10" font-weight="600">01 / Maintainer</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="178" width="980" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="178" width="1096" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="200" class="t-muted" font-size="10" font-weight="600">02 / ghcr.io</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="304" width="980" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="304" width="1096" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="326" class="t-muted" font-size="10" font-weight="600">03 / publish.yml (GitHub Actions)</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-3" x="40" y="430" width="980" height="106" rx="10" class="c-lane" stroke-width="1"/>
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="exception-lane" data-composition-frame-id="lane-3-exception" x="46" y="436" width="968" height="94" rx="8" class="c-security-group" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-3" x="40" y="430" width="1096" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="exception-lane" data-composition-frame-id="lane-3-exception" x="46" y="436" width="1084" height="94" rx="8" class="c-security-group" stroke-width="1"/>
         <text x="54" y="452" class="t-security" font-size="10" font-weight="600">EX / Stopped</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-4" x="40" y="556" width="980" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-4" x="40" y="556" width="1096" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="578" class="t-muted" font-size="10" font-weight="600">05 / GitHub release</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-5" x="40" y="682" width="980" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-5" x="40" y="682" width="1096" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="704" class="t-muted" font-size="10" font-weight="600">06 / Admin's host</text>
 
         <!-- Phase headers -->
-        <path d="M 486.4 35 H 646.4" class="a-emphasis phase-rule" stroke-width="1" stroke-linecap="round" fill="none"/>
-        <rect x="484.4" y="27" width="164" height="16" rx="8" class="c-mask phase-chip"/>
-        <text x="566.4" y="38.5" class="t-backend" font-size="8" font-weight="600" text-anchor="middle" letter-spacing=".04em">One job per image, in parallel</text>
+        <path d="M 423.20000000000005 35 H 700.8" class="a-emphasis phase-rule" stroke-width="1" stroke-linecap="round" fill="none"/>
+        <rect x="429.6" y="27" width="264.79999999999995" height="16" rx="8" class="c-mask phase-chip"/>
+        <text x="562" y="38.5" class="t-backend" font-size="8" font-weight="600" text-anchor="middle" letter-spacing=".04em">Per image and platform, then per image, in parallel</text>
 
         <!-- Workflow groups -->
 
 
         <!-- Edge paths -->
-        <path data-edge-from="assets" data-edge-to="gh-release" data-edge-label="gh release create" data-edge-key="0" data-edge-id="assets-release" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="931.2,398;931.2,598" d="M 931.2 398 L 931.2 598" class="a-emphasis" data-animate="edge" style="--step: 5;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="checks" data-edge-to="plan" data-edge-label="pass" data-edge-key="1" data-edge-id="checks-plan" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="262,372;300,372" d="M 262 372 L 300 372" class="a-emphasis" data-animate="edge" style="--step: 1;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="ctl-job" data-edge-to="assets" data-edge-label="digest" data-edge-key="2" data-edge-id="ctl-assets" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="818.4,372;865.2,372" d="M 818.4 372 L 865.2 372" class="a-emphasis" data-animate="edge" style="--step: 4;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="ctl-job" data-edge-to="ctl-image" data-edge-label="push" data-edge-key="3" data-edge-id="ctl-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="754.4,346;754.4,272" d="M 754.4 346 L 754.4 272" class="a-default" data-animate="edge" style="--step: 11;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="ctl-job" data-edge-to="stop" data-edge-label="not on both platforms" data-edge-key="4" data-edge-id="ctl-stop" data-composition-routing="workflow-v2-auto" data-edge-role="error" data-composition-points="754.4,398;754.4,498;570.4,498" d="M 754.4 398 L 754.4 490 Q 754.4 498 746.4 498 L 570.4 498" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="image" data-edge-to="ctl-job" data-edge-label="names + digests" data-edge-key="5" data-edge-id="image-ctl" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="600.4,372;690.4,372" d="M 600.4 372 L 690.4 372" class="a-emphasis" data-animate="edge" style="--step: 3;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="image" data-edge-to="garden-images" data-edge-label="push if new" data-edge-key="6" data-edge-id="image-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="524.4,346;524.4,280" d="M 524.4 346 L 524.4 280" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="plan" data-edge-to="image" data-edge-label="per line" data-edge-key="7" data-edge-id="plan-image" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="392,372;448.4,372" d="M 392 372 L 448.4 372" class="a-emphasis" data-animate="edge" style="--step: 2;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="plan" data-edge-to="stop" data-edge-label="tag is not VERSION" data-edge-key="8" data-edge-id="plan-stop" data-composition-routing="workflow-v2-auto" data-edge-role="error" data-composition-points="346,406;346,498;478.4,498" d="M 346 406 L 346 490 Q 346 498 354 498 L 478.4 498" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="gh-release" data-edge-to="upgrade" data-edge-label="new wrapper" data-edge-key="9" data-edge-id="release-upgrade" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="931.2,650;931.2,724" d="M 931.2 650 L 931.2 724" class="a-emphasis" data-animate="edge" style="--step: 6;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="tag" data-edge-to="checks" data-edge-key="10" data-edge-id="tag-checks" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="48,120;32,120;32,426;216,426;216,398" d="M 48 120 L 40 120 Q 32 120 32 128 L 32 418 Q 32 426 40 426 L 208 426 Q 216 426 216 418 L 216 398" class="a-emphasis" data-animate="edge" style="--step: 0;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="assets" data-edge-to="gh-release" data-edge-label="gh release create" data-edge-key="0" data-edge-id="assets-release" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="1047.6,398;1047.6,598" d="M 1047.6 398 L 1047.6 598" class="a-emphasis" data-animate="edge" style="--step: 6;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="build" data-edge-to="image" data-edge-label="digests" data-edge-key="1" data-edge-id="build-image" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="531.2,372;592.8,372" d="M 531.2 372 L 592.8 372" class="a-emphasis" data-animate="edge" style="--step: 3;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="build" data-edge-to="garden-images" data-edge-label="push if new" data-edge-key="2" data-edge-id="build-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="461.2,338;461.2,246;588.8,246" d="M 461.2 338 L 461.2 254 Q 461.2 246 469.2 246 L 588.8 246" class="a-default" data-animate="edge" style="--step: 11;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="checks" data-edge-to="plan" data-edge-label="pass" data-edge-key="3" data-edge-id="checks-plan" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="148,372;186,372" d="M 148 372 L 186 372" class="a-emphasis" data-animate="edge" style="--step: 1;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="ctl-job" data-edge-to="assets" data-edge-label="digest" data-edge-key="4" data-edge-id="ctl-assets" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="934.8,372;981.5999999999999,372" d="M 934.8 372 L 981.5999999999999 372" class="a-emphasis" data-animate="edge" style="--step: 5;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="ctl-job" data-edge-to="ctl-image" data-edge-label="push" data-edge-key="5" data-edge-id="ctl-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="878.8,346;878.8,272" d="M 878.8 346 L 878.8 272" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="ctl-job" data-edge-to="stop" data-edge-label="not on both platforms" data-edge-key="6" data-edge-id="ctl-stop" data-composition-routing="workflow-v2-auto" data-edge-role="error" data-composition-points="878.8,398;878.8,498;507.2,498" d="M 878.8 398 L 878.8 490 Q 878.8 498 870.8 498 L 507.2 498" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="image" data-edge-to="ctl-job" data-edge-label="names + digests" data-edge-key="7" data-edge-id="image-ctl" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="732.8,372;822.8,372" d="M 732.8 372 L 822.8 372" class="a-emphasis" data-animate="edge" style="--step: 4;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="image" data-edge-to="garden-images" data-edge-label="tag" data-edge-key="8" data-edge-id="image-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="662.8,346;662.8,280" d="M 662.8 346 L 662.8 280" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="plan" data-edge-to="build" data-edge-label="per image, platform" data-edge-key="9" data-edge-id="plan-build" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="282,372;391.2,372" d="M 282 372 L 391.2 372" class="a-emphasis" data-animate="edge" style="--step: 2;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="plan" data-edge-to="stop" data-edge-label="tag is not VERSION" data-edge-key="10" data-edge-id="plan-stop" data-composition-routing="workflow-v2-auto" data-edge-role="error" data-composition-points="234,406;234,498;415.2,498" d="M 234 406 L 234 490 Q 234 498 242 498 L 415.2 498" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="gh-release" data-edge-to="upgrade" data-edge-label="new wrapper" data-edge-key="11" data-edge-id="release-upgrade" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="1047.6,650;1047.6,724" d="M 1047.6 650 L 1047.6 724" class="a-emphasis" data-animate="edge" style="--step: 7;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="tag" data-edge-to="checks" data-edge-key="12" data-edge-id="tag-checks" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="48,120;26,120;26,372;52,372" d="M 48 120 L 34 120 Q 26 120 26 128 L 26 364 Q 26 372 34 372 L 52 372" class="a-emphasis" data-animate="edge" style="--step: 0;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
 
         <!-- Nodes -->
         <g id="node-tag" data-node-id="tag" data-node-label="push a tag" tabindex="0" role="button" aria-label="Focus push a tag, vX.Y.Z or vX.Y.Z-rc.N, Maintainer" aria-pressed="false" data-node-kind="external" data-node-sublabel="vX.Y.Z or vX.Y.Z-rc.N" data-node-context="Maintainer">
           <title>push a tag · vX.Y.Z or vX.Y.Z-rc.N · Maintainer</title>
-          <rect x="48" y="94" width="96" height="52" rx="8" class="c-mask"/>
-          <rect x="48" y="94" width="96" height="52" rx="8" class="c-external" data-animate="node" style="--step: 0; --flow-node-name: archify-relay-node-0;" stroke-width="1.5"/>
+          <rect x="48" y="94" width="104" height="52" rx="8" class="c-mask"/>
+          <rect x="48" y="94" width="104" height="52" rx="8" class="c-external" data-animate="node" style="--step: 0; --flow-node-name: archify-relay-node-0;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(54 100) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" x="96" y="128.2" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">push a tag</text>
-          <text x="96" y="141.8" class="t-muted" font-size="6.9" text-anchor="middle">vX.Y.Z or vX.Y.Z-rc.N</text>
+          <text data-node-label="" x="100" y="126" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">push a tag</text>
+          <text x="100" y="137.9" class="t-muted" font-size="7.6" text-anchor="middle">vX.Y.Z or vX.Y.Z-rc.N</text>
         </g>
 
-        <g id="node-garden-images" data-node-id="garden-images" data-node-label="lettuce-&lt;image&gt;" tabindex="0" role="button" aria-label="Focus lettuce-&lt;image&gt;, :&lt;content tag&gt;, amd64 + arm64, ghcr.io › One job per image, in parallel" aria-pressed="false" data-node-kind="database" data-node-sublabel=":&lt;content tag&gt;, amd64 + arm64" data-node-tag="SBOM, provenance" data-node-context="ghcr.io › One job per image, in parallel">
-          <title>lettuce-&lt;image&gt; · :&lt;content tag&gt;, amd64 + arm64 · ghcr.io › One job per image, in parallel · SBOM, provenance</title>
-          <rect x="450.4" y="212" width="148" height="68" rx="8" class="c-mask"/>
-          <rect x="450.4" y="212" width="148" height="68" rx="8" class="c-database" data-animate="node" style="--step: 9; --flow-node-name: archify-relay-node-6;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(456.4 218) scale(0.6875)">
+        <g id="node-garden-images" data-node-id="garden-images" data-node-label="lettuce-&lt;image&gt;" tabindex="0" role="button" aria-label="Focus lettuce-&lt;image&gt;, :&lt;content tag&gt;, amd64 + arm64, ghcr.io › Per image and platform, then per image, in parallel" aria-pressed="false" data-node-kind="database" data-node-sublabel=":&lt;content tag&gt;, amd64 + arm64" data-node-tag="SBOM, provenance" data-node-context="ghcr.io › Per image and platform, then per image, in parallel">
+          <title>lettuce-&lt;image&gt; · :&lt;content tag&gt;, amd64 + arm64 · ghcr.io › Per image and platform, then per image, in parallel · SBOM, provenance</title>
+          <rect x="588.8" y="212" width="148" height="68" rx="8" class="c-mask"/>
+          <rect x="588.8" y="212" width="148" height="68" rx="8" class="c-database" data-animate="node" style="--step: 10; --flow-node-name: archify-relay-node-6;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(594.8 218) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" x="524.4" y="246.2" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lettuce-&lt;image&gt;</text>
-          <text x="524.4" y="261.1" class="t-muted" font-size="8" text-anchor="middle">:&lt;content tag&gt;, amd64 + arm64</text>
-        <text x="524.4" y="273.9" class="t-database" font-size="7" text-anchor="middle">SBOM, provenance</text>
+          <text data-node-label="" x="662.8" y="246.2" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lettuce-&lt;image&gt;</text>
+          <text x="662.8" y="261.1" class="t-muted" font-size="8" text-anchor="middle">:&lt;content tag&gt;, amd64 + arm64</text>
+        <text x="662.8" y="273.9" class="t-database" font-size="7" text-anchor="middle">SBOM, provenance</text>
         </g>
 
         <g id="node-ctl-image" data-node-id="ctl-image" data-node-label="lettucectl" tabindex="0" role="button" aria-label="Focus lettucectl, :vX.Y.Z, carries RELEASE, ghcr.io" aria-pressed="false" data-node-kind="database" data-node-sublabel=":vX.Y.Z, carries RELEASE" data-node-context="ghcr.io">
           <title>lettucectl · :vX.Y.Z, carries RELEASE · ghcr.io</title>
-          <rect x="692.4" y="220" width="124" height="52" rx="8" class="c-mask"/>
-          <rect x="692.4" y="220" width="124" height="52" rx="8" class="c-database" data-animate="node" style="--step: 10; --flow-node-name: archify-relay-node-8;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(698.4 226) scale(0.6875)">
+          <rect x="816.8" y="220" width="124" height="52" rx="8" class="c-mask"/>
+          <rect x="816.8" y="220" width="124" height="52" rx="8" class="c-database" data-animate="node" style="--step: 11; --flow-node-name: archify-relay-node-9;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(822.8 226) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" x="754.4" y="252" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lettucectl</text>
-          <text x="754.4" y="264.3" class="t-muted" font-size="8" text-anchor="middle">:vX.Y.Z, carries RELEASE</text>
+          <text data-node-label="" x="878.8" y="252" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lettucectl</text>
+          <text x="878.8" y="264.3" class="t-muted" font-size="8" text-anchor="middle">:vX.Y.Z, carries RELEASE</text>
         </g>
 
         <g id="node-checks" data-node-id="checks" data-node-label="checks" tabindex="0" role="button" aria-label="Focus checks, every job of ci.yml, publish.yml (GitHub Actions)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="every job of ci.yml" data-node-context="publish.yml (GitHub Actions)">
           <title>checks · every job of ci.yml · publish.yml (GitHub Actions)</title>
-          <rect x="170" y="346" width="92" height="52" rx="8" class="c-mask"/>
-          <rect x="170" y="346" width="92" height="52" rx="8" class="c-backend" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-1;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(176 352) scale(0.6875)">
+          <rect x="52" y="346" width="96" height="52" rx="8" class="c-mask"/>
+          <rect x="52" y="346" width="96" height="52" rx="8" class="c-backend" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-1;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(58 352) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="216" y="378" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">checks</text>
-          <text x="216" y="389.6" class="t-muted" font-size="7.3" text-anchor="middle">every job of ci.yml</text>
+          <text data-node-label="" x="100" y="378" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">checks</text>
+          <text x="100" y="390" class="t-muted" font-size="7.7" text-anchor="middle">every job of ci.yml</text>
         </g>
 
         <g id="node-plan" data-node-id="plan" data-node-label="plan" tabindex="0" role="button" aria-label="Focus plan, tag matches VERSION, publish.yml (GitHub Actions)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="tag matches VERSION" data-node-tag="release/images" data-node-context="publish.yml (GitHub Actions)">
           <title>plan · tag matches VERSION · publish.yml (GitHub Actions) · release/images</title>
-          <rect x="300" y="338" width="92" height="68" rx="8" class="c-mask"/>
-          <rect x="300" y="338" width="92" height="68" rx="8" class="c-backend" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-2;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(306 344) scale(0.6875)">
+          <rect x="186" y="338" width="96" height="68" rx="8" class="c-mask"/>
+          <rect x="186" y="338" width="96" height="68" rx="8" class="c-backend" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-2;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(192 344) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="336.8" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">plan</text>
-          <text x="346" y="376" class="t-muted" font-size="7.3" text-anchor="middle">tag matches VERSION</text>
-        <text x="346" y="394" class="t-backend" font-size="7" text-anchor="middle">release/images</text>
+          <text data-node-label="" x="226.8" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">plan</text>
+          <text x="234" y="376" class="t-muted" font-size="7.7" text-anchor="middle">tag matches VERSION</text>
+        <text x="234" y="394" class="t-backend" font-size="7" text-anchor="middle">release/images</text>
         </g>
 
-        <g id="node-image" data-node-id="image" data-node-label="image" tabindex="0" role="button" aria-label="Focus image, content tag; build only if new, publish.yml (GitHub Actions) › One job per image, in parallel" aria-pressed="false" data-node-kind="backend" data-node-sublabel="content tag; build only if new" data-node-context="publish.yml (GitHub Actions) › One job per image, in parallel">
-          <title>image · content tag; build only if new · publish.yml (GitHub Actions) › One job per image, in parallel</title>
-          <rect x="448.4" y="346" width="152" height="52" rx="8" class="c-mask"/>
-          <rect x="448.4" y="346" width="152" height="52" rx="8" class="c-backend" data-animate="node" style="--step: 3; --flow-node-name: archify-relay-node-3;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(454.4 352) scale(0.6875)">
+        <g id="node-build" data-node-id="build" data-node-label="build" tabindex="0" role="button" aria-label="Focus build, per platform, native runner, publish.yml (GitHub Actions) › Per image and platform, then per image, in parallel" aria-pressed="false" data-node-kind="backend" data-node-sublabel="per platform, native runner" data-node-tag="amd64 + arm64 runners" data-node-context="publish.yml (GitHub Actions) › Per image and platform, then per image, in parallel">
+          <title>build · per platform, native runner · publish.yml (GitHub Actions) › Per image and platform, then per image, in parallel · amd64 + arm64 runners</title>
+          <rect x="391.2" y="338" width="140" height="68" rx="8" class="c-mask"/>
+          <rect x="391.2" y="338" width="140" height="68" rx="8" class="c-backend" data-animate="node" style="--step: 3; --flow-node-name: archify-relay-node-3;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(397.2 344) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="524.4" y="367" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">image</text>
-          <text x="524.4" y="384" class="t-muted" font-size="8" text-anchor="middle">content tag; build only if new</text>
+          <text data-node-label="" x="461.2" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">build</text>
+          <text x="461.2" y="376" class="t-muted" font-size="8" text-anchor="middle">per platform, native runner</text>
+        <text x="461.2" y="394" class="t-backend" font-size="7" text-anchor="middle">amd64 + arm64 runners</text>
         </g>
 
-        <g id="node-ctl-job" data-node-id="ctl-job" data-node-label="release" tabindex="0" role="button" aria-label="Focus release, RELEASE, lettucectl image, publish.yml (GitHub Actions)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="RELEASE, lettucectl image" data-node-context="publish.yml (GitHub Actions)">
-          <title>release · RELEASE, lettucectl image · publish.yml (GitHub Actions)</title>
-          <rect x="690.4" y="346" width="128" height="52" rx="8" class="c-mask"/>
-          <rect x="690.4" y="346" width="128" height="52" rx="8" class="c-backend" data-animate="node" style="--step: 4; --flow-node-name: archify-relay-node-5;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(696.4 352) scale(0.6875)">
+        <g id="node-image" data-node-id="image" data-node-label="image" tabindex="0" role="button" aria-label="Focus image, content tag on both digests, publish.yml (GitHub Actions) › Per image and platform, then per image, in parallel" aria-pressed="false" data-node-kind="backend" data-node-sublabel="content tag on both digests" data-node-context="publish.yml (GitHub Actions) › Per image and platform, then per image, in parallel">
+          <title>image · content tag on both digests · publish.yml (GitHub Actions) › Per image and platform, then per image, in parallel</title>
+          <rect x="592.8" y="346" width="140" height="52" rx="8" class="c-mask"/>
+          <rect x="592.8" y="346" width="140" height="52" rx="8" class="c-backend" data-animate="node" style="--step: 4; --flow-node-name: archify-relay-node-5;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(598.8 352) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="753.3" y="367" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">release</text>
-          <text x="754.4" y="384" class="t-muted" font-size="8" text-anchor="middle">RELEASE, lettucectl image</text>
+          <text data-node-label="" x="662.8" y="367" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">image</text>
+          <text x="662.8" y="384" class="t-muted" font-size="8" text-anchor="middle">content tag on both digests</text>
+        </g>
+
+        <g id="node-ctl-job" data-node-id="ctl-job" data-node-label="release-file, ctl" tabindex="0" role="button" aria-label="Focus release-file, ctl, RELEASE, lettucectl, publish.yml (GitHub Actions)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="RELEASE, lettucectl" data-node-context="publish.yml (GitHub Actions)">
+          <title>release-file, ctl · RELEASE, lettucectl · publish.yml (GitHub Actions)</title>
+          <rect x="822.8" y="346" width="112" height="52" rx="8" class="c-mask"/>
+          <rect x="822.8" y="346" width="112" height="52" rx="8" class="c-backend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-7;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(828.8 352) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" x="878.8" y="377.1" class="t-primary" font-size="10.1" font-weight="600" text-anchor="middle">release-file, ctl</text>
+          <text x="878.8" y="389.2" class="t-muted" font-size="8" text-anchor="middle">RELEASE, lettucectl</text>
         </g>
 
         <g id="node-assets" data-node-id="assets" data-node-label="wrapper, sums, notes" tabindex="0" role="button" aria-label="Focus wrapper, sums, notes, pinned to the digest, publish.yml (GitHub Actions)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="pinned to the digest" data-node-context="publish.yml (GitHub Actions)">
           <title>wrapper, sums, notes · pinned to the digest · publish.yml (GitHub Actions)</title>
-          <rect x="865.2" y="346" width="132" height="52" rx="8" class="c-mask"/>
-          <rect x="865.2" y="346" width="132" height="52" rx="8" class="c-backend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-7;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(871.2 352) scale(0.6875)">
+          <rect x="981.5999999999999" y="346" width="132" height="52" rx="8" class="c-mask"/>
+          <rect x="981.5999999999999" y="346" width="132" height="52" rx="8" class="c-backend" data-animate="node" style="--step: 6; --flow-node-name: archify-relay-node-8;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(987.5999999999999 352) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="931.2" y="377.3" class="t-primary" font-size="10.3" font-weight="600" text-anchor="middle">wrapper, sums, notes</text>
-          <text x="931.2" y="389.4" class="t-muted" font-size="8" text-anchor="middle">pinned to the digest</text>
+          <text data-node-label="" x="1047.6" y="377.3" class="t-primary" font-size="10.3" font-weight="600" text-anchor="middle">wrapper, sums, notes</text>
+          <text x="1047.6" y="389.4" class="t-muted" font-size="8" text-anchor="middle">pinned to the digest</text>
         </g>
 
-        <g id="node-stop" data-node-id="stop" data-node-label="fail" tabindex="0" role="button" aria-label="Focus fail, no release, Stopped › One job per image, in parallel" aria-pressed="false" data-node-kind="security" data-node-sublabel="no release" data-node-context="Stopped › One job per image, in parallel">
-          <title>fail · no release · Stopped › One job per image, in parallel</title>
-          <rect x="478.4" y="472" width="92" height="52" rx="8" class="c-mask"/>
-          <rect x="478.4" y="472" width="92" height="52" rx="8" class="c-security" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-4;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(484.4 478) scale(0.6875)">
+        <g id="node-stop" data-node-id="stop" data-node-label="fail" tabindex="0" role="button" aria-label="Focus fail, no release, Stopped › Per image and platform, then per image, in parallel" aria-pressed="false" data-node-kind="security" data-node-sublabel="no release" data-node-context="Stopped › Per image and platform, then per image, in parallel">
+          <title>fail · no release · Stopped › Per image and platform, then per image, in parallel</title>
+          <rect x="415.2" y="472" width="92" height="52" rx="8" class="c-mask"/>
+          <rect x="415.2" y="472" width="92" height="52" rx="8" class="c-security" data-animate="node" style="--step: 12; --flow-node-name: archify-relay-node-4;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(421.2 478) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" x="515.1999999999999" y="493" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">fail</text>
-          <text x="524.4" y="510" class="t-muted" font-size="8" text-anchor="middle">no release</text>
+          <text data-node-label="" x="452" y="493" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">fail</text>
+          <text x="461.2" y="510" class="t-muted" font-size="8" text-anchor="middle">no release</text>
         </g>
 
         <g id="node-gh-release" data-node-id="gh-release" data-node-label="vX.Y.Z" tabindex="0" role="button" aria-label="Focus vX.Y.Z, lettucectl, RELEASE, SHA256SUMS, GitHub release" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="lettucectl, RELEASE, SHA256SUMS" data-node-context="GitHub release">
           <title>vX.Y.Z · lettucectl, RELEASE, SHA256SUMS · GitHub release</title>
-          <rect x="851.2" y="598" width="160" height="52" rx="8" class="c-mask"/>
-          <rect x="851.2" y="598" width="160" height="52" rx="8" class="c-cloud" data-animate="node" style="--step: 6; --flow-node-name: archify-relay-node-9;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(857.2 604) scale(0.6875)">
+          <rect x="967.5999999999999" y="598" width="160" height="52" rx="8" class="c-mask"/>
+          <rect x="967.5999999999999" y="598" width="160" height="52" rx="8" class="c-cloud" data-animate="node" style="--step: 7; --flow-node-name: archify-relay-node-10;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(973.5999999999999 604) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" x="931.2" y="619" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">vX.Y.Z</text>
-          <text x="931.2" y="636" class="t-muted" font-size="8" text-anchor="middle">lettucectl, RELEASE, SHA256SUMS</text>
+          <text data-node-label="" x="1047.6" y="619" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">vX.Y.Z</text>
+          <text x="1047.6" y="636" class="t-muted" font-size="8" text-anchor="middle">lettucectl, RELEASE, SHA256SUMS</text>
         </g>
 
         <g id="node-upgrade" data-node-id="upgrade" data-node-label="self-upgrade" tabindex="0" role="button" aria-label="Focus self-upgrade, swaps after the pull, Admin's host" aria-pressed="false" data-node-kind="external" data-node-sublabel="swaps after the pull" data-node-context="Admin's host">
           <title>self-upgrade · swaps after the pull · Admin's host</title>
-          <rect x="885.2" y="724" width="92" height="52" rx="8" class="c-mask"/>
-          <rect x="885.2" y="724" width="92" height="52" rx="8" class="c-external" data-animate="node" style="--step: 7; --flow-node-name: archify-relay-node-10;" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(891.2 730) scale(0.6875)">
+          <rect x="997.5999999999999" y="724" width="100" height="52" rx="8" class="c-mask"/>
+          <rect x="997.5999999999999" y="724" width="100" height="52" rx="8" class="c-external" data-animate="node" style="--step: 8; --flow-node-name: archify-relay-node-11;" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(1003.5999999999999 730) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" x="931.2" y="758.2" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">self-upgrade</text>
-          <text x="931.2" y="771.9" class="t-muted" font-size="7" text-anchor="middle">swaps after the pull</text>
+          <text data-node-label="" x="1047.6" y="756" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">self-upgrade</text>
+          <text x="1047.6" y="767.9" class="t-muted" font-size="7.6" text-anchor="middle">swaps after the pull</text>
         </g>
 
         <!-- Edge labels -->
         <g data-edge-from="assets" data-edge-to="gh-release" data-edge-label="gh release create" data-edge-key="0" data-edge-id="assets-release">
-          <rect x="885.4000000000001" y="488" width="91.6" height="14" rx="3" class="c-mask"/>
-          <text x="931.2" y="498" class="t-edge-emphasis" font-size="8" text-anchor="middle">gh release create</text>
+          <rect x="1001.8" y="488" width="91.6" height="14" rx="3" class="c-mask"/>
+          <text x="1047.6" y="498" class="t-edge-emphasis" font-size="8" text-anchor="middle">gh release create</text>
         </g>
-        <g data-edge-from="checks" data-edge-to="plan" data-edge-label="pass" data-edge-key="1" data-edge-id="checks-plan">
-          <rect x="266" y="352" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="281" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">pass</text>
+        <g data-edge-from="build" data-edge-to="image" data-edge-label="digests" data-edge-key="1" data-edge-id="build-image">
+          <rect x="540.2" y="352" width="43.6" height="14" rx="3" class="c-mask"/>
+          <text x="562" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">digests</text>
         </g>
-        <g data-edge-from="ctl-job" data-edge-to="assets" data-edge-label="digest" data-edge-key="2" data-edge-id="ctl-assets">
-          <rect x="822.4" y="352" width="38.8" height="14" rx="3" class="c-mask"/>
-          <text x="841.8" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">digest</text>
+        <g data-edge-from="build" data-edge-to="garden-images" data-edge-label="push if new" data-edge-key="2" data-edge-id="build-push">
+          <rect x="493.6" y="226" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="525" y="236" class="t-muted" font-size="8" text-anchor="middle">push if new</text>
         </g>
-        <g data-edge-from="ctl-job" data-edge-to="ctl-image" data-edge-label="push" data-edge-key="3" data-edge-id="ctl-push">
-          <rect x="739.4" y="299" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="754.4" y="309" class="t-muted" font-size="8" text-anchor="middle">push</text>
+        <g data-edge-from="checks" data-edge-to="plan" data-edge-label="pass" data-edge-key="3" data-edge-id="checks-plan">
+          <rect x="152" y="352" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="167" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">pass</text>
         </g>
-        <g data-edge-from="ctl-job" data-edge-to="stop" data-edge-label="not on both platforms" data-edge-key="4" data-edge-id="ctl-stop">
-          <rect x="607" y="478" width="110.8" height="14" rx="3" class="c-mask"/>
-          <text x="662.4" y="488" class="t-edge-security" font-size="8" text-anchor="middle">not on both platforms</text>
+        <g data-edge-from="ctl-job" data-edge-to="assets" data-edge-label="digest" data-edge-key="4" data-edge-id="ctl-assets">
+          <rect x="938.8" y="352" width="38.8" height="14" rx="3" class="c-mask"/>
+          <text x="958.1999999999999" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">digest</text>
         </g>
-        <g data-edge-from="image" data-edge-to="ctl-job" data-edge-label="names + digests" data-edge-key="5" data-edge-id="image-ctl">
-          <rect x="604.4" y="352" width="82" height="14" rx="3" class="c-mask"/>
-          <text x="645.4" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">names + digests</text>
+        <g data-edge-from="ctl-job" data-edge-to="ctl-image" data-edge-label="push" data-edge-key="5" data-edge-id="ctl-push">
+          <rect x="863.8" y="299" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="878.8" y="309" class="t-muted" font-size="8" text-anchor="middle">push</text>
         </g>
-        <g data-edge-from="image" data-edge-to="garden-images" data-edge-label="push if new" data-edge-key="6" data-edge-id="image-push">
-          <rect x="493" y="303" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="524.4" y="313" class="t-muted" font-size="8" text-anchor="middle">push if new</text>
+        <g data-edge-from="ctl-job" data-edge-to="stop" data-edge-label="not on both platforms" data-edge-key="6" data-edge-id="ctl-stop">
+          <rect x="637.6" y="478" width="110.8" height="14" rx="3" class="c-mask"/>
+          <text x="693" y="488" class="t-edge-security" font-size="8" text-anchor="middle">not on both platforms</text>
         </g>
-        <g data-edge-from="plan" data-edge-to="image" data-edge-label="per line" data-edge-key="7" data-edge-id="plan-image">
-          <rect x="396" y="352" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="420.2" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">per line</text>
+        <g data-edge-from="image" data-edge-to="ctl-job" data-edge-label="names + digests" data-edge-key="7" data-edge-id="image-ctl">
+          <rect x="736.8" y="352" width="82" height="14" rx="3" class="c-mask"/>
+          <text x="777.8" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">names + digests</text>
         </g>
-        <g data-edge-from="plan" data-edge-to="stop" data-edge-label="tag is not VERSION" data-edge-key="8" data-edge-id="plan-stop">
-          <rect x="364" y="478" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="412.2" y="488" class="t-edge-security" font-size="8" text-anchor="middle">tag is not VERSION</text>
+        <g data-edge-from="image" data-edge-to="garden-images" data-edge-label="tag" data-edge-key="8" data-edge-id="image-push">
+          <rect x="647.8" y="303" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="662.8" y="313" class="t-muted" font-size="8" text-anchor="middle">tag</text>
         </g>
-        <g data-edge-from="gh-release" data-edge-to="upgrade" data-edge-label="new wrapper" data-edge-key="9" data-edge-id="release-upgrade">
-          <rect x="899.8000000000001" y="677" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="931.2" y="687" class="t-edge-emphasis" font-size="8" text-anchor="middle">new wrapper</text>
+        <g data-edge-from="plan" data-edge-to="build" data-edge-label="per image, platform" data-edge-key="9" data-edge-id="plan-build">
+          <rect x="286" y="352" width="101.2" height="14" rx="3" class="c-mask"/>
+          <text x="336.6" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">per image, platform</text>
+        </g>
+        <g data-edge-from="plan" data-edge-to="stop" data-edge-label="tag is not VERSION" data-edge-key="10" data-edge-id="plan-stop">
+          <rect x="276.40000000000003" y="478" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
+          <text x="324.6" y="488" class="t-edge-security" font-size="8" text-anchor="middle">tag is not VERSION</text>
+        </g>
+        <g data-edge-from="gh-release" data-edge-to="upgrade" data-edge-label="new wrapper" data-edge-key="11" data-edge-id="release-upgrade">
+          <rect x="1016.1999999999999" y="677" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="1047.6" y="687" class="t-edge-emphasis" font-size="8" text-anchor="middle">new wrapper</text>
         </g>
 
 

@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "878eedd44b4bc61d399f9f66545d2ed1cd111f38"
+      "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
     },
     "legend": {
       "entries": {
@@ -97,14 +97,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1300,
-          "end_line": 1305,
+          "line": 1322,
+          "end_line": 1327,
           "label": "cmd_up"
         },
         {
           "path": "lettucectl",
-          "line": 2073,
-          "end_line": 2099,
+          "line": 2098,
+          "end_line": 2124,
           "label": "main dispatch"
         }
       ]
@@ -115,25 +115,25 @@
       "col": 1,
       "type": "backend",
       "label": "up_stack",
-      "sublabel": "push contact, token, garden list",
+      "sublabel": "push contact, token, garden list, settings",
       "sources": [
         {
           "path": "lettucectl",
-          "line": 400,
-          "end_line": 403,
+          "line": 406,
+          "end_line": 410,
           "label": "up_stack"
         },
         {
           "path": "lib/common.sh",
-          "line": 647,
-          "end_line": 664,
+          "line": 655,
+          "end_line": 672,
           "label": "push contact, executor token"
         },
         {
           "path": "lib/common.sh",
-          "line": 685,
-          "end_line": 690,
-          "label": "sync_garden_profiles"
+          "line": 689,
+          "end_line": 718,
+          "label": "NEWS_RADAR_* settings, GARDEN_PROFILES"
         }
       ]
     },
@@ -163,13 +163,13 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 400,
+          "line": 411,
           "label": "called before anything starts"
         },
         {
           "path": "lib/common.sh",
-          "line": 655,
-          "end_line": 775,
+          "line": 727,
+          "end_line": 852,
           "label": "check_stack"
         }
       ]
@@ -217,8 +217,8 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 655,
-          "end_line": 699,
+          "line": 727,
+          "end_line": 771,
           "label": "first refusals"
         }
       ]
@@ -233,14 +233,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 401,
-          "end_line": 405,
+          "line": 412,
+          "end_line": 416,
           "label": "only with the profile"
         },
         {
           "path": "lettucectl",
-          "line": 470,
-          "end_line": 529,
+          "line": 481,
+          "end_line": 540,
           "label": "fill volume, create network"
         }
       ]
@@ -255,14 +255,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 414,
-          "end_line": 439,
+          "line": 425,
+          "end_line": 450,
           "label": "build_local_images"
         },
         {
           "path": "compose/code-server.yml",
           "line": 111,
-          "end_line": 121,
+          "end_line": 120,
           "label": "the shell, FROM the app-server by name"
         }
       ]
@@ -277,8 +277,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 407,
-          "end_line": 411,
+          "line": 418,
+          "end_line": 422,
           "label": "up --no-build --pull missing"
         },
         {
@@ -305,20 +305,20 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 377,
-          "end_line": 387,
+          "line": 387,
+          "end_line": 397,
           "label": "sync_executor"
         },
         {
           "path": "lettucectl",
-          "line": 347,
-          "end_line": 367,
+          "line": 357,
+          "end_line": 377,
           "label": "tar over compose exec"
         },
         {
           "path": "lettucectl",
-          "line": 274,
-          "end_line": 276,
+          "line": 284,
+          "end_line": 286,
           "label": "executor_wanted"
         }
       ]
@@ -333,14 +333,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 736,
-          "end_line": 750,
+          "line": 752,
+          "end_line": 766,
           "label": "drop_mcp_group"
         },
         {
           "path": "lettucectl",
-          "line": 676,
-          "end_line": 690,
+          "line": 692,
+          "end_line": 706,
           "label": "mcp-servers.mjs, BFF restart"
         }
       ]
@@ -355,14 +355,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 554,
-          "end_line": 615,
+          "line": 565,
+          "end_line": 626,
           "label": "sync_doc_tools"
         },
         {
           "path": "lib/common.sh",
-          "line": 486,
-          "end_line": 497,
+          "line": 519,
+          "end_line": 530,
           "label": "compose_shared"
         },
         {
@@ -382,14 +382,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1309,
-          "end_line": 1322,
+          "line": 1331,
+          "end_line": 1344,
           "label": "collected failures"
         },
         {
           "path": "lettucectl",
-          "line": 391,
-          "end_line": 393,
+          "line": 401,
+          "end_line": 403,
           "label": "executor_out_of_step"
         }
       ]
@@ -499,7 +499,7 @@
       "dot": "cyan",
       "title": "Compose files, in order",
       "items": [
-        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, pipelock, code-server, garden",
+        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, news-radar, pipelock, code-server, garden",
         "doc-tools.yml only with garden-doc-tools, pipelock-proxy.yml last and only with garden-pipelock",
         "-p lettuce-<name>, --project-directory upstream/docker, --env-file stack.env"
       ]

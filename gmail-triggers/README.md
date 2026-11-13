@@ -14,7 +14,7 @@ An interactive version, [gmail-triggers-architecture.html](../docs/diagrams/gmai
 | `src/gmail_triggers/__main__.py` | Entry point: reads the settings, builds the store, Google client, poller and app, runs uvicorn on port 8000 without an access log |
 | `src/gmail_triggers/config.py` | `PREFIX` (`/gmail-triggers`), the limits (poll interval, `MAX_RULES`, `MAX_CLAIM`, `LOST_AFTER_SECONDS`, ...) and `Settings` from the environment |
 | `src/gmail_triggers/app.py` | The pages under `/gmail-triggers/` (no JavaScript), `/healthz`, and the executor routes from `executor_api.py`; the poller runs in its lifespan |
-| `src/gmail_triggers/executor_api.py` | `/executor/v1/requests`, `results`, `agents` and `heartbeat`, each behind `garden_common.executor.guard` |
+| `src/gmail_triggers/executor_api.py` | `/executor/v1/requests`, `results`, `agents` and `heartbeat`: `garden_common.executor.request_routes` over the store's run log |
 | `src/gmail_triggers/google.py` | Reads the policy and token files the BFF writes, refreshes the access token in memory, and makes the few Gmail calls (profile, history, message metadata, labels) |
 | `src/gmail_triggers/poller.py` | Every `POLL_SECONDS` (default 120): what arrived since the stored history id, matched against the rules |
 | `src/gmail_triggers/matcher.py` | Which rules a batch of messages sets off; pure, reads only the sender, subject and Gmail's sender verdict |
@@ -41,7 +41,7 @@ The guarantees and limits people see are in [docs/gmail-triggers.md](../docs/gma
 ### The one written exception to "no second way into an agent"
 The rule itself is in [CONTRIBUTING.md](../CONTRIBUTING.md#relationship-to-upstream). Gmail triggers start turns, but open no connection to the app-server: the sidecar hands each request to the garden executor in the app-server, which runs `letta cron add --once`, and Lettuce's scheduler fires the task on the BFF's connection. It gives agents nothing new, since they can already run `letta cron add` themselves.
 
-Only Gmail triggers use this path. The sidecar issues requests only for rules the person made on its Access-protected page, within each rule's hourly limit. The executor runs whatever well-formed request it is served, and agents can read its token, which gives them nothing `letta cron add` doesn't. Trigger rules live in this sidecar, not inside Lettuce, because agents could edit them there.
+Gmail triggers and News Radar use this path ([news-radar/README.md](../news-radar/README.md#rules) has News Radar's reason). This sidecar issues requests only for rules the person made on its Access-protected page, within each rule's hourly limit. The executor runs whatever well-formed request it is served, and agents can read its token, which gives them nothing `letta cron add` doesn't. Trigger rules live in this sidecar, not inside Lettuce, because agents could edit them there.
 
 ### No directory is shared with the app-server
 A shared directory would have to sit where agents can write, and they could swap a component for a symlink that Docker follows on the host. So the sidecar and the executor talk over HTTP ([garden/executor/README.md](../garden/executor/README.md#trust)), and the sidecar's only bind mount is its own rules directory, `$LETTA_STATE_DIR/garden/gmail-triggers`, which the app-server does not mount.

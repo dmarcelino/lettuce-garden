@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "c9d5094283236533ca0c8bdd6b405640ea5dab5a"
+      "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
     }
   },
   "components": [
@@ -31,8 +31,8 @@
       "sources": [
         {
           "path": "README.md",
-          "line": 5,
-          "end_line": 8,
+          "line": 9,
+          "end_line": 12,
           "label": "what each person gets"
         }
       ]
@@ -52,9 +52,9 @@
       ],
       "sources": [
         {
-          "path": "README.md",
-          "line": 34,
-          "end_line": 37,
+          "path": "docs/architecture.md",
+          "line": 9,
+          "end_line": 12,
           "label": "checked three times"
         }
       ]
@@ -74,9 +74,9 @@
       ],
       "sources": [
         {
-          "path": "README.md",
-          "line": 34,
-          "end_line": 37,
+          "path": "docs/architecture.md",
+          "line": 9,
+          "end_line": 12,
           "label": "checked three times"
         }
       ]
@@ -96,8 +96,8 @@
       ],
       "sources": [
         {
-          "path": "README.md",
-          "line": 33,
+          "path": "docs/architecture.md",
+          "line": 8,
           "label": "no open ports"
         }
       ]
@@ -118,7 +118,7 @@
       "sources": [
         {
           "path": "README.md",
-          "line": 7,
+          "line": 11,
           "label": "the Lettuce web UI"
         }
       ]
@@ -139,7 +139,7 @@
       "sources": [
         {
           "path": "README.md",
-          "line": 8,
+          "line": 12,
           "label": "the garden extras"
         }
       ]
@@ -159,9 +159,10 @@
       ],
       "sources": [
         {
-          "path": "README.md",
-          "line": 26,
-          "label": "per-stack state"
+          "path": "docs/architecture.md",
+          "line": 57,
+          "label": "per-stack state",
+          "end_line": 60
         }
       ]
     },
@@ -439,7 +440,7 @@
       "items": [
         "Each stack is its own Compose project, lettuce-<name>",
         "No ports published on the host: each tunnel connects outbound",
-        "Garden pages: vault, Gmail triggers, code editor (those turned on)"
+        "Garden pages: vault, Gmail triggers, News Radar, code editor (those turned on)"
       ]
     }
   ]

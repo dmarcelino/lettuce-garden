@@ -10,7 +10,7 @@ An interactive version, [lettuce-garden-overview.html](docs/diagrams/lettuce-gar
 | Host | Access application | Tunnel routes it to |
 |---|---|---|
 | `<name>.<domain>` | Lettuce's (`CF_ACCESS_AUD`) | `app-server:8080`, the BFF's port in the app-server's network namespace |
-| `<name>-garden.<domain>` | the garden's (`CF_GARDEN_AUD`) | `^/vault(/\|$)` to `garden-vault:8000`, `^/gmail-triggers(/\|$)` to `garden-gmail-triggers:8000`, `^/code-server(/\|$)` to `garden-code-server:8000` (each only with its profile), `^/(assets/[^/]+)?$` to `garden:8000` (with any of them); anything else gets a 404 |
+| `<name>-garden.<domain>` | the garden's (`CF_GARDEN_AUD`) | `^/vault(/\|$)` to `garden-vault:8000`, `^/gmail-triggers(/\|$)` to `garden-gmail-triggers:8000`, `^/news-radar(/\|$)` to `garden-news-radar:8000`, `^/code-server(/\|$)` to `garden-code-server:8000` (each only with its profile), `^/(assets/[^/]+)?$` to `garden:8000` (with any of them); anything else gets a 404 |
 
 Both applications share the stack's Access policy, so `lettucectl users` changes who may sign in to both. The garden's services accept only the garden's tokens, never Lettuce's, which agents could catch inside the app-server's namespace. The routes are written by `cf_tunnel_configure` ([lib/cloudflare.sh](lib/cloudflare.sh)) from `PROFILE_ROUTES`, on `add` and on every `profiles` run. `/executor/v1/` and `/healthz` are never routed.
 
@@ -26,6 +26,7 @@ Both applications share the stack's Access policy, so `lettucectl users` changes
 | `garden` | [garden/](garden/README.md) | any garden page profile | `default` | none |
 | `garden-vault` | [vault/](vault/README.md) | `garden-vault` | `default` | `vault-data` |
 | `garden-gmail-triggers` | [gmail-triggers/](gmail-triggers/README.md) | `garden-gmail-triggers` | `default` | `state/garden/gmail-triggers`; `google-creds` and `google-policy` read-only |
+| `garden-news-radar` | [news-radar/](news-radar/README.md) | `garden-news-radar` | `default` | `news-radar-data` |
 | `garden-pipelock` | [pipelock/](pipelock/README.md) | `garden-pipelock` | `default` | `pipelock-data` |
 | `garden-code-server` (the gate) | [code-server/](code-server/README.md) | `garden-code-server` | `default` | `code-server-sock` read-only |
 | `garden-code-server-editor` | [code-server/editor/](code-server/README.md) | `garden-code-server` | `code-exec` | `workspaces`, `code-server-data`, `code-exec-keys`, `code-server-sock` |
@@ -47,6 +48,7 @@ Both applications share the stack's Access policy, so `lettucectl users` changes
 | Volume | Mounted by | Notes |
 |---|---|---|
 | `vault-data` | `garden-vault` | the encrypted vault; `backup` copies it read-only |
+| `news-radar-data` | `garden-news-radar` | monitors, sources, items, reports; `backup` copies it read-only |
 | `pipelock-data` | `garden-pipelock` | receipt signing key and receipts; `backup` and `receipts` read it read-only |
 | `google-creds`, `google-policy` | `bff`, `google-mcp`, `garden-gmail-triggers` (read-only) | upstream's; never the app-server |
 | `bff-data`, `bff-auth` | `bff` | upstream's |
@@ -64,10 +66,12 @@ Named volumes of a stack are deleted with it by `lettucectl remove` (`compose do
 | The BFF | `searxng`, `ddg-mcp` | backends of the agents' web search and page fetch |
 | Agents (app-server) | `google-mcp` | MCP over HTTP, as Settings -> Google Workspace allows |
 | Agents | `garden-vault` | MCP at `http://garden-vault:8000/mcp`; `vault-run` at `/redeem` |
+| Agents | `garden-news-radar` | MCP at `http://garden-news-radar:8000/mcp` |
 | Agents | `garden-pipelock` | `HTTPS_PROXY` (advisory) and `/fetch` for scanned pages |
 | Agents | Gotenberg | the PDF MCP, started per call from the doc-tools volume |
-| The garden executor (cron in the app-server) | `garden`, `garden-gmail-triggers` | `/executor/v1/` with `GARDEN_EXECUTOR_TOKEN`: the agent list, and Gmail triggers' requests, which it runs as `letta cron add --once` ([garden/executor/README.md](garden/executor/README.md)) |
+| The garden executor (cron in the app-server) | `garden`, `garden-gmail-triggers`, `garden-news-radar` | `/executor/v1/` with `GARDEN_EXECUTOR_TOKEN`: the agent list, and the requests of Gmail triggers and News Radar, which it runs as `letta cron add --once` ([garden/executor/README.md](garden/executor/README.md)) |
 | `garden-gmail-triggers` | Gmail | read-only, with the token Settings -> Google stores |
+| `garden-news-radar` | public websites | the sources agents set up: public addresses only, robots.txt honoured, not through pipelock |
 | The gate | the editor | the editor's Unix socket |
 | The editor | the shell | SSH, for terminals and every git call |
 
@@ -84,9 +88,10 @@ Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<nam
 | `compose/multi.yml` | drops all published ports, so stacks never collide |
 | `compose/vault.yml`, [`vault/`](vault/README.md) | the optional vault (`garden-vault` profile) and its source |
 | `compose/gmail-triggers.yml`, [`gmail-triggers/`](gmail-triggers/README.md) | optional Gmail triggers (`garden-gmail-triggers` profile) and their source |
+| `compose/news-radar.yml`, [`news-radar/`](news-radar/README.md) | the optional News Radar (`garden-news-radar` profile) and its source |
 | `compose/pipelock.yml`, `compose/pipelock-proxy.yml`, [`pipelock/`](pipelock/README.md) | the optional egress proxy (`garden-pipelock` profile), its proxy settings and its image |
 | `compose/code-server.yml`, [`code-server/`](code-server/README.md) | the optional code editor (`garden-code-server` profile): its gate, the editor's image and the shell's image |
-| `compose/garden.yml`, [`garden/`](garden/README.md) | the garden's landing page (on with `garden-vault`, `garden-gmail-triggers` or `garden-code-server`) and the garden executor ([garden/executor/](garden/executor/README.md)), which runs Gmail triggers' requests and sends the landing page the agent list |
+| `compose/garden.yml`, [`garden/`](garden/README.md) | the garden's landing page (on with `garden-vault`, `garden-gmail-triggers`, `garden-news-radar` or `garden-code-server`) and the garden executor ([garden/executor/](garden/executor/README.md)), which runs the requests of Gmail triggers and News Radar and sends the landing page the agent list |
 | `compose/doc-tools.yml`, `compose/shared/gotenberg.yml`, [`doc-tools/`](doc-tools/README.md) | the optional Office and PDF tools (`garden-doc-tools` profile): the app-server's mount and network, the host's shared Gotenberg, and the tools' image and PDF server |
 | [`garden-common/`](garden-common/README.md) | code the garden services share (sign-in checks, the executor API's checks, page styles, icons) |
 | [`agent-skills/`](agent-skills/README.md) | skills `lettucectl skills` installs for every agent of every stack |
@@ -96,8 +101,8 @@ Each stack runs as Compose project `lettuce-<name>` with `--env-file stacks/<nam
 | `scripts/dns-preflight.sh` | compares two nameservers before and after moving a domain (`lettucectl dns-preflight`) |
 | `scripts/doc-tools-e2e.sh`, `scripts/code-server-e2e.sh` | end-to-end runs of the document tools and the code editor against real images |
 | `scripts/check-doc-links.mjs` | checks the Markdown's relative links and anchors, and each folder README's agents' pointer |
-| `tests/` | offline tests (`tests/run.sh`; docker, curl, dig, gh and secret-tool are stubbed), the sidecars' tests (`tests/run-sidecar.sh vault`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
+| `tests/` | offline tests (`tests/run.sh`; docker, curl, dig, gh and secret-tool are stubbed), the sidecars' tests (`tests/run-sidecar.sh vault`, `tests/run-sidecar.sh gmail-triggers`, `tests/run-sidecar.sh news-radar`, `tests/run-sidecar.sh code-server`, `tests/run-sidecar.sh garden`, `tests/run-sidecar.sh doc-tools`) and pipelock's (`tests/run-pipelock.sh`) |
 
 Instance data lives in a data directory apart from the code: `/srv/lettuce-garden` for a release install, the clone's untracked `data/` for a clone (`LETTUCE_DATA` names another). [docs/operations.md](docs/operations.md#files-on-the-host) lists what is in it.
 
-What each part does, and why it is built the way it is, is in its folder's README; how to use and run it, and its security model, in its guide under `docs/`. The design records of the larger features are next to their code: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md) and [garden/DESIGN.md](garden/DESIGN.md) (the garden host).
+What each part does, and why it is built the way it is, is in its folder's README; how to use and run it, and its security model, in its guide under `docs/`. The design records of the larger features are next to their code: [code-server/DESIGN.md](code-server/DESIGN.md), [gmail-triggers/DESIGN.md](gmail-triggers/DESIGN.md), [garden/DESIGN.md](garden/DESIGN.md) (the garden host) and [news-radar/DESIGN.md](news-radar/DESIGN.md).

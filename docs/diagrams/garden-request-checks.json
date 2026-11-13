@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
     },
     "legend": {
       "entries": {
@@ -52,14 +52,14 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 80,
-          "end_line": 91,
+          "line": 73,
+          "end_line": 84,
           "label": "cf_app_body"
         },
         {
           "path": "lettucectl",
-          "line": 163,
-          "end_line": 179,
+          "line": 169,
+          "end_line": 185,
           "label": "the garden's Access app"
         }
       ]
@@ -72,14 +72,14 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 121,
-          "end_line": 134,
+          "line": 114,
+          "end_line": 128,
           "label": "page routes, landing page"
         },
         {
           "path": "lib/cloudflare.sh",
-          "line": 160,
-          "end_line": 180,
+          "line": 154,
+          "end_line": 174,
           "label": "404 for the rest"
         }
       ]
@@ -98,8 +98,8 @@
         },
         {
           "path": "garden-common/src/garden_common/executor.py",
-          "line": 81,
-          "end_line": 104,
+          "line": 88,
+          "end_line": 111,
           "label": "guard"
         },
         {
@@ -132,14 +132,14 @@
       "sources": [
         {
           "path": "garden/executor/run.mjs",
-          "line": 276,
-          "end_line": 294,
+          "line": 283,
+          "end_line": 301,
           "label": "Bearer token, no Origin"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 27,
-          "end_line": 31,
+          "line": 31,
+          "end_line": 38,
           "label": "sidecar URLs, token file"
         }
       ]
@@ -324,7 +324,7 @@
       "title": "Who uses what",
       "items": [
         "vault: PAGE, FORM and FETCH (its own fetch() calls send X-CSRF-Token)",
-        "gmail-triggers: PAGE and FORM; garden landing page: PAGE only (no forms, no script)",
+        "gmail-triggers and news-radar: PAGE and FORM; garden landing page: PAGE only (no forms, no script)",
         "Assets (stylesheets, scripts, icons, the manifest) need the JWT but no Fetch Metadata",
         "The code editor's gate uses Authenticator and COOP, with its own Sec-Fetch rules (docs/code-server.md)"
       ]
@@ -333,7 +333,7 @@
       "dot": "amber",
       "title": "garden_common.executor",
       "items": [
-        "guard: served by garden and gmail-triggers; refuses cf-access-jwt-assertion, cf-connecting-ip and cf-ray; the token is GARDEN_EXECUTOR_TOKEN",
+        "guard: served by garden, gmail-triggers and news-radar; refuses cf-access-jwt-assertion, cf-connecting-ip and cf-ray; the token is GARDEN_EXECUTOR_TOKEN",
         "read_json: JSON objects with v = 1 under a size cap; read_agents validates the agent list",
         "AgentAsks: when a sidecar wants a new agent list (none, older than 15 minutes, or a page asked)",
         "Agents can read the token; it keeps out the other containers on the stack network, not agents"

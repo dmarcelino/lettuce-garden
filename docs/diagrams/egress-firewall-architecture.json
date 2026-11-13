@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "5becc556cb74382948dd4a3fc19b941c90ea6890"
+      "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
     }
   },
   "components": [
@@ -76,7 +76,7 @@
       "id": "vault",
       "type": "backend",
       "label": "garden services",
-      "sublabel": "garden-vault, -gmail-triggers, garden",
+      "sublabel": "vault, gmail-triggers, news-radar, garden",
       "pos": [
         40,
         460
@@ -94,8 +94,8 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 946,
-          "end_line": 960,
+          "line": 1011,
+          "end_line": 1025,
           "label": "check_pipelock"
         }
       ]
@@ -191,8 +191,8 @@
         },
         {
           "path": "lib/common.sh",
-          "line": 757,
-          "end_line": 758,
+          "line": 785,
+          "end_line": 786,
           "label": "only garden-pipelock mounts it"
         }
       ]
@@ -213,14 +213,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 1959,
-          "end_line": 1993,
+          "line": 1977,
+          "end_line": 2011,
           "label": "receipts: no network, read-only"
         },
         {
           "path": "lettucectl",
-          "line": 1799,
-          "end_line": 1799,
+          "line": 1814,
+          "end_line": 1814,
           "label": "backup mounts it read-only"
         }
       ]
@@ -365,7 +365,7 @@
       "items": [
         "Advisory, not a boundary: the stack network still reaches the internet, and any agent can unset HTTPS_PROXY",
         "No TLS interception: for HTTPS it sees the host name, not paths, bodies or responses",
-        "The BFF (its Remote Pi SSH runs included), garden-vault, google-mcp, garden-gmail-triggers and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct"
+        "The BFF (its Remote Pi SSH runs included), garden-vault, google-mcp, garden-gmail-triggers, garden-news-radar and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct"
       ]
     },
     {
@@ -374,7 +374,7 @@
       "items": [
         "garden-pipelock hardened: read-only, no capabilities, no host mounts",
         "Only garden-pipelock mounts pipelock-data, whatever the profiles",
-        "The app-server's proxy variables point at garden-pipelock, and its NO_PROXY lists garden-vault, garden-gmail-triggers and garden, so pipelock never sees the vault's values or the executor's token"
+        "The app-server's proxy variables point at garden-pipelock, and its NO_PROXY lists garden-vault, garden-gmail-triggers, garden-news-radar and garden, so pipelock never sees the vault's values or the executor's token"
       ]
     }
   ]

@@ -10,7 +10,7 @@
       "url": "https://github.com/dmarcelino/lettuce-garden.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
+      "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
     }
   },
   "components": [
@@ -30,7 +30,7 @@
       "sources": [
         {
           "path": "docs/code-server.md",
-          "line": 14,
+          "line": 12,
           "label": "the landing page in use"
         }
       ]
@@ -51,8 +51,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 79,
-          "end_line": 91,
+          "line": 72,
+          "end_line": 84,
           "label": "Access app: HttpOnly, Lax"
         },
         {
@@ -79,14 +79,14 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 121,
-          "end_line": 134,
+          "line": 114,
+          "end_line": 128,
           "label": "garden host routes"
         },
         {
           "path": "lib/cloudflare.sh",
-          "line": 160,
-          "end_line": 179,
+          "line": 154,
+          "end_line": 173,
           "label": "ingress rules"
         }
       ]
@@ -107,8 +107,8 @@
       "sources": [
         {
           "path": "lib/cloudflare.sh",
-          "line": 125,
-          "end_line": 129,
+          "line": 118,
+          "end_line": 123,
           "label": "PROFILE_ROUTES"
         },
         {
@@ -141,23 +141,23 @@
         },
         {
           "path": "garden/src/garden_landing/app.py",
-          "line": 109,
-          "end_line": 124,
+          "line": 110,
+          "end_line": 125,
           "label": "landing page"
         },
         {
           "path": "garden/src/garden_landing/app.py",
-          "line": 134,
-          "end_line": 157,
+          "line": 135,
+          "end_line": 158,
           "label": "routes, executor API"
         }
       ]
     },
     {
-      "id": "gmail",
+      "id": "queues",
       "type": "backend",
-      "label": "garden-gmail-triggers",
-      "sublabel": "/gmail-triggers/ + API",
+      "label": "request queues",
+      "sublabel": "gmail-triggers, news-radar + API",
       "pos": [
         490,
         550
@@ -168,10 +168,21 @@
       ],
       "sources": [
         {
+          "path": "garden-common/src/garden_common/executor.py",
+          "line": 164,
+          "end_line": 217,
+          "label": "request_routes, shared"
+        },
+        {
           "path": "gmail-triggers/src/gmail_triggers/executor_api.py",
-          "line": 47,
-          "end_line": 96,
-          "label": "executor API"
+          "line": 43,
+          "end_line": 44,
+          "label": "Gmail triggers' queue"
+        },
+        {
+          "path": "news-radar/src/garden_news_radar/app.py",
+          "line": 299,
+          "label": "news-radar's queue"
         }
       ]
     },
@@ -191,8 +202,8 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 272,
-          "end_line": 281,
+          "line": 283,
+          "end_line": 295,
           "label": "executor_cron"
         }
       ]
@@ -214,19 +225,19 @@
         {
           "path": "garden/executor/run.mjs",
           "line": 1,
-          "end_line": 20,
+          "end_line": 22,
           "label": "what a run does"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 491,
-          "end_line": 541,
+          "line": 504,
+          "end_line": 559,
           "label": "run order"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 276,
-          "end_line": 293,
+          "line": 283,
+          "end_line": 300,
           "label": "bearer token calls"
         }
       ]
@@ -247,14 +258,14 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 261,
-          "end_line": 263,
+          "line": 270,
+          "end_line": 272,
           "label": "install paths"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 149,
-          "end_line": 159,
+          "line": 156,
+          "end_line": 166,
           "label": "readToken"
         }
       ]
@@ -275,20 +286,20 @@
       "sources": [
         {
           "path": "garden/executor/run.mjs",
-          "line": 189,
-          "end_line": 242,
+          "line": 196,
+          "end_line": 249,
           "label": "argv, no shell"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 415,
-          "end_line": 445,
+          "line": 422,
+          "end_line": 452,
           "label": "cron add --once"
         },
         {
           "path": "garden/executor/run.mjs",
-          "line": 451,
-          "end_line": 473,
+          "line": 458,
+          "end_line": 480,
           "label": "agents list"
         }
       ]
@@ -309,20 +320,20 @@
       "sources": [
         {
           "path": "lettucectl",
-          "line": 283,
-          "end_line": 315,
+          "line": 297,
+          "end_line": 329,
           "label": "GARDEN_INSTALL"
         },
         {
           "path": "lettucectl",
-          "line": 338,
-          "end_line": 381,
+          "line": 355,
+          "end_line": 395,
           "label": "install and sync_executor"
         },
         {
           "path": "lib/common.sh",
-          "line": 333,
-          "end_line": 368,
+          "line": 651,
+          "end_line": 706,
           "label": "token and GARDEN_PROFILES"
         }
       ]
@@ -344,7 +355,7 @@
         "cloudflared",
         "pages",
         "garden",
-        "gmail",
+        "queues",
         "cron",
         "executor",
         "token",
@@ -390,8 +401,8 @@
     },
     {
       "from": "cloudflared",
-      "to": "gmail",
-      "label": "/gmail-triggers/"
+      "to": "queues",
+      "label": "their prefixes"
     },
     {
       "from": "garden",
@@ -417,8 +428,8 @@
     },
     {
       "from": "executor",
-      "to": "gmail",
-      "label": "with --gmail-triggers",
+      "to": "queues",
+      "label": "--gmail-triggers, --news-radar",
       "variant": "security"
     },
     {
@@ -438,9 +449,9 @@
       "title": "Executor API (/executor/v1/)",
       "items": [
         "garden: GET status (agents_wanted), PUT agents",
-        "gmail-triggers: GET requests (claims them), POST results, PUT agents, POST heartbeat",
+        "gmail-triggers and news-radar (request_routes): GET requests (claims them), POST results, PUT agents, POST heartbeat",
         "Every call needs Bearer GARDEN_EXECUTOR_TOKEN and is refused with an Origin or a Cloudflare tunnel header; the tunnel never routes the prefix",
-        "The list from letta agents list goes to each sidecar that answered, once per run, when either asks"
+        "The list from letta agents list goes to each sidecar that answered, once per run, when any of them asks"
       ]
     },
     {
@@ -455,7 +466,7 @@
       "dot": "slate",
       "title": "Install and isolation",
       "items": [
-        "lettucectl up installs run.mjs, the token and the cron file only with garden-gmail-triggers or garden-code-server on; the vault alone gives it no work",
+        "lettucectl up installs run.mjs, the token and the cron file only with garden-gmail-triggers, garden-news-radar or garden-code-server on; the vault alone gives it no work",
         "The token lives in the container layer, not under state/, so up reinstalls it after every recreate",
         "garden keeps the agent list in memory: no volume, default network only, no connection to Lettuce"
       ]

@@ -20,7 +20,7 @@ An interactive version, [release-workflow.html](../docs/diagrams/release-workflo
 ## How it plugs in
 - **Release mode.** lettucectl runs in release mode when `RELEASE` exists ([lib/README.md](../lib/README.md#release-mode-is-a-file-not-a-setting)): it names the published images from it, builds only the two it cannot pull (the document tools and the code editor's shell), and checks that every host path is mounted at the same path in its container.
 - **The overlays** name each published image `${GARDEN_IMAGE_<IMAGE>:-lettuce-<image>:local}`, so a clone builds and runs its own ([compose/README.md](../compose/README.md)).
-- **`publish.yml`** runs on a `vX.Y.Z` or `vX.Y.Z-rc.N` tag, after every job of `ci.yml`: one job per image (built for `linux/amd64` and `linux/arm64` and pushed only when its content tag is not in the registry, with an SBOM, BuildKit provenance and a GitHub attestation), then `RELEASE`, the `lettucectl` image, the wrapper, `SHA256SUMS`, the notes (which images changed since the last release) and the GitHub release.
+- **`publish.yml`** runs on a `vX.Y.Z` or `vX.Y.Z-rc.N` tag, after every job of `ci.yml`. Each image whose content tag is not in the registry yet is built once per platform, each on a runner of that architecture (`ubuntu-24.04` for `linux/amd64`, `ubuntu-24.04-arm` for `linux/arm64`, never under emulation) and pushed by digest with an SBOM and BuildKit provenance; one job per image then puts the content tag on both digests and adds a GitHub attestation. Then `RELEASE`, the `lettucectl` image (built the same way), the wrapper, `SHA256SUMS`, the notes (which images changed since the last release) and the GitHub release.
 
 ## Rules
 

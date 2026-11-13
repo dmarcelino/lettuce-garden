@@ -1029,7 +1029,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
         <g data-graph-role="automatic-crossover" style="--step:4">
           <path data-graph-role="automatic-crossover-underlay" d="M 374 442 L 374 558 Q 374 566 382 566 L 490 566" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="cloudflared" data-edge-to="gmail" data-edge-label="/gmail-triggers/" data-edge-key="4" data-composition-points="374,442;374,566;490,566" data-composition-crossover="halo" data-composition-independent="true" d="M 374 442 L 374 558 Q 374 566 382 566 L 490 566" class="a-default" data-animate="edge" style="--step: 4;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-edge-from="cloudflared" data-edge-to="queues" data-edge-label="their prefixes" data-edge-key="4" data-composition-points="374,442;374,566;490,566" data-composition-crossover="halo" data-composition-independent="true" d="M 374 442 L 374 558 Q 374 566 382 566 L 490 566" class="a-default" data-animate="edge" style="--step: 4;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:5">
           <path data-graph-role="automatic-crossover-underlay" d="M 575 380 L 575 272" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -1049,7 +1049,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
         <g data-graph-role="automatic-crossover" style="--step:9">
           <path data-graph-role="automatic-crossover-underlay" d="M 786 442 L 786 558 Q 786 566 778 566 L 660 566" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="executor" data-edge-to="gmail" data-edge-label="with --gmail-triggers" data-edge-key="9" data-composition-points="786,442;786,566;660,566" data-composition-crossover="halo" data-composition-independent="true" d="M 786 442 L 786 558 Q 786 566 778 566 L 660 566" class="a-security" data-animate="edge" style="--step: 9;" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+          <path data-edge-from="executor" data-edge-to="queues" data-edge-label="--gmail-triggers, --news-radar" data-edge-key="9" data-composition-points="786,442;786,566;660,566" data-composition-crossover="halo" data-composition-independent="true" d="M 786 442 L 786 558 Q 786 566 778 566 L 660 566" class="a-security" data-animate="edge" style="--step: 9;" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:10">
           <path data-graph-role="automatic-crossover-underlay" d="M 924 442 L 924 558 Q 924 566 932 566 L 1000 566" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -1122,15 +1122,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="575" y="425" class="t-muted" font-size="9" text-anchor="middle">landing page, agent list</text>
         </g>
 
-        <g id="node-gmail" data-node-id="gmail" data-node-label="garden-gmail-triggers" tabindex="0" role="button" aria-label="Focus garden-gmail-triggers, /gmail-triggers/ + API, Compose project lettuce-&lt;name&gt;" aria-pressed="false" data-node-kind="backend" data-node-sublabel="/gmail-triggers/ + API" data-node-context="Compose project lettuce-&lt;name&gt;">
-          <title>garden-gmail-triggers · /gmail-triggers/ + API · Compose project lettuce-&lt;name&gt;</title>
+        <g id="node-queues" data-node-id="queues" data-node-label="request queues" tabindex="0" role="button" aria-label="Focus request queues, gmail-triggers, news-radar + API, Compose project lettuce-&lt;name&gt;" aria-pressed="false" data-node-kind="backend" data-node-sublabel="gmail-triggers, news-radar + API" data-node-context="Compose project lettuce-&lt;name&gt;">
+          <title>request queues · gmail-triggers, news-radar + API · Compose project lettuce-&lt;name&gt;</title>
           <rect x="490" y="550" width="170" height="62" rx="8" class="c-mask"/>
           <rect x="490" y="550" width="170" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-8;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(496 556) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="575" y="579" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-gmail-triggers</text>
-        <text x="575" y="595" class="t-muted" font-size="9" text-anchor="middle">/gmail-triggers/ + API</text>
+          <text data-node-label="" x="575" y="579" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">request queues</text>
+        <text x="575" y="595" class="t-muted" font-size="8.4" text-anchor="middle">gmail-triggers, news-radar + API</text>
         </g>
 
         <g id="node-cron" data-node-id="cron" data-node-label="system cron" tabindex="0" role="button" aria-label="Focus system cron, lettuce-garden-executor, Compose project lettuce-&lt;name&gt; › app-server: agents run as root" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="lettuce-garden-executor" data-node-context="Compose project lettuce-&lt;name&gt; › app-server: agents run as root">
@@ -1210,9 +1210,9 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <rect x="403.54999999999995" y="299" width="77.2" height="14" rx="3" class="c-mask"/>
           <text x="442.15" y="309" class="t-edge-default" font-size="8" text-anchor="middle">their prefixes</text>
         </g>
-        <g data-edge-from="cloudflared" data-edge-to="gmail" data-edge-label="/gmail-triggers/" data-edge-key="4">
-          <rect x="388.6" y="546" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="432" y="556" class="t-edge-default" font-size="8" text-anchor="middle">/gmail-triggers/</text>
+        <g data-edge-from="cloudflared" data-edge-to="queues" data-edge-label="their prefixes" data-edge-key="4">
+          <rect x="393.4" y="546" width="77.2" height="14" rx="3" class="c-mask"/>
+          <text x="432" y="556" class="t-edge-default" font-size="8" text-anchor="middle">their prefixes</text>
         </g>
         <g data-edge-from="garden" data-edge-to="pages" data-edge-label="links" data-edge-key="5">
           <rect x="558" y="360" width="34" height="14" rx="3" class="c-mask"/>
@@ -1230,9 +1230,9 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <rect x="676.4" y="384" width="77.2" height="14" rx="3" class="c-mask"/>
           <text x="715" y="394" class="t-edge-security" font-size="8" text-anchor="middle">status, agents</text>
         </g>
-        <g data-edge-from="executor" data-edge-to="gmail" data-edge-label="with --gmail-triggers" data-edge-key="9">
-          <rect x="667.6" y="546" width="110.8" height="14" rx="3" class="c-mask"/>
-          <text x="723" y="556" class="t-edge-security" font-size="8" text-anchor="middle">with --gmail-triggers</text>
+        <g data-edge-from="executor" data-edge-to="queues" data-edge-label="--gmail-triggers, --news-radar" data-edge-key="9">
+          <rect x="626" y="497" width="154" height="14" rx="3" class="c-mask"/>
+          <text x="703" y="507" class="t-edge-security" font-size="8" text-anchor="middle">--gmail-triggers, --news-radar</text>
         </g>
         <g data-edge-from="executor" data-edge-to="letta" data-edge-label="argv" data-edge-key="10">
           <rect x="947" y="546" width="30" height="14" rx="3" class="c-mask"/>

@@ -36,10 +36,10 @@ Operation (<target> is a stack name or "all")
   restart <target>              down + up (app-server and bff share a namespace; never restart one alone)
   check <target>                refuse unsafe or inconsistent configuration
   skills <target>               install agent-skills/ into running stacks (every agent of the stack)
-  mcp <target> [--force]        add the document tools (office, pdf; garden-doc-tools profile) and the vault
-                                (garden-vault profile) to Settings -> MCP, once per stack
+  mcp <target> [--force]        add the document tools (office, pdf; garden-doc-tools profile), the vault
+                                (garden-vault) and News Radar (garden-news-radar) to Settings -> MCP, once per stack
                                 (--force: again, also where the person removed them)
-  backup <target> <dir> [opts]  copy agents, memory, workspaces, tools, vault and receipts to a snapshot in <dir>/<name>/
+  backup <target> <dir> [opts]  copy agents, memory, workspaces, tools, vault, News Radar and receipts to <dir>/<name>/
                                 (--compress: a tar.gz instead; --no-tools; --pause|--live; --keep N)
   status                        containers and health of every stack
   list                          stacks, hostnames (Lettuce's and the garden's) and allowed users
@@ -259,8 +259,9 @@ sync_skills() {
 # NODE_USE_ENV_PROXY: everything it calls is inside the stack, its token must
 # never reach pipelock, and Node >= 22.21 would otherwise warn on every run. It sends
 # `letta agents list` to the garden service when that asks for one and, with
-# the garden-gmail-triggers profile (--gmail-triggers), fetches that sidecar's queued
-# requests over /executor/v1/ and turns each into `letta cron add --once`. It
+# the garden-gmail-triggers profile (--gmail-triggers) and the garden-news-radar
+# profile (--news-radar), fetches that sidecar's queued requests over /executor/v1/
+# and turns each into `letta cron add --once`. It
 # lives in a namespace we own under letta-home, so a restart keeps it; the cron
 # file goes to system-cron, which the entrypoint copies to /etc/cron.d at every
 # start. Its token stays in the container layer, out of the state directory and
@@ -273,19 +274,24 @@ EXECUTOR_JOB=lettuce-garden-executor
 EXECUTOR_TOKEN_FILE=/etc/lettuce-garden/executor-token
 
 # executor_wanted PROFILES -> success when the executor has work under PROFILES:
-# Gmail triggers' requests, or the agent list, which garden asks for only with
-# the code editor on (its links to the agents' workspaces)
+# Gmail triggers' or News Radar's requests, or the agent list, which garden asks for
+# only with the code editor on (its links to the agents' workspaces)
 executor_wanted() {
-  has_profile "$1" garden-gmail-triggers || has_profile "$1" garden-code-server
+  has_profile "$1" garden-gmail-triggers || has_profile "$1" garden-news-radar || has_profile "$1" garden-code-server
 }
 
-# executor_cron NAME -> the stack's cron file for the executor
+# executor_cron NAME -> the stack's cron file for the executor, with the flag of
+# each request queue whose profile is on
 executor_cron() {
-  local flag=""
-  if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" garden-gmail-triggers; then
-    flag=" --gmail-triggers"
+  local flag="" profiles
+  profiles=$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)
+  if has_profile "$profiles" garden-gmail-triggers; then
+    flag+=" --gmail-triggers"
   fi
-  printf '%s\n' "# Installed by lettucectl (garden-gmail-triggers or garden-code-server profile). Removed with the last of them." \
+  if has_profile "$profiles" garden-news-radar; then
+    flag+=" --news-radar"
+  fi
+  printf '%s\n' "# Installed by lettucectl (garden-gmail-triggers, garden-news-radar or garden-code-server profile). Removed with the last of them." \
     "PATH=/usr/local/bin:/usr/bin:/bin" 'MAILTO=""'
   printf '%s' "* * * * * root /usr/local/bin/agent-env env -u NODE_USE_ENV_PROXY node $EXECUTOR_DIR/bin/run.mjs$flag >> $EXECUTOR_DIR/executor.log 2>&1"
 }
@@ -373,7 +379,7 @@ install_executor() {
 # uninstall_executor NAME -> removes the executor, its token and its cron file
 uninstall_executor() {
   remove_executor "$1" "$EXECUTOR_DIR" "$EXECUTOR_JOB" "$EXECUTOR_TOKEN_FILE" || return 1
-  info "$1: removed the garden executor (neither garden-gmail-triggers nor garden-code-server is on)"
+  info "$1: removed the garden executor (none of garden-gmail-triggers, garden-news-radar and garden-code-server is on)"
 }
 
 # sync_executor NAME -> the running stack has the executor exactly when it has
@@ -401,6 +407,7 @@ up_stack() {
   sync_push_contact "$1"
   ensure_executor_token "$1"
   sync_garden_profiles "$1"
+  sync_news_radar_settings "$1"
   check_stack "$1"
   # The app-server mounts the tools' volume and joins the network; both must exist.
   if has_profile "$(env_get "$(stack_env "$1")" COMPOSE_PROFILES)" garden-doc-tools; then
@@ -628,12 +635,12 @@ sync_doc_tools() {
 # out again, since a server that cannot start or answer makes every
 # `letta mcp tools` call fail, the other servers' included.
 MCP_SETTINGS=/root/.letta/mcp-home/.letta/settings.json
-MCP_GROUPS=(doc-tools vault)
-declare -A MCP_PROFILE=([doc-tools]=garden-doc-tools [vault]=garden-vault)
-declare -A MCP_MARKER=([doc-tools]=DOC_TOOLS_MCP_REGISTERED [vault]=VAULT_MCP_REGISTERED)
-declare -A MCP_LABEL=([doc-tools]="the document tools" [vault]="the vault")
+MCP_GROUPS=(doc-tools vault news-radar)
+declare -A MCP_PROFILE=([doc-tools]=garden-doc-tools [vault]=garden-vault [news-radar]=garden-news-radar)
+declare -A MCP_MARKER=([doc-tools]=DOC_TOOLS_MCP_REGISTERED [vault]=VAULT_MCP_REGISTERED [news-radar]=NEWS_RADAR_MCP_REGISTERED)
+declare -A MCP_LABEL=([doc-tools]="the document tools" [vault]="the vault" [news-radar]="News Radar")
 # What a same-named server of the person's differs in.
-declare -A MCP_KIND=([doc-tools]=command [vault]=URL)
+declare -A MCP_KIND=([doc-tools]=command [vault]=URL [news-radar]=URL)
 # Set by register_mcp_group and drop_mcp_group when they changed the list.
 MCP_CHANGED=0
 
@@ -657,6 +664,7 @@ mcp_reminder() {
       case $g in
         doc-tools) info "Documents: office and pdf are in $url Settings -> MCP (docs/doc-tools.md)" ;;
         vault) info "Vault: vault is in $url Settings -> MCP (docs/vault.md)" ;;
+        news-radar) info "News Radar: news-radar is in $url Settings -> MCP (docs/news-radar.md)" ;;
       esac
       continue
     fi
@@ -669,6 +677,10 @@ mcp_reminder() {
       vault)
         info "Vault: in $url Settings -> MCP, add an HTTP server:"
         info "  vault -> http://garden-vault:8000/mcp (docs/vault.md)"
+        ;;
+      news-radar)
+        info "News Radar: in $url Settings -> MCP, add an HTTP server:"
+        info "  news-radar -> http://garden-news-radar:8000/mcp (docs/news-radar.md)"
         ;;
     esac
   done
@@ -1058,6 +1070,9 @@ cmd_remove() {
   fi
   if has_receipts "$name"; then
     info "Its pipelock receipts and their signing key are deleted too; keep a backup if you need them."
+  fi
+  if has_news_radar "$name"; then
+    info "Its monitors, their sources and what they found are deleted too: their volume goes with the stack."
   fi
   state=$(env_get "$f" LETTA_STATE_DIR)
   if has_profile "$(env_get "$f" COMPOSE_PROFILES)" garden-gmail-triggers || [[ -n $state && -d $state/garden/gmail-triggers ]]; then
@@ -1803,6 +1818,9 @@ backup_stack() {
   if has_receipts "$name"; then
     mounts+=(-v "$(receipts_volume "$name"):/src/pipelock:ro")
   fi
+  if has_news_radar "$name"; then
+    mounts+=(-v "$(news_radar_volume "$name"):/src/news-radar:ro")
+  fi
   excludes=(state/letta-home/mod-cache state/letta-home/claude/paste-cache state/letta-home/claude/backups)
   # The BFF rewrites upstream's skills on every connect.
   for s in "$(upstream_dir)"/docker/agent-skills/*/; do
@@ -2016,7 +2034,7 @@ cmd_mcp() {
   require_initialised
   mapfile -t groups < <(mcp_groups "$(cfg PROFILES)")
   ((${#groups[@]})) ||
-    die "the garden-doc-tools and garden-vault profiles are both off; turn one on first, e.g.: lettucectl profiles $(cfg PROFILES),garden-doc-tools"
+    die "the garden-doc-tools, garden-vault and garden-news-radar profiles are all off; turn one on first, e.g.: lettucectl profiles $(cfg PROFILES),garden-doc-tools"
   targets=$(expand_targets "$1")
   for n in $targets; do
     register_mcp "$n" "${2:-}" "${groups[@]}" || failed+=("$n")
