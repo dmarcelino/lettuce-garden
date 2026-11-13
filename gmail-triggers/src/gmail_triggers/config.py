@@ -19,9 +19,13 @@ HEARTBEAT_STALE_SECONDS = 180
 LOST_AFTER_SECONDS = 600
 # Requests handed to the executor per call.
 MAX_CLAIM = 20
-# Google unusable for longer than this: start again from now instead of
-# replaying what arrived meanwhile.
+# Google switched off or disconnected for longer than this: start again from
+# now instead of replaying what arrived meanwhile.
 RESUME_AFTER_SECONDS = 1800
+# A pause nobody chose (the sign-in expired, Gmail not allowed): catch up from
+# the stored history position if Google is back within this long of the last
+# good poll; past it, start again from now.
+CATCH_UP_SECONDS = 48 * 3600
 
 DEFAULT_MAX_PER_HOUR = 6
 MAX_MAX_PER_HOUR = 60
