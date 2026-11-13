@@ -157,7 +157,7 @@
       "id": "queues",
       "type": "backend",
       "label": "request queues",
-      "sublabel": "gmail-triggers, watchlist + API",
+      "sublabel": "gmail-triggers, news-radar + API",
       "pos": [
         490,
         550
@@ -180,9 +180,9 @@
           "label": "Gmail triggers' queue"
         },
         {
-          "path": "watchlist/src/garden_watchlist/app.py",
+          "path": "news-radar/src/garden_news_radar/app.py",
           "line": 299,
-          "label": "watchlist's queue"
+          "label": "news-radar's queue"
         }
       ]
     },
@@ -429,7 +429,7 @@
     {
       "from": "executor",
       "to": "queues",
-      "label": "--gmail-triggers, --watchlist",
+      "label": "--gmail-triggers, --news-radar",
       "variant": "security"
     },
     {
@@ -449,7 +449,7 @@
       "title": "Executor API (/executor/v1/)",
       "items": [
         "garden: GET status (agents_wanted), PUT agents",
-        "gmail-triggers and watchlist (request_routes): GET requests (claims them), POST results, PUT agents, POST heartbeat",
+        "gmail-triggers and news-radar (request_routes): GET requests (claims them), POST results, PUT agents, POST heartbeat",
         "Every call needs Bearer GARDEN_EXECUTOR_TOKEN and is refused with an Origin or a Cloudflare tunnel header; the tunnel never routes the prefix",
         "The list from letta agents list goes to each sidecar that answered, once per run, when any of them asks"
       ]
@@ -466,7 +466,7 @@
       "dot": "slate",
       "title": "Install and isolation",
       "items": [
-        "lettucectl up installs run.mjs, the token and the cron file only with garden-gmail-triggers, garden-watchlist or garden-code-server on; the vault alone gives it no work",
+        "lettucectl up installs run.mjs, the token and the cron file only with garden-gmail-triggers, garden-news-radar or garden-code-server on; the vault alone gives it no work",
         "The token lives in the container layer, not under state/, so up reinstalls it after every recreate",
         "garden keeps the agent list in memory: no volume, default network only, no connection to Lettuce"
       ]

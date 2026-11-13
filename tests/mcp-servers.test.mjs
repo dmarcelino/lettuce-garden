@@ -191,7 +191,7 @@ test("run as lettucectl runs it: a JSON summary, or exit 3 and a message", () =>
   assert.equal(usage.status, 2);
   const noGroup = runScript("add", file, "everything");
   assert.equal(noGroup.status, 2);
-  assert.match(noGroup.stderr, /usage: .* add\|remove FILE doc-tools\|vault\|watchlist/);
+  assert.match(noGroup.stderr, /usage: .* add\|remove FILE doc-tools\|vault\|news-radar/);
 });
 
 test("adds the vault after the existing ones and keeps everything else as it was", async () => {
@@ -279,15 +279,15 @@ test("run as lettucectl runs it for the vault", () => {
   assert.deepEqual(serversIn(file), [OFFICE]);
 });
 
-test("the watchlist and the vault each own only their exact HTTP entry", async () => {
-  const watchlist = { name: "watchlist", transport: "http", url: "http://garden-watchlist:8000/mcp" };
+test("News Radar and the vault each own only their exact HTTP entry", async () => {
+  const NEWS_RADAR = { name: "news-radar", transport: "http", url: "http://garden-news-radar:8000/mcp" };
   const file = tmpFile(render(settings([GOOGLE, OUR_VAULT])));
-  const added = await update(file, "add", "watchlist", { settleMs: 0 });
-  assert.deepEqual(added.added, ["watchlist"]);
-  assert.deepEqual(serversIn(file), [GOOGLE, OUR_VAULT, watchlist]);
-  const again = await update(file, "add", "watchlist", { settleMs: 0 });
+  const added = await update(file, "add", "news-radar", { settleMs: 0 });
+  assert.deepEqual(added.added, ["news-radar"]);
+  assert.deepEqual(serversIn(file), [GOOGLE, OUR_VAULT, NEWS_RADAR]);
+  const again = await update(file, "add", "news-radar", { settleMs: 0 });
   assert.deepEqual(again.added, []);
-  const removed = await update(file, "remove", "watchlist", { settleMs: 0 });
-  assert.deepEqual(removed.removed, ["watchlist"]);
+  const removed = await update(file, "remove", "news-radar", { settleMs: 0 });
+  assert.deepEqual(removed.removed, ["news-radar"]);
   assert.deepEqual(serversIn(file), [GOOGLE, OUR_VAULT]);
 });

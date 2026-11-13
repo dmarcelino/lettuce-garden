@@ -133,7 +133,7 @@
           "path": "lib/common.sh",
           "line": 689,
           "end_line": 718,
-          "label": "WATCHLIST_* settings, GARDEN_PROFILES"
+          "label": "NEWS_RADAR_* settings, GARDEN_PROFILES"
         }
       ]
     },
@@ -499,7 +499,7 @@
       "dot": "cyan",
       "title": "Compose files, in order",
       "items": [
-        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, watchlist, pipelock, code-server, garden",
+        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, news-radar, pipelock, code-server, garden",
         "doc-tools.yml only with garden-doc-tools, pipelock-proxy.yml last and only with garden-pipelock",
         "-p lettuce-<name>, --project-directory upstream/docker, --env-file stack.env"
       ]

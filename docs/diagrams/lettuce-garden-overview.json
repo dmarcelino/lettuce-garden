@@ -399,10 +399,10 @@
       ]
     },
     {
-      "id": "watchlist",
+      "id": "news-radar",
       "type": "backend",
-      "label": "garden-watchlist",
-      "sublabel": "/watchlist/, watchlist-data",
+      "label": "garden-news-radar",
+      "sublabel": "/news-radar/, news-radar-data",
       "pos": [
         560,
         620
@@ -413,7 +413,7 @@
       ],
       "sources": [
         {
-          "path": "compose/watchlist.yml",
+          "path": "compose/news-radar.yml",
           "line": 1,
           "end_line": 59
         }
@@ -540,7 +540,7 @@
         "garden",
         "vault",
         "gmail",
-        "watchlist",
+        "news-radar",
         "gate"
       ],
       "pad": 14
@@ -609,7 +609,7 @@
     },
     {
       "from": "cloudflared",
-      "to": "watchlist"
+      "to": "news-radar"
     },
     {
       "from": "cloudflared",
@@ -651,7 +651,7 @@
     },
     {
       "from": "appserver",
-      "to": "watchlist",
+      "to": "news-radar",
       "label": "/mcp, executor",
       "variant": "dashed"
     },
@@ -715,14 +715,14 @@
         "Garden services accept only the garden's Access application (CF_GARDEN_AUD), never Lettuce's JWT.",
         "The code editor runs nothing agents wrote; its terminals are SSH sessions into the shell, which is no stronger than an agent.",
         "Pipelock is advisory: the stack network keeps its direct route out.",
-        "garden-watchlist fetches public websites directly, public addresses only (not drawn)."
+        "garden-news-radar fetches public websites directly, public addresses only (not drawn)."
       ]
     },
     {
       "dot": "amber",
       "title": "Volumes not drawn",
       "items": [
-        "vault-data: only garden-vault. pipelock-data: only garden-pipelock. watchlist-data: only garden-watchlist.",
+        "vault-data: only garden-vault. pipelock-data: only garden-pipelock. news-radar-data: only garden-news-radar.",
         "google-creds: the BFF, google-mcp, and garden-gmail-triggers read-only.",
         "code-server-sock, code-server-data, code-exec-keys: only the code editor's services.",
         "state/garden/gmail-triggers: only garden-gmail-triggers, outside every app-server mount."

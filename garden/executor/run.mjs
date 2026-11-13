@@ -1,9 +1,9 @@
 // The garden executor: runs as root in the Lettuce app-server, from system cron every
-// minute, whenever it has work (garden-gmail-triggers, garden-watchlist or
+// minute, whenever it has work (garden-gmail-triggers, garden-news-radar or
 // garden-code-server on; the vault alone gives it none). Over HTTP on the stack network,
 // with one bearer token for every sidecar, it:
 // - asks the garden service whether it wants the agent list (for the landing page);
-// - for each request queue its flags name (--gmail-triggers, --watchlist: the stack has
+// - for each request queue its flags name (--gmail-triggers, --news-radar: the stack has
 //   that profile), claims the requests that sidecar has queued, turns each into a
 //   one-off letta-code task (`letta cron add --once`) and posts the outcome back;
 // - when any of them wants it, runs `letta agents list` once and sends the list to each
@@ -19,7 +19,7 @@
 //
 // Cron starts it through upstream's agent-env, so its environment (and letta's) is PID 1's.
 //
-// Overrides (tests only): GARDEN_URL, GT_URL, WL_URL, GT_TOKEN_FILE, GT_LOCK, GT_LOG.
+// Overrides (tests only): GARDEN_URL, GT_URL, NR_URL, GT_TOKEN_FILE, GT_LOCK, GT_LOG.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -32,7 +32,7 @@ const GARDEN = { name: "garden", url: base(process.env.GARDEN_URL || "http://gar
 // The sidecars whose requests the executor runs, each behind its own flag, in run order.
 const QUEUES = [
   { flag: "--gmail-triggers", name: "gmail-triggers", url: base(process.env.GT_URL || "http://garden-gmail-triggers:8000") },
-  { flag: "--watchlist", name: "watchlist", url: base(process.env.WL_URL || "http://garden-watchlist:8000") },
+  { flag: "--news-radar", name: "news-radar", url: base(process.env.NR_URL || "http://garden-news-radar:8000") },
 ];
 const USAGE = `usage: run.mjs ${QUEUES.map((q) => `[${q.flag}]`).join(" ")}`;
 const TOKEN_FILE = process.env.GT_TOKEN_FILE || "/etc/lettuce-garden/executor-token";

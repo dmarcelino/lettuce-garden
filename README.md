@@ -20,12 +20,12 @@ Each extra is a Compose profile whose name starts with `garden-`. Profiles are g
 |---|---|---|
 | `garden-vault` | An encrypted vault with Bitwarden's item types (logins, cards, identities, notes, SSH keys), importable from a Bitwarden export. Agents ask for a secret over MCP, and the person approves each request on the vault's page or by push notification, unless they let an everyday detail (an address, a note) be used without asking. Agents fill values in with placeholders, so they don't reach the AI provider. | [Vault](docs/vault.md) |
 | `garden-gmail-triggers` | Rules such as "when an email arrives in label X, ask agent Y to do Z". The garden polls Gmail read-only and starts each agent through Lettuce's own scheduler. Needs `google`. | [Gmail triggers](docs/gmail-triggers.md) |
-| `garden-watchlist` | Ask an agent to keep an eye on something (films, concerts, events, news on a topic) and report on a schedule. A small service checks the sources without a model; the agent reports only when something is new. | [Watchlist](docs/watchlist.md) |
+| `garden-news-radar` | Ask an agent to keep an eye on something (films, concerts, events, news on a topic) and report on a schedule. A small service checks the sources without a model; the agent reports only when something is new. | [News Radar](docs/news-radar.md) |
 | `garden-code-server` | VS Code in the browser on the agents' workspaces. Its terminals run in a separate container that has the agents' tools and is no stronger than an agent. | [Code editor](docs/code-server.md) |
 | `garden-pipelock` | An egress proxy for letta-code and the agents' tools, which checks where they connect (model calls included), scans pages fetched through it and signs a receipt for every decision. Advisory for now: the stack keeps its direct route out. | [Egress proxy](docs/egress-firewall.md) |
 | `garden-doc-tools` | Office and PDF tools as MCP servers: create, edit and convert Word, PowerPoint, Excel and PDF files in the agents' workspaces. | [Document tools](docs/doc-tools.md) |
 
-With any of the vault, Gmail triggers, the watchlist or the code editor on, the garden address has a landing page linking to the pages that are on. Upstream's own profiles (`cloudflared`, which is required, `search`, `google` and others) are described in Lettuce's `docs/CONFIGURATION.md`, and summarised in [operations.md](docs/operations.md#optional-features).
+With any of the vault, Gmail triggers, News Radar or the code editor on, the garden address has a landing page linking to the pages that are on. Upstream's own profiles (`cloudflared`, which is required, `search`, `google` and others) are described in Lettuce's `docs/CONFIGURATION.md`, and summarised in [operations.md](docs/operations.md#optional-features).
 
 ## Requirements
 - A Linux host (`amd64` or `arm64`) with Docker Engine 25 or later. That is all it needs: `lettucectl` runs from its own image, which brings Docker Compose and every other tool. The document tools (`garden-doc-tools`) need an `amd64` host.
@@ -61,19 +61,19 @@ Developing lettuce-garden runs `./lettucectl` from a clone instead, which builds
 ## Documentation
 **Using a stack** (for the people you give one to)
 - [Your Lettuce stack](docs/user-guide.md): addresses, signing in, first steps, what to keep in mind.
-- The "Using it" section of each extra: [vault](docs/vault.md#using-it), [Gmail triggers](docs/gmail-triggers.md#using-it), [watchlist](docs/watchlist.md#using-it), [code editor](docs/code-server.md#using-it), [document tools](docs/doc-tools.md#using-it).
+- The "Using it" section of each extra: [vault](docs/vault.md#using-it), [Gmail triggers](docs/gmail-triggers.md#using-it), [News Radar](docs/news-radar.md#using-it), [code editor](docs/code-server.md#using-it), [document tools](docs/doc-tools.md#using-it).
 
 **Installing and running it** (for admins)
 - [One-time Cloudflare and Google setup](docs/cloudflare-setup.md): the domain, Zero Trust, Google sign-in and the API token.
 - [Operations](docs/operations.md): everyday commands, people, profiles, upgrades, backups, troubleshooting and security notes.
 - [How it works](docs/architecture.md): the design, the two addresses per stack, what runs, where the data lives, limits.
 - [Google for agents](docs/google-setup.md): Gmail, Calendar, Tasks and Contacts for the agents (`google` profile).
-- The guide of each extra, with how to run it and its security model: [vault](docs/vault.md), [Gmail triggers](docs/gmail-triggers.md), [watchlist](docs/watchlist.md), [code editor](docs/code-server.md), [egress proxy](docs/egress-firewall.md), [document tools](docs/doc-tools.md).
+- The guide of each extra, with how to run it and its security model: [vault](docs/vault.md), [Gmail triggers](docs/gmail-triggers.md), [News Radar](docs/news-radar.md), [code editor](docs/code-server.md), [egress proxy](docs/egress-firewall.md), [document tools](docs/doc-tools.md).
 
 **Developing lettuce-garden**
 - [CONTRIBUTING.md](CONTRIBUTING.md): where to start, the rules, tests and how the docs are organised.
 - [ARCHITECTURE.md](ARCHITECTURE.md): the whole stack's containers, networks, volumes and routes, and a map of the repo.
-- Each folder's README ([lib/](lib/README.md), [compose/](compose/README.md), [vault/](vault/README.md), [gmail-triggers/](gmail-triggers/README.md), [watchlist/](watchlist/README.md), [code-server/](code-server/README.md), [garden/](garden/README.md), [garden-common/](garden-common/README.md), [pipelock/](pipelock/README.md), [doc-tools/](doc-tools/README.md), [agent-skills/](agent-skills/README.md), [backup/](backup/README.md), [tests/](tests/README.md)), each with its rules.
+- Each folder's README ([lib/](lib/README.md), [compose/](compose/README.md), [vault/](vault/README.md), [gmail-triggers/](gmail-triggers/README.md), [news-radar/](news-radar/README.md), [code-server/](code-server/README.md), [garden/](garden/README.md), [garden-common/](garden-common/README.md), [pipelock/](pipelock/README.md), [doc-tools/](doc-tools/README.md), [agent-skills/](agent-skills/README.md), [backup/](backup/README.md), [tests/](tests/README.md)), each with its rules.
 - [AGENTS.md](AGENTS.md): the short directives for coding agents, linking to those rules.
 
 ## Licence

@@ -1,0 +1,362 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "News Radar: containers, boundaries and reports",
+    "output": "docs/diagrams/news-radar-architecture.html",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "695c284c5833bf202b0ac24ab161fd191369c31a"
+    }
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Person's browser",
+      "sublabel": "sees and deletes",
+      "pos": [
+        30,
+        220
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "sources": [
+        {
+          "path": "docs/news-radar.md",
+          "line": 16,
+          "label": "the page"
+        }
+      ]
+    },
+    {
+      "id": "cf-edge",
+      "type": "security",
+      "label": "Cloudflare Access",
+      "sublabel": "garden's own Access app",
+      "pos": [
+        210,
+        220
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 73,
+          "end_line": 84,
+          "label": "Access applications"
+        }
+      ]
+    },
+    {
+      "id": "cloudflared",
+      "type": "cloud",
+      "label": "cloudflared",
+      "sublabel": "routes by host + path",
+      "pos": [
+        450,
+        220
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "lib/cloudflare.sh",
+          "line": 118,
+          "end_line": 124,
+          "label": "PROFILE_ROUTES"
+        }
+      ]
+    },
+    {
+      "id": "bff",
+      "type": "frontend",
+      "label": "BFF :8080",
+      "sublabel": "Lettuce UI",
+      "pos": [
+        790,
+        40
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "AGENTS.md",
+          "line": 40,
+          "label": "no second way into an agent"
+        }
+      ]
+    },
+    {
+      "id": "app-server",
+      "type": "backend",
+      "label": "app-server",
+      "sublabel": "agents, letta-code scheduler",
+      "pos": [
+        1145,
+        40
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "CONTRIBUTING.md",
+          "line": 24,
+          "end_line": 26,
+          "label": "turns through the scheduler"
+        }
+      ]
+    },
+    {
+      "id": "news-radar",
+      "type": "backend",
+      "label": "garden-news-radar",
+      "sublabel": "page, /mcp, fetcher, schedules",
+      "pos": [
+        790,
+        220
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "compose/news-radar.yml",
+          "line": 21,
+          "end_line": 54,
+          "label": "service and hardening"
+        },
+        {
+          "path": "news-radar/src/garden_news_radar/app.py",
+          "line": 296,
+          "end_line": 302,
+          "label": "page, executor routes, /mcp"
+        },
+        {
+          "path": "news-radar/src/garden_news_radar/service.py",
+          "line": 423,
+          "label": "fire: a report only when something is new"
+        }
+      ]
+    },
+    {
+      "id": "executor",
+      "type": "backend",
+      "label": "garden executor",
+      "sublabel": "run.mjs --news-radar, every minute",
+      "pos": [
+        1145,
+        220
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "garden/executor/run.mjs",
+          "line": 33,
+          "end_line": 36,
+          "label": "QUEUES"
+        },
+        {
+          "path": "lettucectl",
+          "line": 283,
+          "label": "executor_cron"
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "type": "database",
+      "label": "news-radar-data",
+      "sublabel": "sources, items, monitors, reports",
+      "pos": [
+        450,
+        400
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "news-radar/src/garden_news_radar/store.py",
+          "line": 1,
+          "end_line": 4,
+          "label": "what it keeps"
+        },
+        {
+          "path": "lib/common.sh",
+          "line": 787,
+          "label": "mounted by garden-news-radar only"
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "type": "external",
+      "label": "Public websites",
+      "sublabel": "feeds, JSON, pages, calendars",
+      "pos": [
+        790,
+        580
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "news-radar/src/garden_news_radar/fetch.py",
+          "line": 95,
+          "label": "PublicOnlyBackend"
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser-to-edge",
+      "from": "browser",
+      "to": "cf-edge",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "edge-to-cloudflared",
+      "from": "cf-edge",
+      "to": "cloudflared",
+      "label": "tunnel",
+      "variant": "emphasis"
+    },
+    {
+      "id": "route-news-radar",
+      "from": "cloudflared",
+      "to": "news-radar",
+      "label": "/news-radar/ + JWT",
+      "variant": "emphasis"
+    },
+    {
+      "id": "route-app",
+      "from": "cloudflared",
+      "to": "bff",
+      "label": "Lettuce host"
+    },
+    {
+      "id": "one-connection",
+      "from": "bff",
+      "to": "app-server",
+      "label": "the one connection"
+    },
+    {
+      "id": "agents-mcp",
+      "from": "app-server",
+      "to": "news-radar",
+      "label": "agents: /mcp"
+    },
+    {
+      "id": "fetch-reports",
+      "from": "executor",
+      "to": "news-radar",
+      "label": "/executor/v1/ (token)",
+      "variant": "security"
+    },
+    {
+      "id": "cron-add",
+      "from": "executor",
+      "to": "app-server",
+      "label": "letta cron add --once"
+    },
+    {
+      "id": "store",
+      "from": "news-radar",
+      "to": "data",
+      "label": "SQLite"
+    },
+    {
+      "id": "fetch-web",
+      "from": "news-radar",
+      "to": "web",
+      "label": "public only",
+      "variant": "dashed"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Stack lettuce-<name>: one Docker Compose project per person",
+      "wraps": [
+        "cloudflared",
+        "bff",
+        "app-server",
+        "news-radar",
+        "executor",
+        "data"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "app-server: agents run here as root",
+      "wraps": [
+        "app-server",
+        "executor"
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "garden-news-radar (stack network)",
+      "items": [
+        "Page at /news-radar/ on the garden host: an Access JWT of the garden's own application, Fetch Metadata, CSRF and Origin on every POST",
+        "/mcp for agents: the host garden-news-radar only, no Origin; the tunnel never routes it",
+        "Fetches public addresses only, honours robots.txt, runs no script; no model",
+        "Never connects to the app-server; uid 10002, read-only, no capabilities"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Garden executor (inside the app-server)",
+      "items": [
+        "With --news-radar, claims queued reports from /executor/v1/ with the stack's token",
+        "Runs letta cron add --once from an argument array; posts results, the agent list and a heartbeat",
+        "Agents can read its token: they can do what it does, which is no more than letta cron add"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "lettucectl (host)",
+      "items": [
+        "compose/news-radar.yml behind the garden-news-radar profile; check_news_radar keeps it hardened",
+        "lettucectl mcp registers the News Radar server; lettucectl skills installs news-radar-sources",
+        "up copies the NEWS_RADAR_* settings from config.env; backup copies news-radar-data"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust notes",
+      "items": [
+        "A report is queued only at a schedule, when something is new, within the daily cap per agent",
+        "Website text reaches the agent between markers, as data; a site can't write the end marker",
+        "Left out: the garden landing page, Gmail triggers, the vault, the code editor"
+      ]
+    }
+  ]
+}

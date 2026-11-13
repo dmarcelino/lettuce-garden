@@ -5313,15 +5313,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="fine" x="150" y="336" class="t-backend" font-size="7" text-anchor="middle">HTTPS_PROXY set</text>
         </g>
 
-        <g id="node-vault" data-node-id="vault" data-node-label="garden services" tabindex="0" role="button" aria-label="Focus garden services, vault, gmail-triggers, watchlist, garden, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="vault, gmail-triggers, watchlist, garden" data-node-context="Architecture component">
-          <title>garden services · vault, gmail-triggers, watchlist, garden · Architecture component</title>
+        <g id="node-vault" data-node-id="vault" data-node-label="garden services" tabindex="0" role="button" aria-label="Focus garden services, vault, gmail-triggers, news-radar, garden, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="vault, gmail-triggers, news-radar, garden" data-node-context="Architecture component">
+          <title>garden services · vault, gmail-triggers, news-radar, garden · Architecture component</title>
           <rect x="40" y="460" width="220" height="64" rx="8" class="c-mask"/>
           <rect x="40" y="460" width="220" height="64" rx="8" class="c-backend" data-animate="node" style="--step:8" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 466) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="150" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden services</text>
-        <text data-detail="context" x="150" y="506" class="t-muted" font-size="8.8" text-anchor="middle">vault, gmail-triggers, watchlist, garden</text>
+        <text data-detail="context" x="150" y="506" class="t-muted" font-size="8.8" text-anchor="middle">vault, gmail-triggers, news-radar, garden</text>
         </g>
 
         <g id="node-search" data-node-id="search" data-node-label="searxng, ddg-mcp" tabindex="0" role="button" aria-label="Focus searxng, ddg-mcp, queries and page fetches, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="queries and page fetches" data-node-tag="HTTPS_PROXY set" data-node-context="Architecture component">
@@ -5660,7 +5660,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <ul>
           <li>Advisory, not a boundary: the stack network still reaches the internet, and any agent can unset HTTPS_PROXY</li>
           <li>No TLS interception: for HTTPS it sees the host name, not paths, bodies or responses</li>
-          <li>The BFF (its Remote Pi SSH runs included), garden-vault, google-mcp, garden-gmail-triggers, garden-watchlist and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct</li>
+          <li>The BFF (its Remote Pi SSH runs included), garden-vault, google-mcp, garden-gmail-triggers, garden-news-radar and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct</li>
         </ul>
       </div>
 
@@ -5672,7 +5672,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <ul>
           <li>garden-pipelock hardened: read-only, no capabilities, no host mounts</li>
           <li>Only garden-pipelock mounts pipelock-data, whatever the profiles</li>
-          <li>The app-server&#39;s proxy variables point at garden-pipelock, and its NO_PROXY lists garden-vault, garden-gmail-triggers, garden-watchlist and garden, so pipelock never sees the vault&#39;s values or the executor&#39;s token</li>
+          <li>The app-server&#39;s proxy variables point at garden-pipelock, and its NO_PROXY lists garden-vault, garden-gmail-triggers, garden-news-radar and garden, so pipelock never sees the vault&#39;s values or the executor&#39;s token</li>
         </ul>
       </div>
     </div>

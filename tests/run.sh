@@ -123,12 +123,12 @@ triggers_config() {
   garden_config
 }
 
-# watchlist_config -> the rendered config also holds the watchlist service
-# compose/watchlist.yml renders, and the garden service
-watchlist_config() {
-  config_edit '.services["garden-watchlist"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
+# news_radar_config -> the rendered config also holds the News Radar service
+# compose/news-radar.yml renders, and the garden service
+news_radar_config() {
+  config_edit '.services["garden-news-radar"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
       "environment":'"$GARDEN_ENV"',"networks":{"default":null},
-      "volumes":[{"type":"volume","source":"watchlist-data","target":"/data","volume":{}}]}'
+      "volumes":[{"type":"volume","source":"news-radar-data","target":"/data","volume":{}}]}'
   garden_config
 }
 
@@ -921,7 +921,7 @@ test_check_refuses_the_vault_profile_without_the_vault() {
 # proxy settings from compose/pipelock-proxy.yml
 pipelock_config() {
   local svc=${1:-'{"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"volumes":[{"type":"volume","source":"pipelock-data","target":"/data"}]}'}
-  local np=localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-watchlist,garden,searxng,ddg-mcp,google-mcp,host.docker.internal
+  local np=localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-news-radar,garden,searxng,ddg-mcp,google-mcp,host.docker.internal
   config_edit '.services["garden-pipelock"] = '"$svc"'
     | .services["app-server"].environment += {"HTTPS_PROXY":"http://garden-pipelock:8888","HTTP_PROXY":"http://garden-pipelock:8888",
       "https_proxy":"http://garden-pipelock:8888","http_proxy":"http://garden-pipelock:8888","NO_PROXY":"'"$np"'","no_proxy":"'"$np"'",
@@ -1016,7 +1016,7 @@ test_check_refuses_a_proxy_that_would_see_the_vault_or_the_executor() {
   added
   local k v
   for k in NO_PROXY no_proxy; do
-    for v in garden-vault garden-gmail-triggers garden-watchlist garden; do
+    for v in garden-vault garden-gmail-triggers garden-news-radar garden; do
       with_pipelock
       config_edit '.services["app-server"].environment["'"$k"'"] |= (split(",") - ["'"$v"'"] | join(","))'
       ctl check alfred
@@ -1155,7 +1155,7 @@ test_check_refuses_another_service_on_a_symlink_to_the_rules() {
 }
 
 test_check_refuses_volumes_from_gmail_triggers() {
-  triggers_refused ".services.bff.volumes_from = [\"garden-gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, the watchlist or the code editor (bff from garden-gmail-triggers)"
+  triggers_refused ".services.bff.volumes_from = [\"garden-gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, News Radar or the code editor (bff from garden-gmail-triggers)"
 }
 
 test_check_refuses_a_volume_bound_to_the_rules() {
@@ -1216,7 +1216,7 @@ test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
     | .services.searxng = {"volumes_from":["service:bff"]}'
   ctl check alfred
   bad_rc
-  out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, the watchlist or the code editor (searxng from bff)"
+  out_has "alfred: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, News Radar or the code editor (searxng from bff)"
 }
 
 test_check_refuses_volumes_from_the_vault() {
@@ -1311,7 +1311,7 @@ exec_args() { tr '\0' '\n' <"$T/exec-args"; }
 
 # executor_cron_text [FLAGS] -> the cron file the executor is installed with
 executor_cron_text() {
-  printf '%s\n' '# Installed by lettucectl (garden-gmail-triggers, garden-watchlist or garden-code-server profile). Removed with the last of them.' \
+  printf '%s\n' '# Installed by lettucectl (garden-gmail-triggers, garden-news-radar or garden-code-server profile). Removed with the last of them.' \
     'PATH=/usr/local/bin:/usr/bin:/bin' 'MAILTO=""'
   printf '%s' "* * * * * root /usr/local/bin/agent-env env -u NODE_USE_ENV_PROXY node /root/.letta/garden/executor/bin/run.mjs${1:+ $1} >> /root/.letta/garden/executor/executor.log 2>&1"
 }
@@ -1333,69 +1333,69 @@ test_up_installs_the_gmail_triggers_executor() {
   eq "${#a[@]}" 8
 }
 
-# with_watchlist -> alfred runs the garden-watchlist profile, and the rendered
+# with_news_radar -> alfred runs the garden-news-radar profile, and the rendered
 # config holds the hardened service
-with_watchlist() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-watchlist/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-watchlist/' "$D/stacks/alfred/stack.env"
-  watchlist_config
+with_news_radar() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-news-radar/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-news-radar/' "$D/stacks/alfred/stack.env"
+  news_radar_config
 }
 
-# watchlist_refused JQ EXPECTED -> with alfred's hardened watchlist edited by the
+# news_radar_refused JQ EXPECTED -> with alfred's hardened News Radar edited by the
 # jq filter JQ, `check` fails and says EXPECTED (on a fresh fixture)
-watchlist_refused() {
+news_radar_refused() {
   teardown
   setup
   added
-  with_watchlist
+  with_news_radar
   config_edit "$1"
   ctl check alfred
   bad_rc
   out_has "alfred: $2"
 }
-MS='.services["garden-watchlist"]'
+MS='.services["garden-news-radar"]'
 
-test_check_accepts_the_hardened_watchlist() {
+test_check_accepts_the_hardened_news_radar() {
   added
-  with_watchlist
+  with_news_radar
   ctl check alfred
   ok_rc
 }
 
-test_check_refuses_a_watchlist_that_loses_its_isolation() {
-  watchlist_refused "del($MS)" "the garden-watchlist profile is on but garden-watchlist is not in the rendered config"
-  watchlist_refused "del($MS.read_only)" "garden-watchlist must have read_only: true"
-  watchlist_refused "$MS.cap_drop = [\"NET_RAW\"]" "garden-watchlist must drop all capabilities"
-  watchlist_refused "$MS.network_mode = \"service:app-server\"" "garden-watchlist must not set network_mode"
-  watchlist_refused "$MS.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden-watchlist must not mount host paths"
-  watchlist_refused "$MS.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "garden-watchlist may mount only its volume watchlist-data"
-  watchlist_refused "$MS.networks = {\"default\":null,\"code-egress\":null}" "garden-watchlist must be on the default network only"
-  watchlist_refused "$MS.environment.CF_ACCESS_AUD = \"\${CF_ACCESS_AUD}\"" "garden-watchlist must accept only the garden's Access application"
+test_check_refuses_a_news_radar_that_loses_its_isolation() {
+  news_radar_refused "del($MS)" "the garden-news-radar profile is on but garden-news-radar is not in the rendered config"
+  news_radar_refused "del($MS.read_only)" "garden-news-radar must have read_only: true"
+  news_radar_refused "$MS.cap_drop = [\"NET_RAW\"]" "garden-news-radar must drop all capabilities"
+  news_radar_refused "$MS.network_mode = \"service:app-server\"" "garden-news-radar must not set network_mode"
+  news_radar_refused "$MS.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden-news-radar must not mount host paths"
+  news_radar_refused "$MS.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "garden-news-radar may mount only its volume news-radar-data"
+  news_radar_refused "$MS.networks = {\"default\":null,\"code-egress\":null}" "garden-news-radar must be on the default network only"
+  news_radar_refused "$MS.environment.CF_ACCESS_AUD = \"\${CF_ACCESS_AUD}\"" "garden-news-radar must accept only the garden's Access application"
 }
 
-test_check_refuses_another_service_on_the_watchlist_volume_whatever_the_profiles() {
+test_check_refuses_another_service_on_the_news_radar_volume_whatever_the_profiles() {
   added
-  config_edit '.services.bff.volumes = [{"type":"volume","source":"watchlist-data","target":"/x"}]'
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"news-radar-data","target":"/x"}]'
   ctl check alfred
   bad_rc
-  out_has "alfred: bff mount(s) the watchlist's volume; only garden-watchlist may"
+  out_has "alfred: bff mount(s) News Radar's volume; only garden-news-radar may"
   teardown
   setup
   added
-  config_edit '.services.searxng.volumes_from = ["garden-watchlist"]'
+  config_edit '.services.searxng.volumes_from = ["garden-news-radar"]'
   ctl check alfred
   bad_rc
-  out_has "searxng from garden-watchlist"
+  out_has "searxng from garden-news-radar"
 }
 
-test_up_installs_the_executor_with_the_watchlist() {
+test_up_installs_the_executor_with_the_news_radar() {
   added
-  with_watchlist
+  with_news_radar
   ctl up alfred
   ok_rc
   local a=()
   mapfile -d '' a <"$T/exec-args"
-  eq "${a[7]}" "$(executor_cron_text --watchlist)"
+  eq "${a[7]}" "$(executor_cron_text --news-radar)"
 }
 
 test_up_gives_the_executor_every_queue_that_is_on() {
@@ -1405,21 +1405,21 @@ test_up_gives_the_executor_every_queue_that_is_on() {
   ok_rc
   local a=()
   mapfile -d '' a <"$T/exec-args"
-  eq "${a[7]}" "$(executor_cron_text "--gmail-triggers --watchlist")"
+  eq "${a[7]}" "$(executor_cron_text "--gmail-triggers --news-radar")"
 }
 
-test_up_copies_the_watchlist_settings_from_config_env() {
+test_up_copies_the_news_radar_settings_from_config_env() {
   added
-  sed -i '/^WATCHLIST_/d' "$D/config.env"
-  printf '%s\n' WATCHLIST_DEFAULT_TIMES=07:30,19:00 WATCHLIST_MAX_REPORTS_PER_DAY=4 >>"$D/config.env"
+  sed -i '/^NEWS_RADAR_/d' "$D/config.env"
+  printf '%s\n' NEWS_RADAR_DEFAULT_TIMES=07:30,19:00 NEWS_RADAR_MAX_REPORTS_PER_DAY=4 >>"$D/config.env"
   ctl up alfred
   ok_rc
-  eq "$(grep '^WATCHLIST_' "$D/stacks/alfred/stack.env" | sort | paste -sd' ')" \
-    "WATCHLIST_DEFAULT_TIMES=07:30,19:00 WATCHLIST_MAX_REPORTS_PER_DAY=4"
-  sed -i '/^WATCHLIST_MAX_REPORTS_PER_DAY=/d' "$D/config.env"
+  eq "$(grep '^NEWS_RADAR_' "$D/stacks/alfred/stack.env" | sort | paste -sd' ')" \
+    "NEWS_RADAR_DEFAULT_TIMES=07:30,19:00 NEWS_RADAR_MAX_REPORTS_PER_DAY=4"
+  sed -i '/^NEWS_RADAR_MAX_REPORTS_PER_DAY=/d' "$D/config.env"
   ctl up alfred
   ok_rc
-  eq "$(grep '^WATCHLIST_' "$D/stacks/alfred/stack.env" | paste -sd' ')" "WATCHLIST_DEFAULT_TIMES=07:30,19:00"
+  eq "$(grep '^NEWS_RADAR_' "$D/stacks/alfred/stack.env" | paste -sd' ')" "NEWS_RADAR_DEFAULT_TIMES=07:30,19:00"
 }
 
 # The executor feeds the garden's agent list, which only the code editor uses,
@@ -1447,7 +1447,7 @@ test_up_with_only_the_vault_has_no_executor() {
   ctl up alfred
   ok_rc
   eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
-  out_has "alfred: removed the garden executor (none of garden-gmail-triggers, garden-watchlist and garden-code-server is on)"
+  out_has "alfred: removed the garden executor (none of garden-gmail-triggers, garden-news-radar and garden-code-server is on)"
 }
 
 test_up_passes_the_executor_token_only_on_stdin() {
@@ -1535,7 +1535,7 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/watchlist.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $D/stacks/alfred/stack.env"
+  log_has "--project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/news-radar.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $D/stacks/alfred/stack.env"
   log_lacks "pipelock-proxy.yml"
 }
 
@@ -3052,7 +3052,7 @@ test_backup_skips_a_vault_that_does_not_exist() {
 
 test_backup_includes_the_receipts() {
   backed
-  stub "STUB_VOLUMES_MISSING='lettuce-alfred_vault-data lettuce-alfred_watchlist-data'"
+  stub "STUB_VOLUMES_MISSING='lettuce-alfred_vault-data lettuce-alfred_news-radar-data'"
   ctl backup alfred "$B"
   ok_rc
   log_has "docker volume inspect lettuce-alfred_pipelock-data"
@@ -3062,28 +3062,28 @@ test_backup_includes_the_receipts() {
 
 test_backup_skips_receipts_that_do_not_exist() {
   backed
-  stub "STUB_VOLUMES_MISSING='lettuce-alfred_pipelock-data lettuce-alfred_watchlist-data'"
+  stub "STUB_VOLUMES_MISSING='lettuce-alfred_pipelock-data lettuce-alfred_news-radar-data'"
   ctl backup alfred "$B"
   ok_rc
   log_has "-v lettuce-alfred_vault-data:/src/vault:ro -v $B/alfred:/dst"
   log_lacks "/src/pipelock"
 }
 
-test_backup_includes_the_watchlist() {
+test_backup_includes_the_news_radar() {
   backed
   stub "STUB_VOLUMES_MISSING='lettuce-alfred_vault-data lettuce-alfred_pipelock-data'"
   ctl backup alfred "$B"
   ok_rc
-  log_has "docker volume inspect lettuce-alfred_watchlist-data"
-  log_has "-v lettuce-alfred_watchlist-data:/src/watchlist:ro -v $B/alfred:/dst"
+  log_has "docker volume inspect lettuce-alfred_news-radar-data"
+  log_has "-v lettuce-alfred_news-radar-data:/src/news-radar:ro -v $B/alfred:/dst"
 }
 
-test_backup_skips_a_watchlist_that_does_not_exist() {
+test_backup_skips_a_news_radar_that_does_not_exist() {
   backed
-  stub STUB_VOLUMES_MISSING=lettuce-alfred_watchlist-data
+  stub STUB_VOLUMES_MISSING=lettuce-alfred_news-radar-data
   ctl backup alfred "$B"
   ok_rc
-  log_lacks "/src/watchlist"
+  log_lacks "/src/news-radar"
 }
 
 test_backup_pauses_a_running_stack_when_asked() {
@@ -3339,7 +3339,7 @@ test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
   log_has "docker network create --internal --label lettuce.doc-tools.stack=alfred lettuce-doc-tools-alfred"
   log_has "docker network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
   # The network exists before the app-server joins it, and Gotenberg joins after.
-  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/watchlist.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $D/stacks/alfred/stack.env up -d"))) ||
+  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/news-radar.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $D/stacks/alfred/stack.env up -d"))) ||
     fail "the network was created after compose up"
   (($(line_of "-p lettuce_shared") > $(line_of "up -d --no-build --pull missing --remove-orphans"))) || fail "gotenberg started before the stack"
 }
@@ -3929,7 +3929,7 @@ test_mcp_needs_the_doc_tools_or_the_vault_profile() {
   added
   ctl mcp alfred
   bad_rc
-  out_has "the garden-doc-tools, garden-vault and garden-watchlist profiles are all off"
+  out_has "the garden-doc-tools, garden-vault and garden-news-radar profiles are all off"
   log_lacks "node --input-type=module"
 }
 
@@ -4436,11 +4436,11 @@ test_only_the_garden_overlay_passes_the_garden_profiles() {
 
 # with_all_gardens -> alfred runs every garden page profile, with every garden service rendered
 with_all_gardens() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-watchlist,garden-vault,garden-code-server/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-watchlist,garden-vault,garden-code-server/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-news-radar,garden-vault,garden-code-server/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-news-radar,garden-vault,garden-code-server/' "$D/stacks/alfred/stack.env"
   vault_config
   triggers_config
-  watchlist_config
+  news_radar_config
   code_config
 }
 

@@ -398,7 +398,7 @@
       "items": [
         "--init, --network none, --read-only, --tmpfs /tmp, no-new-privileges",
         "cap_drop ALL, then CHOWN, DAC_OVERRIDE and FOWNER only",
-        "state, stack.env, vault-data, pipelock-data and watchlist-data (when the volume exists) read-only; only <dir>/<name> is writable",
+        "state, stack.env, vault-data, pipelock-data and news-radar-data (when the volume exists) read-only; only <dir>/<name> is writable",
         "Old .partial-* entries and pruned snapshots are deleted through the same container"
       ]
     },

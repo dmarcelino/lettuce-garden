@@ -324,7 +324,7 @@
       "title": "Who uses what",
       "items": [
         "vault: PAGE, FORM and FETCH (its own fetch() calls send X-CSRF-Token)",
-        "gmail-triggers and watchlist: PAGE and FORM; garden landing page: PAGE only (no forms, no script)",
+        "gmail-triggers and news-radar: PAGE and FORM; garden landing page: PAGE only (no forms, no script)",
         "Assets (stylesheets, scripts, icons, the manifest) need the JWT but no Fetch Metadata",
         "The code editor's gate uses Authenticator and COOP, with its own Sec-Fetch rules (docs/code-server.md)"
       ]
@@ -333,7 +333,7 @@
       "dot": "amber",
       "title": "garden_common.executor",
       "items": [
-        "guard: served by garden, gmail-triggers and watchlist; refuses cf-access-jwt-assertion, cf-connecting-ip and cf-ray; the token is GARDEN_EXECUTOR_TOKEN",
+        "guard: served by garden, gmail-triggers and news-radar; refuses cf-access-jwt-assertion, cf-connecting-ip and cf-ray; the token is GARDEN_EXECUTOR_TOKEN",
         "read_json: JSON objects with v = 1 under a size cap; read_agents validates the agent list",
         "AgentAsks: when a sidecar wants a new agent list (none, older than 15 minutes, or a page asked)",
         "Agents can read the token; it keeps out the other containers on the stack network, not agents"

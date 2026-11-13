@@ -1,6 +1,6 @@
 # garden
 
-The `garden` service serves the landing page at the root of a stack's garden host, `https://<name>-garden.<domain>/`, with a link to each garden page that is on and, with the code editor, a link to each agent's workspace. This folder also holds the garden executor, `executor/run.mjs`, which runs in Lettuce's app-server, not in this image. The service has no profile of its own: it is on whenever any garden page profile is (`garden-vault`, `garden-gmail-triggers`, `garden-watchlist`, `garden-code-server`). The person's view of the page is in [docs/user-guide.md](../docs/user-guide.md) ("What you get"), and its agent links in [docs/code-server.md](../docs/code-server.md) ("Using it"); the design record is [DESIGN.md](DESIGN.md); the executor's install and protocol are in [executor/README.md](executor/README.md).
+The `garden` service serves the landing page at the root of a stack's garden host, `https://<name>-garden.<domain>/`, with a link to each garden page that is on and, with the code editor, a link to each agent's workspace. This folder also holds the garden executor, `executor/run.mjs`, which runs in Lettuce's app-server, not in this image. The service has no profile of its own: it is on whenever any garden page profile is (`garden-vault`, `garden-gmail-triggers`, `garden-news-radar`, `garden-code-server`). The person's view of the page is in [docs/user-guide.md](../docs/user-guide.md) ("What you get"), and its agent links in [docs/code-server.md](../docs/code-server.md) ("Using it"); the design record is [DESIGN.md](DESIGN.md); the executor's install and protocol are in [executor/README.md](executor/README.md).
 
 ![The landing page, the garden executor and what they talk to](../docs/diagrams/garden-architecture.svg)
 
@@ -30,7 +30,7 @@ An interactive version, [garden-architecture.html](../docs/diagrams/garden-archi
 
 ## The executor
 
-`run.mjs` runs every minute from system cron in the app-server, as root, through upstream's `agent-env`. Over HTTP on the stack network, with the bearer token `GARDEN_EXECUTOR_TOKEN`, it asks garden (`GET /executor/v1/status`) whether it wants the agent list and, with `--gmail-triggers` and `--watchlist`, claims those sidecars' requests (`GET /executor/v1/requests`) and turns each into `letta cron add --once`, posting the results back. When any of them wants the list it runs `letta agents list` once and sends it to each (`PUT /executor/v1/agents`). Details, limits and the install are in [executor/README.md](executor/README.md).
+`run.mjs` runs every minute from system cron in the app-server, as root, through upstream's `agent-env`. Over HTTP on the stack network, with the bearer token `GARDEN_EXECUTOR_TOKEN`, it asks garden (`GET /executor/v1/status`) whether it wants the agent list and, with `--gmail-triggers` and `--news-radar`, claims those sidecars' requests (`GET /executor/v1/requests`) and turns each into `letta cron add --once`, posting the results back. When any of them wants the list it runs `letta agents list` once and sends it to each (`PUT /executor/v1/agents`). Details, limits and the install are in [executor/README.md](executor/README.md).
 
 ## How it plugs in
 
@@ -47,7 +47,7 @@ An interactive version, [garden-architecture.html](../docs/diagrams/garden-archi
 Whatever the profiles, `check_garden_audience` refuses a garden service (`garden_services`: each `PROFILE_ROUTES` service and `garden`) whose `CF_ACCESS_AUD` is not `CF_GARDEN_AUD`, or is Lettuce's `CF_ACCESS_AUD`, or whose `PUBLIC_ORIGIN` is not `GARDEN_ORIGIN`. cloudflared hands Lettuce's token to the BFF in plain HTTP, inside the namespace agents share, so a garden page that took it could be driven by an agent that caught it.
 
 ### What `check_garden` refuses
-With any garden page profile (`garden-vault`, `garden-gmail-triggers`, `garden-watchlist`, `garden-code-server`): `GARDEN_ORIGIN` or `CF_GARDEN_AUD` empty (the garden host is missing, and `up` creates it), a missing or malformed `GARDEN_EXECUTOR_TOKEN`, and a `garden` service that is missing, not a hardened sidecar (`check_sidecar`), on a network other than `default`, or mounting anything.
+With any garden page profile (`garden-vault`, `garden-gmail-triggers`, `garden-news-radar`, `garden-code-server`): `GARDEN_ORIGIN` or `CF_GARDEN_AUD` empty (the garden host is missing, and `up` creates it), a missing or malformed `GARDEN_EXECUTOR_TOKEN`, and a `garden` service that is missing, not a hardened sidecar (`check_sidecar`), on a network other than `default`, or mounting anything.
 
 ### The landing page stays passive
 It has no script (its CSP allows none), touches no other sidecar and opens no connection to Lettuce: it reads only the agent list the executor sends. Garden sidecars go under `/<sidecar>/` on the garden host, never on Lettuce's. The Fetch Metadata rules every garden page follows are in [garden-common](../garden-common/README.md#rules).

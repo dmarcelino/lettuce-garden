@@ -1,0 +1,233 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "News Radar: from a request in chat to a report when something is new",
+    "output": "docs/diagrams/news-radar-flow.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "695c284c5833bf202b0ac24ab161fd191369c31a"
+    }
+  },
+  "participants": [
+    {
+      "id": "you",
+      "type": "external",
+      "icon": "person",
+      "label": "You",
+      "sublabel": "chat, and <garden>/news-radar/",
+      "sources": [
+        {
+          "path": "docs/news-radar.md",
+          "line": 12,
+          "end_line": 16,
+          "label": "using it"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Your agent",
+      "sublabel": "sets it up, writes reports",
+      "sources": [
+        {
+          "path": "agent-skills/news-radar-sources/SKILL.md",
+          "line": 34,
+          "label": "setting one up"
+        }
+      ]
+    },
+    {
+      "id": "news-radar",
+      "type": "backend",
+      "label": "News Radar",
+      "sublabel": "no model",
+      "sources": [
+        {
+          "path": "docs/news-radar.md",
+          "line": 56,
+          "label": "no model in the service"
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "type": "external",
+      "label": "Websites",
+      "sublabel": "feeds, data, pages",
+      "sources": [
+        {
+          "path": "docs/news-radar.md",
+          "line": 55,
+          "label": "public addresses only"
+        }
+      ]
+    },
+    {
+      "id": "executor",
+      "type": "backend",
+      "label": "Garden executor",
+      "sublabel": "every minute",
+      "sources": [
+        {
+          "path": "docs/news-radar.md",
+          "line": 52,
+          "label": "monitors start agent turns"
+        }
+      ]
+    },
+    {
+      "id": "scheduler",
+      "type": "backend",
+      "label": "Lettuce scheduler",
+      "sublabel": "Tasks tab",
+      "sources": [
+        {
+          "path": "docs/news-radar.md",
+          "line": 14,
+          "label": "News Radar: <schedule>"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 345,
+      "label": "Once"
+    },
+    {
+      "from": 360,
+      "to": 495,
+      "label": "Every few hours"
+    },
+    {
+      "from": 505,
+      "to": 750,
+      "label": "At the times you chose"
+    }
+  ],
+  "messages": [
+    {
+      "id": "ask",
+      "from": "you",
+      "to": "agent",
+      "y": 170,
+      "label": "follow this, report at 9 on weekdays"
+    },
+    {
+      "id": "source",
+      "from": "agent",
+      "to": "news-radar",
+      "y": 210,
+      "label": "a source, tested before it is saved",
+      "note": "it finds where it is published: a feed, a page's data, the page"
+    },
+    {
+      "id": "monitor",
+      "from": "agent",
+      "to": "news-radar",
+      "y": 285,
+      "label": "a monitor: sources, schedule"
+    },
+    {
+      "id": "confirm",
+      "from": "agent",
+      "to": "you",
+      "y": 320,
+      "label": "the times in words, a preview",
+      "variant": "return"
+    },
+    {
+      "id": "fetch",
+      "from": "news-radar",
+      "to": "web",
+      "y": 390,
+      "label": "fetch each source",
+      "note": "public addresses, robots.txt honoured"
+    },
+    {
+      "id": "items",
+      "from": "web",
+      "to": "news-radar",
+      "y": 450,
+      "label": "items",
+      "variant": "return",
+      "note": "new and changed ones are kept"
+    },
+    {
+      "id": "claim",
+      "from": "executor",
+      "to": "news-radar",
+      "y": 525,
+      "label": "anything to report?",
+      "note": "nothing new: no report, no agent turn"
+    },
+    {
+      "id": "report",
+      "from": "news-radar",
+      "to": "executor",
+      "y": 580,
+      "label": "a report: the new items",
+      "variant": "return"
+    },
+    {
+      "id": "schedule",
+      "from": "executor",
+      "to": "scheduler",
+      "y": 615,
+      "label": "one-off task",
+      "variant": "emphasis",
+      "note": "letta cron add --once"
+    },
+    {
+      "id": "start",
+      "from": "scheduler",
+      "to": "agent",
+      "y": 665,
+      "label": "\"News Radar: <schedule>\"",
+      "variant": "emphasis",
+      "note": "website text is data, not instructions"
+    },
+    {
+      "id": "tell",
+      "from": "agent",
+      "to": "you",
+      "y": 725,
+      "label": "a short report, from your interests",
+      "variant": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "What you see",
+      "items": [
+        "Every monitor and source on <garden>/news-radar/, with Delete",
+        "Reports in Lettuce's Tasks tab as \"News Radar: <schedule>\"",
+        "Nothing at all when nothing is new"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "What it does not stop",
+      "items": [
+        "A hostile page can still try to steer the agent that reads it",
+        "Any agent of the stack can manage any agent's monitors"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Limits",
+      "items": [
+        "Reports per agent per day are capped (NEWS_RADAR_MAX_REPORTS_PER_DAY)",
+        "Sites behind a login, CAPTCHA, waiting room or paywall can't be monitored"
+      ]
+    }
+  ]
+}

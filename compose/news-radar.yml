@@ -1,0 +1,59 @@
+# Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
+# News Radar (news-radar/, news-radar/DESIGN.md, docs/news-radar.md): sources agents
+# configure (feeds, JSON APIs, pages, schema.org data, calendars), checked on a
+# timer without a model, and a report to the agent at each monitor's schedule,
+# only when something is new. Opt-in behind the `garden-news-radar` profile;
+# without it this file adds nothing.
+#
+# Agents reach its MCP server at http://garden-news-radar:8000/mcp over the stack
+# network (that host only, no Origin). The tunnel forwards
+# https://<name>-garden.<domain>/news-radar/ to it (cf_tunnel_configure), where
+# every page needs a Cloudflare Access JWT of the garden's own Access
+# application: the person sees and deletes what agents set up. The garden
+# executor reaches /executor/v1/ with GARDEN_EXECUTOR_TOKEN and turns each
+# report into `letta cron add --once`; the tunnel never routes that prefix.
+#
+# It fetches public addresses only (it checks every address it connects to),
+# so it has the default network and nothing else. Its data lives on a named
+# volume no other service mounts; it runs as a non-root user, read-only, with no
+# capabilities. `lettucectl check` refuses a stack where it loses any of that.
+services:
+  garden-news-radar:
+    profiles: ["garden-news-radar"]
+    build:
+      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/news-radar
+      additional_contexts:
+        garden-common: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden-common
+    image: ${GARDEN_IMAGE_NEWS_RADAR:-lettuce-news-radar:local}
+    environment:
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      # The garden's own Access application and host, never Lettuce's.
+      CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}
+      CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
+      ALLOWED_USERS: ${ALLOWED_USERS:-}
+      PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
+      GARDEN_EXECUTOR_TOKEN: ${GARDEN_EXECUTOR_TOKEN:-}
+      TZ: ${TZ:-UTC}
+      # The admin's settings, copied from config.env by `up`; empty means the default.
+      NEWS_RADAR_DEFAULT_TIMES: ${NEWS_RADAR_DEFAULT_TIMES:-}
+      NEWS_RADAR_MAX_REPORTS_PER_DAY: ${NEWS_RADAR_MAX_REPORTS_PER_DAY:-}
+      NEWS_RADAR_MIN_INTERVAL: ${NEWS_RADAR_MIN_INTERVAL:-}
+      NEWS_RADAR_MAX_SOURCES: ${NEWS_RADAR_MAX_SOURCES:-}
+      NEWS_RADAR_MAX_MONITORS: ${NEWS_RADAR_MAX_MONITORS:-}
+    networks:
+      - default
+    volumes:
+      - news-radar-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 384m
+    pids_limit: 64
+    restart: unless-stopped
+
+volumes:
+  # Deleted by `lettucectl remove` (compose down -v). `lettucectl backup` copies
+  # it from a one-off container that mounts it read-only.
+  news-radar-data:

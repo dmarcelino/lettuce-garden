@@ -1246,7 +1246,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
         <g data-graph-role="automatic-crossover" style="--step:8">
           <path data-graph-role="automatic-crossover-underlay" d="M 510 636 L 560 636" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="cloudflared" data-edge-to="watchlist" data-edge-key="8" data-composition-points="510,636;560,636" data-composition-crossover="halo" data-composition-independent="true" d="M 510 636 L 560 636" class="a-default" data-animate="edge" style="--step: 8;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-edge-from="cloudflared" data-edge-to="news-radar" data-edge-key="8" data-composition-points="510,636;560,636" data-composition-crossover="halo" data-composition-independent="true" d="M 510 636 L 560 636" class="a-default" data-animate="edge" style="--step: 8;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:9">
           <path data-graph-role="automatic-crossover-underlay" d="M 510 756 L 560 756" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -1278,7 +1278,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
         <g data-graph-role="automatic-crossover" style="--step:16">
           <path data-graph-role="automatic-crossover-underlay" d="M 840 636 L 730 636" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="appserver" data-edge-to="watchlist" data-edge-label="/mcp, executor" data-edge-key="16" data-composition-points="840,636;730,636" data-composition-crossover="halo" data-composition-independent="true" d="M 840 636 L 730 636" class="a-dashed" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+          <path data-edge-from="appserver" data-edge-to="news-radar" data-edge-label="/mcp, executor" data-edge-key="16" data-composition-points="840,636;730,636" data-composition-crossover="halo" data-composition-independent="true" d="M 840 636 L 730 636" class="a-dashed" data-animate="edge" style="--step: 12;" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:17">
           <path data-graph-role="automatic-crossover-underlay" d="M 990 306 L 1050 306" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -1492,15 +1492,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="645" y="545" class="t-muted" font-size="9" text-anchor="middle">/gmail-triggers/</text>
         </g>
 
-        <g id="node-watchlist" data-node-id="watchlist" data-node-label="garden-watchlist" tabindex="0" role="button" aria-label="Focus garden-watchlist, /watchlist/, watchlist-data, garden host" aria-pressed="false" data-node-kind="backend" data-node-sublabel="/watchlist/, watchlist-data" data-node-context="garden host">
-          <title>garden-watchlist · /watchlist/, watchlist-data · garden host</title>
+        <g id="node-news-radar" data-node-id="news-radar" data-node-label="garden-news-radar" tabindex="0" role="button" aria-label="Focus garden-news-radar, /news-radar/, news-radar-data, garden host" aria-pressed="false" data-node-kind="backend" data-node-sublabel="/news-radar/, news-radar-data" data-node-context="garden host">
+          <title>garden-news-radar · /news-radar/, news-radar-data · garden host</title>
           <rect x="560" y="620" width="170" height="62" rx="8" class="c-mask"/>
           <rect x="560" y="620" width="170" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 9; --flow-node-name: archify-relay-node-8;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(566 626) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="645" y="649" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-watchlist</text>
-        <text x="645" y="665" class="t-muted" font-size="9" text-anchor="middle">/watchlist/, watchlist-data</text>
+          <text data-node-label="" x="645" y="649" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-news-radar</text>
+        <text x="645" y="665" class="t-muted" font-size="9" text-anchor="middle">/news-radar/, news-radar-data</text>
         </g>
 
         <g id="node-gate" data-node-id="gate" data-node-label="garden-code-server" tabindex="0" role="button" aria-label="Focus garden-code-server, /code-server/ gate, garden host" aria-pressed="false" data-node-kind="security" data-node-sublabel="/code-server/ gate" data-node-context="garden host">
@@ -1602,7 +1602,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <rect x="760.8" y="497" width="48.4" height="14" rx="3" class="c-mask"/>
           <text x="785" y="507" class="t-edge-dashed" font-size="8" text-anchor="middle">executor</text>
         </g>
-        <g data-edge-from="appserver" data-edge-to="watchlist" data-edge-label="/mcp, executor" data-edge-key="16">
+        <g data-edge-from="appserver" data-edge-to="news-radar" data-edge-label="/mcp, executor" data-edge-key="16">
           <rect x="746.4" y="616" width="77.2" height="14" rx="3" class="c-mask"/>
           <text x="785" y="626" class="t-edge-dashed" font-size="8" text-anchor="middle">/mcp, executor</text>
         </g>

@@ -17,7 +17,7 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
 - **Proxy settings** (`compose/pipelock-proxy.yml`): `HTTPS_PROXY`/`HTTP_PROXY` in the
   app-server (letta-code itself, with its calls to the model provider, and agent shells, Claude
   Code and Codex subagents, `npm`, `pip`, `git`, `curl`...), in SearXNG and in the DuckDuckGo
-  reader. Traffic inside the stack (the vault, Gmail triggers, the watchlist, the search sidecars,
+  reader. Traffic inside the stack (the vault, Gmail triggers, News Radar, the search sidecars,
   localhost, `host.docker.internal`) stays direct: pipelock must never see the vault's values, and
   `lettucectl check` refuses a stack where it would.
 - **Destination checks** (balanced mode, `pipelock/pipelock.yaml`):
@@ -44,7 +44,7 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
 ## What it does not do
 - **It is not a boundary.** The stack network still reaches the internet directly, and any agent
   can unset the variable or use a tool that ignores it. The BFF, the vault, google-mcp, Gmail
-  triggers and the watchlist connect directly by design; so does what the BFF does for agents,
+  triggers and News Radar connect directly by design; so does what the BFF does for agents,
   such as its Remote Pi runs over SSH, which carry the agent's instructions. With the `telegram`
   profile, the Telegram gateway connects directly too, including the packages it installs at
   every start. Hosts in `PIPELOCK_DIRECT` are reached directly.

@@ -5677,7 +5677,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </div>
         <ul>
           <li>vault: PAGE, FORM and FETCH (its own fetch() calls send X-CSRF-Token)</li>
-          <li>gmail-triggers and watchlist: PAGE and FORM; garden landing page: PAGE only (no forms, no script)</li>
+          <li>gmail-triggers and news-radar: PAGE and FORM; garden landing page: PAGE only (no forms, no script)</li>
           <li>Assets (stylesheets, scripts, icons, the manifest) need the JWT but no Fetch Metadata</li>
           <li>The code editor&#39;s gate uses Authenticator and COOP, with its own Sec-Fetch rules (docs/code-server.md)</li>
         </ul>
@@ -5689,7 +5689,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <h3>garden_common.executor</h3>
         </div>
         <ul>
-          <li>guard: served by garden, gmail-triggers and watchlist; refuses cf-access-jwt-assertion, cf-connecting-ip and cf-ray; the token is GARDEN_EXECUTOR_TOKEN</li>
+          <li>guard: served by garden, gmail-triggers and news-radar; refuses cf-access-jwt-assertion, cf-connecting-ip and cf-ray; the token is GARDEN_EXECUTOR_TOKEN</li>
           <li>read_json: JSON objects with v = 1 under a size cap; read_agents validates the agent list</li>
           <li>AgentAsks: when a sidecar wants a new agent list (none, older than 15 minutes, or a page asked)</li>
           <li>Agents can read the token; it keeps out the other containers on the stack network, not agents</li>

@@ -440,7 +440,7 @@
       "items": [
         "Each stack is its own Compose project, lettuce-<name>",
         "No ports published on the host: each tunnel connects outbound",
-        "Garden pages: vault, Gmail triggers, the watchlist, code editor (those turned on)"
+        "Garden pages: vault, Gmail triggers, News Radar, code editor (those turned on)"
       ]
     }
   ]

@@ -312,7 +312,7 @@
     {
       "id": "monskill",
       "type": "backend",
-      "label": "watchlist-sources",
+      "label": "news-radar-sources",
       "sublabel": "set up, report, repair",
       "pos": [
         1280,
@@ -324,17 +324,17 @@
       ],
       "sources": [
         {
-          "path": "agent-skills/watchlist-sources/SKILL.md",
+          "path": "agent-skills/news-radar-sources/SKILL.md",
           "line": 8,
           "end_line": 23,
-          "label": "the watchlist server, through the wrapper"
+          "label": "the News Radar server, through the wrapper"
         }
       ]
     },
     {
-      "id": "watchlist",
+      "id": "news-radar",
       "type": "backend",
-      "label": "garden-watchlist",
+      "label": "garden-news-radar",
       "sublabel": "/mcp",
       "pos": [
         1280,
@@ -346,7 +346,7 @@
       ],
       "sources": [
         {
-          "path": "watchlist/src/garden_watchlist/app.py",
+          "path": "news-radar/src/garden_news_radar/app.py",
           "line": 253,
           "end_line": 264,
           "label": "internal /mcp only"
@@ -435,7 +435,7 @@
     },
     {
       "from": "monskill",
-      "to": "watchlist",
+      "to": "news-radar",
       "label": "mcp.sh call"
     }
   ],
@@ -464,7 +464,7 @@
         "using-vault-secrets: the vault MCP server (garden-vault profile)",
         "working-with-documents: office and pdf in Settings -> MCP (garden-doc-tools)",
         "fetching-web-pages: HTTPS_PROXY pointing at garden-pipelock (garden-pipelock)",
-        "watchlist-sources: the watchlist MCP server (garden-watchlist)"
+        "news-radar-sources: News Radar MCP server (garden-news-radar)"
       ]
     }
   ]

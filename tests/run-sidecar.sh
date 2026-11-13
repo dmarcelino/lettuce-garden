@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for a sidecar image (garden/, vault/, gmail-triggers/, watchlist/, code-server/) or
+# Tests for a sidecar image (garden/, vault/, gmail-triggers/, news-radar/, code-server/) or
 # the document tools (doc-tools/). They run in a container built from the image's
 # `test` stage, so the host needs only Docker.
 # agent-skills/ is mounted for the vault's vault-run helper tests. For garden,
@@ -15,7 +15,7 @@ NODE_IMAGE=node:22.22.0-slim
 
 dir=${1:-}
 if [[ ! $dir =~ ^[a-z][a-z0-9-]*$ || ! -f $ROOT/$dir/Dockerfile ]]; then
-  echo "usage: tests/run-sidecar.sh <dir> [pytest args...]   (dir: garden, vault, gmail-triggers, watchlist, code-server, doc-tools)" >&2
+  echo "usage: tests/run-sidecar.sh <dir> [pytest args...]   (dir: garden, vault, gmail-triggers, news-radar, code-server, doc-tools)" >&2
   exit 2
 fi
 shift
