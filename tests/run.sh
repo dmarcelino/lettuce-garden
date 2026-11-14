@@ -5052,6 +5052,17 @@ test_every_published_image_has_an_overlay_variable() {
   done < <(awk '!/^[[:space:]]*(#|$)/' "$ROOT/release/images")
 }
 
+# An image's name can start another's (code-server, code-server-editor), so a
+# pattern such as digest-code-server-* also fetches the other image's digests,
+# whose files have the same names (amd64, arm64) and overwrite its own.
+test_publish_fetches_each_images_own_digests_by_exact_name() {
+  local p="$ROOT/.github/workflows/publish.yml" arch
+  grep -nE 'pattern: *digest-' "$p" && fail "publish.yml fetches digests by pattern"
+  for arch in amd64 arm64; do
+    grep -qF "name: digest-\${{ matrix.image }}-$arch" "$p" || fail "publish.yml does not fetch the $arch digest by name"
+  done
+}
+
 # ── the wrapper (release/lolloctl-wrapper.sh) ─────────────────────────────
 # wrapper_in DIR -> the wrapper, filled in as publish.yml fills it, in DIR/bin,
 # and a socket for it to find

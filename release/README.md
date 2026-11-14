@@ -48,6 +48,7 @@ A file lolloctl reads at run time (a compose file, a skill, the executor, a buil
 ```bash
 tests/run.sh test_content_tags        # content-tag
 tests/run.sh test_every_published     # every image in images has its overlay variable
+tests/run.sh test_publish_            # publish.yml fetches each image's own digests
 tests/run.sh test_wrapper_            # the wrapper, with docker stubbed
 tests/run.sh test_release_            # lolloctl in release mode
 shellcheck -x release/content-tag release/lolloctl-wrapper.sh
