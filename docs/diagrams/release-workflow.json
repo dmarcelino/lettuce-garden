@@ -7,7 +7,7 @@
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "866cc351d27219d5df75ad2d346ea949007fe013"
@@ -212,11 +212,11 @@
       ]
     },
     {
-      "id": "garden-images",
+      "id": "lollo-images",
       "lane": "ghcr",
       "col": 3,
       "type": "database",
-      "label": "lettuce-<image>",
+      "label": "lollo-<image>",
       "sublabel": ":<content tag>, amd64 + arm64",
       "tag": "SBOM, provenance",
       "sources": [
@@ -240,7 +240,7 @@
       "col": 4,
       "type": "backend",
       "label": "release-file, ctl",
-      "sublabel": "RELEASE, lettucectl",
+      "sublabel": "RELEASE, lolloctl",
       "sources": [
         {
           "path": ".github/workflows/publish.yml",
@@ -252,10 +252,10 @@
           "path": ".github/workflows/publish.yml",
           "line": 240,
           "end_line": 282,
-          "label": "lettucectl, one job per platform"
+          "label": "lolloctl, one job per platform"
         },
         {
-          "path": "release/lettucectl.Dockerfile",
+          "path": "release/lolloctl.Dockerfile",
           "line": 1,
           "end_line": 31
         }
@@ -266,7 +266,7 @@
       "lane": "ghcr",
       "col": 4,
       "type": "database",
-      "label": "lettucectl",
+      "label": "lolloctl",
       "sublabel": ":vX.Y.Z, carries RELEASE",
       "sources": [
         {
@@ -305,7 +305,7 @@
       "col": 5,
       "type": "cloud",
       "label": "vX.Y.Z",
-      "sublabel": "lettucectl, RELEASE, SHA256SUMS",
+      "sublabel": "lolloctl, RELEASE, SHA256SUMS",
       "sources": [
         {
           "path": ".github/workflows/publish.yml",
@@ -324,13 +324,13 @@
       "sublabel": "swaps after the pull",
       "sources": [
         {
-          "path": "release/lettucectl-wrapper.sh",
+          "path": "release/lolloctl-wrapper.sh",
           "line": 146,
           "end_line": 161,
           "label": "fetch, pull, then swap"
         },
         {
-          "path": "release/lettucectl-wrapper.sh",
+          "path": "release/lolloctl-wrapper.sh",
           "line": 30,
           "end_line": 34,
           "label": "the new wrapper pulls"
@@ -377,14 +377,14 @@
     {
       "id": "build-push",
       "from": "build",
-      "to": "garden-images",
+      "to": "lollo-images",
       "label": "push if new",
       "role": "branch"
     },
     {
       "id": "image-push",
       "from": "image",
-      "to": "garden-images",
+      "to": "lollo-images",
       "label": "tag",
       "role": "branch"
     },
@@ -437,7 +437,7 @@
       "dot": "cyan",
       "title": "Named by content",
       "items": [
-        "a garden image's tag hashes its build context, its shared context, its name and REBUILD",
+        "a lollo image's tag hashes its build context, its shared context, its name and REBUILD",
         "an unchanged image keeps its name and digest, so its container is not recreated and a vault stays unlocked",
         "each platform builds on a runner of its own architecture, never under emulation"
       ]
@@ -447,14 +447,14 @@
       "title": "Built on the admin's host, never published",
       "items": [
         "doc-tools (AGPL-3.0 PyMuPDF) and the code editor's shell (FROM the app-server's image)",
-        "both build contexts ship inside the lettucectl image"
+        "both build contexts ship inside the lolloctl image"
       ]
     },
     {
       "dot": "rose",
       "title": "Nothing moves after a release",
       "items": [
-        "no latest and nothing from main: the wrapper names the lettucectl image by digest",
+        "no latest and nothing from main: the wrapper names the lolloctl image by digest",
         "the notes list the images that changed, so which containers restart and whether vaults lock"
       ]
     }

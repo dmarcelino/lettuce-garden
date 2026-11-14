@@ -1,6 +1,6 @@
 # One-time Cloudflare and Google setup
 
-You do this once per installation. Afterwards each person is one line in `stacks.conf` and a `lettucectl apply`. Install `lettucectl` on the host first ([README, step 2](../README.md#quickstart)): steps 2.6 and 5 use it and its data directory, `/srv/lettuce-garden` below (`data/` if you run it from a clone). `lettucectl init` checks each step below in order and names the first one missing.
+You do this once per installation. Afterwards each person is one line in `stacks.conf` and a `lolloctl apply`. Install `lolloctl` on the host first ([README, step 2](../README.md#quickstart)): steps 2.6 and 5 use it and its data directory, `/srv/lollo-rozzo` below (`data/` if you run it from a clone). `lolloctl init` checks each step below in order and names the first one missing.
 
 Placeholders used below:
 - `example.com`: your domain.
@@ -13,7 +13,7 @@ Menu labels were checked against the Cloudflare and Google docs in October 2026.
 2. Move the domain's DNS to Cloudflare (the only step that can break something)
 3. Enable Zero Trust
 4. Add Google as a login method
-5. Create the API token for lettucectl
+5. Create the API token for lolloctl
 6. Initialise and add people
 
 ---
@@ -92,7 +92,7 @@ Change one thing at a time.
 ### 2.6 Compare before switching
 On the host, compare your current nameserver with one of the Cloudflare ones. Add every random-named record from your inventory as an extra name:
 ```bash
-lettucectl dns-preflight example.com <current-ns> <cloudflare-ns> <extra names...>
+lolloctl dns-preflight example.com <current-ns> <cloudflare-ns> <extra names...>
 ```
 `<current-ns>` is one of the nameservers from 2.1 and `<cloudflare-ns>` one of the two from 2.5.
 
@@ -127,7 +127,7 @@ Do the switch at a quiet time, not right before you need email.
 1. In the Cloudflare dashboard's left sidebar, click **Zero Trust**. This opens the Zero Trust dashboard (also at https://one.dash.cloudflare.com).
 2. On the onboarding screen, enter a **team name**. It becomes `<team>.cloudflareaccess.com`: the address of the sign-in page people see, and part of the Google redirect URI in step 4. Choose something neutral you won't want to change.
 3. Choose the **Zero Trust Free** plan and enter payment details. Cloudflare requires them even for the $0 plan; you are not charged. The plan covers up to 50 users.
-4. Finish onboarding. Cloudflare's own one-time-PIN login is added as a default login method. That's fine: lettucectl restricts each application to Google.
+4. Finish onboarding. Cloudflare's own one-time-PIN login is added as a default login method. That's fine: lolloctl restricts each application to Google.
 
 You can view the team name later under **Settings** -> **Team name and domain**. Older screens put it under **Custom pages**. Renaming the team later means updating the Google redirect URIs too.
 
@@ -181,10 +181,10 @@ Changes on Google's side can take from 5 minutes to a few hours to apply.
 
 ---
 
-## 5. Create the API token for lettucectl
+## 5. Create the API token for lolloctl
 1. In the Cloudflare dashboard, click the **profile icon** -> **My Profile** -> **API Tokens**.
 2. Click **Create Token**. At the bottom, under **Create Custom Token**, click **Get started**.
-3. **Token name:** `lettucectl`.
+3. **Token name:** `lolloctl`.
 4. **Permissions:** each row has three dropdowns (scope, item, level); **+ Add more** adds a row. Create these five:
 
    | 1st dropdown | 2nd dropdown | 3rd dropdown |
@@ -205,22 +205,22 @@ Changes on Google's side can take from 5 minutes to a few hours to apply.
 8. Click **Continue to summary**, check the list, then click **Create Token**.
 9. **The token is shown only once.** Without pasting it into any chat or file, store it on the host in the data directory. The command doesn't echo it, and the token never reaches your shell history:
    ```bash
-   cd /srv/lettuce-garden && mkdir -p .secrets && chmod 700 .secrets
+   cd /srv/lollo-rozzo && mkdir -p .secrets && chmod 700 .secrets
    (umask 077 && read -rs -p 'Cloudflare API token: ' T && printf '%s\n' "$T" > .secrets/cloudflare-api-token)
    ```
    Then close the Cloudflare page.
 
-This is a *user* token. An account-owned token (**Manage Account -> Account API Tokens**) with the same permissions also works with lettucectl.
+This is a *user* token. An account-owned token (**Manage Account -> Account API Tokens**) with the same permissions also works with lolloctl.
 
 ---
 
 ## 6. Initialise and add people
 ```bash
-lettucectl init        # first run creates config.env: set DOMAIN, PUSH_CONTACT_EMAIL, TZ, PROFILES; then run init again
-$EDITOR /srv/lettuce-garden/stacks.conf   # one line per person: alfred alfred@gmail.com
-lettucectl apply       # shows the plan, then sets up and starts every stack, and installs the agent skills
+lolloctl init        # first run creates config.env: set DOMAIN, PUSH_CONTACT_EMAIL, TZ, PROFILES; then run init again
+$EDITOR /srv/lollo-rozzo/stacks.conf   # one line per person: alfred alfred@gmail.com
+lolloctl apply       # shows the plan, then sets up and starts every stack, and installs the agent skills
 ```
-`init` checks this guide's steps in order, each scope the token needs (step 5) and whether the zone is active (step 2.8), and stops at the first one missing. `apply` runs `lettucectl add` for each new stack ([operations.md](operations.md#people)), which uses `<name>.example.com` for Lettuce and `<name>-garden.example.com` for the garden extras (the vault, Gmail triggers, the code editor), each with its own Access application; both use the stack's one list of people. When Lettuce's name already exists in DNS, it uses `lettuce-<name>.example.com` instead (`HOSTNAME_FALLBACK`); the garden's name always follows Lettuce's (`lettuce-<name>-garden.example.com` then), and when that one is taken, `add` uses the first free of `<...>-garden-2` to `<...>-garden-9`. Stack names are a single DNS label on purpose, and may not end in `-garden`: Cloudflare's free certificate covers `*.example.com` but not `a.b.example.com`.
+`init` checks this guide's steps in order, each scope the token needs (step 5) and whether the zone is active (step 2.8), and stops at the first one missing. `apply` runs `lolloctl add` for each new stack ([operations.md](operations.md#people)), which uses `<name>.example.com` for Lettuce and `<name>-lollo.example.com` for the lollo extras (the vault, Gmail triggers, the code editor), each with its own Access application; both use the stack's one list of people. When Lettuce's name already exists in DNS, it uses `lollo-<name>.example.com` instead (`HOSTNAME_FALLBACK`); the lollo's name always follows Lettuce's (`lollo-<name>-lollo.example.com` then), and when that one is taken, `add` uses the first free of `<...>-lollo-2` to `<...>-lollo-9`. Stack names are a single DNS label on purpose, and may not end in `-lollo`: Cloudflare's free certificate covers `*.example.com` but not `a.b.example.com`.
 
 Check it works:
 - `curl -sI https://alfred.example.com` answers `302` with a `location:` on `https://<team>.cloudflareaccess.com/...`.

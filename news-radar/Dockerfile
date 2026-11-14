@@ -1,11 +1,11 @@
-# The News Radar garden sidecar (see docs/news-radar.md). Built by lettucectl via
+# The News Radar lollo sidecar (see docs/news-radar.md). Built by lolloctl via
 # compose/news-radar.yml; tests/run-sidecar.sh builds the `test` stage and runs it.
-# Both pass the shared package as the build context named `garden-common`.
+# Both pass the shared package as the build context named `lollo-common`.
 FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
-COPY --from=garden-common . /tmp/garden-common
-RUN pip install --root-user-action=ignore /tmp/garden-common && rm -rf /tmp/garden-common
+COPY --from=lollo-common . /tmp/lollo-common
+RUN pip install --root-user-action=ignore /tmp/lollo-common && rm -rf /tmp/lollo-common
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --root-user-action=ignore .
@@ -26,4 +26,4 @@ VOLUME /data
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
-CMD ["python", "-m", "garden_news_radar"]
+CMD ["python", "-m", "lollo_news_radar"]

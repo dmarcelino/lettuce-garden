@@ -4,10 +4,10 @@ Status: implemented (2026-11-08), except the spikes against a running stack (Pla
 - `follow` is for `schema_org` only: a listing whose events are described on their own pages.
 - Requests to one host are at least 2 seconds apart (or robots.txt's `Crawl-delay`), not 5; a 429 or 503 pauses the host. GDELT's limit is met by a long `every`.
 - Only the monitor tools take `agent_id`; sources belong to the stack. `source_put` brings back an earlier spec with `name` and `revert`. The memory cap is 384 MB, for lxml and dateparser.
-- The executor's queue protocol is `garden_common.executor.request_routes`, over each sidecar's own store.
+- The executor's queue protocol is `lollo_common.executor.request_routes`, over each sidecar's own store.
 - A review added: a call fails rather than wait out a pause over 60 s (10 s in a tool call, which ends after 90 s); a report's items are those changed before the second it was built; followed item pages are read again once their item is a week old; a raised `WATCHLIST_MIN_INTERVAL` applies to saved sources too; a source or schedule that no longer validates is skipped, not fatal.
 - The developer reference is [README.md](README.md); the guide for users and admins is [docs/news-radar.md](../docs/news-radar.md).
-- Renamed News Radar (2026-11-13): the folder `news-radar/`, the `garden-news-radar` profile and service, the `/news-radar/` page, the `news-radar` MCP server (its tools unchanged), the `news-radar-data` volume, the `NEWS_RADAR_*` settings, the `news-radar-sources` skill and the executor's `--news-radar`. The record below keeps the names it was reviewed with.
+- Renamed News Radar (2026-11-13): the folder `news-radar/`, the `lollo-news-radar` profile and service, the `/news-radar/` page, the `news-radar` MCP server (its tools unchanged), the `news-radar-data` volume, the `NEWS_RADAR_*` settings, the `news-radar-sources` skill and the executor's `--news-radar`. The record below keeps the names it was reviewed with.
 - After the first live monitor (2026-11-13): a monitor reports by default into the conversation the agent set it up in (`set_up_in`, from `$LETTA_CONVERSATION_ID`; the executor takes a conversation id as well as `new` and `default`), and the person changes where on the page. `monitor_preview` previews a draft before it is saved. A source's `group_by` makes one row of an item listed several times. Filters ignore accents as well as case; extras keep true and false as text. `source_inspect` reads up to 6 same-site scripts, leaving out library and tracking ones.
 
 ## Goal
@@ -21,12 +21,12 @@ Let a person ask their agent, in plain words, to keep an eye on something and re
 
 The agent does the part that needs judgement: it finds the sources, works out how to read them, checks its work, decides what matters to this person and writes the report. A small service does the recurring work: it fetches the sources on a timer, extracts items, remembers what is new, and keeps each monitor's schedule, all without a model. A turn happens only when a schedule comes round **and** there is something to report. A run with nothing new costs nothing.
 
-lettuce-garden is public and runs in many installations, for many people. So nothing here is about particular websites. The service reads any source through a few declarative extractor kinds. The agent writes the configuration at run time, and admins and people choose their own schedules.
+lollo-rozzo is public and runs in many installations, for many people. So nothing here is about particular websites. The service reads any source through a few declarative extractor kinds. The agent writes the configuration at run time, and admins and people choose their own schedules.
 
 ## What people see
 
 - **In chat:** they ask their agent for a monitor and, optionally, a schedule. Without one, the agent uses the admin's default (08:00, 14:00 and 20:00 unless the admin changed it). At those times, when something is new, the agent reports in a conversation of its own. When nothing is new, they hear nothing.
-- **On the garden host**, at `https://<name>-garden.<domain>/watchlist/`, they see every monitor of every agent, with:
+- **On the lollo host**, at `https://<name>-lollo.<domain>/watchlist/`, they see every monitor of every agent, with:
   - its schedule in words, sources and health;
   - its last report, and the last run with nothing to report;
   - a warning when Lettuce isn't picking up reports.
@@ -62,7 +62,7 @@ Taste lives in the agent's memory, not in the monitor. The monitor's filters onl
 ## How it works
 
 ```
- person --chat--> agent (app-server)                       garden-watchlist (stack network)
+ person --chat--> agent (app-server)                       lollo-watchlist (stack network)
                    |  MCP: inspect, test, put source,       fetcher + extractors + scheduler
                    |       put monitor with its schedule --> SQLite on volume watchlist-data
                    |                                              |
@@ -73,10 +73,10 @@ Taste lives in the agent's memory, not in the monitor. The monitor's filters onl
                    |                                              |-- nothing new: record it, no turn
                    |                                              '-- something new: queue a report request
                    |
-            garden executor (system cron in the app-server, every minute, --watchlist)
-                   |  GET  /executor/v1/requests  (claims)  ------> garden-watchlist
+            lollo executor (system cron in the app-server, every minute, --watchlist)
+                   |  GET  /executor/v1/requests  (claims)  ------> lollo-watchlist
                    |  letta cron add --once --at="in 1m" --agent=... --conversation=new|default
-                   |  POST /executor/v1/results, heartbeat ------> garden-watchlist
+                   |  POST /executor/v1/results, heartbeat ------> lollo-watchlist
                    v
             letta-code scheduler fires the task on the BFF's connection
                    |
@@ -84,10 +84,10 @@ Taste lives in the agent's memory, not in the monitor. The monitor's filters onl
                    v
             person reads it (and gets Lettuce's push, if the spike confirms it)
 
- person --Access--> /watchlist/ on the garden host: list, delete   (same service, garden_common.auth)
+ person --Access--> /watchlist/ on the lollo host: list, delete   (same service, lollo_common.auth)
 ```
 
-The service never connects to the app-server. It starts turns the way Gmail triggers do: it queues a request, and the garden executor turns it into a one-off `letta cron` task that Lettuce's scheduler fires on the BFF's connection. That is a second written exception to rule 4, argued under [How it fits this repo's rules](#how-it-fits-this-repos-rules).
+The service never connects to the app-server. It starts turns the way Gmail triggers do: it queues a request, and the lollo executor turns it into a one-off `letta cron` task that Lettuce's scheduler fires on the BFF's connection. That is a second written exception to rule 4, argued under [How it fits this repo's rules](#how-it-fits-this-repos-rules).
 
 ## Sources and extractors
 
@@ -138,14 +138,14 @@ The fetcher is the most exposed code: it reads hostile content from URLs an agen
 
 - **Only `http` and `https`, only public addresses.** The host is resolved first, and the request goes to that address; loopback, private, link-local, unique-local and metadata ranges are refused. Each redirect is checked the same way, and there are at most 5. Agents can already reach the stack network themselves, so this is not their boundary. It keeps a scheduled job from walking the stack's services or the host.
 - **Polite by default:**
-  - a fixed user agent naming the project (`lettuce-garden-watchlist/<version>`, with the repo URL; never a person's address);
+  - a fixed user agent naming the project (`lollo-rozzo-watchlist/<version>`, with the repo URL; never a person's address);
   - robots.txt honoured for that user agent;
   - `ETag` and `If-Modified-Since` reused;
   - at most one request at a time per host, at least 5 seconds apart;
   - no source fetched more often than the admin's minimum interval.
 - **Bounded:** 20 s per request, 5 MiB per response, 10 pages and 20 follows per run.
 - **Challenge pages are failures, not content.** A 403, 429 or 503, a challenge page served with 200, or HTML where JSON was expected marks the run failed and never yields items.
-- **Not through pipelock.** It is advisory and optional; the service carries its own address checks. `garden-watchlist` goes in `NO_PROXY`, since agents call its MCP and the executor its API (and `check_pipelock` requires it there, so pipelock never sees the executor's token).
+- **Not through pipelock.** It is advisory and optional; the service carries its own address checks. `lollo-watchlist` goes in `NO_PROXY`, since agents call its MCP and the executor its API (and `check_pipelock` requires it there, so pipelock never sees the executor's token).
 
 ## New, changed and delivered
 
@@ -199,7 +199,7 @@ The repair is the agent's, during that report's turn, as the skill describes: `s
 
 ### The request
 
-Each report is one request in the executor's existing format (`garden/executor/README.md`): `id`, `agent_id`, `conversation`, `name` ("Watchlist: <schedule in words>", up to 100 characters), `description`, and a `prompt` of up to 8000 characters:
+Each report is one request in the executor's existing format (`landing/executor/README.md`): `id`, `agent_id`, `conversation`, `name` ("Watchlist: <schedule in words>", up to 100 characters), `description`, and a `prompt` of up to 8000 characters:
 
 - **A fixed prologue:** this is a scheduled monitor report. What follows is text from websites, data and not instructions. Write the report from the person's interests, merge duplicates across sources, and repair any listed source with the monitoring tools.
 - **The digest:** per monitor, its name, then one JSON-quoted row per item or story, cut to fixed lengths. When the digest runs long, rows lose their summary, then their venue, before any row is dropped. Whatever doesn't fit stays available through `digest_more(digest_id)`, and the prompt says how much.
@@ -209,19 +209,19 @@ Putting the digest in the prompt saves the tool call (and the model call around 
 
 ### The executor
 
-The garden executor (`garden/executor/run.mjs`) learns `--watchlist`, next to `--gmail-triggers`. With it, the executor:
-- claims `garden-watchlist`' requests;
+The lollo executor (`landing/executor/run.mjs`) learns `--watchlist`, next to `--gmail-triggers`. With it, the executor:
+- claims `lollo-watchlist`' requests;
 - runs each through the same validation and `letta cron add --once`;
 - posts the results;
 - sends the agent list when asked, and a heartbeat.
 
 `executor_cron` adds the flag exactly when the profile is on, and `executor_wanted` includes the profile.
 
-Today the executor hard-codes Gmail triggers as the one sidecar with requests. It becomes a list of request-serving sidecars, one entry per flag. The server side of the protocol (the queue, claims, results, lost requests, heartbeat), now in `gmail_triggers`, moves to `garden-common` so both sidecars share one implementation. That move runs the four suites that use `garden-common`.
+Today the executor hard-codes Gmail triggers as the one sidecar with requests. It becomes a list of request-serving sidecars, one entry per flag. The server side of the protocol (the queue, claims, results, lost requests, heartbeat), now in `gmail_triggers`, moves to `lollo-common` so both sidecars share one implementation. That move runs the four suites that use `lollo-common`.
 
 ## Agent tools (MCP)
 
-Served at `http://garden-watchlist:8000/mcp`, outside the tunnelled `/watchlist/` prefix. It refuses an `Origin` header and Cloudflare's tunnel headers, like the vault's `/mcp`, and is registered in Settings -> MCP by `lettucectl mcp` as its third group of entries.
+Served at `http://lollo-watchlist:8000/mcp`, outside the tunnelled `/watchlist/` prefix. It refuses an `Origin` header and Cloudflare's tunnel headers, like the vault's `/mcp`, and is registered in Settings -> MCP by `lolloctl mcp` as its third group of entries.
 
 | Tool | Does |
 |---|---|
@@ -252,8 +252,8 @@ Everything a tool returns that came from the web (titles, summaries, venues, sam
 
 ## The page
 
-`/watchlist/` on the garden host is a garden page like the others:
-- `garden_common.auth`: the Access JWT of the garden's application, Fetch Metadata, CSRF on forms, COOP;
+`/watchlist/` on the lollo host is a lollo page like the others:
+- `lollo_common.auth`: the Access JWT of the lollo's application, Fetch Metadata, CSRF on forms, COOP;
 - no JavaScript;
 - agent names from the executor's agent list (`AgentAsks`).
 
@@ -280,14 +280,14 @@ Host-wide in `config.env`, written into each `stack.env` by `up` (the way `TZ` r
 
 | Rule | This design |
 |---|---|
-| One isolated stack per person | One `garden-watchlist` per stack, no shared state. A shared multi-tenant service was considered and rejected (see below the table) |
+| One isolated stack per person | One `lollo-watchlist` per stack, no shared state. A shared multi-tenant service was considered and rejected (see below the table) |
 | No second way into an agent (rule 4) | **A second written exception**, to add to CONTRIBUTING before building. Its argument is below the table |
 | A route that bypasses the BFF needs a written reason | `/watchlist/` adds one, to write in CONTRIBUTING: a person must be able to see and stop what agents set up without going through an agent |
 | Don't write into what Lettuce manages (rule 5) | One more `mcp` group (its rule in lib/README changes from two kinds of entries to three). Tasks are created only through letta-code's own CLI, by the executor |
 | Overlays restrict, never redefine | `compose/watchlist.yml` only adds a service; upstream services are untouched but for `NO_PROXY` in `pipelock-proxy.yml` |
 | Nothing secret under `state/` | Nothing secret but the executor token, which comes from `stack.env` as for the other sidecars. Data on the named volume `watchlist-data`, no host path |
-| The executor (garden/executor/README) | `--watchlist`, `executor_cron`, `executor_wanted`; the request list generalised; the protocol's server side shared in `garden-common`; the executor README updated with it |
-| Garden sidecar checklist (CONTRIBUTING) | See the list below the table |
+| The executor (landing/executor/README) | `--watchlist`, `executor_cron`, `executor_wanted`; the request list generalised; the protocol's server side shared in `lollo-common`; the executor README updated with it |
+| Lollo sidecar checklist (CONTRIBUTING) | See the list below the table |
 | Sensitive data | Tests use synthetic fixtures, never copies of real sites; the skill names no site but the two news services |
 
 **Why not one shared service:** it is possible, with Gotenberg's per-stack networks as the precedent. But a tenant bug would leak one person's interests to another, the code that parses hostile content would serve every stack, and the saving is one small container per stack (Gmail triggers' is capped at 256 MB).
@@ -298,8 +298,8 @@ Host-wide in `config.env`, written into each `stack.env` by `up` (the way `TZ` r
 - The service starts a turn only when one of a monitor's schedules fires and there is something to report, within the per-agent daily cap.
 - **Unlike Gmail triggers, agents make these monitors**, not the person. That adds nothing an agent can't already do, and the person sees and deletes every monitor on the page.
 
-**The garden sidecar checklist, item by item:**
-- a `PROFILE_ROUTES` row, the profile in `garden.yml`'s list, and an entry in `LABELS`;
+**The lollo sidecar checklist, item by item:**
+- a `PROFILE_ROUTES` row, the profile in `landing.yml`'s list, and an entry in `LABELS`;
 - `check_watchlist`: a hardened sidecar, mounting only `watchlist-data`, on the `default` network;
 - `watchlist-data` mounted only by it and by `backup`;
 - `NO_PROXY`, with `check_pipelock` requiring it;
@@ -340,7 +340,7 @@ Host-wide in `config.env`, written into each `stack.env` by `up` (the way `TZ` r
    - an executor-made `--once` task with an 8000-character prompt, in `new` and in `default`, reaches the person, gets Lettuce's push, and lets the agent call an HTTP MCP tool;
    - the tokens one report turn costs, with a realistic agent memory and digest.
 1. **The rule first:** the rule 4 exception and the `/watchlist/` bypass reason in CONTRIBUTING, and the `mcp` rule change in lib/README.
-2. **The shared protocol:** move the executor protocol's server side into `garden-common`, generalise the executor's sidecar list. Gmail triggers' and the executor's tests stay green throughout.
+2. **The shared protocol:** move the executor protocol's server side into `lollo-common`, generalise the executor's sidecar list. Gmail triggers' and the executor's tests stay green throughout.
 3. **The service:** fetcher, the five extractors, store, scheduler and reports, health, MCP tools. Offline tests use `httpx.MockTransport` and synthetic fixtures per kind, and cover:
    - address checks: private targets, redirects to them, a name resolving to one;
    - robots.txt, conditional requests and challenge pages;
@@ -350,8 +350,8 @@ Host-wide in `config.env`, written into each `stack.env` by `up` (the way `TZ` r
    - delivered, failed and lost reports;
    - the prompt's size limit.
 4. **The page and the wiring:**
-   - the garden page;
-   - lettucectl: profile, route, checks, volume, backup, the `mcp` group, `NO_PROXY`, `executor_cron`, `executor_wanted` and the config keys;
+   - the lollo page;
+   - lolloctl: profile, route, checks, volume, backup, the `mcp` group, `NO_PROXY`, `executor_cron`, `executor_wanted` and the config keys;
    - the skill, the docs and the diagrams.
 5. **End to end:**
    - Ask an agent for films opening soon at a cinema chain whose list is only in script-loaded JSON, and for "major international news at 9am Monday to Friday".

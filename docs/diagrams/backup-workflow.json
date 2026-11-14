@@ -2,12 +2,12 @@
   "schema_version": 2,
   "diagram_type": "workflow",
   "meta": {
-    "title": "lettucectl backup: one snapshot per stack",
+    "title": "lolloctl backup: one snapshot per stack",
     "output": "docs/diagrams/backup-workflow.html",
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
@@ -15,7 +15,7 @@
     "legend": {
       "entries": {
         "backend": {
-          "label": "lettucectl step"
+          "label": "lolloctl step"
         },
         "security": {
           "label": "Gate or refusal"
@@ -40,7 +40,7 @@
     },
     {
       "id": "cli",
-      "label": "lettucectl on the host"
+      "label": "lolloctl on the host"
     },
     {
       "id": "stack",
@@ -85,11 +85,11 @@
       "lane": "cli",
       "col": 0,
       "type": "external",
-      "label": "lettucectl backup",
+      "label": "lolloctl backup",
       "sublabel": "<name|all> <dir>",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1665,
           "end_line": 1697,
           "label": "cmd_backup"
@@ -101,7 +101,7 @@
       "lane": "copier",
       "col": 0,
       "type": "cloud",
-      "label": "lettuce-backup:local",
+      "label": "lollo-backup:local",
       "sublabel": "Debian slim + rsync",
       "sources": [
         {
@@ -110,7 +110,7 @@
           "end_line": 7
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1699,
           "end_line": 1714,
           "label": "build and run options"
@@ -126,19 +126,19 @@
       "sublabel": "flock -n <dir>/<name>/.lock",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1902,
           "end_line": 1919,
           "label": "one subshell per stack"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1794,
           "end_line": 1827,
           "label": "lock, mounts, excludes"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1829,
           "end_line": 1833,
           "label": "old .partial-* removed"
@@ -155,7 +155,7 @@
       "sublabel": "another backup runs",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1801,
           "end_line": 1803,
           "label": "flock -n"
@@ -171,12 +171,12 @@
       "sublabel": "--pause, --live or ask",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1834,
           "end_line": 1838
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1759,
           "end_line": 1777,
           "label": "backup_choice"
@@ -192,7 +192,7 @@
       "sublabel": "aborted, nothing copied",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1767,
           "end_line": 1776,
           "label": "no --pause, --live or answer"
@@ -208,13 +208,13 @@
       "sublabel": "trap unpauses on exit",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1839,
           "end_line": 1846,
           "label": "trap, then pause"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1879,
           "label": "subshell exit"
         }
@@ -230,19 +230,19 @@
       "tag": "no network, read-only root",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1678,
           "end_line": 1682,
           "label": "BACKUP_RUN"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1711,
           "end_line": 1736,
           "label": "BACKUP_COPY"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1854,
           "end_line": 1858
         }
@@ -257,7 +257,7 @@
       "sublabel": "hard links to previous",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1855,
           "end_line": 1858,
           "label": "prev snapshot, partial name"
@@ -273,12 +273,12 @@
       "sublabel": "renamed when complete",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1859,
           "label": "mv"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1701,
           "end_line": 1702,
           "label": "UTC timestamp names"
@@ -294,13 +294,13 @@
       "sublabel": "oldest snapshots go",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1779,
           "end_line": 1790,
           "label": "backup_prune"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1862,
           "end_line": 1863
         }

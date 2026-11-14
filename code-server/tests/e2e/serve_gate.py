@@ -11,7 +11,7 @@ import time
 import jwt
 import uvicorn
 from cryptography.hazmat.primitives.asymmetric import rsa
-from garden_common.auth import JWT_HEADER, Authenticator
+from lollo_common.auth import JWT_HEADER, Authenticator
 
 from code_server_gate.app import create_app, editor_client, unix_socket_connect
 from code_server_gate.config import Settings

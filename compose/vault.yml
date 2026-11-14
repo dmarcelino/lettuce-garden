@@ -1,38 +1,38 @@
-# Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
+# Merged by lolloctl on top of upstream/docker/compose.yml for every stack.
 # The vault (vault/, docs/vault.md): each person's personal data,
 # encrypted with their passphrase, shared with agents only when they agree.
-# Opt-in behind the `garden-vault` profile; without it this file adds nothing.
+# Opt-in behind the `lollo-vault` profile; without it this file adds nothing.
 #
-# Agents reach it at http://garden-vault:8000/mcp over the stack network, and
-# the tunnel forwards https://<name>-garden.<domain>/vault/ to it
+# Agents reach it at http://lollo-vault:8000/mcp over the stack network, and
+# the tunnel forwards https://<name>-lollo.<domain>/vault/ to it
 # (cf_tunnel_configure). That reachability is not the control: approving, and
-# every page of the UI, needs a Cloudflare Access JWT of the garden's own Access
+# every page of the UI, needs a Cloudflare Access JWT of the lollo's own Access
 # application, which agents cannot forge. Lettuce's JWT, which cloudflared hands
 # the BFF in plain HTTP inside the namespace agents share, is for another
-# audience, so the vault refuses it (`lettucectl check` refuses a stack where it
+# audience, so the vault refuses it (`lolloctl check` refuses a stack where it
 # would not).
 #
 # Its data (the encrypted vault file) lives on a named volume that no other
-# service mounts; `lettucectl check` refuses a stack where one does, or
+# service mounts; `lolloctl check` refuses a stack where one does, or
 # where this service loses read_only or cap_drop ALL, gains privileges,
 # capabilities, devices, another service's namespaces or mounts, or a bind mount.
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
-  garden-vault:
-    profiles: ["garden-vault"]
+  lollo-vault:
+    profiles: ["lollo-vault"]
     build:
-      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/vault
-      # The shared package (Access JWT and CSRF checks) both garden images install.
+      context: ${LOLLO_HOME:?LOLLO_HOME is not set}/vault
+      # The shared package (Access JWT and CSRF checks) both lollo images install.
       additional_contexts:
-        garden-common: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden-common
-    image: ${GARDEN_IMAGE_VAULT:-lettuce-vault:local}
+        lollo-common: ${LOLLO_HOME:?LOLLO_HOME is not set}/lollo-common
+    image: ${LOLLO_IMAGE_VAULT:-lollo-vault:local}
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
-      # The garden's own Access application and host, never Lettuce's.
-      CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}
+      # The lollo's own Access application and host, never Lettuce's.
+      CF_ACCESS_AUD: ${CF_LOLLO_AUD:-}
       CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
       ALLOWED_USERS: ${ALLOWED_USERS:-}
-      PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
+      PUBLIC_ORIGIN: ${LOLLO_ORIGIN:-}
       VAULT_VAPID_PUBLIC_KEY: ${VAULT_VAPID_PUBLIC_KEY:-}
       VAULT_VAPID_PRIVATE_KEY: ${VAULT_VAPID_PRIVATE_KEY:-}
       PUSH_VAPID_CONTACT_EMAIL: ${PUSH_VAPID_CONTACT_EMAIL:-}
@@ -50,7 +50,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  # Deleted by `lettucectl remove` (compose down -v): removing a stack deletes
-  # its vault. Not under stacks/<name>/; `lettucectl backup` copies it from a
+  # Deleted by `lolloctl remove` (compose down -v): removing a stack deletes
+  # its vault. Not under stacks/<name>/; `lolloctl backup` copies it from a
   # one-off container that mounts it read-only.
   vault-data:

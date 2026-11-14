@@ -42,7 +42,7 @@ def test_every_route_needs_a_valid_access_jwt(browser, editor, signing_key, othe
         value = make_jwt(signing_key, **token)
     else:
         value = token
-    for path in [f"{P}/", f"{P}/{COMMIT}/static/x.js", f"{P}/garden.css", f"{P}/icon-192.png"]:
+    for path in [f"{P}/", f"{P}/{COMMIT}/static/x.js", f"{P}/lollo.css", f"{P}/icon-192.png"]:
         r = browser.get(path, headers={"cf-access-jwt-assertion": value})
         assert r.status_code == 403, path
     r = browser.post(f"{P}/mint-key", headers={"cf-access-jwt-assertion": value})
@@ -68,8 +68,8 @@ def test_the_prefix_is_stripped_and_the_path_kept_as_sent(browser, editor):
     browser.get(f"{P}/?folder=/work/agent-1")
     browser.get(f"{P}/vscode-remote-resource?path=/work/a%20b/c%2Fd.png&tkn=1", headers=IMAGE)
     assert [str(r.url) for r in editor.requests] == [
-        "http://garden-code-server-editor/?folder=/work/agent-1",
-        "http://garden-code-server-editor/vscode-remote-resource?path=/work/a%20b/c%2Fd.png&tkn=1",
+        "http://lollo-code-server-editor/?folder=/work/agent-1",
+        "http://lollo-code-server-editor/vscode-remote-resource?path=/work/a%20b/c%2Fd.png&tkn=1",
     ]
 
 
@@ -93,7 +93,7 @@ def test_only_listed_request_headers_reach_the_editor(browser, editor):
         assert name not in sent, name
     assert sent["accept-language"] == "pt-PT" and sent["if-none-match"] == '"etag-1"'
     # code-server checks WebSocket origins against this host.
-    assert sent["x-forwarded-host"] == "alfred-garden.example.com"
+    assert sent["x-forwarded-host"] == "alfred-lollo.example.com"
 
 
 def test_only_listed_response_headers_reach_the_browser(browser, editor):
@@ -133,7 +133,7 @@ def test_only_listed_response_headers_reach_the_browser(browser, editor):
         ("./?folder=%2Fwork", "./?folder=%2Fwork"),
         ("login", "login"),
         (f"{ORIGIN}/?folder=x", f"{ORIGIN}{P}/?folder=x"),
-        ("http://garden-code-server-editor/x", f"{ORIGIN}{P}/x"),
+        ("http://lollo-code-server-editor/x", f"{ORIGIN}{P}/x"),
         (f"{ORIGIN}{P}/ok", f"{ORIGIN}{P}/ok"),
         ("https://example.org/elsewhere", "https://example.org/elsewhere"),
     ],
@@ -264,22 +264,22 @@ def test_an_editor_that_is_down_gets_a_page_not_a_crash(browser, editor):
     assert r.headers["cache-control"] == "no-store"
 
 
-def test_the_gate_serves_its_own_assets_and_not_the_garden_landing_page(browser, editor):
+def test_the_gate_serves_its_own_assets_and_not_the_lollo_landing_page(browser, editor):
     assert P == "/code-server"
-    for path in ("/", "/garden", "/garden/"):
+    for path in ("/", "/lollo", "/lollo/"):
         assert browser.get(path).status_code == 404, path
-    css = browser.get(f"{P}/garden.css", headers={"sec-fetch-dest": "style"})
+    css = browser.get(f"{P}/lollo.css", headers={"sec-fetch-dest": "style"})
     assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
     icon = browser.get(f"{P}/icon-192.png", headers={"sec-fetch-dest": "image"})
     assert icon.status_code == 302 and icon.headers["location"].startswith(f"{P}/_static/")
     assert editor.requests == []
 
 
-def test_the_gates_own_pages_link_to_the_garden_root(browser, editor):
+def test_the_gates_own_pages_link_to_the_lollo_root(browser, editor):
     editor.down = True
     r = browser.get(f"{P}/")
-    assert 'href="/">Lettuce Garden</a>' in r.text and f'href="{P}/garden.css"' in r.text
-    assert "/garden/" not in r.text
+    assert 'href="/">Lollo Rozzo</a>' in r.text and f'href="{P}/lollo.css"' in r.text
+    assert "/lollo/" not in r.text
     assert r.headers["cross-origin-opener-policy"] == "same-origin"
 
 
@@ -288,15 +288,15 @@ def test_settings_from_the_environment():
         "CF_ACCESS_TEAM_DOMAIN": "team1",
         "CF_ACCESS_AUD": "aud1",
         "ALLOWED_USERS": "Alfred@Gmail.com, hal@example.com",
-        "PUBLIC_ORIGIN": "https://alfred-garden.example.com/",
+        "PUBLIC_ORIGIN": "https://alfred-lollo.example.com/",
     }
     s = Settings.from_env(base)
     assert s.allowed_users == {"alfred@gmail.com", "hal@example.com"}
-    assert s.public_origin == ORIGIN and s.public_host == "alfred-garden.example.com"
-    assert not hasattr(s, "garden_profiles")
-    assert s.upstream == "http://garden-code-server-editor"
+    assert s.public_origin == ORIGIN and s.public_host == "alfred-lollo.example.com"
+    assert not hasattr(s, "lollo_profiles")
+    assert s.upstream == "http://lollo-code-server-editor"
     for broken in (
-        {"PUBLIC_ORIGIN": "http://alfred-garden.example.com"},
+        {"PUBLIC_ORIGIN": "http://alfred-lollo.example.com"},
         {"PUBLIC_ORIGIN": f"{ORIGIN}/x"},
         {"ALLOWED_USERS": ""},
     ):
@@ -326,11 +326,11 @@ def test_a_websocket_is_relayed_both_ways(settings, authenticator, editor, signi
             ws.send_text("text")
             assert ws.receive_text() == "text"
     peer = editor.sockets[0]
-    assert peer.url == "ws://garden-code-server-editor/?reconnectionToken=abc&skipWebSocketFrames=false"
+    assert peer.url == "ws://lollo-code-server-editor/?reconnectionToken=abc&skipWebSocketFrames=false"
     assert peer.received == [b"\x00\x01binary", "text"]
     sent = dict(peer.headers)
     assert "cookie" not in sent and "cf-access-jwt-assertion" not in sent
-    assert sent["origin"] == ORIGIN and sent["x-forwarded-host"] == "alfred-garden.example.com"
+    assert sent["origin"] == ORIGIN and sent["x-forwarded-host"] == "alfred-lollo.example.com"
     assert peer.closed
 
 
@@ -340,7 +340,7 @@ def test_a_websocket_is_relayed_both_ways(settings, authenticator, editor, signi
         {"cf-access-jwt-assertion": None},
         {"cf-access-jwt-assertion": "garbage"},
         {"origin": "https://evil.example.org"},
-        {"origin": "https://alfred-garden.example.com:8443"},
+        {"origin": "https://alfred-lollo.example.com:8443"},
         {"origin": None},
     ],
 )

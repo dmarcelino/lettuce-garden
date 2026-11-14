@@ -995,15 +995,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
 
         <!-- Participants -->
-        <g id="node-you" data-node-id="you" data-node-label="You" tabindex="0" role="button" aria-label="Focus You, &lt;garden&gt;/gmail-triggers/, Sequence participant" aria-pressed="false" data-node-kind="external" data-node-sublabel="&lt;garden&gt;/gmail-triggers/" data-node-context="Sequence participant">
-          <title>You · &lt;garden&gt;/gmail-triggers/ · Sequence participant</title>
+        <g id="node-you" data-node-id="you" data-node-label="You" tabindex="0" role="button" aria-label="Focus You, &lt;lollo&gt;/gmail-triggers/, Sequence participant" aria-pressed="false" data-node-kind="external" data-node-sublabel="&lt;lollo&gt;/gmail-triggers/" data-node-context="Sequence participant">
+          <title>You · &lt;lollo&gt;/gmail-triggers/ · Sequence participant</title>
           <rect x="62" y="72" width="111" height="60" rx="6" class="c-mask"/>
           <rect x="62" y="72" width="111" height="60" rx="6" class="c-external" data-animate="node" style="--step: 0; --flow-node-name: archify-relay-node-0;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="person" class="semantic-sigil s-external" transform="translate(68 78) scale(0.6875)">
             <circle cx="8" cy="4.5" r="2.5"/><path d="M3 14v-2a5 5 0 0 1 10 0v2"/>
           </g>
           <text data-node-label="" x="117.5" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">You</text>
-          <text x="117.5" y="122" class="t-muted" font-size="7" text-anchor="middle">&lt;garden&gt;/gmail-triggers/</text>
+          <text x="117.5" y="122" class="t-muted" font-size="7" text-anchor="middle">&lt;lollo&gt;/gmail-triggers/</text>
         </g>
 
         <g id="node-gmail" data-node-id="gmail" data-node-label="Gmail" tabindex="0" role="button" aria-label="Focus Gmail, your account, Sequence participant" aria-pressed="false" data-node-kind="external" data-node-sublabel="your account" data-node-context="Sequence participant">
@@ -1029,14 +1029,14 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <text x="405.1" y="122" class="t-muted" font-size="7" text-anchor="middle">your rules</text>
         </g>
 
-        <g id="node-executor" data-node-id="executor" data-node-label="Garden executor" tabindex="0" role="button" aria-label="Focus Garden executor, every minute, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="every minute" data-node-context="Sequence participant">
-          <title>Garden executor · every minute · Sequence participant</title>
+        <g id="node-executor" data-node-id="executor" data-node-label="Lollo executor" tabindex="0" role="button" aria-label="Focus Lollo executor, every minute, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="every minute" data-node-context="Sequence participant">
+          <title>Lollo executor · every minute · Sequence participant</title>
           <rect x="493.4000000000001" y="72" width="111" height="60" rx="6" class="c-mask"/>
           <rect x="493.4000000000001" y="72" width="111" height="60" rx="6" class="c-backend" data-animate="node" style="--step: 3; --flow-node-name: archify-relay-node-3;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(499.4000000000001 78) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="548.9000000000001" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Garden executor</text>
+          <text data-node-label="" x="548.9000000000001" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Lollo executor</text>
           <text x="548.9000000000001" y="122" class="t-muted" font-size="7" text-anchor="middle">every minute</text>
         </g>
 

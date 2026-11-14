@@ -7,8 +7,8 @@ import pytest
 from conftest import AGENT, EVENTS_JSON, NAVIGATE, ORIGIN, TOKEN, json_spec, make_jwt
 from starlette.testclient import TestClient
 
-from garden_news_radar.app import create_app
-from garden_news_radar.store import Agent
+from lollo_news_radar.app import create_app
+from lollo_news_radar.store import Agent
 
 B = "/news-radar"
 AUTH = {"authorization": f"Bearer {TOKEN}"}
@@ -28,7 +28,7 @@ def client(app, signing_key):
 
 @pytest.fixture
 def internal(app):
-    with TestClient(app, base_url="http://garden-news-radar:8000", follow_redirects=False) as c:
+    with TestClient(app, base_url="http://lollo-news-radar:8000", follow_redirects=False) as c:
         yield c
 
 
@@ -109,7 +109,7 @@ def test_mcp_refuses_browsers_and_the_tunnel_host(service, authenticator):
     body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
     headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
     with TestClient(
-        create_app(service, authenticator, TOKEN, run_loops=False), base_url="http://garden-news-radar:8000"
+        create_app(service, authenticator, TOKEN, run_loops=False), base_url="http://lollo-news-radar:8000"
     ) as c:
         ok = c.post("/mcp", json=body, headers=headers)
         assert ok.status_code == 200
@@ -185,7 +185,7 @@ def test_the_tools_offer_set_up_in_drafts_and_any_conversation(service, authenti
     body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
     headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
     with TestClient(
-        create_app(service, authenticator, TOKEN, run_loops=False), base_url="http://garden-news-radar:8000"
+        create_app(service, authenticator, TOKEN, run_loops=False), base_url="http://lollo-news-radar:8000"
     ) as c:
         tools = {t["name"]: t for t in c.post("/mcp", json=body, headers=headers).json()["result"]["tools"]}
     put = tools["monitor_put"]["inputSchema"]["properties"]

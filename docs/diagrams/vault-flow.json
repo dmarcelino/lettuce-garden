@@ -7,7 +7,7 @@
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "55e9049d85cf1721d5e0e66b88255e94577cbbb2"
@@ -33,7 +33,7 @@
       "id": "vault",
       "type": "security",
       "label": "Your vault",
-      "sublabel": "<garden>/vault/",
+      "sublabel": "<lollo>/vault/",
       "sources": [
         {
           "path": "docs/vault.md",

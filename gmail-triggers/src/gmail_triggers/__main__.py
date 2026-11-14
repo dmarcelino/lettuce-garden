@@ -7,7 +7,7 @@ import sys
 
 import httpx
 import uvicorn
-from garden_common.auth import Authenticator
+from lollo_common.auth import Authenticator
 
 from . import logs
 from .app import create_app

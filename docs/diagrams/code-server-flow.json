@@ -7,16 +7,16 @@
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "c9d5094283236533ca0c8bdd6b405640ea5dab5a"
     }
   },
   "components": [
-    { "id": "browser", "type": "external", "icon": "person", "label": "Your browser", "sublabel": "<garden>/code-server/", "pos": [40, 150], "size": [140, 62],
+    { "id": "browser", "type": "external", "icon": "person", "label": "Your browser", "sublabel": "<lollo>/code-server/", "pos": [40, 150], "size": [140, 62],
       "sources": [{ "path": "docs/code-server.md", "line": 17, "end_line": 30, "label": "using the editor" }] },
-    { "id": "access", "type": "security", "label": "Cloudflare Access", "sublabel": "the garden's sign-in", "pos": [250, 150], "size": [150, 62],
+    { "id": "access", "type": "security", "label": "Cloudflare Access", "sublabel": "the lollo's sign-in", "pos": [250, 150], "size": [150, 62],
       "sources": [{ "path": "docs/code-server.md", "line": 50, "label": "the gate is the only way in" }] },
     { "id": "gate", "type": "security", "label": "Gate", "sublabel": "checks every request", "pos": [490, 150], "size": [150, 62],
       "sources": [{ "path": "docs/code-server.md", "line": 50, "label": "sign-in on every request" }] },
@@ -44,6 +44,6 @@
   "cards": [
     { "dot": "rose", "title": "One rule", "items": ["Nothing an agent wrote ever runs in the editor", "Never choose \"Trust\" for a folder: the browser remembers it, and the editor can't undo it"] },
     { "dot": "emerald", "title": "The shell is as strong as an agent", "items": ["The agents' tools and the workspaces, nothing else", "No sign-in token, no Google token, no credentials, no way to Lettuce or the vault"] },
-    { "dot": "slate", "title": "What it does not cover", "items": ["A bug in code-server or a kept built-in could still run script in the editor's tab, on the garden's address"] }
+    { "dot": "slate", "title": "What it does not cover", "items": ["A bug in code-server or a kept built-in could still run script in the editor's tab, on the lollo's address"] }
   ]
 }

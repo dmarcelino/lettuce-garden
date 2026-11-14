@@ -96,7 +96,7 @@ def test_every_route_requires_a_valid_access_jwt(client, env, signing_key, other
     else:
         value = token
     headers = {"cf-access-jwt-assertion": value, "origin": ORIGIN}
-    gets = ["/", "/new", f"/r/{rule.id}", f"/r/{rule.id}/history", "/garden.css", "/app.css", "/icon-192.png"]
+    gets = ["/", "/new", f"/r/{rule.id}", f"/r/{rule.id}/history", "/lollo.css", "/app.css", "/icon-192.png"]
     for path in gets:
         r = client.get(B + path, headers=headers)
         assert r.status_code == 403, path
@@ -127,9 +127,9 @@ def test_healthz_is_open_and_root_redirects(client):
     assert r.status_code == 308 and r.headers["location"] == f"{B}/"
 
 
-def test_the_garden_landing_page_is_not_served_here(client):
-    """The garden service owns / on the garden's host; the tunnel never routes it here."""
-    for path in ("/", "/garden", "/garden/"):
+def test_the_lollo_landing_page_is_not_served_here(client):
+    """The landing service owns / on the lollo's host; the tunnel never routes it here."""
+    for path in ("/", "/lollo", "/lollo/"):
         assert client.get(path).status_code == 404, path
 
 
@@ -162,7 +162,7 @@ def test_forms_post_only_from_this_origin(client, env):
 
 def test_stylesheets_and_icons_load_as_subresources_and_everything_carries_coop(client):
     style = {"sec-fetch-mode": "no-cors", "sec-fetch-dest": "style", "sec-fetch-site": "same-origin"}
-    for path in ("/garden.css", "/app.css", "/icon-192.png"):
+    for path in ("/lollo.css", "/app.css", "/icon-192.png"):
         r = client.get(f"{B}{path}", headers=style)
         assert r.status_code == 200, path
         assert r.headers["cross-origin-opener-policy"] == "same-origin", path
@@ -170,11 +170,11 @@ def test_stylesheets_and_icons_load_as_subresources_and_everything_carries_coop(
         assert r.headers["cross-origin-opener-policy"] == "same-origin"
 
 
-def test_pages_live_under_their_prefix_and_link_to_the_garden_root(client):
+def test_pages_live_under_their_prefix_and_link_to_the_lollo_root(client):
     assert B == "/gmail-triggers"
     page = client.get(f"{B}/").text
-    assert 'href="/">Lettuce Garden</a>' in page and f'href="{B}/garden.css"' in page
-    assert "/garden/" not in page
+    assert 'href="/">Lollo Rozzo</a>' in page and f'href="{B}/lollo.css"' in page
+    assert "/lollo/" not in page
 
 
 def test_pages_carry_the_security_headers_and_no_script(client, env):
@@ -186,7 +186,7 @@ def test_pages_carry_the_security_headers_and_no_script(client, env):
         assert "script-src 'none'" in r.headers["content-security-policy"]
         assert r.headers["x-frame-options"] == "DENY"
         assert "<script" not in r.text and "style=" not in r.text
-    css = client.get(f"{B}/garden.css")
+    css = client.get(f"{B}/lollo.css")
     assert css.status_code == 200 and "--accent: #0b1020" in css.text
     icon = client.get(f"{B}/icon-512.png")
     assert icon.headers["content-type"] == "image/png" and icon.content.startswith(b"\x89PNG")
@@ -305,7 +305,7 @@ def test_send_a_test_and_see_it_in_history(client, env):
     page = client.get(r.headers["location"]).text
     assert "Test request sent" in page and "Waiting for Lettuce" in page
     auth = {"authorization": f"Bearer {TOKEN}"}
-    with TestClient(client.app, base_url="http://garden-gmail-triggers:8000") as api:
+    with TestClient(client.app, base_url="http://lollo-gmail-triggers:8000") as api:
         claimed = api.get("/executor/v1/requests", headers=auth).json()["requests"]
         assert [c["id"] for c in claimed] == [req["id"]]
         assert "Sent to Lettuce" in client.get(f"{B}/r/{rule.id}/history").text

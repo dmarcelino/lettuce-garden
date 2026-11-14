@@ -65,7 +65,7 @@ def vault_url():
 
 def run(url, *args, extra_env=None, stdin=None):
     env = {k: v for k, v in os.environ.items() if not k.startswith("VAULT_")}
-    env.update(GARDEN_VAULT_URL=url, **(extra_env or {}))
+    env.update(LOLLO_VAULT_URL=url, **(extra_env or {}))
     return subprocess.run([sys.executable, str(HELPER), *args], env=env, capture_output=True, timeout=30, input=stdin)
 
 
@@ -165,7 +165,7 @@ print("got", len(got), flush=True)
 
 def spawn(url, *command):
     env = {k: v for k, v in os.environ.items() if not k.startswith("VAULT_")}
-    env["GARDEN_VAULT_URL"] = url
+    env["LOLLO_VAULT_URL"] = url
     child = subprocess.Popen(
         [sys.executable, str(HELPER), "good", "--", *command],
         env=env,

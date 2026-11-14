@@ -1,5 +1,5 @@
-# Merged by lettucectl last, after every other compose file, only when the stack has the
-# `garden-pipelock` profile (the `compose` wrapper in lib/common.sh), so without it no
+# Merged by lolloctl last, after every other compose file, only when the stack has the
+# `lollo-pipelock` profile (the `compose` wrapper in lib/common.sh), so without it no
 # container gets a proxy setting. Points the app-server at pipelock (letta-code
 # itself, its calls to the model provider included, and the agents' shells and
 # subagents), and ddg-mcp's searches and page fetches and searxng's queries to
@@ -20,21 +20,21 @@
 #
 # NO_PROXY keeps stack-internal traffic away from pipelock: it refuses private
 # addresses, and it must never see the vault's values (vault), the
-# executor's token (gmail-triggers, news-radar, garden) or the BFF and app-server on
-# localhost. host.docker.internal is a local model server, if any. `lettucectl
+# executor's token (gmail-triggers, news-radar, landing) or the BFF and app-server on
+# localhost. host.docker.internal is a local model server, if any. `lolloctl
 # check` refuses an app-server without the proxy or without the vault,
-# gmail-triggers, news-radar and garden in NO_PROXY. A new service agents call inside the
+# gmail-triggers, news-radar and landing in NO_PROXY. A new service agents call inside the
 # stack goes in this list too, or pipelock refuses its private address.
-# PIPELOCK_DIRECT, which lettucectl always passes with the profile (never from
+# PIPELOCK_DIRECT, which lolloctl always passes with the profile (never from
 # stack.env directly: pipelock_direct checks config.env's and the stack's own
 # lists), appends an install's hosts, such as a model server on the LAN.
 x-proxy: &proxy
-  HTTPS_PROXY: http://garden-pipelock:8888
-  HTTP_PROXY: http://garden-pipelock:8888
-  https_proxy: http://garden-pipelock:8888
-  http_proxy: http://garden-pipelock:8888
-  NO_PROXY: localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-news-radar,garden,searxng,ddg-mcp,google-mcp,gotenberg,host.docker.internal${PIPELOCK_DIRECT:+,${PIPELOCK_DIRECT}}
-  no_proxy: localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-news-radar,garden,searxng,ddg-mcp,google-mcp,gotenberg,host.docker.internal${PIPELOCK_DIRECT:+,${PIPELOCK_DIRECT}}
+  HTTPS_PROXY: http://lollo-pipelock:8888
+  HTTP_PROXY: http://lollo-pipelock:8888
+  https_proxy: http://lollo-pipelock:8888
+  http_proxy: http://lollo-pipelock:8888
+  NO_PROXY: localhost,127.0.0.1,::1,lollo-pipelock,lollo-vault,lollo-gmail-triggers,lollo-news-radar,landing,searxng,ddg-mcp,google-mcp,gotenberg,host.docker.internal${PIPELOCK_DIRECT:+,${PIPELOCK_DIRECT}}
+  no_proxy: localhost,127.0.0.1,::1,lollo-pipelock,lollo-vault,lollo-gmail-triggers,lollo-news-radar,landing,searxng,ddg-mcp,google-mcp,gotenberg,host.docker.internal${PIPELOCK_DIRECT:+,${PIPELOCK_DIRECT}}
 
 services:
   app-server:

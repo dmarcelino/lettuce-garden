@@ -11,7 +11,7 @@
       "supported": true
     }
   },
-  "git.path": "/opt/lettuce-editor/bin/shell-git",
+  "git.path": "/opt/lollo-editor/bin/shell-git",
   "git.autofetch": false,
   "git.useIntegratedAskPass": false,
   "git.terminalAuthentication": false,
@@ -19,7 +19,7 @@
   "git.terminalGitEditor": false,
   "terminal.integrated.profiles.linux": {
     "shell": {
-      "path": "/opt/lettuce-editor/bin/exec-shell",
+      "path": "/opt/lollo-editor/bin/exec-shell",
       "icon": "terminal"
     },
     "bash": null,
@@ -30,7 +30,7 @@
   },
   "terminal.integrated.defaultProfile.linux": "shell",
   "terminal.integrated.automationProfile.linux": {
-    "path": "/opt/lettuce-editor/bin/exec-shell"
+    "path": "/opt/lollo-editor/bin/exec-shell"
   },
   "terminal.integrated.allowInUntrustedWorkspace": true,
   "typescript.disableAutomaticTypeAcquisition": true,

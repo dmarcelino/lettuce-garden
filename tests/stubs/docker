@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Test stub for docker: records the call and answers the few queries lettucectl makes.
-# Settings come from $STUB_ROOT/stub.env, not the environment: lettucectl runs
+# Test stub for docker: records the call and answers the few queries lolloctl makes.
+# Settings come from $STUB_ROOT/stub.env, not the environment: lolloctl runs
 # docker under `env -i`. Tests copy the stubs to $STUB_ROOT/bin.
 STUB_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=/dev/null
@@ -14,8 +14,8 @@ args=" $* "
 # What compose_env passes beside stack.env: the code, the shell's base and, in
 # release mode, the published images' names (the vault's stands for them all).
 [[ $args != *" compose "* ]] ||
-  printf 'docker-env-images LETTUCE_HOME=%s APP_SERVER_IMAGE=%s LETTA_IMAGE_NS=%s GARDEN_IMAGE_VAULT=%s\n' \
-    "${LETTUCE_HOME:-}" "${APP_SERVER_IMAGE:-}" "${LETTA_IMAGE_NS:-}" "${GARDEN_IMAGE_VAULT:-}" >>"$STUB_LOG"
+  printf 'docker-env-images LOLLO_HOME=%s APP_SERVER_IMAGE=%s LETTA_IMAGE_NS=%s LOLLO_IMAGE_VAULT=%s\n' \
+    "${LOLLO_HOME:-}" "${APP_SERVER_IMAGE:-}" "${LETTA_IMAGE_NS:-}" "${LOLLO_IMAGE_VAULT:-}" >>"$STUB_LOG"
 NETS=$STUB_ROOT/networks
 # The document tools' volumes, lines of "<name> <tag label or -> <complete true|false> <in use true|false>
 # [<driver> [<option count>]]" (local and 0 when left out).
@@ -42,7 +42,7 @@ case $args in
       printf '{"Descriptor":{"platform":{"os":"%s","architecture":"%s"}}}\n' "${p%%/*}" "${p#*/}"
     done | jq -s .
     ;;
-  # lettucectl reading its own container's mounts (check_mounts): mounts.json.
+  # lolloctl reading its own container's mounts (check_mounts): mounts.json.
   " inspect --format {{json .Mounts}} "*) cat "$STUB_ROOT/mounts.json" 2>/dev/null || exit 1 ;;
   # Filling a tools volume: a container of the image, never started, copied out.
   " create "*)
@@ -68,7 +68,7 @@ case $args in
     awk -v n="$last" '$1 == n && $4 == "true" { busy = 1 } END { exit busy }' "$VOLS" 2>/dev/null || exit 1
     awk -v n="$last" '$1 != n' "$VOLS" >"$VOLS.tmp" 2>/dev/null && mv "$VOLS.tmp" "$VOLS"
     ;;
-  " volume inspect "*"lettuce-doc-tools-"*)
+  " volume inspect "*"lollo-doc-tools-"*)
     vol=${args##* volume inspect }
     vol=${vol%% *}
     [[ $vol == --format ]] && vol=$last
@@ -79,7 +79,7 @@ case $args in
     exit 0
     ;;
   # Containers left by an interrupted fill: ids in $STUB_ROOT/fill-containers.
-  " ps -aq --filter label=lettucectl.doc-tools=fill "*) cat "$STUB_ROOT/fill-containers" 2>/dev/null ;;
+  " ps -aq --filter label=lolloctl.doc-tools=fill "*) cat "$STUB_ROOT/fill-containers" 2>/dev/null ;;
   # Networks live in $STUB_ROOT/networks, lines of
   # "<name> <stack label or -> <internal true|false> <attached ids, comma-separated or ->".
   " network ls "*)
@@ -122,23 +122,23 @@ case $args in
     awk -v n="$last" '$1 != n' "$NETS" >"$NETS.tmp" 2>/dev/null && mv "$NETS.tmp" "$NETS"
     ;;
   # The shared project (compose_shared): its config from shared-config.json; its
-  # gotenberg exists once `up` ran, as the line "lettuce_shared gotenberg" in
+  # gotenberg exists once `up` ran, as the line "lollo_shared gotenberg" in
   # containers.txt, with the id gotenberg-id.
-  *" -p lettuce_shared "*" config --format json "*) cat "$STUB_ROOT/shared-config.json" 2>/dev/null ;;
-  *" -p lettuce_shared "*" up -d "*)
+  *" -p lollo_shared "*" config --format json "*) cat "$STUB_ROOT/shared-config.json" 2>/dev/null ;;
+  *" -p lollo_shared "*" up -d "*)
     [[ ${STUB_SHARED_UP_RC:-0} == 0 ]] || exit "$STUB_SHARED_UP_RC"
-    grep -qx 'lettuce_shared gotenberg' "$STUB_ROOT/containers.txt" 2>/dev/null ||
-      echo 'lettuce_shared gotenberg' >>"$STUB_ROOT/containers.txt"
+    grep -qx 'lollo_shared gotenberg' "$STUB_ROOT/containers.txt" 2>/dev/null ||
+      echo 'lollo_shared gotenberg' >>"$STUB_ROOT/containers.txt"
     ;;
-  *" -p lettuce_shared "*" down "*)
+  *" -p lollo_shared "*" down "*)
     # Like Docker: a removed container leaves every network it was on.
-    sed -i '/^lettuce_shared gotenberg$/d' "$STUB_ROOT/containers.txt"
+    sed -i '/^lollo_shared gotenberg$/d' "$STUB_ROOT/containers.txt"
     if [[ -f $NETS ]]; then
       awk '{ k = split($4, a, ","); o = ""; for (i = 1; i <= k; i++) if (a[i] != "gotenberg-id" && a[i] != "-") o = o (o ? "," : "") a[i]; $4 = (o ? o : "-") } { print }' "$NETS" >"$NETS.tmp" && mv "$NETS.tmp" "$NETS"
     fi
     ;;
-  *" -p lettuce_shared "*" ps -aq gotenberg "*)
-    grep -qx 'lettuce_shared gotenberg' "$STUB_ROOT/containers.txt" 2>/dev/null && echo gotenberg-id
+  *" -p lollo_shared "*" ps -aq gotenberg "*)
+    grep -qx 'lollo_shared gotenberg' "$STUB_ROOT/containers.txt" 2>/dev/null && echo gotenberg-id
     ;;
   " run "*)
     # Values passed by name (`-e NAME`) go to run-env.log, so tests can tell them
@@ -148,7 +148,7 @@ case $args in
       [[ $prev == -e && $a != *=* ]] && printf '%s=%s\n' "$a" "${!a-}" >>"$STUB_ROOT/run-env.log"
       [[ $prev == -c ]] && printf '%s' "$a" >"$STUB_ROOT/run-script"
       [[ $prev == -v && $a == *:/dst ]] && dst=${a%:/dst}
-      [[ $prev == -v && $a == lettuce-doc-tools-*:/dst* ]] && vol=${a%%:*}
+      [[ $prev == -v && $a == lollo-doc-tools-*:/dst* ]] && vol=${a%%:*}
       [[ $a == .partial-* ]] && out=$a
       prev=$a
     done
@@ -199,7 +199,7 @@ case $args in
       [[ $last == "$v"* ]] && exit 1
     done
     # Like a Compose-built image: it carries the project's labels.
-    echo '{"Env":["NODE_VERSION=22","PATH=/usr/local/bin:/usr/bin:/bin"],"Labels":{"com.docker.compose.project":"lettuce-alfred","com.docker.compose.service":"app-server","org.opencontainers.image.title":"letta-code"}}'
+    echo '{"Env":["NODE_VERSION=22","PATH=/usr/local/bin:/usr/bin:/bin"],"Labels":{"com.docker.compose.project":"lollo-alfred","com.docker.compose.service":"app-server","org.opencontainers.image.title":"letta-code"}}'
     ;;
   *" compose version "*) echo "${STUB_COMPOSE_VERSION:-2.40.3}" ;;
   *" ps -a --filter label=com.docker.compose.project="*)
@@ -272,11 +272,11 @@ case $args in
     done
     printf '%s\n' app-server bff
     IFS=, read -ra ps <<<"$(sed -n 's/^COMPOSE_PROFILES=//p' "$env_file")"
-    # garden: once, with any of the profiles compose/garden.yml gives it.
-    garden=",$(sed -n 's/^ *profiles: *\[\(.*\)\]/\1/p' "$STUB_ROOT/home/compose/garden.yml" | tr -d '" '),"
+    # landing: once, with any of the profiles compose/landing.yml gives it.
+    landing=",$(sed -n 's/^ *profiles: *\[\(.*\)\]/\1/p' "$STUB_ROOT/home/compose/landing.yml" | tr -d '" '),"
     for p in "${ps[@]}"; do
-      if [[ $garden == *",$p,"* ]]; then
-        echo garden
+      if [[ $landing == *",$p,"* ]]; then
+        echo landing
         break
       fi
     done
@@ -286,12 +286,12 @@ case $args in
         google) echo google-mcp ;;
         telegram) echo channel-gateway ;;
         cloudflared) echo cloudflared ;;
-        garden-vault) echo garden-vault ;;
-        garden-gmail-triggers) echo garden-gmail-triggers ;;
-        garden-news-radar) echo garden-news-radar ;;
-        garden-pipelock) echo garden-pipelock ;;
-        garden-code-server) printf '%s\n' garden-code-server garden-code-server-editor garden-code-server-exec ;;
-        garden-doc-tools) ;;
+        lollo-vault) echo lollo-vault ;;
+        lollo-gmail-triggers) echo lollo-gmail-triggers ;;
+        lollo-news-radar) echo lollo-news-radar ;;
+        lollo-pipelock) echo lollo-pipelock ;;
+        lollo-code-server) printf '%s\n' lollo-code-server lollo-code-server-editor lollo-code-server-exec ;;
+        lollo-doc-tools) ;;
       esac
     done
     ;;

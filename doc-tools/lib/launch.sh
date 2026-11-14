@@ -7,7 +7,7 @@
 # HOME and the caches move to /tmp: `letta mcp` sets HOME to Lettuce's
 # mcp-home, which these tools must not write into.
 # shellcheck disable=SC2034 # used by the launchers that source this
-DOC_TOOLS=/opt/lettuce-doc-tools
+DOC_TOOLS=/opt/lollo-doc-tools
 
 doc_tools_env() {
   # No core files: a crash dump holds document content, and the host's
@@ -29,7 +29,7 @@ doc_tools_env() {
       ;;
   esac
   WORKSPACE=/work/$id
-  base=/tmp/lettuce-doc-tools
+  base=/tmp/lollo-doc-tools
   (umask 077 && mkdir -p "$base/home" "$base/cache" "$base/tmp")
   export HOME="$base/home" XDG_CACHE_HOME="$base/cache" TMPDIR="$base/tmp" WORKSPACE
 }

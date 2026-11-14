@@ -1,0 +1,48 @@
+# Merged by lolloctl on top of upstream/docker/compose.yml for every stack.
+# The landing service (landing/): the landing page at the root of the stack's lollo host,
+# https://<name>-lollo.<domain>/, linking to the lollo pages that are on and,
+# with the code editor, to each agent's workspace by name. On whenever any
+# lollo page profile is (Compose starts a service when any of its profiles is on);
+# without one this file adds nothing.
+#
+# The tunnel forwards / and the landing page's assets on the lollo host to it
+# (cf_tunnel_configure); every page there needs a Cloudflare Access JWT of the
+# lollo's own Access application (CF_LOLLO_AUD), never Lettuce's. The lollo
+# executor lolloctl installs in the app-server sends it the agent list over
+# /executor/v1/ with LOLLO_EXECUTOR_TOKEN; the tunnel never routes that prefix.
+#
+# It keeps the agent list in memory: no volume, no host path, only the default
+# network. `lolloctl check` refuses a stack where it loses its hardening,
+# mounts anything or joins another network.
+# Relative paths resolve against --project-directory (upstream/docker).
+services:
+  landing:
+    profiles: ["lollo-vault", "lollo-gmail-triggers", "lollo-news-radar", "lollo-code-server"]
+    build:
+      context: ${LOLLO_HOME:?LOLLO_HOME is not set}/landing
+      additional_contexts:
+        lollo-common: ${LOLLO_HOME:?LOLLO_HOME is not set}/lollo-common
+    image: ${LOLLO_IMAGE_LANDING:-lollo-landing:local}
+    environment:
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CF_ACCESS_AUD: ${CF_LOLLO_AUD:-}
+      CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
+      ALLOWED_USERS: ${ALLOWED_USERS:-}
+      PUBLIC_ORIGIN: ${LOLLO_ORIGIN:-}
+      # For the links back to Lettuce, on its own host.
+      LETTUCE_ORIGIN: ${PUBLIC_ORIGIN:-}
+      # The landing page links only to the lollo pages that are on (lolloctl
+      # derives the list from COMPOSE_PROFILES).
+      LOLLO_PROFILES: ${LOLLO_PROFILES:-}
+      LOLLO_EXECUTOR_TOKEN: ${LOLLO_EXECUTOR_TOKEN:-}
+      TZ: ${TZ:-UTC}
+    networks:
+      - default
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    pids_limit: 64
+    restart: unless-stopped

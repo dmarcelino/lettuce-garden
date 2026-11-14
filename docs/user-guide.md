@@ -1,11 +1,11 @@
 # Your Lettuce stack
 
-This page is for you if someone runs lettuce-garden and has given you a stack. It covers what you get, how to sign in and where to start. Whoever runs the server is called the *admin* below.
+This page is for you if someone runs lollo-rozzo and has given you a stack. It covers what you get, how to sign in and where to start. Whoever runs the server is called the *admin* below.
 
 ## What you get
 - **Your own agent server.** Letta agents with their own memory, conversations, workspaces and secrets. Nobody else's agents can reach yours, and yours can't reach theirs.
 - **Lettuce**, the web app for talking to your agents, at `https://<name>.<domain>`. It is a PWA: on a phone, add it to the Home Screen.
-- **Your garden** at `https://<name>-garden.<domain>/`, when the admin has turned on any of its pages. Its home page links to each one that is on:
+- **Your lollo** at `https://<name>-lollo.<domain>/`, when the admin has turned on any of its pages. Its home page links to each one that is on:
 
   | Page | What it does | Guide |
   |---|---|---|
@@ -19,7 +19,7 @@ This page is for you if someone runs lettuce-garden and has given you a stack. I
 The admin tells you your exact addresses (`<name>` and `<domain>` above).
 
 ## Signing in
-Open your Lettuce address and sign in with the Google account the admin allowed. The garden uses the same sign-in. You are signed in to each address separately, so the garden may ask once more.
+Open your Lettuce address and sign in with the Google account the admin allowed. The lollo uses the same sign-in. You are signed in to each address separately, so the lollo may ask once more.
 
 If Cloudflare says you may not sign in, or Lettuce says forbidden or unknown user, your email is not on the stack's list yet: ask the admin.
 

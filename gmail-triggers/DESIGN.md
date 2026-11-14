@@ -1,6 +1,6 @@
 # Gmail triggers: implementation plan
 
-Note (2026-10-25): since this plan, the project was renamed Lettuce Garden (it was lettuce-multi-user) and the vault moved from `/secrets/` to `/garden/secrets/`, next to a `/garden/` landing page. Since 2026-10-28 the garden pages live on each stack's own garden address (`https://<name>-garden.<domain>/gmail-triggers/`, garden/DESIGN.md), and the executor is the garden executor (`garden/executor/run.mjs`, with `--gmail-triggers`). The record below is unchanged.
+Note (2026-10-25): since this plan, the vault moved from `/secrets/` to `/lollo/secrets/`, next to a `/lollo/` landing page. Since 2026-10-28 the lollo pages live on each stack's own lollo address (`https://<name>-lollo.<domain>/gmail-triggers/`, landing/DESIGN.md), and the executor is the lollo executor (`landing/executor/run.mjs`, with `--gmail-triggers`). The record below is unchanged.
 
 Status: implemented on `feature/gmail-triggers`, with one change from the design below found in review: **the file spool was replaced by an HTTP API** (see "Revision: no shared spool"). Not yet done: the step 0 spike against a running stack and the step 6 end-to-end test. The executor passes letta's flags as `--name=<value>` (not `--name <value>`): letta-code parses them with strict `parseArgs`, which misreads a value starting with `-`.
 
@@ -10,20 +10,20 @@ Let each person on a stack say, from a web page and without any technical knowle
 "when an email arrives in label X (optionally only from these senders), ask agent Y to do Z".
 Polling Gmail costs no model turns; a turn happens only when a rule matches.
 
-Everything ships in lettuce-garden. Upstream Lettuce and letta-code are not changed.
+Everything ships in lollo-rozzo. Upstream Lettuce and letta-code are not changed.
 
-It is the first **garden sidecar**: an opt-in service with its own page at
-`https://<stack>/garden/<sidecar>/`, here `https://<stack>/garden/gmail-triggers/`.
+It is the first **lollo sidecar**: an opt-in service with its own page under a per-sidecar
+path on Lettuce's host (the lollo pages have since moved to their own host, landing/DESIGN.md).
 The vault keeps `/secrets/` (moving it is out of scope).
 
 ## How it works
 
 ```
  browser --tunnel--> gmail-triggers:8000 (stack network)          app-server container
- (Access)            /garden/gmail-triggers/  pages               (agents run here as root)
+ (Access)            /lollo/gmail-triggers/  pages               (agents run here as root)
                      Gmail poller
                      rules + pending requests:                     executor (system cron, every minute)
-                       $LETTA_STATE_DIR/garden/gmail-triggers  <--- GET /executor/v1/requests (token)
+                       $LETTA_STATE_DIR/lollo/gmail-triggers  <--- GET /executor/v1/requests (token)
                      /executor/v1/ (never routed by the tunnel) <--- results, agents, heartbeat
                                                                     |
                                                                     +-- letta cron add --once --> task file
@@ -54,20 +54,20 @@ the executor fetches and letta-code's own CLI turns into a scheduled task.
 ## Revision: no shared spool
 
 The first implementation shared a spool directory: the sidecar bind-mounted
-`$LETTA_STATE_DIR/letta-home/garden/gmail-triggers/spool`, which the app-server sees under
+`$LETTA_STATE_DIR/letta-home/lollo/gmail-triggers/spool`, which the app-server sees under
 `/root/.letta`. Review found that every path component below `letta-home` is writable by agents, so
 an agent could replace one with a symlink, and Docker follows it **on the host** the next time the
 container starts. The sidecar (uid 0, writes anything root owns) would then have any host directory
 mounted, `/run` and its `docker.sock` included. A startup check can't close that race, because the
-container restarts without lettucectl.
+container restarts without lolloctl.
 
 So the two sides now share no directory:
 - Pending requests are rows in the sidecar's SQLite, written in the poll's transaction (which also
   removes the "crash between commit and file write" case).
 - The executor talks to the sidecar over the stack network on `/executor/v1/`, outside
-  `/garden/gmail-triggers`, so the tunnel never routes it. A per-stack bearer token
+  `/lollo/gmail-triggers`, so the tunnel never routes it. A per-stack bearer token
   (`GMAIL_TRIGGERS_EXECUTOR_TOKEN`, generated once into `stack.env`, installed for the executor as
-  `/root/.letta/garden/gmail-triggers/token`) keeps out the other containers on the network.
+  `/root/.letta/lollo/gmail-triggers/token`) keeps out the other containers on the network.
   Agents can read it; with it they can do what they could with the spool (read, claim or drop
   requests, forge results) and nothing more.
 - A claimed request is never offered again: a lost turn beats a duplicate one.
@@ -78,7 +78,7 @@ So the two sides now share no directory:
 A second code review then changed:
 - The cron line runs `node` through upstream's `/usr/local/bin/agent-env` (its documented way to
   give cron jobs PID 1's environment), so the executor no longer reads `/proc/1/environ`.
-- The executor token moved to `/etc/lettuce-garden/gmail-triggers-token` in the app-server's
+- The executor token moved to `/etc/lollo-rozzo/gmail-triggers-token` in the app-server's
   container layer: nothing secret goes under `state/`, and `up` reinstalls it after every recreate.
 - The installer replaces its two files atomically, without a manifest.
 - A failed install no longer stops `up`/`profiles` in the middle, and `profiles` re-syncs the
@@ -100,7 +100,7 @@ Against upstream Lettuce's `AGENTS.md` (main):
 | **Exactly one upstream WebSocket, owned by the BFF.** A closing connection kills its in-flight turns, and the scheduler is bound to the connection that attaches first | No new connection. Tasks are created through the CLI, and the scheduler fires them on the BFF's connection |
 | **Upstream is not ours to patch** | Only published interfaces: the `letta cron` CLI and the system-cron directory the image's entrypoint already loads |
 | **All durable state under `LETTA_STATE_DIR`** (one `tar` backs up a stack) | Rules and spool both live under the stack's state directory |
-| **Never recreate `app-server` on its own** | The app-server's compose config doesn't change; the executor is installed with `compose exec`. lettucectl still brings up whole stacks only |
+| **Never recreate `app-server` on its own** | The app-server's compose config doesn't change; the executor is installed with `compose exec`. lolloctl still brings up whole stacks only |
 | `google-creds` / `google-policy` are kept away from other services | **Deliberate exception:** `gmail-triggers` mounts both read-only. The alternative is its own Google consent (see Decisions) |
 
 ## This repo's rules, checked
@@ -111,15 +111,15 @@ Against CLAUDE.md's "Relationship to upstream":
 |---|---|
 | **No second way into an agent**: no sidecar opens a connection or starts a turn; `compose exec` for files and read-only CLI calls is the limit | **Breaks the "starts a turn" part on purpose**: starting turns is the feature. Covered by a narrow, written exception (below) |
 | **Plug in only through supported seams**, or name the dependency so an upgrade checks it | The `letta cron add` CLI and `/root/.letta/system-cron` are not seams. Both get named under "Named today" |
-| A route that bypasses the BFF needs a written reason | `/garden/gmail-triggers/` gets one (below) |
-| **Don't write into what Lettuce manages**; own a namespace | The executor and spool live in `/root/.letta/garden/gmail-triggers`, which we own. Its cron file starts with `lettuce-garden-`. Tasks are created through letta-code's own CLI, never by editing its task file |
+| A route that bypasses the BFF needs a written reason | `/lollo/gmail-triggers/` gets one (below) |
+| **Don't write into what Lettuce manages**; own a namespace | The executor and spool live in `/root/.letta/lollo/gmail-triggers`, which we own. Its cron file starts with `lollo-rozzo-`. Tasks are created through letta-code's own CLI, never by editing its task file |
 | **Overlays restrict, never redefine** | The overlay only adds a service; `app-server` is untouched |
 | **Nothing secret under `stacks/<name>/state/`** | Rules and spool hold labels, addresses, prompts and message ids, not credentials. The Google token stays in its named volume |
 | `NET_RAW` dropped in the app-server's network namespace | Not affected: nothing joins that namespace |
 
 **The exception**, worded for CLAUDE.md:
 
-> **No second way into an agent.** ... The one exception is a garden sidecar starting a turn
+> **No second way into an agent.** ... The one exception is a lollo sidecar starting a turn
 > through letta-code's own scheduler. It does this by handing a request to an executor in the
 > app-server, which runs `letta cron add --once`. It opens no connection, and the scheduler
 > fires the task on the BFF's connection. It gives agents nothing new, since they can already
@@ -128,7 +128,7 @@ Against CLAUDE.md's "Relationship to upstream":
 
 **The route's reason**, worded for CLAUDE.md:
 
-> `/garden/gmail-triggers/` (its own UI and Access check) bypasses the BFF because the rules
+> `/lollo/gmail-triggers/` (its own UI and Access check) bypasses the BFF because the rules
 > must live where agents can't edit them. Inside Lettuce, agents could.
 
 **Named dependencies**, added under "Named today":
@@ -154,11 +154,11 @@ connection could therefore end up owning scheduled turns that are not even its o
 - **The executor runs inside the app-server container** because that's where the `letta` CLI
   and the task file are. It gives nothing new to agents: they're root in that container and
   can already run `letta cron add` for any agent.
-- **Rules live where agents can't reach them.** `$LETTA_STATE_DIR/garden/gmail-triggers` is
+- **Rules live where agents can't reach them.** `$LETTA_STATE_DIR/lollo/gmail-triggers` is
   not under any app-server mount, so agents can't add, change or read rules. That's the
   safety net the filters exist for.
-- **The spool is where agents can reach it**: `$LETTA_STATE_DIR/letta-home/garden/gmail-triggers/spool`,
-  which the app-server sees as `/root/.letta/garden/gmail-triggers/spool`. The sidecar mounts only
+- **The spool is where agents can reach it**: `$LETTA_STATE_DIR/letta-home/lollo/gmail-triggers/spool`,
+  which the app-server sees as `/root/.letta/lollo/gmail-triggers/spool`. The sidecar mounts only
   that subdirectory, never the executor next to it, so it can't change code that runs as root in
   the app-server. Agents could add, change or
   drop requests there. Adding one only does what they could already do. Changing or dropping
@@ -186,13 +186,13 @@ connection could therefore end up owning scheduled turns that are not even its o
 | Executor | A small Node script (Node is in the image, as letta-code needs it). It runs `letta` with an argument array (no shell), with the environment of PID 1 (`/proc/1/environ`) so `LETTA_LOCAL_BACKEND_*` match the server | Request text is untrusted; cron jobs get an empty environment |
 | Sidecar user | uid 0 with `cap_drop: [ALL]`, `no-new-privileges`, read-only root filesystem | The state directories are root-owned (the app-server runs as root). Without `CAP_DAC_OVERRIDE`, root can write only what root owns, and only what is mounted. The vault's named volume lets it run as uid 10001; host paths would need a chown step |
 | Code sharing | Move the vault's Access JWT + CSRF code (`broker/.../auth.py`) into a small shared package used by both images | It's security-critical; two copies would drift |
-| Version tie | The executor records the `letta` CLI's exit status and stderr per request, and the page shows failures. `lettucectl upgrade` docs add a check of `letta cron add` | The CLI's flags are the interface, named in CLAUDE.md's dependency list |
+| Version tie | The executor records the `letta` CLI's exit status and stderr per request, and the page shows failures. `lolloctl upgrade` docs add a check of `letta cron add` | The CLI's flags are the interface, named in CLAUDE.md's dependency list |
 | Starting turns | The one written exception to "no second way into an agent": through letta-code's scheduler only, for rules made on the Access-protected page, within each rule's hourly limit | Starting turns is the feature; this route adds nothing agents can't already do |
 
 ## Look and feel
 
 Lettuce's visual language with the colours reversed. Lettuce has only a dark theme
-(`upstream/web/src/styles.css`, `color-scheme: dark`), so the garden page is light-only.
+(`upstream/web/src/styles.css`, `color-scheme: dark`), so the lollo page is light-only.
 Its filled controls take Lettuce's dark ink with the accent as text, the reverse of Lettuce's
 accent fill with dark text.
 
@@ -206,7 +206,7 @@ Keep from Lettuce:
 
 Tokens (`:root` in the sidecar's CSS):
 
-| Token | Lettuce (dark) | Garden (reversed) |
+| Token | Lettuce (dark) | Lollo (reversed) |
 |---|---|---|
 | `--bg` | #0f1116 | #e7eaf0 |
 | `--surface` | #171a21 | #f6f7fa |
@@ -223,14 +223,14 @@ Tokens (`:root` in the sidecar's CSS):
   as PNGs in Python like the vault's `icons.py` (the vault's CSP forbids data URIs).
 - `theme-color`: #e7eaf0.
 - Check contrast to WCAG AA once the page exists.
-- Put the CSS in the shared package (`garden.css`) so later sidecars, and the vault if
+- Put the CSS in the shared package (`lollo.css`) so later sidecars, and the vault if
   wanted, can use the same file.
 - Borrow upstream's UI gate: phone and desktop mockups before implementing, then a visual
   pass after.
 
 ## Pages
 
-All pages sit under `/garden/gmail-triggers/` and each needs a verified Access JWT. POSTs
+All pages sit under `/lollo/gmail-triggers/` and each needs a verified Access JWT. POSTs
 need CSRF and answer with a 303 redirect, like the vault. The page needs no JavaScript.
 
 - **Triggers**: one row per rule, with an on/off toggle, last run time and outcome, and a
@@ -271,7 +271,7 @@ size-capped bodies:
 
 ## Spool (superseded)
 
-`/spool` in the sidecar, `/root/.letta/garden/gmail-triggers/spool` in the app-server:
+`/spool` in the sidecar, `/root/.letta/lollo/gmail-triggers/spool` in the app-server:
 
 ```
 requests/<uuid>.json   sidecar -> executor: {v:1, id, rule_id, agent_id, conversation: "new"|"default",
@@ -282,17 +282,17 @@ agents.json            executor -> sidecar: [{id, name}] from `letta agents list
 heartbeat              executor -> sidecar: last run time
 ```
 
-The executor itself is `/root/.letta/garden/gmail-triggers/bin/run.mjs` (installed by lettucectl,
+The executor itself is `/root/.letta/lollo/gmail-triggers/bin/run.mjs` (installed by lolloctl,
 manifest-tracked like skills), outside the spool. The cron file is
-`/root/.letta/system-cron/lettuce-garden-gmail-triggers`, copied to
+`/root/.letta/system-cron/lollo-rozzo-gmail-triggers`, copied to
 `/etc/cron.d/` on install. The name has no dot, because cron ignores files with one.
 
 ## Code layout
 
 ```
-garden-common/                 shared Python package (garden_common)
-  src/garden_common/auth.py    moved from broker/src/secret_broker/auth.py
-  src/garden_common/static/garden.css
+lollo-common/                 shared Python package (lollo_common)
+  src/lollo_common/auth.py    moved from broker/src/secret_broker/auth.py
+  src/lollo_common/static/lollo.css
 gmail-triggers/                the sidecar (Python 3.12, Starlette, Jinja2, httpx)
   Dockerfile                   base / test / runtime stages, like broker/Dockerfile
   pyproject.toml               pinned dependencies
@@ -313,7 +313,7 @@ compose/gmail-triggers.yml     the service behind the gmail-triggers profile
 docs/gmail-triggers.md         user guide and security model
 ```
 
-The `garden-common` package reaches both images through Compose `additional_contexts` (and
+The `lollo-common` package reaches both images through Compose `additional_contexts` (and
 `--build-context` in the test script). The vault's import paths change, but its behaviour
 doesn't.
 
@@ -324,8 +324,8 @@ One service, **`gmail-triggers`**:
 - `user: "0"`, `read_only`, `tmpfs: /tmp`, `cap_drop: [ALL]`, `no-new-privileges`, memory and
   pids limits;
 - volumes:
-  - `${LETTA_STATE_DIR}/garden/gmail-triggers:/data`;
-  - `${LETTA_STATE_DIR}/letta-home/garden/gmail-triggers/spool:/spool`;
+  - `${LETTA_STATE_DIR}/lollo/gmail-triggers:/data`;
+  - `${LETTA_STATE_DIR}/letta-home/lollo/gmail-triggers/spool:/spool`;
   - `google-creds:/creds:ro`;
   - `google-policy:/policy:ro`;
 - environment: the Access settings (`CF_ACCESS_*`, `ALLOWED_USERS`, `PUBLIC_ORIGIN`) and `TZ`;
@@ -333,14 +333,14 @@ One service, **`gmail-triggers`**:
 
 Nothing in the overlay touches `app-server`.
 
-## lettucectl changes
+## lolloctl changes
 
 - `compose()` in `lib/common.sh`: add `-f compose/gmail-triggers.yml` after `secrets.yml`.
   Update the CLAUDE.md invariant, which says four compose files.
 - `cf_tunnel_configure` in `lib/cloudflare.sh`: when the profile is on, add
-  `{path: "^/garden/gmail-triggers(/|$)", service: "http://gmail-triggers:8000"}` before
+  `{path: "^/lollo/gmail-triggers(/|$)", service: "http://gmail-triggers:8000"}` before
   the app-server rule. Turn the per-profile routes into one small table (profile -> path,
-  service) so later garden sidecars add a row instead of another `if`.
+  service) so later lollo sidecars add a row instead of another `if`.
 - **Executor install**: after `up` with the profile on, install `gmail-triggers/executor/` and
   the cron file through `compose exec app-server`, the way `SKILLS_INSTALL` streams a tar.
   - Manifest-tracked, so a re-run replaces exactly what it installed.
@@ -354,7 +354,7 @@ Nothing in the overlay touches `app-server`.
   - no `read_only`, or no `cap_drop: [ALL]`;
   - any bind mount other than exactly the two state paths above;
   - `google-creds` or `google-policy` mounted writable;
-  - any service other than `gmail-triggers` mounting `$LETTA_STATE_DIR/garden`;
+  - any service other than `gmail-triggers` mounting `$LETTA_STATE_DIR/lollo`;
   - `google-creds` mounted by anything other than `bff`, `google-mcp` and `gmail-triggers`.
     This is new and also guards the existing setup.
 
@@ -365,12 +365,12 @@ Nothing in the overlay touches `app-server`.
 
 ## Tests
 
-lettucectl (`tests/run.sh`):
+lolloctl (`tests/run.sh`):
 - Stubs:
   - docker stub: `gmail-triggers) echo gmail-triggers ;;`;
   - a `triggers_config` helper, like `broker_config` / `with_secrets`, that writes a valid
     rendered config.
-- `add` with the profile routes `/garden/gmail-triggers` before the app rule, and only
+- `add` with the profile routes `/lollo/gmail-triggers` before the app rule, and only
   with the profile.
 - `profiles` adding and dropping the profile adds and removes the route on every stack,
   removes the container, and uninstalls the executor.
@@ -426,20 +426,20 @@ executor tests for `gmail-triggers`), and update CLAUDE.md's commands.
 0. **Spike on a dev stack**, by hand, before writing the sidecar. Check the open questions
    below against the pinned letta-code (0.34.9). The CLI and scheduler code was read in a
    newer checkout.
-1. **Shared package**: move `auth.py` into `garden-common`; the vault uses it; vault tests
+1. **Shared package**: move `auth.py` into `lollo-common`; the vault uses it; vault tests
    pass unchanged.
 2. **Sidecar core**: `google.py`, `store.py`, `matcher.py`, `spool.py`, `triggers.py`,
    `poller.py`, and the executor, with their tests.
-3. **Pages and theme**: mockups (phone and desktop) first, then templates, `garden.css`,
+3. **Pages and theme**: mockups (phone and desktop) first, then templates, `lollo.css`,
    icons, and the page tests.
-4. **lettucectl**: overlay, route table, executor install and uninstall,
-   `check_gmail_triggers`, and the lettucectl tests. Run `shellcheck`.
+4. **lolloctl**: overlay, route table, executor install and uninstall,
+   `check_gmail_triggers`, and the lolloctl tests. Run `shellcheck`.
 5. **Docs**:
    - `docs/gmail-triggers.md` (user guide plus security model, including what agents can do
      to the spool);
    - README profile list and `docs/operations.md`;
-   - CLAUDE.md layout, invariants and commands, including the `/garden/<sidecar>` route
-     convention and "garden sidecars never open an app-server connection";
+   - CLAUDE.md layout, invariants and commands, including the per-sidecar route
+     convention and "lollo sidecars never open an app-server connection";
    - CLAUDE.md "Relationship to upstream": the exception, the route's reason and the named
      dependencies, worded as in "This repo's rules, checked". This text lands in the same
      change as the code, never before it.
@@ -468,10 +468,10 @@ executor tests for `gmail-triggers`), and update CLAUDE.md's commands.
 
 ## Not in scope
 
-- Renaming the project, or moving `/secrets/` under `/garden/`.
+- Renaming the project, or moving `/secrets/` under `/lollo/`.
 - Gmail push (Pub/Sub); polling every 2 minutes is enough.
 - Rules that reply, label or archive by themselves; the agent does that, under Settings ->
   Google's permissions.
 - Other mail providers.
 - An upstream change letting the BFF accept triggers itself. It's the cleanest fit for
-  upstream's architecture, but it belongs to Lettuce, not lettuce-garden.
+  upstream's architecture, but it belongs to Lettuce, not lollo-rozzo.

@@ -1,5 +1,5 @@
 # Instance data: never commit. A clone keeps its own in data/ (lib/DESIGN.md);
-# the other entries keep a LETTUCE_DATA pointed at a clone out of commits too.
+# the other entries keep a LOLLO_DATA pointed at a clone out of commits too.
 /data/
 /upstream/
 /config.env
@@ -7,8 +7,8 @@
 /stacks/
 /stacks.conf
 
-# Written by publish.yml for the lettucectl image; in a clone it would switch
-# lettucectl to release mode.
+# Written by publish.yml for the lolloctl image; in a clone it would switch
+# lolloctl to release mode.
 /RELEASE
 
 # Local git worktrees (git worktree add .worktrees/<branch>)

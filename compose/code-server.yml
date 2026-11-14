@@ -1,43 +1,43 @@
-# Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
+# Merged by lolloctl on top of upstream/docker/compose.yml for every stack.
 # The code editor (code-server/README.md; docs/code-server.md for users): VS Code in the browser at
-# https://<name>-garden.<domain>/code-server/, on the agents' workspaces. Opt-in
-# behind the `garden-code-server` profile; without it this file adds nothing.
+# https://<name>-lollo.<domain>/code-server/, on the agents' workspaces. Opt-in
+# behind the `lollo-code-server` profile; without it this file adds nothing.
 #
-# Three services, because the editor shares the garden's origin with the vault
+# Three services, because the editor shares the lollo's origin with the vault
 # and must never run what agents wrote:
-# - garden-code-server, the gate: the tunnel forwards /code-server/ on the garden host
-#   to it. It checks the garden's Access JWT on every request and WebSocket,
+# - lollo-code-server, the gate: the tunnel forwards /code-server/ on the lollo host
+#   to it. It checks the lollo's Access JWT on every request and WebSocket,
 #   strips the prefix and lets only listed headers and pages through. It is the
 #   only one on `default` and the only way in: it reaches the editor through
 #   the editor's Unix socket, on code-server-sock.
-# - garden-code-server-editor: code-server itself, listening on that socket and on no
+# - lollo-code-server-editor: code-server itself, listening on that socket and on no
 #   port, so nothing on a network reaches it, the shell included. Its one
 #   network, code-exec, takes its SSH sessions to the shell. It edits the
 #   workspaces and runs no workspace code: Restricted Mode for good, a pruned
 #   set of built-in extensions, nothing installable, terminals in the shell.
-# - garden-code-server-exec, the shell: the app-server's own image plus an SSH server,
+# - lollo-code-server-exec, the shell: the app-server's own image plus an SSH server,
 #   with the workspaces and the agents' tools mounted as in the app-server. It
 #   is as strong as an agent and holds nothing an agent can't get: no Access
 #   token, no Google token, no credentials. Its only way out is code-egress.
-# `lettucectl check` refuses a stack where any of them loses its networks,
+# `lolloctl check` refuses a stack where any of them loses its networks,
 # mounts or hardening, or another service joins their networks, network
 # namespaces or volumes.
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
-  garden-code-server:
-    profiles: ["garden-code-server"]
+  lollo-code-server:
+    profiles: ["lollo-code-server"]
     build:
-      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/code-server
+      context: ${LOLLO_HOME:?LOLLO_HOME is not set}/code-server
       additional_contexts:
-        garden-common: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden-common
-    image: ${GARDEN_IMAGE_CODE_SERVER:-lettuce-code-server:local}
+        lollo-common: ${LOLLO_HOME:?LOLLO_HOME is not set}/lollo-common
+    image: ${LOLLO_IMAGE_CODE_SERVER:-lollo-code-server:local}
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
-      # The garden's own Access application and host, never Lettuce's.
-      CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}
+      # The lollo's own Access application and host, never Lettuce's.
+      CF_ACCESS_AUD: ${CF_LOLLO_AUD:-}
       CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
       ALLOWED_USERS: ${ALLOWED_USERS:-}
-      PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
+      PUBLIC_ORIGIN: ${LOLLO_ORIGIN:-}
       TZ: ${TZ:-UTC}
     volumes:
       # The editor's socket (code_server_gate.config.EDITOR_SOCKET).
@@ -53,11 +53,11 @@ services:
     pids_limit: 64
     restart: unless-stopped
 
-  garden-code-server-editor:
-    profiles: ["garden-code-server"]
+  lollo-code-server-editor:
+    profiles: ["lollo-code-server"]
     build:
-      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/code-server/editor
-    image: ${GARDEN_IMAGE_CODE_SERVER_EDITOR:-lettuce-code-server-editor:local}
+      context: ${LOLLO_HOME:?LOLLO_HOME is not set}/code-server/editor
+    image: ${LOLLO_IMAGE_CODE_SERVER_EDITOR:-lollo-code-server-editor:local}
     command:
       # A Unix socket, not a port: code-server has no Access check of its own.
       # Mode 666 because the gate runs as nobody; only the two of them mount it.
@@ -72,13 +72,13 @@ services:
       - --disable-update-check
       - --disable-getting-started-override
       - --extensions-dir
-      - /opt/lettuce-editor/no-extensions
+      - /opt/lollo-editor/no-extensions
       - --user-data-dir
       - /data/user
       # The image's own, read-only: code-server would otherwise read (and write)
       # one on code-server-data, where a key could set what check refuses here.
       - --config
-      - /opt/lettuce-editor/config.yaml
+      - /opt/lollo-editor/config.yaml
     environment:
       # An empty gallery: no marketplace, so nothing can be searched or installed.
       EXTENSIONS_GALLERY: "{}"
@@ -108,14 +108,14 @@ services:
       start_interval: 1s
     restart: unless-stopped
 
-  garden-code-server-exec:
-    profiles: ["garden-code-server"]
+  lollo-code-server-exec:
+    profiles: ["lollo-code-server"]
     build:
-      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/code-server/exec
+      context: ${LOLLO_HOME:?LOLLO_HOME is not set}/code-server/exec
       additional_contexts:
-        # The app-server's image, by the name lettucectl passes (app_server_image).
+        # The app-server's image, by the name lolloctl passes (app_server_image).
         # Not service:app-server: building this service would then build the
-        # app-server too, over a pulled image. lettucectl builds the app-server
+        # app-server too, over a pulled image. lolloctl builds the app-server
         # first when it is built on this host (up_stack).
         base: docker-image://${APP_SERVER_IMAGE:?APP_SERVER_IMAGE is not set}
     # One tag for every stack, rebuilt by each stack's `up` (from the build
@@ -125,7 +125,7 @@ services:
     # builds just before it starts the stack, so the tag holds that stack's own
     # variant, and Compose recreates the shell only when its content changes
     # (sshd_config, the app-server's image).
-    image: lettuce-code-server-exec:local
+    image: lollo-code-server-exec:local
     # PID 1 keeps the container's environment for agent-env.
     init: true
     working_dir: /work
@@ -145,7 +145,7 @@ services:
     pids_limit: 4096
     # sshd needs the host key and authorized_keys the editor writes on its first start.
     depends_on:
-      garden-code-server-editor:
+      lollo-code-server-editor:
         condition: service_healthy
     restart: unless-stopped
 

@@ -7,7 +7,7 @@
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
@@ -29,7 +29,7 @@
       ],
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 233,
           "end_line": 245,
           "label": "sync_skills: */SKILL.md, names checked"
@@ -39,7 +39,7 @@
     {
       "id": "ctl",
       "type": "external",
-      "label": "lettucectl skills",
+      "label": "lolloctl skills",
       "sublabel": "sync_skills, per stack",
       "pos": [
         380,
@@ -51,13 +51,13 @@
       ],
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 2016,
           "end_line": 2024,
           "label": "cmd_skills"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 246,
           "end_line": 252,
           "label": "tar into compose exec"
@@ -79,13 +79,13 @@
       ],
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 242,
           "end_line": 243,
           "label": "a shared name is refused"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1838,
           "end_line": 1844,
           "label": "backup skips upstream's"
@@ -107,12 +107,12 @@
       ],
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 242,
           "label": "rewrites its skills on connect"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 706,
           "end_line": 711,
           "label": "renders the mcp-servers skill"
@@ -123,7 +123,7 @@
       "id": "dir",
       "type": "database",
       "label": "/root/.letta/skills",
-      "sublabel": ".lettucectl-skills manifest",
+      "sublabel": ".lolloctl-skills manifest",
       "pos": [
         380,
         230
@@ -134,13 +134,13 @@
       ],
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 212,
           "end_line": 231,
           "label": "SKILLS_INSTALL"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1719,
           "end_line": 1737,
           "label": "backup leaves them out"
@@ -151,7 +151,7 @@
       "id": "docs",
       "type": "backend",
       "label": "office, pdf",
-      "sublabel": "stdio MCP, garden-doc-tools",
+      "sublabel": "stdio MCP, lollo-doc-tools",
       "pos": [
         720,
         230
@@ -256,7 +256,7 @@
     {
       "id": "vault",
       "type": "security",
-      "label": "garden-vault",
+      "label": "lollo-vault",
       "sublabel": "/mcp, /redeem",
       "pos": [
         380,
@@ -268,13 +268,13 @@
       ],
       "sources": [
         {
-          "path": "vault/src/garden_vault/app.py",
+          "path": "vault/src/lollo_vault/app.py",
           "line": 1,
           "end_line": 4,
           "label": "internal /mcp and /redeem"
         },
         {
-          "path": "vault/src/garden_vault/app.py",
+          "path": "vault/src/lollo_vault/app.py",
           "line": 546,
           "end_line": 553,
           "label": "routes"
@@ -284,7 +284,7 @@
     {
       "id": "pipelock",
       "type": "security",
-      "label": "garden-pipelock",
+      "label": "lollo-pipelock",
       "sublabel": ":8888 proxy and /fetch",
       "pos": [
         1000,
@@ -334,7 +334,7 @@
     {
       "id": "news-radar",
       "type": "backend",
-      "label": "garden-news-radar",
+      "label": "lollo-news-radar",
       "sublabel": "/mcp",
       "pos": [
         1280,
@@ -346,7 +346,7 @@
       ],
       "sources": [
         {
-          "path": "news-radar/src/garden_news_radar/app.py",
+          "path": "news-radar/src/lollo_news_radar/app.py",
           "line": 253,
           "end_line": 264,
           "label": "internal /mcp only"
@@ -461,10 +461,10 @@
       "dot": "slate",
       "title": "Each skill applies only with its feature",
       "items": [
-        "using-vault-secrets: the vault MCP server (garden-vault profile)",
-        "working-with-documents: office and pdf in Settings -> MCP (garden-doc-tools)",
-        "fetching-web-pages: HTTPS_PROXY pointing at garden-pipelock (garden-pipelock)",
-        "news-radar-sources: News Radar MCP server (garden-news-radar)"
+        "using-vault-secrets: the vault MCP server (lollo-vault profile)",
+        "working-with-documents: office and pdf in Settings -> MCP (lollo-doc-tools)",
+        "fetching-web-pages: HTTPS_PROXY pointing at lollo-pipelock (lollo-pipelock)",
+        "news-radar-sources: News Radar MCP server (lollo-news-radar)"
       ]
     }
   ]

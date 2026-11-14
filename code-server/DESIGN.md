@@ -2,7 +2,7 @@
 
 Note (2026-10-30): door 4 was revisited. The git extension is back: `git.path` is the fixed `bin/shell-git`, which runs every git call over SSH in the shell, the editor image has no git, and the image patches the extension's two trust calls (`requestResourceTrust`, `isResourceTrusted`) to resolve to true, failing the build when they no longer match. The prompt guarded against the repository's config running git's helpers, which now run in the shell, so the editor stays in Restricted Mode with Source Control on. Door 4 and the git row below say so; docs/code-server.md has the security model.
 
-Note (2026-10-28): the editor has since moved to `https://<name>-garden.<domain>/code-server/`, off Lettuce's origin, and the landing page's agent list is server-rendered by the `garden` service (garden/DESIGN.md). The record below is unchanged.
+Note (2026-10-28): the editor has since moved to `https://<name>-lollo.<domain>/code-server/`, off Lettuce's origin, and the landing page's agent list is server-rendered by the `landing` service (landing/DESIGN.md). The record below is unchanged.
 
 Status: implemented on branch `vscode` (2026-10-27), steps 0-5; step 6, a real stack, is still to
 do. The source review below was checked at runtime (step 0, results at the end), which changed two
@@ -17,13 +17,13 @@ mounts (compose/code-server.yml). docs/code-server.md is the user guide and secu
 
 Let each person on a stack open their agents' workspaces in VS Code in the browser, from anywhere,
 without SSH access to the host: browse and edit files, search, diff, and a terminal (git included) with
-the same tools the agents have. It lives at `https://<stack>/garden/code-server/`, next to the other
-garden pages, behind the stack's own Cloudflare Access login.
+the same tools the agents have. It lives at `https://<stack>/lollo/code-server/`, next to the other
+lollo pages, behind the stack's own Cloudflare Access login.
 
-`lettucectl shell` and `toolbox` already do this, but only for the operator, on the host. This is
+`lolloctl shell` and `toolbox` already do this, but only for the operator, on the host. This is
 the person-facing version.
 
-Everything ships in lettuce-garden. Upstream Lettuce and letta-code are not changed.
+Everything ships in lollo-rozzo. Upstream Lettuce and letta-code are not changed.
 
 ## The model: an editor that runs nothing, and a shell next to it
 
@@ -168,7 +168,7 @@ say so, as they do for pipelock.
    as documents, and every other response is served `nosniff` with `Content-Security-Policy:
    sandbox`, so a file route (`/vscode-remote-resource?path=...`) can't serve an agent's HTML or SVG
    as a page on the origin. code-server is kept current: its pin moves with its weekly releases.
-2. **Make the garden pages refuse same-origin script.** This goes in `garden-common`, so the vault,
+2. **Make the lollo pages refuse same-origin script.** This goes in `lollo-common`, so the vault,
    gmail-triggers and the landing page all get it. It also protects them from script that gets into
    Lettuce itself, so it is worth doing on its own and lands first. It relies only on headers
    browsers set and scripts can't change:
@@ -178,9 +178,9 @@ say so, as they do for pipelock.
    - Form posts require `navigate`/`document` and `Sec-Fetch-Site: same-origin`.
    - The vault's own `fetch()` endpoints (the push subscription in `static/app.js`) keep
      `same-origin`/`cors` mode. They still need the form token, which a script now can't read.
-   - Every garden page sends `Cross-Origin-Opener-Policy: same-origin`. The editor's pages must
+   - Every lollo page sends `Cross-Origin-Opener-Policy: same-origin`. The editor's pages must
      not (the gate never adds it): two same-origin documents with different COOP values land in
-     separate browsing context groups, so a garden page the editor's tab opens in a popup is cut off
+     separate browsing context groups, so a lollo page the editor's tab opens in a popup is cut off
      from it.
    - `frame-ancestors 'none'` is already set on both sidecars' pages and stays.
    - A request without `Sec-Fetch-*` headers is refused. Every browser Lettuce supports sends them;
@@ -200,23 +200,23 @@ say so, as they do for pipelock.
 ## How it works
 
 ```
- browser --Access--> tunnel: ^/garden/code-server(/|$) -> code-server:8000
+ browser --Access--> tunnel: ^/lollo/code-server(/|$) -> code-server:8000
                                                    |
-   code-server (the gate; Python, garden-common; networks default + code-editor)
+   code-server (the gate; Python, lollo-common; networks default + code-editor)
      - verifies the Access JWT on every request and every WebSocket upgrade, and closes
        WebSockets when the JWT expires
      - WebSocket upgrades: Origin must be exactly PUBLIC_ORIGIN
-     - strips /garden/code-server, adds it back to redirects
+     - strips /lollo/code-server, adds it back to redirects
      - forwards an allow-list of request headers (never Cookie or cf-access-jwt-assertion)
        and of response headers (never Set-Cookie or COOP; Service-Worker-Allowed narrowed to
        the prefix)
      - lets only the workbench and the webview host load as documents; nosniff and
        CSP sandbox on everything else
-     - serves /garden/ (landing_routes) like the other garden sidecars
+     - serves /lollo/ (landing_routes) like the other lollo sidecars
                                                    |
    network code-editor (internal: the gate and the editor only)
                                                    |
-   code-server-editor:8080   image lettuce-code-server-editor:local (Debian slim, code-server
+   code-server-editor:8080   image lollo-code-server-editor:local (Debian slim, code-server
        |   pruned to the allow-list, ssh client)
        |   --auth none --disable-proxy --disable-telemetry --disable-update-check
        |   --disable-getting-started-override --extensions-dir <empty, read-only>
@@ -229,7 +229,7 @@ say so, as they do for pipelock.
    network code-exec (internal: the editor and the shell only)
        |   terminals: ssh -tt, through agent-env
        |
-   code-server-exec:22   image lettuce-code-server-exec:local (FROM the app-server's image + openssh-server)
+   code-server-exec:22   image lollo-code-server-exec:local (FROM the app-server's image + openssh-server)
        |   /work             <- state/workspaces (rw, as in the app-server)
        |   /opt/agent-tools  <- state/tools (rw, as in the app-server)
        |   /keys             <- volume code-exec-keys (ro)
@@ -244,15 +244,15 @@ say so, as they do for pipelock.
 
 | Topic | Decision | Why |
 |---|---|---|
-| Address | `/garden/code-server/` on the stack's hostname, a `PROFILE_ROUTES` row like the other garden sidecars | One hostname per stack; no new DNS, Access or certificate state |
+| Address | `/lollo/code-server/` on the stack's hostname, a `PROFILE_ROUTES` row like the other lollo sidecars | One hostname per stack; no new DNS, Access or certificate state |
 | Separate hostname | Ruled out | Operator decision |
 | Separate port (`:8443`) | Ruled out after a spike (2026-10-27) | Access let signed-in requests through on 8443 although its docs say it strips the port; the tunnel matches rules without the port, so Lettuce's whole API also answered on 8443, same-origin with the editor. Closing that needs a zone rule that fails open if removed, plus a token permission; some networks block 8443 |
 | Profile | `code-server` | Names what runs; upstream is unlikely to claim it (to confirm, see open questions) |
-| Gate | A garden sidecar (`code-server`, Python, garden-common): JWT check, prefix strip, WebSocket pass-through, header allow-lists, document rules, the `/garden/` landing page | code-server has no Access check and needs a prefix-stripping proxy; the JWT check is the one the vault uses |
+| Gate | A lollo sidecar (`code-server`, Python, lollo-common): JWT check, prefix strip, WebSocket pass-through, header allow-lists, document rules, the `/lollo/` landing page | code-server has no Access check and needs a prefix-stripping proxy; the JWT check is the one the vault uses |
 | Editor | `code-server-editor`, `--auth none`, reachable only from the gate; runs no workspace code (above) | Access is the login; the editor's server process decides what runs on the origin |
 | Shell | `code-server-exec`, an SSH server on the app-server's image; the editor's terminal profiles are an SSH wrapper | Terminals, and git with its hooks, get the agents' toolchain without running in the editor |
 | Terminal | The terminal profile `exec-shell` prints a three-line notice, then runs `ssh -tt` to the shell with `cd -- <dir> && exec agent-env bash -i`. The notice: "Shell with your agents' tools and rights (workspace /work/<agent-id>). / /work and /opt/agent-tools are shared with every agent: never store tokens or passwords here / (no npm/cargo logins, no credentials in config files). Other installs vanish on the next restart." | An SSH session starts with a fresh environment and `/etc/profile` resets `PATH`, so without upstream's `agent-env` (PID 1's environment) the agents' tools aren't on `PATH` and `npm i -g` installs into the container's own layer. `bash -i`, not a login shell, keeps `/etc/profile` from overwriting it. The notice comes from the editor image, so nothing in the shell can change or hide it; sshd shows no motd for a session given a command |
-| SSH keys | The editor's entrypoint creates a client key (on `code-server-data`) and the shell's host key once, and writes the host key and `authorized_keys` to `code-exec-keys`; the shell mounts that read-only. Key login only, no forwarding of any kind | No key passes through lettucectl or `stack.env`; the host key is pinned; the shell never holds the client key |
+| SSH keys | The editor's entrypoint creates a client key (on `code-server-data`) and the shell's host key once, and writes the host key and `authorized_keys` to `code-exec-keys`; the shell mounts that read-only. Key login only, no forwarding of any kind | No key passes through lolloctl or `stack.env`; the host key is pinned; the shell never holds the client key |
 | Networks | `code-editor` (internal; gate and editor), `code-exec` (internal; editor and shell), `code-egress` (shell only), declared in the overlay | Agents reach neither container; the editor reaches nothing but the shell; the shell reaches the internet but not the stack. No upstream service changes |
 | Access token and cookies | The gate never forwards `Cookie`, `cf-access-jwt-assertion` or `Set-Cookie` | The person's token and Lettuce's session cookie never reach the editor; the editor can't set cookies on the origin |
 | Workspace Trust | On, never granted (Restricted Mode); TypeScript allowed in it through `extensions.supportUntrustedWorkspaces`, terminals through `terminal.integrated.allowInUntrustedWorkspace` | Restricted Mode is the only switch for tasks, debugging and workspace terminal settings |
@@ -260,7 +260,7 @@ say so, as they do for pipelock.
 | Settings | The editor's entrypoint merges the fixed settings (trust, the TypeScript override, terminals allowed, terminal profiles, type acquisition off, no schema downloads, no update checks or telemetry) into the user settings on every start; a file that isn't plain JSON is kept aside | The person can change them in the UI; a restart puts them back |
 | Folders | One agent's workspace per window, `/work/<agent-id>`; the docs say never to open `/work` itself | Search and file watching per agent; a slip with "Trust" covers one agent, not all |
 | Extensions | No marketplace; built-in allow-list; nothing installable | Doors 2 and 3 above |
-| Images | `lettuce-code-server:local` (the gate, from `code-server/`), `lettuce-code-server-editor:local` (from `code-server/editor/`: Debian slim, `openssh-client`, `jq`, the release tarball pinned by version and SHA-256 per architecture, pruned to the allow-list) and `lettuce-code-server-exec:local` (from `code-server/exec/`: `FROM` the app-server's image plus `openssh-server`), all built by `compose up --build` like the other sidecars | No image mounts, so no Docker 28 / Compose 2.35 requirement; the shell's base follows upstream's image without restating its tag |
+| Images | `lollo-code-server:local` (the gate, from `code-server/`), `lollo-code-server-editor:local` (from `code-server/editor/`: Debian slim, `openssh-client`, `jq`, the release tarball pinned by version and SHA-256 per architecture, pruned to the allow-list) and `lollo-code-server-exec:local` (from `code-server/exec/`: `FROM` the app-server's image plus `openssh-server`), all built by `compose up --build` like the other sidecars | No image mounts, so no Docker 28 / Compose 2.35 requirement; the shell's base follows upstream's image without restating its tag |
 | User | Editor: uid 0, `cap_drop: [ALL]`, `no-new-privileges`, `read_only`; tmpfs `/tmp`. Shell: root with Docker's default capabilities minus `NET_RAW`, `no-new-privileges`, writable root (so `apt` and `pip` work until the next recreate). Gate: like gmail-triggers, no host paths | Agents write the workspaces as root; without `DAC_OVERRIDE`, the editor edits only what root owns |
 | Editor state | Named volume `code-server-data`, mounted by nothing else; not backed up | Not under `state/`, which agents mount read-write; nothing in it can't be recreated |
 | Agent memory | Not mounted | It's Lettuce's ("don't write into what Lettuce manages"); `shell` stays the way in for it |
@@ -274,7 +274,7 @@ Against CLAUDE.md's "Relationship to upstream":
 
 | Rule | This design |
 |---|---|
-| **No second way into an agent** | No connection to the BFF or app-server; it starts no turn. It is a third feature that bypasses the BFF with its own UI and Access check, so it gets a written reason next to the vault and gmail-triggers, under `/garden/<sidecar>/` as required |
+| **No second way into an agent** | No connection to the BFF or app-server; it starts no turn. It is a third feature that bypasses the BFF with its own UI and Access check, so it gets a written reason next to the vault and gmail-triggers, under its own per-sidecar path as required |
 | **Overlays restrict, never redefine** | Three new services and three new networks; no upstream service changes |
 | **Plug in only through supported seams** | The shell is built `FROM` upstream's app-server image and depends on its layout: Debian with `apt`, `bash`, the image `ENV` that points `PATH`, `NPM_CONFIG_PREFIX`, `CARGO_HOME`, `GOBIN` and the `UV_*` variables at `/opt/agent-tools`, and `/usr/local/bin/agent-env` (its own comment says "Cron only"; the terminal becomes its second user). Named under "Named today" so `upgrade` checks it. The editor depends on nothing of Lettuce's |
 | **Don't write into what Lettuce manages** | Workspaces and tools are written by the person, as with `shell`; settings, the MCP list and memory are not mounted. The editor writes no `.vscode/` folder of its own into a workspace |
@@ -304,9 +304,9 @@ code-server/                  the gate (Python, Starlette, httpx, a WebSocket cl
   exec/                       the shell image
     Dockerfile                FROM the app-server's image + openssh-server
     sshd_config               keys from /keys, root by key only, no forwarding, no environment
-garden-common/src/garden_common/
+lollo-common/src/lollo_common/
   auth.py                     + Fetch Metadata checks
-  (pages)                     + COOP on every garden response
+  (pages)                     + COOP on every lollo response
 compose/
   code-server.yml             services code-server, code-server-editor and code-server-exec
                               (profile code-server), networks code-editor, code-exec and
@@ -319,8 +319,8 @@ docs/
 
 - Always merged, so `stale_services` removes all three containers when the profile is off (as with
   `pipelock`).
-- **`code-server` (the gate):** built from `code-server/` with the `garden-common` context, as
-  gmail-triggers is; environment `CF_ACCESS_*`, `ALLOWED_USERS`, `PUBLIC_ORIGIN`, `GARDEN_PROFILES`;
+- **`code-server` (the gate):** built from `code-server/` with the `lollo-common` context, as
+  gmail-triggers is; environment `CF_ACCESS_*`, `ALLOWED_USERS`, `PUBLIC_ORIGIN`, `LOLLO_PROFILES`;
   networks `default` and `code-editor`; `read_only`, `cap_drop: [ALL]`, no host paths.
 - **`code-server-editor`:** built from `code-server/editor/`; the flags above; volumes
   `state/workspaces:/work`, `code-server-data:/data`, `code-exec-keys:/keys`; networks
@@ -331,7 +331,7 @@ docs/
   `code-exec-keys:/keys:ro`; networks `code-exec` and `code-egress`; `depends_on` the editor (the
   keys exist first).
 
-## lettucectl changes
+## lolloctl changes
 
 - **`check_stack`**, with the profile (`check_code_server`):
   - the gate: `check_sidecar`; networks exactly `default` and `code-editor`.
@@ -352,16 +352,16 @@ docs/
   Whatever the profiles: `code-server-data` is mounted by nothing but `code-server-editor`, and
   `code-exec-keys` by nothing but the editor and (read-only) the shell; no `volumes_from` names one
   of the three services.
-- **Access cookie:** `cf_app_body` is the application as lettucectl defines it, with
+- **Access cookie:** `cf_app_body` is the application as lolloctl defines it, with
   `http_only_cookie_attribute: true` and `same_site_cookie_attribute: lax`; `cf_app_create` posts it
   and `cf_app_update` puts it (a `PUT` replaces the application's settings). `route_stack` applies it
   with the routes, so `profiles` brings every existing stack in line on every run. `check` does not
   read it back: `check` runs offline at every `up`, and enabling the profile goes through `profiles`
   anyway. The token already has "Access: Apps and Policies: Edit".
 - **`compose` wrapper:** `compose/code-server.yml` always, after `compose/pipelock.yml`.
-- **Tunnel:** a `PROFILE_ROUTES` row, `code-server ^/garden/code-server(/|$) http://code-server:8000`.
+- **Tunnel:** a `PROFILE_ROUTES` row, `code-server ^/lollo/code-server(/|$) http://code-server:8000`.
   `add`, `remove` and `profiles` already handle routes.
-- **`/garden/` landing page:** `LABELS` gains `code-server` ("Code editor", "Your agents' files in
+- **`/lollo/` landing page:** `LABELS` gains `code-server` ("Code editor", "Your agents' files in
   VS Code"); `landing_routes` is served by the gate like the other sidecars.
 
 ## Tests
@@ -383,12 +383,12 @@ docs/
   - a document or iframe load of anything but the workbench and the webview host is refused, and
     every other response carries `nosniff` and `CSP: sandbox`; the workbench never gets COOP;
   - streaming bodies both ways; the landing page.
-- **garden-common tests**, run through the vault's and gmail-triggers' suites:
+- **lollo-common tests**, run through the vault's and gmail-triggers' suites:
   - a page `GET` in `cors`/`same-origin`/`no-cors` mode is refused, and so is one with no
     `Sec-Fetch-*` headers; a cross-site navigation (Access re-login) is not;
   - a form post outside `navigate`/`document`/`same-origin` is refused;
   - the vault's push endpoints still work from its own script;
-  - every garden response carries COOP.
+  - every lollo response carries COOP.
 - **Editor image tests** (run by `tests/run-sidecar.sh code-server`, no network): the kept
   built-ins equal the allow-list; no `node`, `npm` or shell profile is found from `PATH` or
   `/etc/shells`; code-server runs from the image; the keys are made once and follow either volume;
@@ -397,7 +397,7 @@ docs/
 - **`scripts/code-server-e2e.sh [--browser]`** (needs Docker and the internet for the first build;
   throwaway containers only): the real images, wired like the overlay. It checks:
   - through the real gate (with a test signing key): the workbench, its scripts and the webview host
-    load under `/garden/code-server/`; the gallery is empty; an agent's HTML file can't load as a
+    load under `/lollo/code-server/`; the gallery is empty; an agent's HTML file can't load as a
     page and loads only sandboxed; `/proxy/1234/` answers 403; no JWT, no editor; a WebSocket
     reaches the editor, and one from `:8443` is refused;
   - over the terminal's SSH session: git and a `pre-commit` hook run in the shell, not the editor;
@@ -417,7 +417,7 @@ docs/
 ## Steps
 
 0. **Spike** at runtime: done (results below).
-1. Garden page hardening in `garden-common` (Fetch Metadata, COOP) and the Access cookie
+1. Lollo page hardening in `lollo-common` (Fetch Metadata, COOP) and the Access cookie
    attributes, with their tests: done.
 2. `code-server/editor/` and `code-server/exec/`, with the editor image tests: done.
 3. The gate (`code-server/`) and its tests: done.
@@ -473,7 +473,7 @@ Run with `scripts/code-server-e2e.sh --browser` on code-server v4.143.1, the app
 - Extensions from a marketplace, or any extension not in the image.
 - A debugger in the editor, and third-party formatters or linters in it (run them in the terminal).
 - Notebooks. (The Markdown preview was added after the spike, pinned to its Strict policy and without the Markdown Editor; docs/code-server.md.)
-- Editing agent memory: `lettucectl shell <name> <agent>`.
+- Editing agent memory: `lolloctl shell <name> <agent>`.
 - Port preview of dev servers run in the terminal.
 - A list of agents by name on the landing page (it needs `letta agents list`; the folder picker
   shows ids).

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Test stub for `dig +short TYPE NAME`: answers from $STUB_ROOT/dns.txt (lines of "name TYPE answer");
 # STUB_DNS_WILDCARD (in stub.env), when set, answers every A query (a wildcard record).
-# Settings come from $STUB_ROOT/stub.env, not the environment: lettucectl runs
+# Settings come from $STUB_ROOT/stub.env, not the environment: lolloctl runs
 # docker under `env -i`. Tests copy the stubs to $STUB_ROOT/bin.
 STUB_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=/dev/null

@@ -1,10 +1,10 @@
 """The gate in front of the code editor (docs/code-server.md).
 
-The editor shares the garden's origin with the vault and Gmail triggers, and
+The editor shares the lollo's origin with the vault and Gmail triggers, and
 has no Access check of its own; it listens only on a Unix socket that only this gate mounts.
 Everything under PREFIX passes this gate, which:
 - needs a verified Access JWT on every request and WebSocket upgrade, this
-  garden's own Origin on every upgrade, and this origin (Sec-Fetch-Site) for
+  lollo's own Origin on every upgrade, and this origin (Sec-Fetch-Site) for
   anything but a read; it closes a WebSocket when its JWT expires;
 - strips PREFIX on the way in and puts it back on redirects;
 - passes only listed headers either way: the editor never sees the person's
@@ -29,8 +29,8 @@ import anyio
 import anyio.abc
 import httpx
 import jwt
-from garden_common.auth import COOP, JWT_HEADER, Authenticator, AuthError
-from garden_common.garden import stylesheet
+from lollo_common.auth import COOP, JWT_HEADER, Authenticator, AuthError
+from lollo_common.lollo import stylesheet
 from jinja2 import Environment, PackageLoader, select_autoescape
 from starlette.applications import Starlette
 from starlette.background import BackgroundTask
@@ -77,7 +77,7 @@ REQUEST_HEADERS = frozenset(
 )
 # What reaches the browser. Never Set-Cookie or Cross-Origin-*-Policy: an
 # opener policy on the workbench would put it in one browsing context group with
-# the garden pages, which set COOP same-origin to be cut off from it.
+# the lollo pages, which set COOP same-origin to be cut off from it.
 RESPONSE_HEADERS = frozenset(
     {
         "accept-ranges",
@@ -178,7 +178,7 @@ def create_app(
     clock: Callable[[], float] = time.time,
 ) -> Starlette:
     env = Environment(loader=PackageLoader("code_server_gate", "templates"), autoescape=select_autoescape(default=True))
-    garden_css = stylesheet()
+    lollo_css = stylesheet()
     upstream = urlsplit(settings.upstream)
     ws_upstream = f"{'wss' if upstream.scheme == 'https' else 'ws'}://{upstream.netloc}"
 
@@ -328,10 +328,10 @@ def create_app(
                 except RuntimeError:
                     pass  # already closed
 
-    async def garden_css_file(request: Request) -> Response:
+    async def lollo_css_file(request: Request) -> Response:
         if refused := await checked(request):
             return refused
-        return Response(garden_css, media_type="text/css", headers={**GATE_HEADERS, "cache-control": "no-cache"})
+        return Response(lollo_css, media_type="text/css", headers={**GATE_HEADERS, "cache-control": "no-cache"})
 
     async def icon(request: Request) -> Response:
         if refused := await checked(request):
@@ -348,7 +348,7 @@ def create_app(
         routes=[
             Route("/healthz", healthz),
             Route(PREFIX, root),
-            Route(PREFIX + "/garden.css", garden_css_file),
+            Route(PREFIX + "/lollo.css", lollo_css_file),
             Route(PREFIX + "/icon-192.png", icon),
             Route(PREFIX + "/{rest:path}", editor, methods=METHODS),
             WebSocketRoute(PREFIX + "/{rest:path}", editor_socket),

@@ -93,7 +93,7 @@ tool's parameters with `$W schema mcp__office__<tool>` before you first use it.
   `-32000` again after the retry), stop. Do not install other tools (LibreOffice,
   python-docx, pandoc and the like) and do not build the file by hand. Tell the person
   the document tools are not working on this stack and that whoever runs it can fix
-  them with `lettucectl restart <stack>`.
+  them with `lolloctl restart <stack>`.
 
 ## Create an Office document
 1. Create it with `office`. Pick a `name` that is not in your workspace yet (`ls` first):

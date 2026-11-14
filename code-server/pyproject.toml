@@ -1,10 +1,10 @@
 [project]
 name = "code-server-gate"
 version = "0.1.0"
-description = "Lettuce Garden sidecar: the Access-checked gate in front of the code editor (code-server)"
+description = "Lollo Rozzo sidecar: the Access-checked gate in front of the code editor (code-server)"
 requires-python = ">=3.12"
-# Pinned: this is an application image, rebuilt on every `lettucectl up`. Shared
-# libraries use the vault's pins. garden-common is installed by the Dockerfile
+# Pinned: this is an application image, rebuilt on every `lolloctl up`. Shared
+# libraries use the vault's pins. lollo-common is installed by the Dockerfile
 # from its build context and deliberately not listed here, so pip never looks
 # for a package of that name on PyPI.
 dependencies = [

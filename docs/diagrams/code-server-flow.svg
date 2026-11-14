@@ -979,19 +979,19 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
 
         <!-- Components -->
-        <g id="node-browser" data-node-id="browser" data-node-label="Your browser" tabindex="0" role="button" aria-label="Focus Your browser, &lt;garden&gt;/code-server/, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="&lt;garden&gt;/code-server/" data-node-context="Architecture component">
-          <title>Your browser · &lt;garden&gt;/code-server/ · Architecture component</title>
+        <g id="node-browser" data-node-id="browser" data-node-label="Your browser" tabindex="0" role="button" aria-label="Focus Your browser, &lt;lollo&gt;/code-server/, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="&lt;lollo&gt;/code-server/" data-node-context="Architecture component">
+          <title>Your browser · &lt;lollo&gt;/code-server/ · Architecture component</title>
           <rect x="40" y="150" width="140" height="62" rx="8" class="c-mask"/>
           <rect x="40" y="150" width="140" height="62" rx="8" class="c-external" data-animate="node" style="--step: 0; --flow-node-name: archify-relay-node-0;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="person" class="semantic-sigil s-external" transform="translate(46 156) scale(0.6875)">
             <circle cx="8" cy="4.5" r="2.5"/><path d="M3 14v-2a5 5 0 0 1 10 0v2"/>
           </g>
           <text data-node-label="" x="110" y="179" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Your browser</text>
-        <text x="110" y="195" class="t-muted" font-size="9" text-anchor="middle">&lt;garden&gt;/code-server/</text>
+        <text x="110" y="195" class="t-muted" font-size="9" text-anchor="middle">&lt;lollo&gt;/code-server/</text>
         </g>
 
-        <g id="node-access" data-node-id="access" data-node-label="Cloudflare Access" tabindex="0" role="button" aria-label="Focus Cloudflare Access, the garden's sign-in, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="the garden's sign-in" data-node-context="Architecture component">
-          <title>Cloudflare Access · the garden's sign-in · Architecture component</title>
+        <g id="node-access" data-node-id="access" data-node-label="Cloudflare Access" tabindex="0" role="button" aria-label="Focus Cloudflare Access, the lollo's sign-in, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="the lollo's sign-in" data-node-context="Architecture component">
+          <title>Cloudflare Access · the lollo's sign-in · Architecture component</title>
           <rect x="250" y="150" width="150" height="62" rx="8" class="c-mask"/>
           <rect x="250" y="150" width="150" height="62" rx="8" class="c-security" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-2;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(256 156) scale(0.6875)">
@@ -999,7 +999,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
           <text data-node-label="" x="325" y="179" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Cloudflare Access</text>
-        <text x="325" y="195" class="t-muted" font-size="9" text-anchor="middle">the garden's sign-in</text>
+        <text x="325" y="195" class="t-muted" font-size="9" text-anchor="middle">the lollo's sign-in</text>
         </g>
 
         <g id="node-gate" data-node-id="gate" data-node-label="Gate" tabindex="0" role="button" aria-label="Focus Gate, checks every request, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="checks every request" data-node-context="Architecture component">

@@ -7,7 +7,7 @@
     "quality_profile": "showcase",
     "locale": "en",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
@@ -40,7 +40,7 @@
       "id": "cf-edge",
       "type": "security",
       "label": "Cloudflare Access",
-      "sublabel": "garden's own Access app",
+      "sublabel": "lollo's own Access app",
       "pos": [
         210,
         220
@@ -57,10 +57,10 @@
           "label": "cf_app_body"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 163,
           "end_line": 179,
-          "label": "the garden's Access app (CF_GARDEN_AUD)"
+          "label": "the lollo's Access app (CF_LOLLO_AUD)"
         }
       ]
     },
@@ -139,7 +139,7 @@
           "label": "scheduler fires on the BFF's connection"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 272,
           "end_line": 281,
           "label": "executor_cron"
@@ -149,7 +149,7 @@
     {
       "id": "triggers",
       "type": "backend",
-      "label": "garden-gmail-triggers",
+      "label": "lollo-gmail-triggers",
       "sublabel": "pages, poller, /executor/v1/",
       "pos": [
         790,
@@ -183,7 +183,7 @@
     {
       "id": "executor",
       "type": "backend",
-      "label": "garden executor",
+      "label": "lollo executor",
       "sublabel": "run.mjs, system cron, every minute",
       "pos": [
         1145,
@@ -195,19 +195,19 @@
       ],
       "sources": [
         {
-          "path": "garden/executor/run.mjs",
+          "path": "landing/executor/run.mjs",
           "line": 1,
           "end_line": 20,
           "label": "what a run does"
         },
         {
-          "path": "garden/executor/run.mjs",
+          "path": "landing/executor/run.mjs",
           "line": 415,
           "end_line": 427,
           "label": "letta cron add --once"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 249,
           "end_line": 262,
           "label": "installed by up"
@@ -251,7 +251,7 @@
     {
       "id": "rules",
       "type": "database",
-      "label": "state/garden/gmail-triggers",
+      "label": "state/lollo/gmail-triggers",
       "sublabel": "triggers.db: rules, request queue",
       "pos": [
         790,
@@ -308,7 +308,7 @@
   "boundaries": [
     {
       "kind": "region",
-      "label": "Stack lettuce-<name>: one Docker Compose project per person",
+      "label": "Stack lollo-<name>: one Docker Compose project per person",
       "wraps": [
         "cloudflared",
         "bff",
@@ -410,22 +410,22 @@
   "cards": [
     {
       "dot": "emerald",
-      "title": "garden-gmail-triggers (stack network)",
+      "title": "lollo-gmail-triggers (stack network)",
       "items": [
-        "Pages at /gmail-triggers/ on the garden host: an Access JWT of the garden's own application on every request, Fetch Metadata on every page and form, CSRF and Origin on every POST",
+        "Pages at /gmail-triggers/ on the lollo host: an Access JWT of the lollo's own application on every request, Fetch Metadata on every page and form, CSRF and Origin on every POST",
         "Polls Gmail every 2 minutes, metadata only; agents never see email bodies through it",
-        "Its only bind mount is state/garden/gmail-triggers, which the app-server does not mount",
+        "Its only bind mount is state/lollo/gmail-triggers, which the app-server does not mount",
         "Never connects to the app-server; shares no directory with it"
       ]
     },
     {
       "dot": "violet",
-      "title": "Garden executor (inside the app-server)",
+      "title": "Lollo executor (inside the app-server)",
       "items": [
-        "garden/executor/run.mjs, installed by lettucectl up in /root/.letta/garden/executor and run by system cron every minute",
+        "landing/executor/run.mjs, installed by lolloctl up in /root/.letta/lollo/executor and run by system cron every minute",
         "With --gmail-triggers, claims requests from /executor/v1/ with the stack's token; the tunnel never routes that path",
         "Runs letta cron add --once with an argument array; posts results, the agent list and a heartbeat",
-        "Also answers the garden landing page's agent-list asks (not drawn)",
+        "Also answers the lollo landing page's agent-list asks (not drawn)",
         "Agents can read its token: they can do what it does, which is no more than letta cron add"
       ]
     },
@@ -441,11 +441,11 @@
     },
     {
       "dot": "amber",
-      "title": "lettucectl (host)",
+      "title": "lolloctl (host)",
       "items": [
-        "compose/gmail-triggers.yml behind the garden-gmail-triggers profile (needs google)",
-        "Tunnel route ^/gmail-triggers(/|$) on the garden host to garden-gmail-triggers:8000; / to the garden landing page",
-        "Generates GARDEN_EXECUTOR_TOKEN once per stack; installs and removes the executor with the profile",
+        "compose/gmail-triggers.yml behind the lollo-gmail-triggers profile (needs google)",
+        "Tunnel route ^/gmail-triggers(/|$) on the lollo host to lollo-gmail-triggers:8000; / to the lollo landing page",
+        "Generates LOLLO_EXECUTOR_TOKEN once per stack; installs and removes the executor with the profile",
         "check_gmail_triggers: one bind mount, no symlinks on its path, Google volumes read-only, hardened"
       ]
     },
@@ -455,7 +455,7 @@
       "items": [
         "Lettuce's Google token is read, never written: the access token is refreshed in memory only",
         "A claimed request is never offered twice: a lost turn beats a duplicate",
-        "Left out: google-mcp, the garden landing page, the vault, the code editor"
+        "Left out: google-mcp, the lollo landing page, the vault, the code editor"
       ]
     }
   ]

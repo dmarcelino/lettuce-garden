@@ -6,13 +6,13 @@ import os
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-# The editor lives under this path on the garden's host, behind the tunnel route
+# The editor lives under this path on the lollo's host, behind the tunnel route
 # of the same name.
 PREFIX = "/code-server"
-# garden-code-server-editor listens only on this Unix socket, on a volume only this gate
+# lollo-code-server-editor listens only on this Unix socket, on a volume only this gate
 # and the editor mount (compose/code-server.yml); the URL names it for Host.
 EDITOR_SOCKET = "/run/code-server/editor.sock"
-DEFAULT_UPSTREAM = "http://garden-code-server-editor"
+DEFAULT_UPSTREAM = "http://lollo-code-server-editor"
 
 
 class ConfigError(Exception):

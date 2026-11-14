@@ -1,6 +1,6 @@
 # Document tools (Office and PDF)
 
-The `garden-doc-tools` profile lets the agents of every stack create, read, edit and convert Word,
+The `lollo-doc-tools` profile lets the agents of every stack create, read, edit and convert Word,
 PowerPoint and Excel files and PDFs in their own workspaces. Two MCP servers do the work:
 
 - **`office`**: [OfficeAgent.NET](https://github.com/ilia-sokolov/OfficeAgent.NET) (MIT). It
@@ -50,17 +50,17 @@ text in place, and Excel calculation beyond OfficeAgent's list of supported func
 
 ### Turning it on
 ```bash
-lettucectl profiles cloudflared,search,garden-doc-tools   # your current list plus garden-doc-tools
-lettucectl skills all                              # installs the working-with-documents skill
-lettucectl mcp all                                 # adds office and pdf to each Settings -> MCP
+lolloctl profiles cloudflared,search,lollo-doc-tools   # your current list plus lollo-doc-tools
+lolloctl skills all                              # installs the working-with-documents skill
+lolloctl mcp all                                 # adds office and pdf to each Settings -> MCP
 ```
 `mcp` adds the two servers to each stack's **Settings -> MCP**, where each person sees them next
 to their own:
 
 | Name | Transport | Command |
 |---|---|---|
-| `office` | stdio | `/opt/lettuce-doc-tools/bin/officeagent` |
-| `pdf` | stdio | `/opt/lettuce-doc-tools/bin/pdf-mcp` |
+| `office` | stdio | `/opt/lollo-doc-tools/bin/officeagent` |
+| `pdf` | stdio | `/opt/lollo-doc-tools/bin/pdf-mcp` |
 
 No arguments and no environment variables are needed, and a person can also add them by hand
 there. The entries survive restarts and upgrades (they live in the stack's `letta-home`).
@@ -68,13 +68,13 @@ there. The entries survive restarts and upgrades (they live in the stack's `lett
 `mcp` runs once per stack: it remembers that it did (`DOC_TOOLS_MCP_REGISTERED` in `stack.env`),
 so a person who removes a server keeps it removed; `mcp <name> --force` adds it again. It adds
 only what is missing, and leaves alone every other server and a server of the same name with
-another command (it says so). `add` registers a new stack's servers itself. With the `garden-vault`
+another command (it says so). `add` registers a new stack's servers itself. With the `lollo-vault`
 profile on, `mcp` registers the vault too, the same way and with its own marker
 ([vault.md](vault.md#running-it)); it needs one of the two profiles.
 
 The list belongs to Lettuce's BFF, which reads it from disk before every change, so an entry
 added from outside stays. `mcp` writes only the entries whose command is under
-`/opt/lettuce-doc-tools/` (and the vault's exact HTTP entry), and refuses, changing nothing, when the file is not the shape it
+`/opt/lollo-doc-tools/` (and the vault's exact HTTP entry), and refuses, changing nothing, when the file is not the shape it
 knows (after a Lettuce upgrade, say): then add the servers by hand. One thing can still undo
 it: a Settings -> MCP page that was open before `mcp` ran and is saved afterwards writes back
 the list it loaded, without the servers; run `mcp <name> --force` again.
@@ -85,7 +85,7 @@ whenever `mcp` changes a stack's list, it restarts that stack's BFF alone; a tur
 finishes first (up to 10 minutes), and the vault and the app-server keep running. Stacks are
 restarted one after another, so `mcp all` can wait that long for each busy stack, and turning
 the profile off can restart a BFF that `up` has just recreated. If the
-restart fails, it says so, and agents see the servers after the next `lettucectl restart <name>`.
+restart fails, it says so, and agents see the servers after the next `lolloctl restart <name>`.
 
 The first `up` with the profile builds the tools' image once per host, which takes a few
 minutes: it downloads OfficeAgent, a Python runtime and the Python packages, each pinned and
@@ -95,26 +95,26 @@ by step, in [doc-tools/README.md](../doc-tools/README.md#what-up-does-with-the-p
 
 ### Turning it off
 ```bash
-lettucectl profiles cloudflared,search   # the list without garden-doc-tools
+lolloctl profiles cloudflared,search   # the list without lollo-doc-tools
 ```
 The app-servers restart without the mount and the network, Gotenberg stops and is removed, and
-every `lettuce-doc-tools-*` network and tools volume is deleted. Documents stay in the
+every `lollo-doc-tools-*` network and tools volume is deleted. Documents stay in the
 workspaces. The servers `mcp` registered are removed from Settings -> MCP (a stdio server that
 cannot start makes every `letta mcp tools` call fail, the other servers' included), and the BFF
 restarts so agents stop seeing them; servers a person added by hand stay, and they should remove
 them. If a removal fails, the next `up` or `profiles` retries it. The image stays until you
-delete it (`docker image rm lettuce-doc-tools:<hash>`).
+delete it (`docker image rm lollo-doc-tools:<hash>`).
 
 ### After an update
-The tools' versions are pinned in this repo, so an update arrives with a new version of lettuce-garden;
+The tools' versions are pinned in this repo, so an update arrives with a new version of lollo-rozzo;
 how the pins are moved is in [doc-tools/README.md](../doc-tools/README.md#maintaining). After pulling one,
-run `lettucectl up all`. A change to the tools builds a new
+run `lolloctl up all`. A change to the tools builds a new
 image, fills a new volume and recreates the app-servers (the old volume is deleted once no
 container uses it; old images stay until you delete them); documents, memories, conversations, MCP entries, the vault
 and settings are not touched.
 
 The bundled runtimes (.NET inside OfficeAgent, CPython, MuPDF) get security fixes only when these
-pins are bumped, so keep lettuce-garden current.
+pins are bumped, so keep lollo-rozzo current.
 
 ### Removing a stack
 `remove` deletes the stack's network to Gotenberg after stopping the stack; Gotenberg keeps
@@ -124,34 +124,34 @@ If removing the network fails, the next `up` or `profiles` removes it.
 ### Troubleshooting
 - **`MCP error -32000: Connection closed`**: the server did not start. The usual cause is a call
   made outside an agent workspace: the servers refuse to run unless the working directory is
-  inside `/work/<agent-id>`. Check with `lettucectl shell <name> <agent>`, then
-  `cd /work/<agent-id> && /opt/lettuce-doc-tools/bin/pdf-mcp </dev/null` (it prints why it
+  inside `/work/<agent-id>`. Check with `lolloctl shell <name> <agent>`, then
+  `cd /work/<agent-id> && /opt/lollo-doc-tools/bin/pdf-mcp </dev/null` (it prints why it
   refuses, or waits for input when it is fine).
-- **`the converter (Gotenberg) is unreachable`**: check `docker compose -p lettuce_shared ps`, and
-  that the stack's network has it: `docker network inspect lettuce-doc-tools-<name>`. Running
-  `lettucectl up <name>` repairs both.
+- **`the converter (Gotenberg) is unreachable`**: check `docker compose -p lollo_shared ps`, and
+  that the stack's network has it: `docker network inspect lollo-doc-tools-<name>`. Running
+  `lolloctl up <name>` repairs both.
 - **`the converter took too long`**: letta-code gives each MCP call 60 seconds, so conversions
   stop at 50. Split the document or reduce its images.
 - **`not-found` from office after parallel calls**: calls made at the same time in one workspace
   can lose each other's document ids. Open the file again by its path.
-- **`spawn failed: ENOENT /opt/lettuce-doc-tools/bin/...`**, or an empty `/opt/lettuce-doc-tools`
-  in the app-server: the tools are not mounted. Run `lettucectl up <name>`; if it says the
-  volume is incomplete and in use, every stack with garden-doc-tools shares it: run
-  `lettucectl down all`, then `lettucectl up all`.
-- **`lettuce-doc-tools-<hash> was not made by lettucectl`** at `up`: a volume of that name exists
-  without lettucectl's label, or with driver options (a bind to a host directory, say). Every
+- **`spawn failed: ENOENT /opt/lollo-doc-tools/bin/...`**, or an empty `/opt/lollo-doc-tools`
+  in the app-server: the tools are not mounted. Run `lolloctl up <name>`; if it says the
+  volume is incomplete and in use, every stack with lollo-doc-tools shares it: run
+  `lolloctl down all`, then `lolloctl up all`.
+- **`lollo-doc-tools-<hash> was not made by lolloctl`** at `up`: a volume of that name exists
+  without lolloctl's label, or with driver options (a bind to a host directory, say). Every
   app-server would run what it holds, so `up` refuses it; remove it and run `up` again.
-- **`could not fill the volume lettuce-doc-tools-<hash>`** at `up`: the copy failed (disk full,
+- **`could not fill the volume lollo-doc-tools-<hash>`** at `up`: the copy failed (disk full,
   say); the stack was not started. Fix the cause and run `up` again: an incomplete volume is
   filled again.
 - **Agents do not find `office` or `pdf`** although `mcp` added them: the `mcp-servers` skill's
   description (in the app-server, `/root/.letta/skills/mcp-servers/SKILL.md`) should list them.
-  If it does not, the BFF restart after `mcp` failed: run `lettucectl restart <name>`.
-- **`mcp` says the MCP settings are not what lettucectl expects**: Lettuce changed the file's
-  layout; add the servers by hand in Settings -> MCP, and report it to the lettuce-garden
-  maintainers so `lettucectl mcp` can follow.
+  If it does not, the BFF restart after `mcp` failed: run `lolloctl restart <name>`.
+- **`mcp` says the MCP settings are not what lolloctl expects**: Lettuce changed the file's
+  layout; add the servers by hand in Settings -> MCP, and report it to the lollo-rozzo
+  maintainers so `lolloctl mcp` can follow.
 - **`office` or `pdf` gone from Settings -> MCP**: a Settings page that was open before `mcp` ran
-  was saved over them; run `lettucectl mcp <name> --force`.
+  was saved over them; run `lolloctl mcp <name> --force`.
 - **`check` refuses the stack**: the message names the rule; the overlay and the shared file are
   the reference (`compose/doc-tools.yml`, `compose/shared/gotenberg.yml`).
 
@@ -197,7 +197,7 @@ own app-server, and Gotenberg serves conversions one LibreOffice job at a time.
   document from fetching anything: Chromium and LibreOffice may not reach private or public
   addresses, JavaScript is off, and `downloadFrom` and webhooks are disabled. `check` refuses a
   Gotenberg without these flags (or with one set back to `false`), with a port, or without its
-  hardening (read-only root, no capabilities, non-root user, `no-new-privileges`). lettucectl
+  hardening (read-only root, no capabilities, non-root user, `no-new-privileges`). lolloctl
   connects it only to internal networks it made for a stack, labelled with that stack's name. Each conversion is independent; simultaneous requests from
   different stacks get their own results.
 - **Gotenberg is the one container on every stack's network.** A conversion that compromised

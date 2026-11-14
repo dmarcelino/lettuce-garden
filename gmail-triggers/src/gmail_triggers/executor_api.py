@@ -1,5 +1,5 @@
 """The executor's API at /executor/v1/ (docs/gmail-triggers.md): the request
-routes every queue-serving garden sidecar shares (garden_common.executor),
+routes every queue-serving lollo sidecar shares (lollo_common.executor),
 outside /gmail-triggers, so the tunnel never routes them, no Access check, and
 every call needs the stack's executor token.
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from garden_common.executor import request_routes
+from lollo_common.executor import request_routes
 from starlette.routing import Route
 
 from .config import MAX_CLAIM

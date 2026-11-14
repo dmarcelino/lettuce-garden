@@ -11,7 +11,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from email.utils import parseaddr
 
-from garden_common.text import CONTROL, encodable, one_line
+from lollo_common.text import CONTROL, encodable, one_line
 
 from .config import MAX_SUBJECT
 

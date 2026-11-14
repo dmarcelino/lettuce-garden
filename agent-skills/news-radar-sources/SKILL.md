@@ -171,7 +171,7 @@ skips the turn when there is nothing to report.
      each report) or `default` (your main conversation); see "Changing a monitor".
 5. **Confirm with the person**: the schedule in words with the timezone (`schedule_in_words`),
    where reports go (`conversation_in_words`), and what `monitor_preview` shows now. On the
-   garden's News Radar page they can see every monitor, change where its reports go, and
+   lollo's News Radar page they can see every monitor, change where its reports go, and
    delete it.
 
 ## Changing a monitor

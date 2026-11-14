@@ -43,7 +43,7 @@ def redeem(handles: list[str]) -> dict[str, str]:
     """All the handles' values, or none: the vault uses up no handle when one is
     unknown or a name clashes, with another handle's or one already set here."""
     # Not VAULT_*: that is the secrets' namespace, and a field could be called URL.
-    base = os.environ.get("GARDEN_VAULT_URL", "http://garden-vault:8000").rstrip("/")
+    base = os.environ.get("LOLLO_VAULT_URL", "http://lollo-vault:8000").rstrip("/")
     taken = sorted(name for name in os.environ if name.startswith("VAULT_"))
     request = urllib.request.Request(
         f"{base}/redeem",

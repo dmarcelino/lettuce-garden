@@ -7,7 +7,7 @@
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "f8563bfc55ffeeada10efbe046a47c964413bb38"
@@ -18,7 +18,7 @@
       "id": "browser",
       "type": "external",
       "label": "Person's browser",
-      "sublabel": "garden host /vault/",
+      "sublabel": "lollo host /vault/",
       "pos": [40, 300],
       "size": [130, 62],
       "sources": [{ "path": "docs/vault.md", "line": 11, "end_line": 40, "label": "using the vault" }]
@@ -27,12 +27,12 @@
       "id": "edge",
       "type": "security",
       "label": "Cloudflare Access",
-      "sublabel": "Lettuce's app + garden's app",
+      "sublabel": "Lettuce's app + lollo's app",
       "pos": [230, 300],
       "size": [170, 62],
       "sources": [
         { "path": "lib/cloudflare.sh", "line": 80, "end_line": 91, "label": "cf_app_body: HttpOnly, SameSite=Lax" },
-        { "path": "lettucectl", "line": 163, "end_line": 179, "label": "the garden's own Access app (CF_GARDEN_AUD)" }
+        { "path": "lolloctl", "line": 163, "end_line": 179, "label": "the lollo's own Access app (CF_LOLLO_AUD)" }
       ]
     },
     {
@@ -42,7 +42,7 @@
       "sublabel": "team JWKS (certs)",
       "pos": [240, 470],
       "size": [150, 62],
-      "sources": [{ "path": "garden-common/src/garden_common/auth.py", "line": 66, "end_line": 74, "label": "JWKS resolver" }]
+      "sources": [{ "path": "lollo-common/src/lollo_common/auth.py", "line": 66, "end_line": 74, "label": "JWKS resolver" }]
     },
     {
       "id": "cloudflared",
@@ -52,21 +52,21 @@
       "pos": [470, 300],
       "size": [150, 62],
       "sources": [
-        { "path": "lib/cloudflare.sh", "line": 121, "end_line": 134, "label": "garden routes and landing page" },
+        { "path": "lib/cloudflare.sh", "line": 121, "end_line": 134, "label": "lollo routes and landing page" },
         { "path": "lib/cloudflare.sh", "line": 160, "end_line": 180, "label": "cf_tunnel_configure" },
         { "path": "compose/multi.yml", "line": 1, "end_line": 10, "label": "no published ports" }
       ]
     },
     {
-      "id": "garden",
+      "id": "lollo",
       "type": "frontend",
-      "label": "garden",
+      "label": "landing",
       "sublabel": "landing page, links /vault/",
       "pos": [470, 130],
       "size": [150, 62],
       "sources": [
-        { "path": "compose/garden.yml", "line": 18, "end_line": 48, "label": "on with any garden page profile" },
-        { "path": "garden/src/garden_landing/app.py", "line": 148, "end_line": 158, "label": "routes" }
+        { "path": "compose/landing.yml", "line": 18, "end_line": 48, "label": "on with any lollo page profile" },
+        { "path": "landing/src/lollo_landing/app.py", "line": 148, "end_line": 158, "label": "routes" }
       ]
     },
     {
@@ -78,7 +78,7 @@
       "size": [170, 62],
       "sources": [
         { "path": "lib/README.md", "line": 82, "end_line": 83, "label": "shares the app-server's network namespace" },
-        { "path": "vault/src/garden_vault/app.py", "line": 507, "end_line": 518, "label": "the bridge calls /mcp" }
+        { "path": "vault/src/lollo_vault/app.py", "line": 507, "end_line": 518, "label": "the bridge calls /mcp" }
       ]
     },
     {
@@ -103,20 +103,20 @@
       "sources": [
         { "path": "agent-skills/using-vault-secrets/vault-run", "line": 42, "end_line": 70, "label": "POST /redeem, all or none" },
         { "path": "agent-skills/using-vault-secrets/vault-fill", "line": 2, "end_line": 15, "label": "vault-fill: a template, filled" },
-        { "path": "lettucectl", "line": 227, "end_line": 248, "label": "installed by lettucectl skills" }
+        { "path": "lolloctl", "line": 227, "end_line": 248, "label": "installed by lolloctl skills" }
       ]
     },
     {
       "id": "vault",
       "type": "security",
-      "label": "garden-vault",
+      "label": "lollo-vault",
       "sublabel": "/vault/, /mcp, /redeem",
       "pos": [470, 470],
       "size": [150, 62],
       "sources": [
         { "path": "compose/vault.yml", "line": 20, "end_line": 50, "label": "service and hardening" },
-        { "path": "vault/src/garden_vault/app.py", "line": 542, "end_line": 552, "label": "routes" },
-        { "path": "vault/src/garden_vault/app.py", "line": 125, "end_line": 168, "label": "Access JWT, Fetch Metadata, CSRF" }
+        { "path": "vault/src/lollo_vault/app.py", "line": 542, "end_line": 552, "label": "routes" },
+        { "path": "vault/src/lollo_vault/app.py", "line": 125, "end_line": 168, "label": "Access JWT, Fetch Metadata, CSRF" }
       ]
     },
     {
@@ -128,7 +128,7 @@
       "size": [150, 62],
       "sources": [
         { "path": "compose/vault.yml", "line": 52, "end_line": 56, "label": "named volume" },
-        { "path": "vault/src/garden_vault/vault.py", "line": 1, "end_line": 7, "label": "what is encrypted" },
+        { "path": "vault/src/lollo_vault/vault.py", "line": 1, "end_line": 7, "label": "what is encrypted" },
         { "path": "lib/common.sh", "line": 437, "end_line": 439, "label": "only the vault mounts it" }
       ]
     },
@@ -139,15 +139,15 @@
       "sublabel": "browser vendor",
       "pos": [40, 640],
       "size": [130, 62],
-      "sources": [{ "path": "vault/src/garden_vault/push.py", "line": 27, "end_line": 55, "label": "VAPID push" }]
+      "sources": [{ "path": "vault/src/lollo_vault/push.py", "line": 27, "end_line": 55, "label": "VAPID push" }]
     }
   ],
   "boundaries": [
     { "kind": "region", "label": "Cloudflare", "wraps": ["edge", "jwks"], "pad": 16 },
     {
       "kind": "region",
-      "label": "Compose project lettuce-<name> (one per person)",
-      "wraps": ["cloudflared", "garden", "bff", "appserver", "vaultrun", "vault", "volume"],
+      "label": "Compose project lollo-<name> (one per person)",
+      "wraps": ["cloudflared", "lollo", "bff", "appserver", "vaultrun", "vault", "volume"],
       "pad": 26
     },
     { "kind": "security-group", "label": "shared network namespace", "wraps": ["bff", "appserver", "vaultrun"], "pad": 18 },
@@ -162,12 +162,12 @@
   "connections": [
     { "from": "browser", "to": "edge", "label": "HTTPS", "variant": "emphasis" },
     { "from": "edge", "to": "cloudflared", "label": "tunnel", "variant": "emphasis" },
-    { "from": "cloudflared", "to": "garden", "label": "garden host /" },
+    { "from": "cloudflared", "to": "lollo", "label": "lollo host /" },
     { "from": "cloudflared", "to": "bff", "label": "Lettuce host + Lettuce JWT" },
-    { "from": "cloudflared", "to": "vault", "label": "garden host /vault/ + garden JWT", "variant": "security" },
+    { "from": "cloudflared", "to": "vault", "label": "lollo host /vault/ + lollo JWT", "variant": "security" },
     { "from": "bff", "to": "appserver", "label": "WebSocket 127.0.0.1:4500" },
     { "from": "appserver", "to": "bff", "label": "mcp_call (vault tool)", "fromSide": "top", "toSide": "top" },
-    { "from": "bff", "to": "vault", "label": "POST /mcp, Host garden-vault" },
+    { "from": "bff", "to": "vault", "label": "POST /mcp, Host lollo-vault" },
     { "from": "appserver", "to": "vaultrun", "label": "agent shell runs" },
     { "from": "vaultrun", "to": "vault", "label": "POST /redeem (handles)", "variant": "security" },
     { "from": "vault", "to": "jwks", "label": "JWKS", "variant": "dashed" },
@@ -180,10 +180,10 @@
       "dot": "emerald",
       "title": "Boundaries that hold",
       "items": [
-        "Every /vault/ page and every approval needs an Access JWT for the garden's own application (CF_GARDEN_AUD); only Cloudflare signs it",
-        "Lettuce's JWT, which reaches the BFF in plain HTTP, is for another audience: the vault refuses it, and check_garden_audience refuses a stack where it would not",
-        "Pages load only as top-level documents and forms post only from the garden origin (Fetch Metadata); every response sets COOP same-origin",
-        "/mcp and /redeem answer only Host garden-vault with no Origin; the tunnel routes only /vault/ to the vault",
+        "Every /vault/ page and every approval needs an Access JWT for the lollo's own application (CF_LOLLO_AUD); only Cloudflare signs it",
+        "Lettuce's JWT, which reaches the BFF in plain HTTP, is for another audience: the vault refuses it, and check_lollo_audience refuses a stack where it would not",
+        "Pages load only as top-level documents and forms post only from the lollo origin (Fetch Metadata); every response sets COOP same-origin",
+        "/mcp and /redeem answer only Host lollo-vault with no Origin; the tunnel routes only /vault/ to the vault",
         "The data key lives only in the vault process while unlocked; a lock drops handles and uncollected values"
       ]
     },
@@ -200,9 +200,9 @@
       "dot": "slate",
       "title": "Not shown",
       "items": [
-        "Other garden pages on the same host (gmail-triggers, the code editor) and Lettuce's opt-in services",
+        "Other lollo pages on the same host (gmail-triggers, the code editor) and Lettuce's opt-in services",
         "The LLM provider that the app-server calls",
-        "lettucectl on the host: builds and checks each stack, registers the vault in Settings -> MCP (lettucectl mcp), installs vault-run and vault-fill (lettucectl skills)"
+        "lolloctl on the host: builds and checks each stack, registers the vault in Settings -> MCP (lolloctl mcp), installs vault-run and vault-fill (lolloctl skills)"
       ]
     }
   ]

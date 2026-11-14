@@ -3,10 +3,10 @@ import sqlite3
 
 import pytest
 
-from garden_vault import crypto
-from garden_vault.config import ERASE_DELAY_SECONDS
-from garden_vault.kinds import KINDS, group_fields
-from garden_vault.vault import AUTO, Locked, Vault, VaultError, build_fields
+from lollo_vault import crypto
+from lollo_vault.config import ERASE_DELAY_SECONDS
+from lollo_vault.kinds import KINDS, group_fields
+from lollo_vault.vault import AUTO, Locked, Vault, VaultError, build_fields
 
 from .conftest import CARD, FAST_KDF, PASSPHRASE, SECRET, STREET, add_address, add_card
 

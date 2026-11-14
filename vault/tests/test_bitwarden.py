@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from garden_vault.bitwarden import MAX_IMPORT_BYTES, read_export
-from garden_vault.vault import VaultError
+from lollo_vault.bitwarden import MAX_IMPORT_BYTES, read_export
+from lollo_vault.vault import VaultError
 
 from .conftest import CARD, SECRET, STREET
 

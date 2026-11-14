@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline tests for lettucectl. docker, curl and dig are replaced by the stubs in
+# Offline tests for lolloctl. docker, curl and dig are replaced by the stubs in
 # tests/stubs, so nothing here touches Docker, DNS or Cloudflare.
 #   tests/run.sh            run everything
 #   tests/run.sh <pattern>  run the tests whose name contains <pattern>
@@ -11,8 +11,8 @@ FILTER=${1:-}
 ADDED_CACHE=""
 
 # ── fixture ──────────────────────────────────────────────────────────────────
-# Each test gets a fresh copy of the repo in $T/home (the code, LETTUCE_HOME),
-# its data in $T/home/data ($D: a clone's default LETTUCE_DATA), Lettuce's
+# Each test gets a fresh copy of the repo in $T/home (the code, LOLLO_HOME),
+# its data in $T/home/data ($D: a clone's default LOLLO_DATA), Lettuce's
 # source at the example's tag in $U, and the stubs in $T/bin.
 REF=$(sed -n 's/^LETTUCE_REF=//p' "$ROOT/config.env.example")
 setup() {
@@ -21,7 +21,7 @@ setup() {
   D=$H/data
   U=$D/upstream/$REF
   mkdir -p "$U/docker" "$D/.secrets" "$T/bin"
-  cp -r "$ROOT/lettucectl" "$ROOT/lib" "$ROOT/compose" "$ROOT/backup" "$ROOT/release" "$ROOT/config.env.example" "$H/"
+  cp -r "$ROOT/lolloctl" "$ROOT/lib" "$ROOT/compose" "$ROOT/backup" "$ROOT/release" "$ROOT/config.env.example" "$H/"
   cp "$ROOT"/tests/stubs/* "$T/bin/"
   touch "$U/docker/compose.yml"
   printf 'secret-api-token-123\n' >"$D/.secrets/cloudflare-api-token"
@@ -39,12 +39,12 @@ setup() {
 
 teardown() { rm -rf "$T"; }
 
-# ctl ARGS... -> runs lettucectl with the stubs first on PATH; output in $OUT,
-# status in $RC. LETTUCE_DATA is CTL_DATA: empty (a clone's default, $D) unless
-# a test sets it, so the tester's own environment never reaches lettucectl.
+# ctl ARGS... -> runs lolloctl with the stubs first on PATH; output in $OUT,
+# status in $RC. LOLLO_DATA is CTL_DATA: empty (a clone's default, $D) unless
+# a test sets it, so the tester's own environment never reaches lolloctl.
 ctl() {
   RC=0
-  LETTUCE_DATA=${CTL_DATA:-} PATH="$T/bin:$PATH" "$H/lettucectl" "$@" >"$OUT" 2>&1 || RC=$?
+  LOLLO_DATA=${CTL_DATA:-} PATH="$T/bin:$PATH" "$H/lolloctl" "$@" >"$OUT" 2>&1 || RC=$?
 }
 
 stub() { printf '%s\n' "$*" >>"$T/stub.env"; }
@@ -54,10 +54,10 @@ body_of() { grep "^curl $1 $2 " "$T/calls.log" | tail -1 | cut -d' ' -f4-; }
 first_body_of() { grep "^curl $1 $2 " "$T/calls.log" | head -1 | cut -d' ' -f4-; }
 # ingress -> the tunnel routes of the last configuration put
 ingress() { jq -c '.config.ingress' <<<"$(body_of PUT /accounts/acc1/cfd_tunnel/tun1/configurations)"; }
-# The ingress rules every stack ends with: alfred's garden host answers 404 to
-# what no garden rule routes, and Lettuce's host goes to the app-server only.
-LANDING='{"hostname":"alfred-garden.example.org","path":"^/(assets/[^/]+)?$","service":"http://garden:8000"}'
-GARDEN_404='{"hostname":"alfred-garden.example.org","service":"http_status:404"}'
+# The ingress rules every stack ends with: alfred's lollo host answers 404 to
+# what no lollo rule routes, and Lettuce's host goes to the app-server only.
+LANDING='{"hostname":"alfred-lollo.example.org","path":"^/(assets/[^/]+)?$","service":"http://landing:8000"}'
+LOLLO_404='{"hostname":"alfred-lollo.example.org","service":"http_status:404"}'
 LETTUCE_TAIL='{"hostname":"alfred.example.org","service":"http://app-server:8080"},{"service":"http_status:404"}'
 
 senv() { awk -v k="$2" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) } END { printf "%s", v }' "$D/stacks/$1/stack.env"; }
@@ -76,31 +76,31 @@ log_has() { grep -qF -- "$1" "$T/calls.log" || fail "call log lacks: $1"; }
 log_lacks() { ! grep -qF -- "$1" "$T/calls.log" || fail "call log unexpectedly has: $1"; }
 eq() { [[ $1 == "$2" ]] || fail "expected [$2], got [$1]"; }
 
-# What every garden service's environment renders to: the garden's own Access
+# What every lollo service's environment renders to: the lollo's own Access
 # application and origin. The docker stub fills ${KEY} from the stack's env file.
 # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
-GARDEN_ENV='{"CF_ACCESS_AUD":"${CF_GARDEN_AUD}","PUBLIC_ORIGIN":"${GARDEN_ORIGIN}"}'
+LOLLO_ENV='{"CF_ACCESS_AUD":"${CF_LOLLO_AUD}","PUBLIC_ORIGIN":"${LOLLO_ORIGIN}"}'
 
-# garden_config -> the rendered config also holds the garden service
-# compose/garden.yml renders (on with any garden page profile); the repo copy has
-# the garden executor
-garden_config() {
+# landing_config -> the rendered config also holds the landing service
+# compose/landing.yml renders (on with any lollo page profile); the repo copy has
+# the lollo executor
+landing_config() {
   # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
-  config_edit '.services.garden = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"networks":{"default":null},
-    "environment":('"$GARDEN_ENV"' + {"LETTUCE_ORIGIN":"${PUBLIC_ORIGIN}"})}'
-  mkdir -p "$H/garden/executor/tests"
-  printf '// executor\n' >"$H/garden/executor/run.mjs"
-  printf '// test\n' >"$H/garden/executor/tests/run.test.mjs"
+  config_edit '.services.landing = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"networks":{"default":null},
+    "environment":('"$LOLLO_ENV"' + {"LETTUCE_ORIGIN":"${PUBLIC_ORIGIN}"})}'
+  mkdir -p "$H/landing/executor/tests"
+  printf '// executor\n' >"$H/landing/executor/run.mjs"
+  printf '// test\n' >"$H/landing/executor/tests/run.test.mjs"
 }
 
 # vault_config [VAULT_JSON] -> the rendered compose config also holds this
 # vault (default: the hardened one compose/vault.yml renders) and the
-# garden service
+# landing service
 vault_config() {
-  local vault=${1:-'{"read_only":true,"cap_drop":["ALL"],"environment":'"$GARDEN_ENV"',"volumes":[{"type":"volume","source":"vault-data","target":"/data"}]}'}
-  jq -c --argjson b "$vault" '.services["garden-vault"] = $b' "$T/compose-config.json" >"$T/c.json"
+  local vault=${1:-'{"read_only":true,"cap_drop":["ALL"],"environment":'"$LOLLO_ENV"',"volumes":[{"type":"volume","source":"vault-data","target":"/data"}]}'}
+  jq -c --argjson b "$vault" '.services["lollo-vault"] = $b' "$T/compose-config.json" >"$T/c.json"
   mv "$T/c.json" "$T/compose-config.json"
-  garden_config
+  landing_config
 }
 
 # config_edit JQ -> applies the jq filter JQ to the rendered compose config
@@ -111,25 +111,25 @@ config_edit() {
 
 # triggers_config -> the rendered config also holds the gmail-triggers service
 # compose/gmail-triggers.yml renders for alfred, the services upstream gives
-# google-creds and the garden service; the repo copy has the executor
+# google-creds and the landing service; the repo copy has the executor
 triggers_config() {
-  config_edit '.services["garden-gmail-triggers"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
-      "environment":'"$GARDEN_ENV"',"volumes":[
-      {"type":"bind","source":"'"$D"'/stacks/alfred/state/garden/gmail-triggers","target":"/data"},
+  config_edit '.services["lollo-gmail-triggers"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
+      "environment":'"$LOLLO_ENV"',"volumes":[
+      {"type":"bind","source":"'"$D"'/stacks/alfred/state/lollo/gmail-triggers","target":"/data"},
       {"type":"volume","source":"google-creds","target":"/creds","read_only":true},
       {"type":"volume","source":"google-policy","target":"/policy","read_only":true}]}
     | .services.bff.volumes = [{"type":"volume","source":"google-creds","target":"/app/google/creds"}]
     | .services["google-mcp"] = {"volumes":[{"type":"volume","source":"google-creds","target":"/creds"}]}'
-  garden_config
+  landing_config
 }
 
 # news_radar_config -> the rendered config also holds the News Radar service
-# compose/news-radar.yml renders, and the garden service
+# compose/news-radar.yml renders, and the landing service
 news_radar_config() {
-  config_edit '.services["garden-news-radar"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
-      "environment":'"$GARDEN_ENV"',"networks":{"default":null},
+  config_edit '.services["lollo-news-radar"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
+      "environment":'"$LOLLO_ENV"',"networks":{"default":null},
       "volumes":[{"type":"volume","source":"news-radar-data","target":"/data","volume":{}}]}'
-  garden_config
+  landing_config
 }
 
 # run_test NAME -> runs the test in a fresh fixture, prints its result after
@@ -172,7 +172,7 @@ test_add_requires_init() {
   sed -i 's/^CF_ZONE_ID=.*/CF_ZONE_ID=/' "$D/config.env"
   ctl add alfred a@b.com
   bad_rc
-  out_has "lettucectl init"
+  out_has "lolloctl init"
 }
 
 # ── init ─────────────────────────────────────────────────────────────────────
@@ -180,10 +180,10 @@ test_add_requires_init() {
 # GitHub's archive of the tag, which the curl stub serves, and config.env
 # pointing at it
 make_upstream_archive() {
-  local tag=${1:-v-test} src=$T/src/lettuce-${1:-v-test}
+  local tag=${1:-v-test} src=$T/src/lollo-${1:-v-test}
   mkdir -p "$src/docker/agent-skills/upstream-skill" "$T/github"
   printf 'name: lettuce\n' >"$src/docker/compose.yml"
-  tar -czf "$T/github/$tag.tar.gz" -C "$T/src" "lettuce-$tag"
+  tar -czf "$T/github/$tag.tar.gz" -C "$T/src" "lollo-$tag"
   rm -rf "$D/upstream"
   sed -i -e 's|^LETTUCE_REPO=.*|LETTUCE_REPO=https://github.com/Example/lettuce.git|' \
     -e "s/^LETTUCE_REF=.*/LETTUCE_REF=$tag/" "$D/config.env"
@@ -221,7 +221,7 @@ test_init_downloads_lettuce_and_caches_cloudflare_ids() {
   eq "$(grep ^CF_GOOGLE_IDP_ID= "$D/config.env")" CF_GOOGLE_IDP_ID=idp-g
   [[ -f $D/stacks.conf ]] || fail "no stacks.conf"
   eq "$(stat -c %a "$D/stacks.conf")" 600
-  out_has "lettucectl apply"
+  out_has "lolloctl apply"
 }
 
 test_init_keeps_a_downloaded_tag() {
@@ -347,12 +347,12 @@ test_init_rejects_old_compose() {
 test_add_creates_everything_in_order() {
   ctl add alfred Alfred@Example.com
   ok_rc
-  # Lettuce's application, then the garden's; the garden's DNS record, then
+  # Lettuce's application, then the lollo's; the lollo's DNS record, then
   # Lettuce's, whose id means the stack is complete.
   eq "$(calls | tr '\n' ';')" "GET /zones/zone1/dns_records;GET /zones/zone1/dns_records;POST /accounts/acc1/access/policies;POST /accounts/acc1/access/apps;POST /accounts/acc1/access/apps;POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
-  eq "$(grep '^curl POST /accounts/acc1/access/apps ' "$T/calls.log" | cut -d' ' -f4- | jq -r .name | paste -sd' ')" "lettuce-alfred lettuce-alfred-garden"
-  eq "$(grep '^curl POST /zones/zone1/dns_records ' "$T/calls.log" | cut -d' ' -f4- | jq -r .name | paste -sd' ')" "alfred-garden.example.org alfred.example.org"
-  log_has "compose -p lettuce-alfred"
+  eq "$(grep '^curl POST /accounts/acc1/access/apps ' "$T/calls.log" | cut -d' ' -f4- | jq -r .name | paste -sd' ')" "lollo-alfred lollo-alfred-pages"
+  eq "$(grep '^curl POST /zones/zone1/dns_records ' "$T/calls.log" | cut -d' ' -f4- | jq -r .name | paste -sd' ')" "alfred-lollo.example.org alfred.example.org"
+  log_has "compose -p lollo-alfred"
   log_has "up -d --no-build"
   out_has "https://alfred.example.org"
 }
@@ -368,17 +368,17 @@ test_add_payloads() {
     '["self_hosted","alfred.example.org","alfred.example.org",["idp-g"],true,[{"id":"pol1","precedence":1}]]'
   # No script on the stack's origin may read the Access token.
   eq "$(jq -c '[.http_only_cookie_attribute, .same_site_cookie_attribute]' <<<"$b")" '[true,"lax"]'
-  # The garden's application: its own host and audience, the same policy and cookie.
+  # The lollo's application: its own host and audience, the same policy and cookie.
   local g
   g=$(body_of POST /accounts/acc1/access/apps)
   eq "$(jq -c '[.name, .domain, .destinations[0].uri, .policies]' <<<"$g")" \
-    '["lettuce-alfred-garden","alfred-garden.example.org","alfred-garden.example.org",[{"id":"pol1","precedence":1}]]'
+    '["lollo-alfred-pages","alfred-lollo.example.org","alfred-lollo.example.org",[{"id":"pol1","precedence":1}]]'
   eq "$(jq -c 'del(.name, .domain, .destinations)' <<<"$g")" "$(jq -c 'del(.name, .domain, .destinations)' <<<"$b")"
   b=$(body_of POST /accounts/acc1/cfd_tunnel)
-  eq "$(jq -c '[.name, .config_src]' <<<"$b")" '["lettuce-alfred","cloudflare"]'
-  eq "$(ingress)" "[$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(jq -c '[.name, .config_src]' <<<"$b")" '["lollo-alfred","cloudflare"]'
+  eq "$(ingress)" "[$LOLLO_404,$LETTUCE_TAIL]"
   b=$(first_body_of POST /zones/zone1/dns_records)
-  eq "$(jq -c '[.type, .name, .content, .proxied]' <<<"$b")" '["CNAME","alfred-garden.example.org","tun1.cfargotunnel.com",true]'
+  eq "$(jq -c '[.type, .name, .content, .proxied]' <<<"$b")" '["CNAME","alfred-lollo.example.org","tun1.cfargotunnel.com",true]'
   b=$(body_of POST /zones/zone1/dns_records)
   eq "$(jq -c '[.type, .name, .content, .proxied]' <<<"$b")" '["CNAME","alfred.example.org","tun1.cfargotunnel.com",true]'
 }
@@ -394,11 +394,11 @@ test_add_writes_private_stack_env() {
   eq "$(senv alfred LETTA_STATE_DIR)" "$D/stacks/alfred/state"
   eq "$(senv alfred CF_ACCESS_TEAM_DOMAIN)" team
   eq "$(senv alfred CF_ACCESS_AUD)" aud1
-  eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden.example.org
-  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden.example.org
-  eq "$(senv alfred CF_GARDEN_APP_ID)" app2
-  eq "$(senv alfred CF_GARDEN_AUD)" aud2
-  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
+  eq "$(senv alfred LOLLO_HOSTNAME)" alfred-lollo.example.org
+  eq "$(senv alfred LOLLO_ORIGIN)" https://alfred-lollo.example.org
+  eq "$(senv alfred CF_LOLLO_APP_ID)" app2
+  eq "$(senv alfred CF_LOLLO_AUD)" aud2
+  eq "$(senv alfred CF_LOLLO_DNS_RECORD_ID)" rec2
   eq "$(senv alfred CF_DNS_RECORD_ID)" rec1
   eq "$(senv alfred CLOUDFLARE_TUNNEL_TOKEN)" tuntok1
   eq "$(senv alfred TZ)" UTC
@@ -427,129 +427,129 @@ test_add_secrets_differ_between_stacks() {
 }
 
 test_add_routes_the_vault_path_with_the_profile() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-vault/' "$D/config.env"
   vault_config
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/vault(/|$)","service":"http://garden-vault:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
-  out_has "Its garden pages: https://alfred-garden.example.org/"
+  eq "$(ingress)" '[{"hostname":"alfred-lollo.example.org","path":"^/vault(/|$)","service":"http://lollo-vault:8000"},'"$LANDING,$LOLLO_404,$LETTUCE_TAIL]"
+  out_has "Its lollo pages: https://alfred-lollo.example.org/"
 }
 
 test_add_routes_gmail_triggers_with_the_profile() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers,lollo-vault/' "$D/config.env"
   vault_config
   triggers_config
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/vault(/|$)","service":"http://garden-vault:8000"},{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://garden-gmail-triggers:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(ingress)" '[{"hostname":"alfred-lollo.example.org","path":"^/vault(/|$)","service":"http://lollo-vault:8000"},{"hostname":"alfred-lollo.example.org","path":"^/gmail-triggers(/|$)","service":"http://lollo-gmail-triggers:8000"},'"$LANDING,$LOLLO_404,$LETTUCE_TAIL]"
 }
 
-# The landing page links each garden page profile, garden-<page>, to /<page>/ on
-# the garden host, so every PROFILE_ROUTES row must route that path to its sidecar.
-test_garden_routes_follow_the_profile_names() {
+# The landing page links each lollo page profile, lollo-<page>, to /<page>/ on
+# the lollo host, so every PROFILE_ROUTES row must route that path to its sidecar.
+test_lollo_routes_follow_the_profile_names() {
   local r p path svc
   # shellcheck source=/dev/null
   source <(sed -n '/^PROFILE_ROUTES=(/,/^)/p' "$ROOT/lib/cloudflare.sh")
   ((${#PROFILE_ROUTES[@]} > 0)) || fail "no PROFILE_ROUTES"
   for r in "${PROFILE_ROUTES[@]}"; do
     read -r p path svc <<<"$r"
-    [[ $p == garden-?* ]] || fail "profile $p lacks the garden- prefix"
-    eq "$path" "^/${p#garden-}(/|\$)"
+    [[ $p == lollo-?* ]] || fail "profile $p lacks the lollo- prefix"
+    eq "$path" "^/${p#lollo-}(/|\$)"
   done
 }
 
-test_up_gives_the_sidecars_only_the_garden_profiles() {
+test_up_gives_the_sidecars_only_the_lollo_profiles() {
   added
   ctl up alfred
   ok_rc
-  eq "$(senv alfred GARDEN_PROFILES)" ""
+  eq "$(senv alfred LOLLO_PROFILES)" ""
   with_triggers
   vault_config
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers,lollo-vault/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,lollo-gmail-triggers,lollo-vault/' "$D/stacks/alfred/stack.env"
   ctl up alfred
   ok_rc
   # In PROFILE_ROUTES order, which is the landing page's.
-  eq "$(senv alfred GARDEN_PROFILES)" garden-vault,garden-gmail-triggers
+  eq "$(senv alfred LOLLO_PROFILES)" lollo-vault,lollo-gmail-triggers
   eq "$(stat -c %a "$D/stacks/alfred/stack.env")" 600
 }
 
-# A profile that adds no garden page leaves GARDEN_PROFILES, and so the
+# A profile that adds no lollo page leaves LOLLO_PROFILES, and so the
 # sidecars' config, alone: Compose would recreate them, and the vault relock.
-test_profiles_leave_garden_profiles_alone_for_other_profiles() {
+test_profiles_leave_lollo_profiles_alone_for_other_profiles() {
   vault_config
   added
-  ctl profiles cloudflared,search,garden-vault
+  ctl profiles cloudflared,search,lollo-vault
   ok_rc
-  eq "$(senv alfred GARDEN_PROFILES)" garden-vault
-  ctl profiles cloudflared,garden-vault
+  eq "$(senv alfred LOLLO_PROFILES)" lollo-vault
+  ctl profiles cloudflared,lollo-vault
   ok_rc
-  eq "$(senv alfred GARDEN_PROFILES)" garden-vault
+  eq "$(senv alfred LOLLO_PROFILES)" lollo-vault
   ctl profiles cloudflared,search
   ok_rc
-  eq "$(senv alfred GARDEN_PROFILES)" ""
+  eq "$(senv alfred LOLLO_PROFILES)" ""
 }
 
-# The garden host is named after Lettuce's, whichever name Lettuce got.
+# The lollo host is named after Lettuce's, whichever name Lettuce got.
 test_add_falls_back_when_name_resolves() {
   echo "alfred.example.org A 1.2.3.4" >"$T/dns.txt"
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(senv alfred PUBLIC_ORIGIN)" https://lettuce-alfred.example.org
-  eq "$(senv alfred GARDEN_ORIGIN)" https://lettuce-alfred-garden.example.org
+  eq "$(senv alfred PUBLIC_ORIGIN)" https://lollo-alfred.example.org
+  eq "$(senv alfred LOLLO_ORIGIN)" https://lollo-alfred-lollo.example.org
 }
 
-# taken_gardens LABEL -> every garden name pick_garden_hostname tries for LABEL
-taken_gardens() {
+# taken_lollos LABEL -> every lollo name pick_lollo_hostname tries for LABEL
+taken_lollos() {
   local i
-  printf '%s-garden.example.org' "$1"
-  for i in 2 3 4 5 6 7 8 9; do printf ' %s-garden-%s.example.org' "$1" "$i"; done
+  printf '%s-lollo.example.org' "$1"
+  for i in 2 3 4 5 6 7 8 9; do printf ' %s-lollo-%s.example.org' "$1" "$i"; done
 }
 
-test_add_numbers_the_garden_name_when_taken() {
-  echo "alfred-garden.example.org CNAME elsewhere.example.net." >"$T/dns.txt"
-  stub STUB_CF_TAKEN=alfred-garden-2.example.org
+test_add_numbers_the_lollo_name_when_taken() {
+  echo "alfred-lollo.example.org CNAME elsewhere.example.net." >"$T/dns.txt"
+  stub STUB_CF_TAKEN=alfred-lollo-2.example.org
   ctl add alfred alfred@example.com
   ok_rc
   eq "$(senv alfred PUBLIC_ORIGIN)" https://alfred.example.org
-  eq "$(senv alfred GARDEN_HOSTNAME)" alfred-garden-3.example.org
-  eq "$(senv alfred GARDEN_ORIGIN)" https://alfred-garden-3.example.org
+  eq "$(senv alfred LOLLO_HOSTNAME)" alfred-lollo-3.example.org
+  eq "$(senv alfred LOLLO_ORIGIN)" https://alfred-lollo-3.example.org
   rm "$T/dns.txt"
   ctl add hal hal@example.com
   ok_rc
-  eq "$(senv hal GARDEN_HOSTNAME)" hal-garden.example.org
+  eq "$(senv hal LOLLO_HOSTNAME)" hal-lollo.example.org
 }
 
-test_add_fails_when_every_garden_name_is_taken() {
-  stub "STUB_CF_TAKEN=\"$(taken_gardens alfred)\""
+test_add_fails_when_every_lollo_name_is_taken() {
+  stub "STUB_CF_TAKEN=\"$(taken_lollos alfred)\""
   ctl add alfred alfred@example.com
   bad_rc
-  out_has "every garden name from alfred-garden.example.org to alfred-garden-9.example.org is taken"
+  out_has "every lollo name from alfred-lollo.example.org to alfred-lollo-9.example.org is taken"
   [[ ! -e $D/stacks/alfred ]] || fail "stack dir left behind"
   log_lacks "curl POST"
 }
 
-# <name>-garden.<domain> is the garden host of <name>, so no new stack may take it.
-test_add_refuses_a_name_ending_in_garden() {
-  ctl add alfred-garden alfred@example.com
+# <name>-lollo.<domain> is the lollo host of <name>, so no new stack may take it.
+test_add_refuses_a_name_ending_in_lollo() {
+  ctl add alfred-lollo alfred@example.com
   bad_rc
-  out_has "invalid stack name 'alfred-garden': it may not end in -garden"
+  out_has "invalid stack name 'alfred-lollo': it may not end in -lollo"
   log_lacks "curl "
-  [[ ! -e $D/stacks/alfred-garden ]] || fail "stack dir created for a refused name"
+  [[ ! -e $D/stacks/alfred-lollo ]] || fail "stack dir created for a refused name"
 }
 
 test_add_falls_back_when_name_is_in_the_zone() {
   stub STUB_CF_TAKEN=alfred.example.org
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(senv alfred PUBLIC_ORIGIN)" https://lettuce-alfred.example.org
+  eq "$(senv alfred PUBLIC_ORIGIN)" https://lollo-alfred.example.org
 }
 
 test_add_fails_when_both_names_taken() {
-  printf '%s\n' "mail.example.org CNAME mail.example.net." "lettuce-mail.example.org TXT x" >"$T/dns.txt"
+  printf '%s\n' "mail.example.org CNAME mail.example.net." "lollo-mail.example.org TXT x" >"$T/dns.txt"
   ctl add mail a@b.com
   bad_rc
-  out_has "lettuce-mail.example.org"
+  out_has "lollo-mail.example.org"
   [[ ! -e $D/stacks/mail ]] || fail "stack dir left behind"
 }
 
@@ -566,9 +566,9 @@ test_add_resumes_after_a_failure() {
   ctl add alfred alfred@example.com
   bad_rc
   out_has "stubbed failure"
-  out_has "lettucectl add alfred"
+  out_has "lolloctl add alfred"
   eq "$(senv alfred CF_ACCESS_APP_ID)" app1
-  eq "$(senv alfred CF_GARDEN_APP_ID)" app2
+  eq "$(senv alfred CF_LOLLO_APP_ID)" app2
   : >"$T/stub.env"
   : >"$T/calls.log"
   ctl add alfred alfred@example.com
@@ -576,7 +576,7 @@ test_add_resumes_after_a_failure() {
   eq "$(calls | tr '\n' ';')" "POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
 }
 
-test_add_resumes_after_a_failed_garden_application() {
+test_add_resumes_after_a_failed_lollo_application() {
   stub 'STUB_CF_FAIL="POST /accounts/acc1/access/apps"'
   ctl add alfred alfred@example.com
   bad_rc
@@ -585,15 +585,15 @@ test_add_resumes_after_a_failed_garden_application() {
   ctl add alfred alfred@example.com
   ok_rc
   eq "$(calls | tr '\n' ';')" "POST /accounts/acc1/access/apps;POST /accounts/acc1/access/apps;POST /accounts/acc1/cfd_tunnel;GET /accounts/acc1/cfd_tunnel/tun1/token;PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
-  eq "$(senv alfred CF_GARDEN_AUD)" aud2
+  eq "$(senv alfred CF_LOLLO_AUD)" aud2
 }
 
-test_add_resumes_after_a_failed_garden_dns_record() {
-  # The garden's record comes first, so this fails before Lettuce's.
+test_add_resumes_after_a_failed_lollo_dns_record() {
+  # The lollo's record comes first, so this fails before Lettuce's.
   stub 'STUB_CF_FAIL="POST /zones/zone1/dns_records"'
   ctl add alfred alfred@example.com
   bad_rc
-  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" ""
+  eq "$(senv alfred CF_LOLLO_DNS_RECORD_ID)" ""
   eq "$(senv alfred CF_DNS_RECORD_ID)" ""
   log_lacks "up -d"
   : >"$T/stub.env"
@@ -601,7 +601,7 @@ test_add_resumes_after_a_failed_garden_dns_record() {
   ctl add alfred alfred@example.com
   ok_rc
   eq "$(calls | tr '\n' ';')" "PUT /accounts/acc1/cfd_tunnel/tun1/configurations;POST /zones/zone1/dns_records;POST /zones/zone1/dns_records;"
-  eq "$(senv alfred CF_GARDEN_DNS_RECORD_ID)" rec2
+  eq "$(senv alfred CF_LOLLO_DNS_RECORD_ID)" rec2
   eq "$(senv alfred CF_DNS_RECORD_ID)" rec1
 }
 
@@ -614,13 +614,13 @@ test_add_prints_the_google_redirect_uri() {
 
 test_add_keeps_the_google_hint_when_the_executor_cannot_be_installed() {
   triggers_config
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers/' "$D/config.env"
   stub STUB_EXEC_RC=1
   ctl add alfred alfred@example.com
   bad_rc
   out_has "https://alfred.example.org/api/google/oauth/callback"
-  out_has "the garden executor is out of step on: alfred; fix the cause, then run: lettucectl up <name>"
-  out_lacks "lettucectl add alfred"
+  out_has "the lollo executor is out of step on: alfred; fix the cause, then run: lolloctl up <name>"
+  out_lacks "lolloctl add alfred"
 }
 
 test_add_skips_the_google_hint_without_the_profile() {
@@ -639,7 +639,7 @@ test_add_refuses_an_existing_stack() {
 }
 
 # ── check / up ───────────────────────────────────────────────────────────────
-# added -> a fresh alfred stack, made by `lettucectl add`, with an empty call log.
+# added -> a fresh alfred stack, made by `lolloctl add`, with an empty call log.
 # Most tests start with one and `add` is the suite's slowest step, so it runs
 # once per run for each starting state: the next test that starts from the same
 # state gets a copy of the result, with the first test's $T replaced by its own.
@@ -839,11 +839,11 @@ test_check_accepts_dropping_every_capability() {
   ok_rc
 }
 
-# with_vault [VAULT_JSON] -> alfred runs the `garden-vault` profile and the
+# with_vault [VAULT_JSON] -> alfred runs the `lollo-vault` profile and the
 # rendered config holds this vault (default: the hardened one)
 with_vault() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-vault/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-vault/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,lollo-vault/' "$D/stacks/alfred/stack.env"
   vault_config "$@"
 }
 
@@ -884,7 +884,7 @@ test_check_refuses_a_vault_with_privileges_or_shared_namespaces() {
     with_vault '{"read_only":true,"cap_drop":["ALL"],"volumes":[],"'"$k"'":'"$v"'}'
     ctl check alfred
     bad_rc
-    out_has "alfred: garden-vault must not set $k"
+    out_has "alfred: lollo-vault must not set $k"
   done <<'EOF'
 privileged true
 cap_add ["SYS_ADMIN"]
@@ -909,7 +909,7 @@ test_check_refuses_another_service_on_the_vault_volume() {
 test_check_refuses_the_vault_profile_without_the_vault() {
   added
   with_vault
-  jq -c 'del(.services["garden-vault"])' "$T/compose-config.json" >"$T/c.json"
+  jq -c 'del(.services["lollo-vault"])' "$T/compose-config.json" >"$T/c.json"
   mv "$T/c.json" "$T/compose-config.json"
   ctl check alfred
   bad_rc
@@ -921,18 +921,18 @@ test_check_refuses_the_vault_profile_without_the_vault() {
 # proxy settings from compose/pipelock-proxy.yml
 pipelock_config() {
   local svc=${1:-'{"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],"volumes":[{"type":"volume","source":"pipelock-data","target":"/data"}]}'}
-  local np=localhost,127.0.0.1,::1,garden-pipelock,garden-vault,garden-gmail-triggers,garden-news-radar,garden,searxng,ddg-mcp,google-mcp,host.docker.internal
-  config_edit '.services["garden-pipelock"] = '"$svc"'
-    | .services["app-server"].environment += {"HTTPS_PROXY":"http://garden-pipelock:8888","HTTP_PROXY":"http://garden-pipelock:8888",
-      "https_proxy":"http://garden-pipelock:8888","http_proxy":"http://garden-pipelock:8888","NO_PROXY":"'"$np"'","no_proxy":"'"$np"'",
+  local np=localhost,127.0.0.1,::1,lollo-pipelock,lollo-vault,lollo-gmail-triggers,lollo-news-radar,landing,searxng,ddg-mcp,google-mcp,host.docker.internal
+  config_edit '.services["lollo-pipelock"] = '"$svc"'
+    | .services["app-server"].environment += {"HTTPS_PROXY":"http://lollo-pipelock:8888","HTTP_PROXY":"http://lollo-pipelock:8888",
+      "https_proxy":"http://lollo-pipelock:8888","http_proxy":"http://lollo-pipelock:8888","NO_PROXY":"'"$np"'","no_proxy":"'"$np"'",
       "NODE_USE_ENV_PROXY":"1"}'
 }
 
-# with_pipelock [PIPELOCK_JSON] -> alfred runs the `garden-pipelock` profile and the
+# with_pipelock [PIPELOCK_JSON] -> alfred runs the `lollo-pipelock` profile and the
 # rendered config holds this pipelock (default: the hardened one)
 with_pipelock() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-pipelock/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-pipelock/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-pipelock/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,lollo-pipelock/' "$D/stacks/alfred/stack.env"
   pipelock_config "$@"
 }
 
@@ -954,7 +954,7 @@ test_check_refuses_a_pipelock_that_is_not_hardened() {
     with_pipelock "$p"
     ctl check alfred
     bad_rc
-    out_has "alfred: garden-pipelock must"
+    out_has "alfred: lollo-pipelock must"
   done
 }
 
@@ -985,19 +985,19 @@ test_check_refuses_the_vault_volume_without_the_profile() {
 
 test_check_refuses_volumes_from_pipelock() {
   added
-  config_edit '.services.searxng = {"volumes_from":["garden-pipelock"]}'
+  config_edit '.services.searxng = {"volumes_from":["lollo-pipelock"]}'
   ctl check alfred
   bad_rc
-  out_has "(searxng from garden-pipelock)"
+  out_has "(searxng from lollo-pipelock)"
 }
 
 test_check_refuses_pipelock_profile_without_the_service() {
   added
   with_pipelock
-  config_edit 'del(.services["garden-pipelock"])'
+  config_edit 'del(.services["lollo-pipelock"])'
   ctl check alfred
   bad_rc
-  out_has "garden-pipelock is not in the rendered config"
+  out_has "lollo-pipelock is not in the rendered config"
 }
 
 test_check_refuses_an_app_server_that_skips_pipelock() {
@@ -1008,7 +1008,7 @@ test_check_refuses_an_app_server_that_skips_pipelock() {
     config_edit '.services["app-server"].environment["'"$k"'"] = "http://elsewhere:3128"'
     ctl check alfred
     bad_rc
-    out_has "the app-server's $k must be http://garden-pipelock:8888"
+    out_has "the app-server's $k must be http://lollo-pipelock:8888"
   done
 }
 
@@ -1016,7 +1016,7 @@ test_check_refuses_a_proxy_that_would_see_the_vault_or_the_executor() {
   added
   local k v
   for k in NO_PROXY no_proxy; do
-    for v in garden-vault garden-gmail-triggers garden-news-radar garden; do
+    for v in lollo-vault lollo-gmail-triggers lollo-news-radar landing; do
       with_pipelock
       config_edit '.services["app-server"].environment["'"$k"'"] |= (split(",") - ["'"$v"'"] | join(","))'
       ctl check alfred
@@ -1032,11 +1032,11 @@ test_check_ignores_proxy_settings_without_pipelock() {
   ok_rc
 }
 
-# with_triggers -> alfred runs the garden-gmail-triggers profile (with google), and the
+# with_triggers -> alfred runs the lollo-gmail-triggers profile (with google), and the
 # rendered config holds the hardened service
 with_triggers() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,lollo-gmail-triggers/' "$D/stacks/alfred/stack.env"
   triggers_config
 }
 
@@ -1050,11 +1050,11 @@ test_check_accepts_the_hardened_gmail_triggers() {
 test_check_refuses_gmail_triggers_without_google() {
   added
   with_triggers
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-gmail-triggers/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-gmail-triggers/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-gmail-triggers/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,lollo-gmail-triggers/' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "alfred: the garden-gmail-triggers profile needs google"
+  out_has "alfred: the lollo-gmail-triggers profile needs google"
 }
 
 # triggers_refused JQ EXPECTED -> with alfred's hardened gmail-triggers edited by
@@ -1067,80 +1067,80 @@ triggers_refused() {
   bad_rc
   out_has "alfred: $2"
 }
-GT='.services["garden-gmail-triggers"]'
+GT='.services["lollo-gmail-triggers"]'
 
 test_check_refuses_gmail_triggers_missing() {
-  triggers_refused "del($GT)" "the garden-gmail-triggers profile is on but garden-gmail-triggers is not in the rendered config"
+  triggers_refused "del($GT)" "the lollo-gmail-triggers profile is on but lollo-gmail-triggers is not in the rendered config"
 }
 
 test_check_refuses_gmail_triggers_without_read_only() {
-  triggers_refused "del($GT.read_only)" "garden-gmail-triggers must have read_only: true"
+  triggers_refused "del($GT.read_only)" "lollo-gmail-triggers must have read_only: true"
 }
 
 test_check_refuses_gmail_triggers_with_capabilities() {
-  triggers_refused "$GT.cap_drop = [\"NET_RAW\"]" "garden-gmail-triggers must drop all capabilities"
+  triggers_refused "$GT.cap_drop = [\"NET_RAW\"]" "lollo-gmail-triggers must drop all capabilities"
 }
 
 test_check_refuses_gmail_triggers_privileged() {
-  triggers_refused "$GT.privileged = true" "garden-gmail-triggers must not set privileged"
+  triggers_refused "$GT.privileged = true" "lollo-gmail-triggers must not set privileged"
 }
 
 test_check_refuses_gmail_triggers_cap_add() {
-  triggers_refused "$GT.cap_add = [\"SYS_ADMIN\"]" "garden-gmail-triggers must not set cap_add"
+  triggers_refused "$GT.cap_add = [\"SYS_ADMIN\"]" "lollo-gmail-triggers must not set cap_add"
 }
 
 test_check_refuses_gmail_triggers_network_mode() {
   # In the app-server's namespace an agent could take over its port.
-  triggers_refused "$GT.network_mode = \"service:app-server\"" "garden-gmail-triggers must not set network_mode"
+  triggers_refused "$GT.network_mode = \"service:app-server\"" "lollo-gmail-triggers must not set network_mode"
 }
 
 test_check_refuses_gmail_triggers_pid() {
-  triggers_refused "$GT.pid = \"host\"" "garden-gmail-triggers must not set pid"
+  triggers_refused "$GT.pid = \"host\"" "lollo-gmail-triggers must not set pid"
 }
 
 test_check_refuses_gmail_triggers_ipc() {
-  triggers_refused "$GT.ipc = \"host\"" "garden-gmail-triggers must not set ipc"
+  triggers_refused "$GT.ipc = \"host\"" "lollo-gmail-triggers must not set ipc"
 }
 
 test_check_refuses_gmail_triggers_volumes_from() {
-  triggers_refused "$GT.volumes_from = [\"app-server\"]" "garden-gmail-triggers must not set volumes_from"
+  triggers_refused "$GT.volumes_from = [\"app-server\"]" "lollo-gmail-triggers must not set volumes_from"
 }
 
 test_check_refuses_gmail_triggers_devices() {
-  triggers_refused "$GT.devices = [{\"source\":\"/dev/fuse\",\"target\":\"/dev/fuse\",\"permissions\":\"rwm\"}]" "garden-gmail-triggers must not set devices"
+  triggers_refused "$GT.devices = [{\"source\":\"/dev/fuse\",\"target\":\"/dev/fuse\",\"permissions\":\"rwm\"}]" "lollo-gmail-triggers must not set devices"
 }
 
 test_check_refuses_gmail_triggers_with_another_host_path() {
-  triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden-gmail-triggers may mount from the host only"
+  triggers_refused "$GT.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "lollo-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_without_its_state() {
-  triggers_refused "del($GT.volumes[0])" "garden-gmail-triggers may mount from the host only"
+  triggers_refused "del($GT.volumes[0])" "lollo-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_on_a_parent_of_its_state() {
-  triggers_refused "$GT.volumes[0].source = \"$D/stacks/alfred/state/garden\"" "garden-gmail-triggers may mount from the host only"
+  triggers_refused "$GT.volumes[0].source = \"$D/stacks/alfred/state/lollo\"" "lollo-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_with_its_state_elsewhere() {
-  triggers_refused "$GT.volumes[0].target = \"/root\"" "garden-gmail-triggers may mount from the host only"
+  triggers_refused "$GT.volumes[0].target = \"/root\"" "lollo-gmail-triggers may mount from the host only"
 }
 
 test_check_refuses_gmail_triggers_writable_google_creds() {
-  triggers_refused "del($GT.volumes[1].read_only)" "garden-gmail-triggers must mount google-creds and google-policy read-only"
+  triggers_refused "del($GT.volumes[1].read_only)" "lollo-gmail-triggers must mount google-creds and google-policy read-only"
 }
 
 test_check_refuses_gmail_triggers_writable_google_policy() {
-  triggers_refused "$GT.volumes[2].read_only = false" "garden-gmail-triggers must mount google-creds and google-policy read-only"
+  triggers_refused "$GT.volumes[2].read_only = false" "lollo-gmail-triggers must mount google-creds and google-policy read-only"
 }
 
 test_check_refuses_gmail_triggers_other_volumes() {
-  triggers_refused "$GT.volumes += [{\"type\":\"volume\",\"source\":\"bff-auth\",\"target\":\"/x\"}]" "garden-gmail-triggers must not mount bff-auth"
+  triggers_refused "$GT.volumes += [{\"type\":\"volume\",\"source\":\"bff-auth\",\"target\":\"/x\"}]" "lollo-gmail-triggers must not mount bff-auth"
 }
 
 test_check_refuses_another_service_on_the_rules() {
-  triggers_refused ".services[\"app-server\"].volumes = [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state/garden/gmail-triggers\",\"target\":\"/x\"}]" \
-    "app-server mounts $D/stacks/alfred/state/garden/gmail-triggers, which reaches $D/stacks/alfred/state/garden"
+  triggers_refused ".services[\"app-server\"].volumes = [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state/lollo/gmail-triggers\",\"target\":\"/x\"}]" \
+    "app-server mounts $D/stacks/alfred/state/lollo/gmail-triggers, which reaches $D/stacks/alfred/state/lollo"
 }
 
 test_check_refuses_another_service_on_a_parent_of_the_rules() {
@@ -1149,18 +1149,18 @@ test_check_refuses_another_service_on_a_parent_of_the_rules() {
 }
 
 test_check_refuses_another_service_on_a_symlink_to_the_rules() {
-  ln -s "$D/stacks/alfred/state/garden" "$T/link"
+  ln -s "$D/stacks/alfred/state/lollo" "$T/link"
   triggers_refused ".services.bff.volumes += [{\"type\":\"bind\",\"source\":\"$T/link/gmail-triggers\",\"target\":\"/x\"}]" \
     "bff mounts $T/link/gmail-triggers, which reaches"
 }
 
 test_check_refuses_volumes_from_gmail_triggers() {
-  triggers_refused ".services.bff.volumes_from = [\"garden-gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, News Radar or the code editor (bff from garden-gmail-triggers)"
+  triggers_refused ".services.bff.volumes_from = [\"lollo-gmail-triggers:ro\"]" "volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, News Radar or the code editor (bff from lollo-gmail-triggers)"
 }
 
 test_check_refuses_a_volume_bound_to_the_rules() {
-  triggers_refused ".volumes = {\"rules\":{\"driver\":\"local\",\"driver_opts\":{\"type\":\"none\",\"o\":\"bind\",\"device\":\"$D/stacks/alfred/state/garden/\"}}}" \
-    "volume rules is bound to $D/stacks/alfred/state/garden/, which reaches"
+  triggers_refused ".volumes = {\"rules\":{\"driver\":\"local\",\"driver_opts\":{\"type\":\"none\",\"o\":\"bind\",\"device\":\"$D/stacks/alfred/state/lollo/\"}}}" \
+    "volume rules is bound to $D/stacks/alfred/state/lollo/, which reaches"
 }
 
 test_check_refuses_a_volume_bound_to_a_parent_of_the_rules() {
@@ -1190,24 +1190,24 @@ test_check_refuses_a_symlinked_state_dir() {
   out_has "alfred: $D/stacks/alfred/state is a symlink"
 }
 
-test_check_refuses_a_symlinked_garden() {
+test_check_refuses_a_symlinked_lollo() {
   added
   mkdir -p "$T/elsewhere"
-  ln -s "$T/elsewhere" "$D/stacks/alfred/state/garden"
+  ln -s "$T/elsewhere" "$D/stacks/alfred/state/lollo"
   with_triggers
   ctl check alfred
   bad_rc
-  out_has "alfred: $D/stacks/alfred/state/garden is a symlink"
+  out_has "alfred: $D/stacks/alfred/state/lollo is a symlink"
 }
 
 test_check_refuses_a_symlinked_rules_dir() {
   added
-  mkdir -p "$T/elsewhere" "$D/stacks/alfred/state/garden"
-  ln -s "$T/elsewhere" "$D/stacks/alfred/state/garden/gmail-triggers"
+  mkdir -p "$T/elsewhere" "$D/stacks/alfred/state/lollo"
+  ln -s "$T/elsewhere" "$D/stacks/alfred/state/lollo/gmail-triggers"
   with_triggers
   ctl check alfred
   bad_rc
-  out_has "alfred: $D/stacks/alfred/state/garden/gmail-triggers is a symlink"
+  out_has "alfred: $D/stacks/alfred/state/lollo/gmail-triggers is a symlink"
 }
 
 test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
@@ -1221,10 +1221,10 @@ test_check_refuses_volumes_from_a_google_creds_holder_whatever_the_profiles() {
 
 test_check_refuses_volumes_from_the_vault() {
   added
-  config_edit '.services.searxng = {"volumes_from":["garden-vault"]}'
+  config_edit '.services.searxng = {"volumes_from":["lollo-vault"]}'
   ctl check alfred
   bad_rc
-  out_has "(searxng from garden-vault)"
+  out_has "(searxng from lollo-vault)"
 }
 
 test_check_accepts_volumes_from_elsewhere() {
@@ -1237,33 +1237,33 @@ test_check_accepts_volumes_from_elsewhere() {
 test_check_refuses_a_missing_executor_token() {
   added
   with_triggers
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
+  sed -i '/^LOLLO_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+  out_has "alfred: LOLLO_EXECUTOR_TOKEN must be 64 lowercase hex characters"
 }
 
 test_check_refuses_a_malformed_executor_token() {
   added
   with_triggers
-  sed -i 's/^GARDEN_EXECUTOR_TOKEN=.*/GARDEN_EXECUTOR_TOKEN=ABCDEF/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^LOLLO_EXECUTOR_TOKEN=.*/LOLLO_EXECUTOR_TOKEN=ABCDEF/' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+  out_has "LOLLO_EXECUTOR_TOKEN must be 64 lowercase hex characters"
 }
 
-test_check_refuses_a_missing_executor_token_with_any_garden_profile() {
+test_check_refuses_a_missing_executor_token_with_any_lollo_profile() {
   added
   with_vault
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
+  sed -i '/^LOLLO_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+  out_has "alfred: LOLLO_EXECUTOR_TOKEN must be 64 lowercase hex characters"
 }
 
 test_check_needs_no_executor_token_without_the_profile() {
   added
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
+  sed -i '/^LOLLO_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   ctl check alfred
   ok_rc
 }
@@ -1271,23 +1271,23 @@ test_check_needs_no_executor_token_without_the_profile() {
 test_up_creates_the_executor_token_once() {
   added
   local tok
-  tok=$(senv alfred GARDEN_EXECUTOR_TOKEN)
+  tok=$(senv alfred LOLLO_EXECUTOR_TOKEN)
   [[ $tok =~ ^[0-9a-f]{64}$ ]] || fail "bad token [$tok]"
   ctl up alfred
   ok_rc
-  eq "$(senv alfred GARDEN_EXECUTOR_TOKEN)" "$tok"
+  eq "$(senv alfred LOLLO_EXECUTOR_TOKEN)" "$tok"
   eq "$(stat -c %a "$D/stacks/alfred/stack.env")" 600
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
+  sed -i '/^LOLLO_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
   ctl up alfred
   ok_rc
-  [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "token not recreated"
+  [[ $(senv alfred LOLLO_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "token not recreated"
 }
 
 test_executor_tokens_differ_between_stacks() {
   ctl add alfred alfred@example.com
   ctl add hal hal@example.com
   ok_rc
-  [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) != "$(senv hal GARDEN_EXECUTOR_TOKEN)" ]] || fail "same token"
+  [[ $(senv alfred LOLLO_EXECUTOR_TOKEN) != "$(senv hal LOLLO_EXECUTOR_TOKEN)" ]] || fail "same token"
 }
 
 test_check_refuses_google_creds_in_other_services_whatever_the_profiles() {
@@ -1311,12 +1311,12 @@ exec_args() { tr '\0' '\n' <"$T/exec-args"; }
 
 # executor_cron_text [FLAGS] -> the cron file the executor is installed with
 executor_cron_text() {
-  printf '%s\n' '# Installed by lettucectl (garden-gmail-triggers, garden-news-radar or garden-code-server profile). Removed with the last of them.' \
+  printf '%s\n' '# Installed by lolloctl (lollo-gmail-triggers, lollo-news-radar or lollo-code-server profile). Removed with the last of them.' \
     'PATH=/usr/local/bin:/usr/bin:/bin' 'MAILTO=""'
-  printf '%s' "* * * * * root /usr/local/bin/agent-env env -u NODE_USE_ENV_PROXY node /root/.letta/garden/executor/bin/run.mjs${1:+ $1} >> /root/.letta/garden/executor/executor.log 2>&1"
+  printf '%s' "* * * * * root /usr/local/bin/agent-env env -u NODE_USE_ENV_PROXY node /root/.letta/lollo/executor/bin/run.mjs${1:+ $1} >> /root/.letta/lollo/executor/executor.log 2>&1"
 }
 GT_CRON_TEXT=$(executor_cron_text --gmail-triggers)
-EXECUTOR_ARGS="/root/.letta/garden/executor lettuce-garden-executor /root/.letta/system-cron /etc/cron.d /etc/lettuce-garden/executor-token"
+EXECUTOR_ARGS="/root/.letta/lollo/executor lollo-rozzo-executor /root/.letta/system-cron /etc/cron.d /etc/lollo-rozzo/executor-token"
 
 test_up_installs_the_gmail_triggers_executor() {
   added
@@ -1333,11 +1333,11 @@ test_up_installs_the_gmail_triggers_executor() {
   eq "${#a[@]}" 8
 }
 
-# with_news_radar -> alfred runs the garden-news-radar profile, and the rendered
+# with_news_radar -> alfred runs the lollo-news-radar profile, and the rendered
 # config holds the hardened service
 with_news_radar() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-news-radar/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-news-radar/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-news-radar/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,lollo-news-radar/' "$D/stacks/alfred/stack.env"
   news_radar_config
 }
 
@@ -1353,7 +1353,7 @@ news_radar_refused() {
   bad_rc
   out_has "alfred: $2"
 }
-MS='.services["garden-news-radar"]'
+MS='.services["lollo-news-radar"]'
 
 test_check_accepts_the_hardened_news_radar() {
   added
@@ -1363,14 +1363,14 @@ test_check_accepts_the_hardened_news_radar() {
 }
 
 test_check_refuses_a_news_radar_that_loses_its_isolation() {
-  news_radar_refused "del($MS)" "the garden-news-radar profile is on but garden-news-radar is not in the rendered config"
-  news_radar_refused "del($MS.read_only)" "garden-news-radar must have read_only: true"
-  news_radar_refused "$MS.cap_drop = [\"NET_RAW\"]" "garden-news-radar must drop all capabilities"
-  news_radar_refused "$MS.network_mode = \"service:app-server\"" "garden-news-radar must not set network_mode"
-  news_radar_refused "$MS.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden-news-radar must not mount host paths"
-  news_radar_refused "$MS.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "garden-news-radar may mount only its volume news-radar-data"
-  news_radar_refused "$MS.networks = {\"default\":null,\"code-egress\":null}" "garden-news-radar must be on the default network only"
-  news_radar_refused "$MS.environment.CF_ACCESS_AUD = \"\${CF_ACCESS_AUD}\"" "garden-news-radar must accept only the garden's Access application"
+  news_radar_refused "del($MS)" "the lollo-news-radar profile is on but lollo-news-radar is not in the rendered config"
+  news_radar_refused "del($MS.read_only)" "lollo-news-radar must have read_only: true"
+  news_radar_refused "$MS.cap_drop = [\"NET_RAW\"]" "lollo-news-radar must drop all capabilities"
+  news_radar_refused "$MS.network_mode = \"service:app-server\"" "lollo-news-radar must not set network_mode"
+  news_radar_refused "$MS.volumes += [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "lollo-news-radar must not mount host paths"
+  news_radar_refused "$MS.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "lollo-news-radar may mount only its volume news-radar-data"
+  news_radar_refused "$MS.networks = {\"default\":null,\"code-egress\":null}" "lollo-news-radar must be on the default network only"
+  news_radar_refused "$MS.environment.CF_ACCESS_AUD = \"\${CF_ACCESS_AUD}\"" "lollo-news-radar must accept only the lollo's Access application"
 }
 
 test_check_refuses_another_service_on_the_news_radar_volume_whatever_the_profiles() {
@@ -1378,14 +1378,14 @@ test_check_refuses_another_service_on_the_news_radar_volume_whatever_the_profile
   config_edit '.services.bff.volumes = [{"type":"volume","source":"news-radar-data","target":"/x"}]'
   ctl check alfred
   bad_rc
-  out_has "alfred: bff mount(s) News Radar's volume; only garden-news-radar may"
+  out_has "alfred: bff mount(s) News Radar's volume; only lollo-news-radar may"
   teardown
   setup
   added
-  config_edit '.services.searxng.volumes_from = ["garden-news-radar"]'
+  config_edit '.services.searxng.volumes_from = ["lollo-news-radar"]'
   ctl check alfred
   bad_rc
-  out_has "searxng from garden-news-radar"
+  out_has "searxng from lollo-news-radar"
 }
 
 test_up_installs_the_executor_with_the_news_radar() {
@@ -1400,7 +1400,7 @@ test_up_installs_the_executor_with_the_news_radar() {
 
 test_up_gives_the_executor_every_queue_that_is_on() {
   added
-  with_all_gardens
+  with_all_lollos
   ctl up alfred
   ok_rc
   local a=()
@@ -1422,7 +1422,7 @@ test_up_copies_the_news_radar_settings_from_config_env() {
   eq "$(grep '^NEWS_RADAR_' "$D/stacks/alfred/stack.env" | paste -sd' ')" "NEWS_RADAR_DEFAULT_TIMES=07:30,19:00"
 }
 
-# The executor feeds the garden's agent list, which only the code editor uses,
+# The executor feeds the lollo's agent list, which only the code editor uses,
 # so the code editor installs it too; only gmail-triggers turns on its request loop.
 test_up_installs_the_executor_with_the_code_editor() {
   added
@@ -1443,11 +1443,11 @@ test_up_with_only_the_vault_has_no_executor() {
   ctl up alfred
   ok_rc
   log_lacks " exec "
-  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/lollo/executor/bin"
   ctl up alfred
   ok_rc
   eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
-  out_has "alfred: removed the garden executor (none of garden-gmail-triggers, garden-news-radar and garden-code-server is on)"
+  out_has "alfred: removed the lollo executor (none of lollo-gmail-triggers, lollo-news-radar and lollo-code-server is on)"
 }
 
 test_up_passes_the_executor_token_only_on_stdin() {
@@ -1456,7 +1456,7 @@ test_up_passes_the_executor_token_only_on_stdin() {
   ctl up alfred
   ok_rc
   local tok
-  tok=$(senv alfred GARDEN_EXECUTOR_TOKEN)
+  tok=$(senv alfred LOLLO_EXECUTOR_TOKEN)
   eq "$(tar -xOf "$T/exec-stdin.log" token)" "$tok"
   eq "$(tar -tvf "$T/exec-stdin.log" token | cut -c1-10)" "-rw-------"
   ! grep -qF "$tok" "$T/calls.log" || fail "token in docker argv"
@@ -1470,8 +1470,8 @@ test_up_fails_clearly_when_the_executor_cannot_be_installed() {
   stub STUB_EXEC_RC=1
   ctl up alfred
   bad_rc
-  out_has "alfred: could not install the garden executor; the stack is up, but its garden gets no agent list and its Gmail triggers will not run"
-  out_has "the garden executor is out of step on: alfred; fix the cause, then run: lettucectl up <name>"
+  out_has "alfred: could not install the lollo executor; the stack is up, but its landing page gets no agent list and its Gmail triggers will not run"
+  out_has "the lollo executor is out of step on: alfred; fix the cause, then run: lolloctl up <name>"
 }
 
 test_up_all_continues_past_a_failed_executor_install() {
@@ -1482,31 +1482,31 @@ test_up_all_continues_past_a_failed_executor_install() {
   # One rendered config serves both stacks in the stub, so hal shares alfred's
   # state path to pass the bind-mount check.
   sed -i "s|^LETTA_STATE_DIR=.*|LETTA_STATE_DIR=$D/stacks/alfred/state|" "$D/stacks/hal/stack.env"
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/stacks/alfred/stack.env" "$D/stacks/hal/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,lollo-gmail-triggers/' "$D/stacks/alfred/stack.env" "$D/stacks/hal/stack.env"
   : >"$T/calls.log"
   stub STUB_EXEC_RC=1
   ctl up all
   bad_rc
-  log_has "-p lettuce-alfred"
-  grep -q '^docker compose -p lettuce-hal .* up -d --no-build' "$T/calls.log" || fail "hal not started after alfred's failed install"
-  out_has "the garden executor is out of step on: alfred hal; fix the cause, then run: lettucectl up <name>"
+  log_has "-p lollo-alfred"
+  grep -q '^docker compose -p lollo-hal .* up -d --no-build' "$T/calls.log" || fail "hal not started after alfred's failed install"
+  out_has "the lollo executor is out of step on: alfred hal; fix the cause, then run: lolloctl up <name>"
 }
 
 test_up_removes_the_executor_when_the_profile_is_off() {
   added
-  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/lollo/executor/bin"
   ctl up alfred
   ok_rc
   log_has "exec -T app-server sh -c"
   eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
-  out_has "alfred: removed the garden executor"
+  out_has "alfred: removed the lollo executor"
 }
 
 test_up_removes_an_executor_known_by_its_cron_file() {
   added
   mkdir -p "$D/stacks/alfred/state/letta-home/system-cron"
-  touch "$D/stacks/alfred/state/letta-home/system-cron/lettuce-garden-executor"
+  touch "$D/stacks/alfred/state/letta-home/system-cron/lollo-rozzo-executor"
   ctl up alfred
   ok_rc
   log_has "sh uninstall $EXECUTOR_ARGS"
@@ -1515,11 +1515,11 @@ test_up_removes_an_executor_known_by_its_cron_file() {
 test_up_fails_clearly_when_the_executor_cannot_be_removed() {
   added
   mkdir -p "$D/stacks/alfred/state/letta-home/system-cron"
-  touch "$D/stacks/alfred/state/letta-home/system-cron/lettuce-garden-executor"
+  touch "$D/stacks/alfred/state/letta-home/system-cron/lollo-rozzo-executor"
   stub STUB_EXEC_RC=1
   ctl up alfred
   bad_rc
-  out_has "alfred: could not remove the garden executor"
+  out_has "alfred: could not remove the lollo executor"
 }
 
 test_up_refuses_readable_stack_env() {
@@ -1535,7 +1535,7 @@ test_compose_ignores_the_callers_environment() {
   PUBLIC_ORIGIN=https://evil.example ctl up alfred
   ok_rc
   log_lacks "PUBLIC_ORIGIN=https://evil.example"
-  log_has "--project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/news-radar.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file $D/stacks/alfred/stack.env"
+  log_has "--project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/news-radar.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/landing.yml --env-file $D/stacks/alfred/stack.env"
   log_lacks "pipelock-proxy.yml"
 }
 
@@ -1544,7 +1544,7 @@ test_compose_adds_the_proxy_overlay_only_with_pipelock() {
   with_pipelock
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/pipelock-proxy.yml --env-file $D/stacks/alfred/stack.env"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/landing.yml -f $H/compose/pipelock-proxy.yml --env-file $D/stacks/alfred/stack.env"
 }
 
 # PIPELOCK_DIRECT: hosts an install reaches without pipelock (a model server on
@@ -1598,8 +1598,8 @@ test_up_all_starts_every_stack() {
   : >"$T/calls.log"
   ctl up all
   ok_rc
-  log_has "-p lettuce-alfred"
-  log_has "-p lettuce-hal"
+  log_has "-p lollo-alfred"
+  log_has "-p lollo-hal"
 }
 
 # ── users ────────────────────────────────────────────────────────────────────
@@ -1629,7 +1629,7 @@ test_remove_deletes_cloudflare_resources_and_keeps_data() {
   eq "$(calls | tr '\n' ';')" "DELETE /zones/zone1/dns_records/rec1;DELETE /zones/zone1/dns_records/rec2;DELETE /accounts/acc1/cfd_tunnel/tun1/connections;DELETE /accounts/acc1/cfd_tunnel/tun1;DELETE /accounts/acc1/access/apps/app2;DELETE /accounts/acc1/access/apps/app1;DELETE /accounts/acc1/access/policies/pol1;"
   [[ -d $D/stacks/alfred/state ]] || fail "state deleted without --purge"
   local k
-  for k in CF_TUNNEL_ID CF_DNS_RECORD_ID CF_GARDEN_DNS_RECORD_ID CF_GARDEN_APP_ID CF_GARDEN_AUD CF_ACCESS_APP_ID CF_ACCESS_POLICY_ID; do
+  for k in CF_TUNNEL_ID CF_DNS_RECORD_ID CF_LOLLO_DNS_RECORD_ID CF_LOLLO_APP_ID CF_LOLLO_AUD CF_ACCESS_APP_ID CF_ACCESS_POLICY_ID; do
     eq "$(senv alfred "$k")" ""
   done
 }
@@ -1640,14 +1640,14 @@ test_remove_keeps_the_ids_it_could_not_delete_and_retries_them() {
   ctl remove alfred <<<"alfred"
   ok_rc
   out_has "Access application app2"
-  eq "$(senv alfred CF_GARDEN_APP_ID)" app2
+  eq "$(senv alfred CF_LOLLO_APP_ID)" app2
   eq "$(senv alfred CF_ACCESS_APP_ID)" ""
   : >"$T/stub.env"
   : >"$T/calls.log"
   ctl remove alfred <<<"alfred"
   ok_rc
   eq "$(calls | tr '\n' ';')" "DELETE /accounts/acc1/access/apps/app2;"
-  eq "$(senv alfred CF_GARDEN_AUD)" ""
+  eq "$(senv alfred CF_LOLLO_AUD)" ""
 }
 
 test_remove_purge_deletes_the_stack_directory() {
@@ -1672,33 +1672,33 @@ test_remove_purge_empties_the_gmail_trigger_rules_too() {
   # They live under stack.env's LETTA_STATE_DIR, like every other mount.
   added
   state_elsewhere
-  mkdir -p "$T/state/garden/gmail-triggers" "$D/stacks/alfred/state/garden/gmail-triggers"
+  mkdir -p "$T/state/lollo/gmail-triggers" "$D/stacks/alfred/state/lollo/gmail-triggers"
   ctl remove alfred --purge <<<"alfred"
   ok_rc
-  log_has "-v $T/state/garden:/garden"
-  log_lacks "-v $D/stacks/alfred/state/garden:/garden"
-  log_has "/root/.letta /data /work /garden -mindepth 1 -delete"
+  log_has "-v $T/state/lollo:/lollo"
+  log_lacks "-v $D/stacks/alfred/state/lollo:/lollo"
+  log_has "/root/.letta /data /work /lollo -mindepth 1 -delete"
 }
 
-test_remove_purge_mounts_no_garden_when_there_is_none() {
+test_remove_purge_mounts_no_lollo_when_there_is_none() {
   added
   state_elsewhere
-  mkdir -p "$D/stacks/alfred/state/garden/gmail-triggers"
+  mkdir -p "$D/stacks/alfred/state/lollo/gmail-triggers"
   ctl remove alfred --purge <<<"alfred"
   ok_rc
-  log_lacks ":/garden"
+  log_lacks ":/lollo"
 }
 
-test_remove_purge_refuses_a_symlinked_garden() {
+test_remove_purge_refuses_a_symlinked_lollo() {
   # Docker would follow it, and the purge would empty whatever it points at.
   added
   mkdir -p "$T/elsewhere"
   touch "$T/elsewhere/keep"
-  ln -s "$T/elsewhere" "$D/stacks/alfred/state/garden"
+  ln -s "$T/elsewhere" "$D/stacks/alfred/state/lollo"
   ctl remove alfred --purge <<<"alfred"
   bad_rc
-  out_has "$D/stacks/alfred/state/garden is a symlink"
-  log_lacks ":/garden"
+  out_has "$D/stacks/alfred/state/lollo is a symlink"
+  log_lacks ":/lollo"
   log_lacks "run --rm --no-deps"
 }
 
@@ -1720,7 +1720,7 @@ test_remove_reminds_to_delete_the_google_redirect_uri() {
 }
 
 test_remove_says_the_vault_goes_too() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-vault/' "$D/config.env"
   vault_config
   added
   ctl remove alfred <<<"alfred"
@@ -1734,11 +1734,11 @@ test_remove_warns_about_a_vault_whose_profile_is_off() {
   ctl remove alfred <<<"alfred"
   ok_rc
   out_has "Its vault"
-  log_has "volume inspect lettuce-alfred_vault-data"
+  log_has "volume inspect lollo-alfred_vault-data"
 }
 
 test_remove_says_where_the_gmail_triggers_are() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers/' "$D/config.env"
   triggers_config
   added
   ctl remove alfred <<<"alfred"
@@ -1749,7 +1749,7 @@ test_remove_says_where_the_gmail_triggers_are() {
 test_remove_finds_gmail_triggers_under_the_state_dir() {
   added
   state_elsewhere
-  mkdir -p "$T/state/garden/gmail-triggers"
+  mkdir -p "$T/state/lollo/gmail-triggers"
   ctl remove alfred <<<"alfred"
   ok_rc
   out_has "Its Gmail triggers stop with it"
@@ -1758,7 +1758,7 @@ test_remove_finds_gmail_triggers_under_the_state_dir() {
 test_remove_says_nothing_of_gmail_triggers_outside_the_state_dir() {
   added
   state_elsewhere
-  mkdir -p "$D/stacks/alfred/state/garden/gmail-triggers"
+  mkdir -p "$D/stacks/alfred/state/lollo/gmail-triggers"
   ctl remove alfred <<<"alfred"
   ok_rc
   out_lacks "Gmail triggers"
@@ -1776,12 +1776,12 @@ test_remove_says_the_receipts_go_too() {
   ctl remove alfred <<<"alfred"
   ok_rc
   out_has "Its pipelock receipts and their signing key are deleted too"
-  log_has "volume inspect lettuce-alfred_pipelock-data"
+  log_has "volume inspect lollo-alfred_pipelock-data"
 }
 
 test_remove_says_nothing_of_receipts_never_written() {
   added
-  stub STUB_VOLUMES_MISSING=lettuce-alfred_pipelock-data
+  stub STUB_VOLUMES_MISSING=lollo-alfred_pipelock-data
   ctl remove alfred <<<"alfred"
   ok_rc
   out_lacks "pipelock"
@@ -1789,7 +1789,7 @@ test_remove_says_nothing_of_receipts_never_written() {
 }
 
 test_remove_says_nothing_of_a_vault_that_was_never_created() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-vault/' "$D/config.env"
   vault_config
   added
   stub STUB_VOLUME_RC=1
@@ -1809,8 +1809,8 @@ test_profiles_sets_config_and_every_stack() {
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search,google
   eq "$(senv hal COMPOSE_PROFILES)" cloudflared,search,google
   eq "$(stat -c %a "$D/stacks/hal/stack.env")" 600
-  log_has "-p lettuce-alfred"
-  log_has "-p lettuce-hal"
+  log_has "-p lollo-alfred"
+  log_has "-p lollo-hal"
   log_has "up -d --no-build"
   log_lacks " rm -sf"
   out_has "https://alfred.example.org/api/google/oauth/callback"
@@ -1822,7 +1822,7 @@ containers() {
   local n=$1 s
   shift
   for s in "$@"; do
-    printf 'lettuce-%s %s\n' "$n" "$s" >>"$T/containers.txt"
+    printf 'lollo-%s %s\n' "$n" "$s" >>"$T/containers.txt"
   done
 }
 
@@ -1832,19 +1832,19 @@ test_profiles_removes_services_of_dropped_profiles() {
   ctl profiles cloudflared
   ok_rc
   log_has "up -d --no-build"
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf ddg-mcp searxng$' "$T/calls.log" || fail "dropped services not removed"
+  grep -q '^docker compose -p lollo-alfred .* rm -sf ddg-mcp searxng$' "$T/calls.log" || fail "dropped services not removed"
   out_lacks "oauth/callback"
 }
 
 test_profiles_dropping_pipelock_removes_it_and_the_proxy_settings() {
   added
   with_pipelock
-  containers alfred app-server bff cloudflared garden-pipelock
+  containers alfred app-server bff cloudflared lollo-pipelock
   : >"$T/calls.log"
   ctl profiles cloudflared
   ok_rc
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden-pipelock$' "$T/calls.log" || fail "pipelock not removed"
-  grep '^docker compose -p lettuce-alfred .* up -d' "$T/calls.log" | grep -q pipelock-proxy.yml && fail "up still merged the proxy settings"
+  grep -q '^docker compose -p lollo-alfred .* rm -sf lollo-pipelock$' "$T/calls.log" || fail "pipelock not removed"
+  grep '^docker compose -p lollo-alfred .* up -d' "$T/calls.log" | grep -q pipelock-proxy.yml && fail "up still merged the proxy settings"
   true
 }
 
@@ -1853,7 +1853,7 @@ test_profiles_removes_leftovers_on_a_rerun() {
   containers alfred app-server bff cloudflared searxng ddg-mcp google-mcp
   ctl profiles cloudflared,search
   ok_rc
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf google-mcp$' "$T/calls.log" || fail "leftover google-mcp not removed"
+  grep -q '^docker compose -p lollo-alfred .* rm -sf google-mcp$' "$T/calls.log" || fail "leftover google-mcp not removed"
 }
 
 test_profiles_same_list_restarts_nothing() {
@@ -1902,11 +1902,11 @@ test_profiles_routes_the_vault_for_every_stack() {
   ctl add alfred alfred@example.com
   ctl add hal hal@example.com
   : >"$T/calls.log"
-  ctl profiles cloudflared,search,garden-vault
+  ctl profiles cloudflared,search,lollo-vault
   ok_rc
   eq "$(grep -c '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log")" 2
-  grep '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log" | grep -qF '"hostname":"hal-garden.example.org","path":"^/vault(/|$)"' ||
-    fail "hal's garden host has no /vault route"
+  grep '^curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations ' "$T/calls.log" | grep -qF '"hostname":"hal-lollo.example.org","path":"^/vault(/|$)"' ||
+    fail "hal's lollo host has no /vault route"
   # The route is in place before the stacks start.
   [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --no-build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stacks started before their route"
@@ -1919,20 +1919,20 @@ test_profiles_reapplies_every_stacks_access_application() {
   local created
   created=$(first_body_of POST /accounts/acc1/access/apps)
   : >"$T/calls.log"
-  ctl profiles cloudflared,search,garden-vault
+  ctl profiles cloudflared,search,lollo-vault
   ok_rc
   # Stacks made before a setting existed (the HttpOnly cookie) get it too.
   eq "$(grep -c '^curl PUT /accounts/acc1/access/apps/app1 ' "$T/calls.log")" 2
   eq "$(body_of PUT /accounts/acc1/access/apps/app1 | jq -c 'del(.name, .domain, .destinations)')" \
     "$(jq -c 'del(.name, .domain, .destinations)' <<<"$created")"
-  grep '^curl PUT /accounts/acc1/access/apps/app1 ' "$T/calls.log" | grep -qF '"name":"lettuce-hal","domain":"hal.example.org"' ||
+  grep '^curl PUT /accounts/acc1/access/apps/app1 ' "$T/calls.log" | grep -qF '"name":"lollo-hal","domain":"hal.example.org"' ||
     fail "hal's application was not re-applied with its own name and host"
-  # And the garden's application, with its own name and host.
+  # And the lollo's application, with its own name and host.
   eq "$(grep -c '^curl PUT /accounts/acc1/access/apps/app2 ' "$T/calls.log")" 2
   eq "$(body_of PUT /accounts/acc1/access/apps/app2 | jq -c 'del(.name, .domain, .destinations)')" \
     "$(jq -c 'del(.name, .domain, .destinations)' <<<"$created")"
-  grep '^curl PUT /accounts/acc1/access/apps/app2 ' "$T/calls.log" | grep -qF '"name":"lettuce-hal-garden","domain":"hal-garden.example.org"' ||
-    fail "hal's garden application was not re-applied with its own name and host"
+  grep '^curl PUT /accounts/acc1/access/apps/app2 ' "$T/calls.log" | grep -qF '"name":"lollo-hal-pages","domain":"hal-lollo.example.org"' ||
+    fail "hal's lollo application was not re-applied with its own name and host"
   [[ $(grep -n '^curl PUT /accounts/acc1/access/apps' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --no-build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stacks started before their Access application was updated"
 }
@@ -1951,20 +1951,20 @@ test_profiles_reports_a_failed_access_application_update() {
 }
 
 test_profiles_dropping_the_vault_removes_the_route() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-vault/' "$D/config.env"
   vault_config
   added
   ctl profiles cloudflared
   ok_rc
   log_has "curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations"
-  log_lacks "http://garden-vault:8000"
+  log_lacks "http://lollo-vault:8000"
 }
 
 test_profiles_reports_a_failed_route_update() {
   vault_config
   added
   stub 'STUB_CF_FAIL="PUT /accounts/acc1/cfd_tunnel/tun1/configurations"'
-  ctl profiles cloudflared,search,garden-vault
+  ctl profiles cloudflared,search,lollo-vault
   bad_rc
   out_has "run the same command again"
 }
@@ -1973,53 +1973,53 @@ test_profiles_routes_gmail_triggers_and_installs_the_executor() {
   triggers_config
   added
   containers alfred app-server
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
-  ctl profiles cloudflared,search,google,garden-gmail-triggers
+  sed -i '/^LOLLO_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
+  ctl profiles cloudflared,search,google,lollo-gmail-triggers
   ok_rc
-  [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "profiles gave no executor token"
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://garden-gmail-triggers:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  [[ $(senv alfred LOLLO_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "profiles gave no executor token"
+  eq "$(ingress)" '[{"hostname":"alfred-lollo.example.org","path":"^/gmail-triggers(/|$)","service":"http://lollo-gmail-triggers:8000"},'"$LANDING,$LOLLO_404,$LETTUCE_TAIL]"
   log_has "sh install $EXECUTOR_ARGS"
   [[ $(grep -n '^curl PUT' "$T/calls.log" | tail -1 | cut -d: -f1) -lt $(grep -n 'up -d --no-build' "$T/calls.log" | head -1 | cut -d: -f1) ]] ||
     fail "stack started before its route"
 }
 
 test_profiles_dropping_gmail_triggers_removes_route_container_and_executor() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers/' "$D/config.env"
   triggers_config
   added
-  containers alfred app-server bff cloudflared google-mcp garden-gmail-triggers garden
-  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
+  containers alfred app-server bff cloudflared google-mcp lollo-gmail-triggers landing
+  mkdir -p "$D/stacks/alfred/state/letta-home/lollo/executor/bin"
   ctl profiles cloudflared,google
   ok_rc
   log_has "curl PUT /accounts/acc1/cfd_tunnel/tun1/configurations"
-  log_lacks "garden-gmail-triggers:8000"
-  log_lacks "garden:8000"
-  # The last garden page profile is off, so the garden goes too.
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden garden-gmail-triggers$' "$T/calls.log" || fail "gmail-triggers and garden containers not removed"
+  log_lacks "lollo-gmail-triggers:8000"
+  log_lacks "landing:8000"
+  # The last lollo page profile is off, so landing goes too.
+  grep -q '^docker compose -p lollo-alfred .* rm -sf landing lollo-gmail-triggers$' "$T/calls.log" || fail "gmail-triggers and landing containers not removed"
   log_has "sh uninstall $EXECUTOR_ARGS"
-  out_has "alfred: removed the garden executor"
+  out_has "alfred: removed the lollo executor"
 }
 
-test_profiles_dropping_gmail_triggers_keeps_the_garden_for_the_vault_but_not_the_executor() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault/' "$D/config.env"
+test_profiles_dropping_gmail_triggers_keeps_landing_for_the_vault_but_not_the_executor() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers,lollo-vault/' "$D/config.env"
   triggers_config
   vault_config
   added
-  containers alfred app-server bff cloudflared google-mcp garden-gmail-triggers garden-vault garden
-  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
+  containers alfred app-server bff cloudflared google-mcp lollo-gmail-triggers lollo-vault landing
+  mkdir -p "$D/stacks/alfred/state/letta-home/lollo/executor/bin"
   : >"$T/calls.log"
-  ctl profiles cloudflared,google,garden-vault
+  ctl profiles cloudflared,google,lollo-vault
   ok_rc
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden-gmail-triggers$' "$T/calls.log" || fail "only gmail-triggers should go"
+  grep -q '^docker compose -p lollo-alfred .* rm -sf lollo-gmail-triggers$' "$T/calls.log" || fail "only gmail-triggers should go"
   log_lacks "sh install"
   eq "$(exec_args | paste -sd' ')" "sh uninstall $EXECUTOR_ARGS"
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/vault(/|$)","service":"http://garden-vault:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
+  eq "$(ingress)" '[{"hostname":"alfred-lollo.example.org","path":"^/vault(/|$)","service":"http://lollo-vault:8000"},'"$LANDING,$LOLLO_404,$LETTUCE_TAIL]"
 }
 
 test_profiles_rerun_removes_a_leftover_executor() {
   added
   containers alfred app-server
-  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/lollo/executor/bin"
   ctl profiles cloudflared,search
   ok_rc
   out_has "nothing to change"
@@ -2029,18 +2029,18 @@ test_profiles_rerun_removes_a_leftover_executor() {
 test_profiles_reports_an_executor_it_could_not_remove() {
   added
   containers alfred app-server
-  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/lollo/executor/bin"
   stub STUB_EXEC_RC=1
   ctl profiles cloudflared,search
   bad_rc
-  out_has "alfred: could not remove the garden executor"
-  out_has "could not sync the garden executor of: alfred"
+  out_has "alfred: could not remove the lollo executor"
+  out_has "could not sync the lollo executor of: alfred"
   out_has "run the same command again"
 }
 
 test_profiles_skips_a_stopped_stack_when_removing_the_executor() {
   added
-  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/lollo/executor/bin"
   ctl profiles cloudflared,search
   ok_rc
   out_has "alfred: not running; its executor is removed at its next up"
@@ -2048,11 +2048,11 @@ test_profiles_skips_a_stopped_stack_when_removing_the_executor() {
 }
 
 test_profiles_rerun_repairs_a_failed_executor_install() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers/' "$D/config.env"
   triggers_config
   added
   containers alfred app-server
-  ctl profiles cloudflared,google,garden-gmail-triggers
+  ctl profiles cloudflared,google,lollo-gmail-triggers
   ok_rc
   out_has "nothing to change"
   log_has "sh install $EXECUTOR_ARGS"
@@ -2070,22 +2070,22 @@ test_profiles_continues_past_a_failed_executor_install() {
   containers hal app-server
   : >"$T/calls.log"
   stub STUB_EXEC_RC=1
-  ctl profiles cloudflared,search,google,garden-gmail-triggers
+  ctl profiles cloudflared,search,google,lollo-gmail-triggers
   bad_rc
-  grep -q '^docker compose -p lettuce-hal .* up -d --no-build' "$T/calls.log" || fail "hal not started"
-  out_has "alfred: could not install the garden executor"
-  out_has "hal: could not install the garden executor"
-  out_has "could not sync the garden executor of: alfred hal"
+  grep -q '^docker compose -p lollo-hal .* up -d --no-build' "$T/calls.log" || fail "hal not started"
+  out_has "alfred: could not install the lollo executor"
+  out_has "hal: could not install the lollo executor"
+  out_has "could not sync the lollo executor of: alfred hal"
   out_has "run the same command again"
-  eq "$(senv hal COMPOSE_PROFILES)" cloudflared,search,google,garden-gmail-triggers
+  eq "$(senv hal COMPOSE_PROFILES)" cloudflared,search,google,lollo-gmail-triggers
 }
 
 test_profiles_checks_gmail_triggers_under_the_new_list_before_writing() {
   added
   # The rendered config has no gmail-triggers service.
-  ctl profiles cloudflared,search,google,garden-gmail-triggers
+  ctl profiles cloudflared,search,google,lollo-gmail-triggers
   bad_rc
-  out_has "alfred: the garden-gmail-triggers profile is on but garden-gmail-triggers is not in the rendered config"
+  out_has "alfred: the lollo-gmail-triggers profile is on but lollo-gmail-triggers is not in the rendered config"
   eq "$(grep ^PROFILES= "$D/config.env")" PROFILES=cloudflared,search
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
   log_lacks "up -d"
@@ -2094,10 +2094,10 @@ test_profiles_checks_gmail_triggers_under_the_new_list_before_writing() {
 test_profiles_checks_the_executor_token_before_writing() {
   triggers_config
   added
-  sed -i 's/^GARDEN_EXECUTOR_TOKEN=.*/GARDEN_EXECUTOR_TOKEN=not-hex/' "$D/stacks/alfred/stack.env"
-  ctl profiles cloudflared,search,google,garden-gmail-triggers
+  sed -i 's/^LOLLO_EXECUTOR_TOKEN=.*/LOLLO_EXECUTOR_TOKEN=not-hex/' "$D/stacks/alfred/stack.env"
+  ctl profiles cloudflared,search,google,lollo-gmail-triggers
   bad_rc
-  out_has "alfred: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters"
+  out_has "alfred: LOLLO_EXECUTOR_TOKEN must be 64 lowercase hex characters"
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
   log_lacks "up -d"
 }
@@ -2106,20 +2106,20 @@ test_profiles_checks_symlinks_under_the_new_list_before_writing() {
   triggers_config
   added
   mkdir -p "$T/elsewhere"
-  ln -s "$T/elsewhere" "$D/stacks/alfred/state/garden"
-  ctl profiles cloudflared,search,google,garden-gmail-triggers
+  ln -s "$T/elsewhere" "$D/stacks/alfred/state/lollo"
+  ctl profiles cloudflared,search,google,lollo-gmail-triggers
   bad_rc
-  out_has "alfred: $D/stacks/alfred/state/garden is a symlink"
+  out_has "alfred: $D/stacks/alfred/state/lollo is a symlink"
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared,search
 }
 
 test_profiles_renders_the_new_list_for_the_check() {
   triggers_config
   added
-  ctl profiles cloudflared,search,google,garden-gmail-triggers
+  ctl profiles cloudflared,search,google,lollo-gmail-triggers
   ok_rc
   # The first rendering, before anything is written, already uses the new list.
-  eq "$(grep '^docker-env-file ' "$T/calls.log" | head -1)" "docker-env-file COMPOSE_PROFILES=cloudflared,search,google,garden-gmail-triggers"
+  eq "$(grep '^docker-env-file ' "$T/calls.log" | head -1)" "docker-env-file COMPOSE_PROFILES=cloudflared,search,google,lollo-gmail-triggers"
   eq "$(grep -c '^docker-env-file COMPOSE_PROFILES=cloudflared,search$' "$T/calls.log")" 0
   # The rendering's temp env file is gone.
   eq "$(find "$D/stacks/alfred" -maxdepth 1 -name 'stack.env.*' | wc -l)" 0
@@ -2127,9 +2127,9 @@ test_profiles_renders_the_new_list_for_the_check() {
 
 test_profiles_refuses_gmail_triggers_without_google() {
   added
-  ctl profiles cloudflared,garden-gmail-triggers
+  ctl profiles cloudflared,lollo-gmail-triggers
   bad_rc
-  out_has "the garden-gmail-triggers profile needs google"
+  out_has "the lollo-gmail-triggers profile needs google"
   eq "$(grep ^PROFILES= "$D/config.env")" PROFILES=cloudflared,search
   log_lacks "up -d"
 }
@@ -2171,7 +2171,7 @@ test_list_shows_stacks_and_hosts() {
   ok_rc
   out_has "alfred"
   out_has "https://hal.example.org"
-  out_has "https://hal-garden.example.org/"
+  out_has "https://hal-lollo.example.org/"
 }
 
 # ── shell ────────────────────────────────────────────────────────────────────
@@ -2189,7 +2189,7 @@ test_shell_without_agent_opens_work() {
   added
   ctl shell alfred </dev/null
   ok_rc
-  log_has "-p lettuce-alfred"
+  log_has "-p lollo-alfred"
   log_has "exec -T -w /work app-server bash"
   log_lacks "letta agents list"
 }
@@ -2208,7 +2208,7 @@ test_shell_opens_the_agents_workspace() {
   ok_rc
   out_has "alfred: Lucius (agent-2)"
   log_has "exec -T -w /work/agent-2 -e AGENT_ID=agent-2 -e LETTA_AGENT_ID=agent-2 -e AGENT_NAME=Lucius -e USER_CWD=/work/agent-2 app-server bash -c"
-  # shellcheck disable=SC2016 # the literal script lettucectl passes to the container
+  # shellcheck disable=SC2016 # the literal script lolloctl passes to the container
   log_has 'export MEMORY_DIR=$LETTA_LOCAL_BACKEND_DIR/memfs/$AGENT_ID/memory'
 }
 
@@ -2315,9 +2315,9 @@ toolbox_tools() {
 
 # toolbox_file LINE... -> the operator's personal toolbox file
 toolbox_file() {
-  mkdir -p "$T/u/.config/lettucectl"
-  printf '%s\n' "$@" >"$T/u/.config/lettucectl/toolbox"
-  chmod 600 "$T/u/.config/lettucectl/toolbox"
+  mkdir -p "$T/u/.config/lolloctl"
+  printf '%s\n' "$@" >"$T/u/.config/lolloctl/toolbox"
+  chmod 600 "$T/u/.config/lolloctl/toolbox"
 }
 
 run_env() { cat "$T/run-env.log" 2>/dev/null; }
@@ -2327,7 +2327,7 @@ test_toolbox_opens_the_agents_workspace() {
   tb lucius
   ok_rc
   out_has "alfred: Lucius (agent-2)"
-  log_has "--hostname toolbox-alfred --label lettucectl.toolbox=alfred --label lettucectl.agent=agent-2 --security-opt no-new-privileges --memory 8g --pids-limit 4096 --tmpfs /root:mode=700,exec --tmpfs /tmp:exec"
+  log_has "--hostname toolbox-alfred --label lolloctl.toolbox=alfred --label lolloctl.agent=agent-2 --security-opt no-new-privileges --memory 8g --pids-limit 4096 --tmpfs /root:mode=700,exec --tmpfs /tmp:exec"
   log_has "-v $D/stacks/alfred/state/workspaces/agent-2:/work/agent-2 -w /work/agent-2"
   log_has "-e AGENT_ID=agent-2 -e LETTA_AGENT_ID=agent-2 -e AGENT_NAME=Lucius -e USER_CWD=/work/agent-2"
   log_has "-e PATH=/opt/claude-code/bin:/usr/local/bin:/usr/bin:/bin"
@@ -2413,7 +2413,7 @@ test_toolbox_reads_the_personal_file() {
     "env AWS_PROFILE=dev"
   tb lucius
   ok_rc
-  out_has "+5 from $T/u/.config/lettucectl/toolbox"
+  out_has "+5 from $T/u/.config/lolloctl/toolbox"
   log_has "-v $T/u/shared:$T/u/shared:ro"
   log_has "-v $T/u/.aws/config:/root/.aws/config:ro"
   log_has "-v $T/data:/data:rw"
@@ -2464,7 +2464,7 @@ test_toolbox_refuses_missing_mounts() {
 test_toolbox_refuses_a_personal_file_others_can_write() {
   toolbox_ready
   toolbox_file "env A=b"
-  chmod 666 "$T/u/.config/lettucectl/toolbox"
+  chmod 666 "$T/u/.config/lolloctl/toolbox"
   tb lucius
   bad_rc
   out_has "writable by others"
@@ -2485,7 +2485,7 @@ test_toolbox_needs_the_stack_image() {
   stub STUB_IMAGE_RC=1
   tb lucius
   bad_rc
-  out_has "lettucectl up alfred"
+  out_has "lolloctl up alfred"
   log_lacks "docker run"
 }
 
@@ -2510,7 +2510,7 @@ test_toolbox_requires_an_agent() {
   toolbox_ready
   tb
   bad_rc
-  out_has "usage: lettucectl toolbox"
+  out_has "usage: lolloctl toolbox"
 }
 
 test_toolbox_leaves_out_agent_tools_by_default() {
@@ -2552,7 +2552,7 @@ test_toolbox_tools_needs_the_tools_dir() {
   toolbox_ready
   tb --tools lucius
   bad_rc
-  out_has "lettucectl up alfred"
+  out_has "lolloctl up alfred"
   log_lacks "docker run"
 }
 
@@ -2561,7 +2561,7 @@ test_toolbox_refuses_an_unknown_tools_mode() {
   mkdir -p "$D/stacks/alfred/state/tools"
   tb --tools=wx lucius
   bad_rc
-  out_has "usage: lettucectl toolbox"
+  out_has "usage: lolloctl toolbox"
   log_lacks "docker run"
 }
 
@@ -2585,7 +2585,7 @@ test_skills_installs_every_skill_dir() {
   ok_rc
   out_has "alfred: 2 skill(s) installed"
   eq "$(shipped)" "alpha/ alpha/SKILL.md beta/ beta/SKILL.md"
-  log_has "-p lettuce-alfred"
+  log_has "-p lollo-alfred"
   log_has "exec -T app-server sh -c"
   log_has "sh /root/.letta/skills alpha beta"
 }
@@ -2599,7 +2599,7 @@ test_skills_all_covers_every_stack() {
   ok_rc
   out_has "alfred: 1 skill(s) installed"
   out_has "hal: 1 skill(s) installed"
-  log_has "-p lettuce-hal"
+  log_has "-p lollo-hal"
 }
 
 test_skills_removes_all_when_the_repo_has_none() {
@@ -2659,7 +2659,7 @@ test_skills_ships_the_repo_skills() {
   grep -qx "name: using-vault-secrets" "$ROOT/agent-skills/using-vault-secrets/SKILL.md" || fail "SKILL.md name mismatch"
 }
 
-# The script lettucectl runs in the container, run here on a stand-in skills dir.
+# The script lolloctl runs in the container, run here on a stand-in skills dir.
 test_skills_script_replaces_only_its_own_skills() {
   added
   skill alpha beta
@@ -2668,11 +2668,11 @@ test_skills_script_replaces_only_its_own_skills() {
   local d=$T/skills
   mkdir -p "$d/serving-web-apps" "$d/old" "$d/alpha"
   touch "$d/serving-web-apps/SKILL.md" "$d/old/SKILL.md" "$d/alpha/stale.txt"
-  printf 'old\nalpha\n' >"$d/.lettucectl-skills"
+  printf 'old\nalpha\n' >"$d/.lolloctl-skills"
   sh -c "$(cat "$T/exec-script")" sh "$d" alpha beta <"$T/exec-stdin.log"
   eq "$(cd "$d" && find . | LC_ALL=C sort | paste -sd' ')" \
-    ". ./.lettucectl-skills ./alpha ./alpha/SKILL.md ./beta ./beta/SKILL.md ./serving-web-apps ./serving-web-apps/SKILL.md"
-  eq "$(paste -sd' ' "$d/.lettucectl-skills")" "alpha beta"
+    ". ./.lolloctl-skills ./alpha ./alpha/SKILL.md ./beta ./beta/SKILL.md ./serving-web-apps ./serving-web-apps/SKILL.md"
+  eq "$(paste -sd' ' "$d/.lolloctl-skills")" "alpha beta"
 }
 
 test_skills_script_keeps_skills_on_a_broken_stream() {
@@ -2683,14 +2683,14 @@ test_skills_script_keeps_skills_on_a_broken_stream() {
   local d=$T/skills
   mkdir -p "$d/alpha"
   touch "$d/alpha/SKILL.md"
-  printf 'alpha\n' >"$d/.lettucectl-skills"
+  printf 'alpha\n' >"$d/.lolloctl-skills"
   ! sh -c "$(cat "$T/exec-script")" sh "$d" alpha <<<'not a tar' 2>/dev/null || fail "script accepted a broken stream"
-  eq "$(cd "$d" && find . | LC_ALL=C sort | paste -sd' ')" ". ./.lettucectl-skills ./alpha ./alpha/SKILL.md"
+  eq "$(cd "$d" && find . | LC_ALL=C sort | paste -sd' ')" ". ./.lolloctl-skills ./alpha ./alpha/SKILL.md"
 }
 
-# ── garden executor ──────────────────────────────────────────────────────────
+# ── lollo executor ──────────────────────────────────────────────────────────
 # run_exec_script ROOT [STDIN] -> runs the last exec's script with its arguments
-# as lettucectl passed them, but with the container's /root/.letta and /etc
+# as lolloctl passed them, but with the container's /root/.letta and /etc
 # under ROOT; stdin is the streamed tar unless STDIN is given
 run_exec_script() {
   local r=$1 in=${2:-$T/exec-stdin.log} a args=()
@@ -2704,7 +2704,7 @@ run_exec_script() {
   sh -c "$(cat "$T/exec-script")" "${args[@]}" <"$in"
 }
 files_in() { (cd "$1" && find . | LC_ALL=C sort | paste -sd' '); }
-INSTALLED=". ./etc ./etc/cron.d ./etc/cron.d/lettuce-garden-executor ./etc/lettuce-garden ./etc/lettuce-garden/executor-token ./letta ./letta/garden ./letta/garden/executor ./letta/garden/executor/bin ./letta/garden/executor/bin/run.mjs ./letta/system-cron ./letta/system-cron/lettuce-garden-executor"
+INSTALLED=". ./etc ./etc/cron.d ./etc/cron.d/lollo-rozzo-executor ./etc/lollo-rozzo ./etc/lollo-rozzo/executor-token ./letta ./letta/lollo ./letta/lollo/executor ./letta/lollo/executor/bin ./letta/lollo/executor/bin/run.mjs ./letta/system-cron ./letta/system-cron/lollo-rozzo-executor"
 
 # installed_up -> alfred with the profile, after an `up` whose install script can be replayed
 installed_up() {
@@ -2717,32 +2717,32 @@ installed_up() {
 test_executor_script_installs_files_token_and_cron() {
   installed_up
   local r=$T/root g
-  g=$r/letta/garden/executor
+  g=$r/letta/lollo/executor
   run_exec_script "$r"
   eq "$(files_in "$r")" "$INSTALLED"
   eq "$(cat "$g/bin/run.mjs")" "// executor"
   # The token is in the container layer, not under the state directory.
-  eq "$(cat "$r/etc/lettuce-garden/executor-token")" "$(senv alfred GARDEN_EXECUTOR_TOKEN)"
-  eq "$(stat -c %a "$r/etc/lettuce-garden/executor-token")" 600
-  eq "$(stat -c %a "$r/etc/lettuce-garden")" 700
-  eq "$(cat "$r/letta/system-cron/lettuce-garden-executor")" "$GT_CRON_TEXT"
-  cmp -s "$r/letta/system-cron/lettuce-garden-executor" "$r/etc/cron.d/lettuce-garden-executor" || fail "cron copies differ"
-  eq "$(stat -c %a "$r/etc/cron.d/lettuce-garden-executor")" 644
-  eq "$(stat -c %a "$r/letta/system-cron/lettuce-garden-executor")" 644
+  eq "$(cat "$r/etc/lollo-rozzo/executor-token")" "$(senv alfred LOLLO_EXECUTOR_TOKEN)"
+  eq "$(stat -c %a "$r/etc/lollo-rozzo/executor-token")" 600
+  eq "$(stat -c %a "$r/etc/lollo-rozzo")" 700
+  eq "$(cat "$r/letta/system-cron/lollo-rozzo-executor")" "$GT_CRON_TEXT"
+  cmp -s "$r/letta/system-cron/lollo-rozzo-executor" "$r/etc/cron.d/lollo-rozzo-executor" || fail "cron copies differ"
+  eq "$(stat -c %a "$r/etc/cron.d/lollo-rozzo-executor")" 644
+  eq "$(stat -c %a "$r/letta/system-cron/lollo-rozzo-executor")" 644
 }
 
 test_executor_script_replaces_its_files() {
   installed_up
   local r=$T/root g
-  g=$r/letta/garden/executor
-  mkdir -p "$g/bin" "$r/etc/lettuce-garden"
+  g=$r/letta/lollo/executor
+  mkdir -p "$g/bin" "$r/etc/lollo-rozzo"
   touch "$g/bin/notes.txt" "$g/executor.log"
   printf 'stale\n' >"$g/bin/run.mjs"
-  printf 'old-token\n' >"$r/etc/lettuce-garden/executor-token"
+  printf 'old-token\n' >"$r/etc/lollo-rozzo/executor-token"
   run_exec_script "$r"
   eq "$(files_in "$g")" ". ./bin ./bin/notes.txt ./bin/run.mjs ./executor.log"
   eq "$(cat "$g/bin/run.mjs")" "// executor"
-  eq "$(cat "$r/etc/lettuce-garden/executor-token")" "$(senv alfred GARDEN_EXECUTOR_TOKEN)"
+  eq "$(cat "$r/etc/lollo-rozzo/executor-token")" "$(senv alfred LOLLO_EXECUTOR_TOKEN)"
   run_exec_script "$r"
   eq "$(files_in "$g")" ". ./bin ./bin/notes.txt ./bin/run.mjs ./executor.log"
 }
@@ -2755,7 +2755,7 @@ test_executor_script_keeps_the_install_on_a_broken_stream() {
   printf 'not a tar' >"$T/broken"
   ! run_exec_script "$r" "$T/broken" 2>/dev/null || fail "script accepted a broken stream"
   eq "$(files_in "$r")" "$before"
-  eq "$(cat "$r/letta/garden/executor/bin/run.mjs")" "// executor"
+  eq "$(cat "$r/letta/lollo/executor/bin/run.mjs")" "// executor"
 }
 
 # partial_stream FILE -> a tar holding only FILE
@@ -2781,14 +2781,14 @@ test_executor_script_uninstall_removes_executor_token_and_both_cron_files() {
   installed_up
   local r=$T/root
   run_exec_script "$r"
-  touch "$r/letta/garden/executor/executor.log"
+  touch "$r/letta/lollo/executor/executor.log"
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$D/config.env"
   sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$D/stacks/alfred/stack.env"
-  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/lollo/executor/bin"
   ctl up alfred
   ok_rc
   run_exec_script "$r" /dev/null
-  eq "$(files_in "$r")" ". ./etc ./etc/cron.d ./letta ./letta/garden ./letta/garden/executor ./letta/garden/executor/executor.log ./letta/system-cron"
+  eq "$(files_in "$r")" ". ./etc ./etc/cron.d ./letta ./letta/lollo ./letta/lollo/executor ./letta/lollo/executor/executor.log ./letta/system-cron"
   # Again, on what is left: nothing to do, no error.
   run_exec_script "$r" /dev/null
 }
@@ -2797,14 +2797,14 @@ test_executor_script_uninstall_keeps_a_token_dir_in_use() {
   installed_up
   local r=$T/root
   run_exec_script "$r"
-  touch "$r/etc/lettuce-garden/other"
+  touch "$r/etc/lollo-rozzo/other"
   sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google/' "$D/config.env"
   sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google/' "$D/stacks/alfred/stack.env"
-  mkdir -p "$D/stacks/alfred/state/letta-home/garden/executor/bin"
+  mkdir -p "$D/stacks/alfred/state/letta-home/lollo/executor/bin"
   ctl up alfred
   ok_rc
   run_exec_script "$r" /dev/null
-  eq "$(files_in "$r/etc/lettuce-garden")" ". ./other"
+  eq "$(files_in "$r/etc/lollo-rozzo")" ". ./other"
 }
 
 # ── receipts ─────────────────────────────────────────────────────────────────
@@ -2815,14 +2815,14 @@ receipt_files() {
     "1760000300 /data/evidence/evidence-proxy.run.b-1.jsonl" "1760000600 /data/evidence/evidence-proxy.run.b-2.jsonl" >"$T/run-stdout"
 }
 
-PIPELOCK_RUN="docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --label com.docker.compose.project= --label com.docker.compose.service= --label lettucectl.receipts=alfred -v lettuce-alfred_pipelock-data:/data:ro"
+PIPELOCK_RUN="docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --label com.docker.compose.project= --label com.docker.compose.service= --label lolloctl.receipts=alfred -v lollo-alfred_pipelock-data:/data:ro"
 
 test_receipts_verifies_and_lists_sessions_newest_first() {
   added
   receipt_files
   ctl receipts alfred
   ok_rc
-  log_has "$PIPELOCK_RUN --entrypoint pipelock lettuce-pipelock:local verify-receipt --whole-recorder --chain /data/evidence --key /data/keys/receipt-signing.json.pub"
+  log_has "$PIPELOCK_RUN --entrypoint pipelock lollo-pipelock:local verify-receipt --whole-recorder --chain /data/evidence --key /data/keys/receipt-signing.json.pub"
   eq "$(grep -o 'proxy\.run\.[ab]$' "$OUT" | paste -sd' ')" "proxy.run.b proxy.run.a"
 }
 
@@ -2831,10 +2831,10 @@ test_receipts_writes_the_newest_session_by_default() {
   receipt_files
   ctl receipts alfred "$T/report.html"
   ok_rc
-  log_has "$PIPELOCK_RUN --entrypoint pipelock lettuce-pipelock:local evidence view --receipt-dir /data/evidence --session proxy.run.b --trusted-signer file=/data/keys/receipt-signing.json.pub"
+  log_has "$PIPELOCK_RUN --entrypoint pipelock lollo-pipelock:local evidence view --receipt-dir /data/evidence --session proxy.run.b --trusted-signer file=/data/keys/receipt-signing.json.pub"
   eq "$(stat -c %a "$T/report.html")" 600
   out_has "alfred: session proxy.run.b -> $T/report.html"
-  eq "$(grep -c 'image inspect lettuce-pipelock:local' "$T/calls.log")" 1
+  eq "$(grep -c 'image inspect lollo-pipelock:local' "$T/calls.log")" 1
 }
 
 test_receipts_makes_an_existing_report_private() {
@@ -2885,7 +2885,7 @@ test_receipts_says_when_they_do_not_verify() {
 test_receipts_says_when_pipelock_was_writing() {
   added
   receipt_files
-  containers alfred app-server garden-pipelock
+  containers alfred app-server lollo-pipelock
   stub STUB_RUN_FAIL=verify-receipt
   ctl receipts alfred
   bad_rc
@@ -2914,7 +2914,7 @@ test_receipts_refuses_a_report_inside_the_repo() {
 
 test_receipts_needs_the_volume() {
   added
-  stub STUB_VOLUMES_MISSING=lettuce-alfred_pipelock-data
+  stub STUB_VOLUMES_MISSING=lollo-alfred_pipelock-data
   ctl receipts alfred
   bad_rc
   out_has "no pipelock receipts"
@@ -2944,7 +2944,7 @@ backed() {
   B=$T/bk
   mkdir -p "$B"
 }
-backup_runs() { grep -c "^docker run .* lettuce-backup:local sh -c" "$T/calls.log" || true; }
+backup_runs() { grep -c "^docker run .* lollo-backup:local sh -c" "$T/calls.log" || true; }
 snapshots() { find "$B/alfred" -mindepth 1 -maxdepth 1 ! -name .lock -printf '%f\n' | LC_ALL=C sort | paste -sd' '; }
 
 test_backup_rejects_bad_destinations() {
@@ -2974,7 +2974,7 @@ test_backup_rejects_bad_destinations() {
   out_has "--keep needs"
   ctl backup alfred
   bad_rc
-  out_has "usage: lettucectl backup"
+  out_has "usage: lolloctl backup"
   log_lacks "docker run"
 }
 
@@ -2986,10 +2986,10 @@ test_backup_copies_a_stopped_stack_without_asking() {
   out_lacks "Choice"
   out_lacks "vault"
   log_lacks " pause"
-  log_has "docker build -q -t lettuce-backup:local $H/backup"
+  log_has "docker build -q -t lollo-backup:local $H/backup"
   # --init: sh as PID 1 would ignore the signal docker forwards on Ctrl-C.
-  log_has "docker run --rm --init --network none --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --label lettucectl.backup=alfred"
-  log_has "-v $D/stacks/alfred/state:/src/state:ro -v $D/stacks/alfred/stack.env:/src/stack.env:ro -v $B/alfred:/dst lettuce-backup:local"
+  log_has "docker run --rm --init --network none --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --label lolloctl.backup=alfred"
+  log_has "-v $D/stacks/alfred/state:/src/state:ro -v $D/stacks/alfred/stack.env:/src/stack.env:ro -v $B/alfred:/dst lollo-backup:local"
   log_has "sh rsync /src /dst $(id -u):$(id -g)  .partial-"
   log_has "state/letta-home/mod-cache state/letta-home/claude/paste-cache state/letta-home/claude/backups"
   log_lacks "state/tools"
@@ -3020,7 +3020,7 @@ test_backup_removes_what_an_interrupted_run_left() {
   mkdir -p "$B/alfred/.partial-20260101T000000Z"
   ctl backup alfred "$B"
   ok_rc
-  log_has "-v $B/alfred:/dst lettuce-backup:local rm -rf -- /dst/.partial-20260101T000000Z"
+  log_has "-v $B/alfred:/dst lollo-backup:local rm -rf -- /dst/.partial-20260101T000000Z"
 }
 
 test_backup_includes_the_vault() {
@@ -3028,8 +3028,8 @@ test_backup_includes_the_vault() {
   with_vault
   ctl backup alfred "$B"
   ok_rc
-  log_has "docker volume inspect lettuce-alfred_vault-data"
-  log_has "-v lettuce-alfred_vault-data:/src/vault:ro"
+  log_has "docker volume inspect lollo-alfred_vault-data"
+  log_has "-v lollo-alfred_vault-data:/src/vault:ro"
 }
 
 # Turning the profile off keeps the volume; it still holds the vault.
@@ -3037,7 +3037,7 @@ test_backup_includes_a_vault_left_by_a_dropped_profile() {
   backed
   ctl backup alfred "$B"
   ok_rc
-  log_has "-v lettuce-alfred_vault-data:/src/vault:ro"
+  log_has "-v lollo-alfred_vault-data:/src/vault:ro"
 }
 
 test_backup_skips_a_vault_that_does_not_exist() {
@@ -3046,41 +3046,41 @@ test_backup_skips_a_vault_that_does_not_exist() {
   stub STUB_VOLUME_RC=1
   ctl backup alfred "$B"
   ok_rc
-  out_has "the vault volume lettuce-alfred_vault-data does not exist yet"
+  out_has "the vault volume lollo-alfred_vault-data does not exist yet"
   log_lacks "/src/vault"
 }
 
 test_backup_includes_the_receipts() {
   backed
-  stub "STUB_VOLUMES_MISSING='lettuce-alfred_vault-data lettuce-alfred_news-radar-data'"
+  stub "STUB_VOLUMES_MISSING='lollo-alfred_vault-data lollo-alfred_news-radar-data'"
   ctl backup alfred "$B"
   ok_rc
-  log_has "docker volume inspect lettuce-alfred_pipelock-data"
-  log_has "-v lettuce-alfred_pipelock-data:/src/pipelock:ro -v $B/alfred:/dst"
+  log_has "docker volume inspect lollo-alfred_pipelock-data"
+  log_has "-v lollo-alfred_pipelock-data:/src/pipelock:ro -v $B/alfred:/dst"
   log_lacks "/src/vault"
 }
 
 test_backup_skips_receipts_that_do_not_exist() {
   backed
-  stub "STUB_VOLUMES_MISSING='lettuce-alfred_pipelock-data lettuce-alfred_news-radar-data'"
+  stub "STUB_VOLUMES_MISSING='lollo-alfred_pipelock-data lollo-alfred_news-radar-data'"
   ctl backup alfred "$B"
   ok_rc
-  log_has "-v lettuce-alfred_vault-data:/src/vault:ro -v $B/alfred:/dst"
+  log_has "-v lollo-alfred_vault-data:/src/vault:ro -v $B/alfred:/dst"
   log_lacks "/src/pipelock"
 }
 
 test_backup_includes_the_news_radar() {
   backed
-  stub "STUB_VOLUMES_MISSING='lettuce-alfred_vault-data lettuce-alfred_pipelock-data'"
+  stub "STUB_VOLUMES_MISSING='lollo-alfred_vault-data lollo-alfred_pipelock-data'"
   ctl backup alfred "$B"
   ok_rc
-  log_has "docker volume inspect lettuce-alfred_news-radar-data"
-  log_has "-v lettuce-alfred_news-radar-data:/src/news-radar:ro -v $B/alfred:/dst"
+  log_has "docker volume inspect lollo-alfred_news-radar-data"
+  log_has "-v lollo-alfred_news-radar-data:/src/news-radar:ro -v $B/alfred:/dst"
 }
 
 test_backup_skips_a_news_radar_that_does_not_exist() {
   backed
-  stub STUB_VOLUMES_MISSING=lettuce-alfred_news-radar-data
+  stub STUB_VOLUMES_MISSING=lollo-alfred_news-radar-data
   ctl backup alfred "$B"
   ok_rc
   log_lacks "/src/news-radar"
@@ -3092,8 +3092,8 @@ test_backup_pauses_a_running_stack_when_asked() {
   ctl backup alfred "$B" <<<"p"
   ok_rc
   out_has "alfred is running. A live copy can catch"
-  eq "$(grep -oE ' (pause|unpause)$|lettuce-backup:local sh -c' "$T/calls.log" | paste -sd,)" \
-    " pause,lettuce-backup:local sh -c, unpause"
+  eq "$(grep -oE ' (pause|unpause)$|lollo-backup:local sh -c' "$T/calls.log" | paste -sd,)" \
+    " pause,lollo-backup:local sh -c, unpause"
 }
 
 test_backup_copies_live_when_asked() {
@@ -3217,10 +3217,10 @@ test_backup_all_covers_every_stack() {
   ctl backup all "$B"
   ok_rc
   [[ -d $B/alfred && -d $B/hal ]] || fail "not every stack backed up"
-  log_has "lettucectl.backup=hal"
+  log_has "lolloctl.backup=hal"
 }
 
-# The script lettucectl runs in the container, run here with the host's rsync and
+# The script lolloctl runs in the container, run here with the host's rsync and
 # tar on a stand-in state.
 test_backup_script_copies_what_matters() {
   command -v rsync >/dev/null || return 0
@@ -3235,8 +3235,8 @@ test_backup_script_copies_what_matters() {
     "$src/state/letta-home/skills/serving-web-apps/SKILL.md" "$src/state/letta-home/skills/fetching-web-pages/SKILL.md" \
     "$src/state/letta-home/skills/from-settings/SKILL.md" "$src/state/workspaces/agent-1/notes.md" \
     "$src/state/tools/bin/uv" "$src/vault/vault.db"
-  printf 'fetching-web-pages\n' >"$src/state/letta-home/skills/.lettucectl-skills"
-  # The same excludes lettucectl passed, after MODE SRC DST OWNER PREV OUT.
+  printf 'fetching-web-pages\n' >"$src/state/letta-home/skills/.lolloctl-skills"
+  # The same excludes lolloctl passed, after MODE SRC DST OWNER PREV OUT.
   args=$(grep -o ' \.partial-[^ ]* .*' "$T/calls.log" | head -1 | cut -d' ' -f3-)
   # shellcheck disable=SC2086 # the excludes are single words
   sh -c "$(cat "$T/run-script")" sh rsync "$src" "$dst" "$(id -u):$(id -g)" "" s1 $args
@@ -3258,8 +3258,8 @@ docs_tree() {
   printf 'FROM scratch\n' >"$H/doc-tools/Dockerfile"
 }
 
-# docs_tag -> the tag lettucectl computes for the test copy's doc-tools/
-docs_tag() { (LETTUCE_HOME=$H && . "$H/lib/common.sh" && doc_tools_tag); }
+# docs_tag -> the tag lolloctl computes for the test copy's doc-tools/
+docs_tag() { (LOLLO_HOME=$H && . "$H/lib/common.sh" && doc_tools_tag); }
 
 # docs_config [NAME] -> the rendered config also holds what compose/doc-tools.yml
 # renders for NAME (default alfred), and the shared project renders a Gotenberg
@@ -3268,19 +3268,19 @@ docs_config() {
   local name=${1:-alfred}
   docs_tree
   config_edit '.services["app-server"].volumes = [{"type":"volume","source":"doc-tools",
-      "target":"/opt/lettuce-doc-tools","read_only":true,"volume":{"nocopy":true}}]
-    | .volumes = {"doc-tools":{"name":"lettuce-doc-tools-'"$(docs_tag)"'","external":true}}
+      "target":"/opt/lollo-doc-tools","read_only":true,"volume":{"nocopy":true}}]
+    | .volumes = {"doc-tools":{"name":"lollo-doc-tools-'"$(docs_tag)"'","external":true}}
     | .services["app-server"].networks = {"default":null,"doc-tools":null}
-    | .networks = {"default":{"name":"lettuce-'"$name"'_default"},"doc-tools":{"name":"lettuce-doc-tools-'"$name"'","external":true}}'
+    | .networks = {"default":{"name":"lollo-'"$name"'_default"},"doc-tools":{"name":"lollo-doc-tools-'"$name"'","external":true}}'
   sed -n 's/^      - \(--.*\)$/\1/p' "$ROOT/compose/shared/gotenberg.yml" |
     jq -R . | jq -sc '{services: {gotenberg: {read_only: true, cap_drop: ["ALL"], user: "1001:1001",
       security_opt: ["no-new-privileges:true"], command: (["gotenberg"] + .), networks: {internal: null}}}, networks: {internal: {internal: true}}}' >"$T/shared-config.json"
 }
 
-# with_docs -> alfred runs the garden-doc-tools profile (docs_config)
+# with_docs -> alfred runs the lollo-doc-tools profile (docs_config)
 with_docs() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-doc-tools/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,lollo-doc-tools/' "$D/stacks/alfred/stack.env"
   docs_config
 }
 
@@ -3292,8 +3292,8 @@ docs_refused() {
   out_has "$2"
 }
 
-# tools_volume NAME COMPLETE [IN_USE] -> a tools volume lettucectl made exists
-tools_volume() { echo "$1 ${1#lettuce-doc-tools-} $2 ${3:-false}" >>"$T/volumes"; }
+# tools_volume NAME COMPLETE [IN_USE] -> a tools volume lolloctl made exists
+tools_volume() { echo "$1 ${1#lollo-doc-tools-} $2 ${3:-false}" >>"$T/volumes"; }
 
 # The tools volume's fill and marker check, as calls.log shows them.
 CHECK_RUN="run --rm --init --network none --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER"
@@ -3323,8 +3323,8 @@ test_compose_adds_the_doc_tools_overlay_and_its_values_only_with_the_profile() {
   with_docs
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $D/stacks/alfred/stack.env"
-  log_has "docker-env DOC_TOOLS_NETWORK=lettuce-doc-tools-alfred DOC_TOOLS_VOLUME=lettuce-doc-tools-$(docs_tag)"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/landing.yml -f $H/compose/doc-tools.yml --env-file $D/stacks/alfred/stack.env"
+  log_has "docker-env DOC_TOOLS_NETWORK=lollo-doc-tools-alfred DOC_TOOLS_VOLUME=lollo-doc-tools-$(docs_tag)"
   grep -q '^DOC_TOOLS' "$D/stacks/alfred/stack.env" && fail "doc-tools values written to stack.env"
   true
 }
@@ -3332,37 +3332,37 @@ test_compose_adds_the_doc_tools_overlay_and_its_values_only_with_the_profile() {
 test_up_with_doc_tools_builds_creates_and_connects_before_reporting() {
   added
   with_docs
-  stub STUB_IMAGES_MISSING=lettuce-doc-tools
+  stub STUB_IMAGES_MISSING=lollo-doc-tools
   ctl up alfred
   ok_rc
-  log_has "docker build -q -t lettuce-doc-tools:$(docs_tag) $H/doc-tools"
-  log_has "docker network create --internal --label lettuce.doc-tools.stack=alfred lettuce-doc-tools-alfred"
-  log_has "docker network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
+  log_has "docker build -q -t lollo-doc-tools:$(docs_tag) $H/doc-tools"
+  log_has "docker network create --internal --label lollo.doc-tools.stack=alfred lollo-doc-tools-alfred"
+  log_has "docker network connect --alias gotenberg lollo-doc-tools-alfred gotenberg-id"
   # The network exists before the app-server joins it, and Gotenberg joins after.
-  (($(line_of "network create") < $(line_of "-p lettuce-alfred --project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/news-radar.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml -f $H/compose/doc-tools.yml --env-file $D/stacks/alfred/stack.env up -d"))) ||
+  (($(line_of "network create") < $(line_of "-p lollo-alfred --project-directory $U/docker -f $U/docker/compose.yml -f $H/compose/hardening.yml -f $H/compose/multi.yml -f $H/compose/vault.yml -f $H/compose/gmail-triggers.yml -f $H/compose/news-radar.yml -f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/landing.yml -f $H/compose/doc-tools.yml --env-file $D/stacks/alfred/stack.env up -d"))) ||
     fail "the network was created after compose up"
-  (($(line_of "-p lettuce_shared") > $(line_of "up -d --no-build --pull missing --remove-orphans"))) || fail "gotenberg started before the stack"
+  (($(line_of "-p lollo_shared") > $(line_of "up -d --no-build --pull missing --remove-orphans"))) || fail "gotenberg started before the stack"
 }
 
 test_up_with_doc_tools_fills_the_tools_volume_before_starting() {
   added
   with_docs
-  stub STUB_IMAGES_MISSING=lettuce-doc-tools
+  stub STUB_IMAGES_MISSING=lollo-doc-tools
   local tag vol
   tag=$(docs_tag)
-  vol=lettuce-doc-tools-$tag
+  vol=lollo-doc-tools-$tag
   ctl up alfred
   ok_rc
-  log_has "docker volume create --label lettuce.doc-tools.tag=$tag $vol"
-  log_has "docker create --label lettucectl.doc-tools=fill lettuce-doc-tools:$tag /none"
-  log_has "docker cp doc-tools-cid:/opt/lettuce-doc-tools/. -"
-  log_has "docker $FILL_RUN --label lettucectl.doc-tools=fill -v $vol:/dst lettuce-backup:local sh -c"
+  log_has "docker volume create --label lollo.doc-tools.tag=$tag $vol"
+  log_has "docker create --label lolloctl.doc-tools=fill lollo-doc-tools:$tag /none"
+  log_has "docker cp doc-tools-cid:/opt/lollo-doc-tools/. -"
+  log_has "docker $FILL_RUN --label lolloctl.doc-tools=fill -v $vol:/dst lollo-backup:local sh -c"
   log_has "docker rm -f doc-tools-cid"
   eq "$(cat "$T/fill-stdin")" "TOOLS-TAR"
   grep -q 'tar -x' "$T/run-script" || fail "the fill does not unpack"
-  grep -q '/dst/.lettuce-doc-tools-complete' "$T/run-script" || fail "the fill writes no marker"
+  grep -q '/dst/.lollo-doc-tools-complete' "$T/run-script" || fail "the fill writes no marker"
   # image -> volume -> fill -> compose up, and the volume is complete.
-  (($(line_of "docker build -q -t lettuce-doc-tools") < $(line_of "volume create"))) || fail "volume made before the image"
+  (($(line_of "docker build -q -t lollo-doc-tools") < $(line_of "volume create"))) || fail "volume made before the image"
   (($(line_of "docker rm -f doc-tools-cid") < $(line_of "up -d --no-build --pull missing --remove-orphans"))) || fail "the stack started before the fill"
   grep -qx "$vol $tag true false" "$T/volumes" || fail "the volume is not complete: $(cat "$T/volumes")"
 }
@@ -3370,10 +3370,10 @@ test_up_with_doc_tools_fills_the_tools_volume_before_starting() {
 test_up_keeps_a_complete_tools_volume() {
   added
   with_docs
-  tools_volume "lettuce-doc-tools-$(docs_tag)" true
+  tools_volume "lollo-doc-tools-$(docs_tag)" true
   ctl up alfred
   ok_rc
-  log_has "docker $CHECK_RUN -v lettuce-doc-tools-$(docs_tag):/dst:ro lettuce-backup:local test -f /dst/.lettuce-doc-tools-complete"
+  log_has "docker $CHECK_RUN -v lollo-doc-tools-$(docs_tag):/dst:ro lollo-backup:local test -f /dst/.lollo-doc-tools-complete"
   log_lacks "volume create"
   log_lacks "docker create"
   log_lacks "volume rm"
@@ -3383,12 +3383,12 @@ test_up_refills_a_tools_volume_without_its_marker() {
   added
   with_docs
   local vol
-  vol=lettuce-doc-tools-$(docs_tag)
+  vol=lollo-doc-tools-$(docs_tag)
   tools_volume "$vol" false
   ctl up alfred
   ok_rc
   log_has "volume rm $vol"
-  log_has "volume create --label lettuce.doc-tools.tag=$(docs_tag) $vol"
+  log_has "volume create --label lollo.doc-tools.tag=$(docs_tag) $vol"
   grep -qx "$vol $(docs_tag) true false" "$T/volumes" || fail "not refilled: $(cat "$T/volumes")"
 }
 
@@ -3398,29 +3398,29 @@ test_up_stops_when_the_tools_volume_cannot_be_filled() {
   stub STUB_RUN_FAIL=tar
   ctl up alfred
   bad_rc
-  out_has "could not fill the volume lettuce-doc-tools-$(docs_tag)"
+  out_has "could not fill the volume lollo-doc-tools-$(docs_tag)"
   log_has "docker rm -f doc-tools-cid"
   log_lacks "up -d --no-build"
   # An incomplete volume in use is not removed under a running app-server.
   sed -i '/^STUB_RUN_FAIL=/d' "$T/stub.env"
   : >"$T/volumes"
-  tools_volume "lettuce-doc-tools-$(docs_tag)" false true
+  tools_volume "lollo-doc-tools-$(docs_tag)" false true
   ctl up alfred
   bad_rc
-  out_has "lettuce-doc-tools-$(docs_tag) is incomplete and in use; stop every stack with doc-tools (lettucectl down all), then run: lettucectl up all"
+  out_has "lollo-doc-tools-$(docs_tag) is incomplete and in use; stop every stack with doc-tools (lolloctl down all), then run: lolloctl up all"
   log_lacks "up -d --no-build"
 }
 
-test_up_refuses_a_tools_volume_lettucectl_did_not_make() {
+test_up_refuses_a_tools_volume_lolloctl_did_not_make() {
   added
   with_docs
   local vol
-  vol=lettuce-doc-tools-$(docs_tag)
+  vol=lollo-doc-tools-$(docs_tag)
   # Made by hand: no label, though it has the marker.
   echo "$vol - true false" >>"$T/volumes"
   ctl up alfred
   bad_rc
-  out_has "$vol was not made by lettucectl"
+  out_has "$vol was not made by lolloctl"
   log_lacks "up -d --no-build"
   log_lacks "volume rm $vol"
   # Labelled, but a bind to a host directory (driver options).
@@ -3428,22 +3428,22 @@ test_up_refuses_a_tools_volume_lettucectl_did_not_make() {
   echo "$vol $(docs_tag) true false local 3" >>"$T/volumes"
   ctl up alfred
   bad_rc
-  out_has "$vol was not made by lettucectl"
+  out_has "$vol was not made by lolloctl"
   : >"$T/volumes"
   echo "$vol $(docs_tag) true false nfs 0" >>"$T/volumes"
   ctl up alfred
   bad_rc
-  out_has "$vol was not made by lettucectl"
+  out_has "$vol was not made by lolloctl"
 }
 
 test_up_builds_no_image_for_a_complete_tools_volume() {
   added
   with_docs
-  tools_volume "lettuce-doc-tools-$(docs_tag)" true
-  stub STUB_IMAGES_MISSING=lettuce-doc-tools
+  tools_volume "lollo-doc-tools-$(docs_tag)" true
+  stub STUB_IMAGES_MISSING=lollo-doc-tools
   ctl up alfred
   ok_rc
-  log_lacks "docker build -q -t lettuce-doc-tools"
+  log_lacks "docker build -q -t lollo-doc-tools"
 }
 
 test_up_removes_containers_an_interrupted_fill_left() {
@@ -3453,7 +3453,7 @@ test_up_removes_containers_an_interrupted_fill_left() {
   ctl up alfred
   ok_rc
   log_has "docker rm -f old-cid"
-  (($(line_of "docker rm -f old-cid") < $(line_of "docker create --label lettucectl.doc-tools=fill"))) ||
+  (($(line_of "docker rm -f old-cid") < $(line_of "docker create --label lolloctl.doc-tools=fill"))) ||
     fail "the leftover was not removed before the fill"
 }
 
@@ -3461,7 +3461,7 @@ test_up_fills_the_tools_volume_under_a_lock() {
   added
   with_docs
   mkdir -p "$D/stacks"
-  # Another lettucectl holds the lock for a moment: this one waits, then fills.
+  # Another lolloctl holds the lock for a moment: this one waits, then fills.
   # It holds it long enough for up to start on a loaded machine (tests run in parallel).
   flock "$D/stacks/.doc-tools.lock" sleep 4 &
   local held=""
@@ -3472,29 +3472,29 @@ test_up_fills_the_tools_volume_under_a_lock() {
     }
     sleep 0.02
   done
-  [[ -n $held ]] || fail "the other lettucectl never took the lock"
+  [[ -n $held ]] || fail "the other lolloctl never took the lock"
   local t0=$SECONDS
   ctl up alfred
   ok_rc
   wait
   ((SECONDS - t0 >= 1)) || fail "up did not wait for the lock"
-  out_has "waiting for another lettucectl to finish with the volume"
-  log_has "volume create --label lettuce.doc-tools.tag=$(docs_tag)"
+  out_has "waiting for another lolloctl to finish with the volume"
+  log_has "volume create --label lollo.doc-tools.tag=$(docs_tag)"
 }
 
 test_up_removes_old_tools_volumes_and_leaves_one_in_use() {
   added
   with_docs
-  tools_volume lettuce-doc-tools-0000000001 true
-  tools_volume lettuce-doc-tools-0000000002 true true
+  tools_volume lollo-doc-tools-0000000001 true
+  tools_volume lollo-doc-tools-0000000002 true true
   ctl up alfred
   ok_rc
-  log_has "volume rm lettuce-doc-tools-0000000001"
-  log_has "volume rm lettuce-doc-tools-0000000002"
+  log_has "volume rm lollo-doc-tools-0000000001"
+  log_has "volume rm lollo-doc-tools-0000000002"
   out_lacks "0000000002"
-  grep -q '^lettuce-doc-tools-0000000001 ' "$T/volumes" && fail "the old volume stayed"
-  grep -q '^lettuce-doc-tools-0000000002 ' "$T/volumes" || fail "the volume in use was removed"
-  grep -q "^lettuce-doc-tools-$(docs_tag) " "$T/volumes" || fail "the current volume was removed"
+  grep -q '^lollo-doc-tools-0000000001 ' "$T/volumes" && fail "the old volume stayed"
+  grep -q '^lollo-doc-tools-0000000002 ' "$T/volumes" || fail "the volume in use was removed"
+  grep -q "^lollo-doc-tools-$(docs_tag) " "$T/volumes" || fail "the current volume was removed"
 }
 
 test_up_again_connects_nothing_twice() {
@@ -3516,7 +3516,7 @@ test_up_without_doc_tools_makes_no_network_or_gotenberg() {
   ctl up alfred
   ok_rc
   log_lacks "network create"
-  log_lacks "-p lettuce_shared --project-directory $H/compose/shared -f $H/compose/shared/gotenberg.yml --env-file /dev/null up"
+  log_lacks "-p lollo_shared --project-directory $H/compose/shared -f $H/compose/shared/gotenberg.yml --env-file /dev/null up"
   log_lacks "doc-tools.yml"
 }
 
@@ -3532,12 +3532,12 @@ test_check_refuses_a_doc_tools_mount_that_is_not_the_tools_volume_read_only() {
   with_docs
   local ok
   ok=$(jq -c '.services["app-server"].volumes[0]' "$T/compose-config.json")
-  docs_refused '.services["app-server"].volumes[0].read_only = false' "read-only at /opt/lettuce-doc-tools"
-  docs_refused '.services["app-server"].volumes[0] = {"type":"image","source":"lettuce-doc-tools:'"$(docs_tag)"'","target":"/opt/lettuce-doc-tools","read_only":true}' "read-only at /opt/lettuce-doc-tools"
-  docs_refused '.services["app-server"].volumes[0] = {"type":"bind","source":"/tmp/x","target":"/opt/lettuce-doc-tools","read_only":true}' "read-only at /opt/lettuce-doc-tools"
-  docs_refused '.services["app-server"].volumes = ['"$ok"', {"type":"bind","source":"/tmp/x","target":"/opt/lettuce-doc-tools"}]' "read-only at /opt/lettuce-doc-tools"
-  docs_refused '.services["app-server"].volumes = ['"$ok"'] | .volumes["doc-tools"].external = false' "must be the external lettuce-doc-tools-$(docs_tag)"
-  docs_refused '.volumes["doc-tools"] = {"name":"lettuce-doc-tools-0000000001","external":true}' "must be the external lettuce-doc-tools-$(docs_tag)"
+  docs_refused '.services["app-server"].volumes[0].read_only = false' "read-only at /opt/lollo-doc-tools"
+  docs_refused '.services["app-server"].volumes[0] = {"type":"image","source":"lollo-doc-tools:'"$(docs_tag)"'","target":"/opt/lollo-doc-tools","read_only":true}' "read-only at /opt/lollo-doc-tools"
+  docs_refused '.services["app-server"].volumes[0] = {"type":"bind","source":"/tmp/x","target":"/opt/lollo-doc-tools","read_only":true}' "read-only at /opt/lollo-doc-tools"
+  docs_refused '.services["app-server"].volumes = ['"$ok"', {"type":"bind","source":"/tmp/x","target":"/opt/lollo-doc-tools"}]' "read-only at /opt/lollo-doc-tools"
+  docs_refused '.services["app-server"].volumes = ['"$ok"'] | .volumes["doc-tools"].external = false' "must be the external lollo-doc-tools-$(docs_tag)"
+  docs_refused '.volumes["doc-tools"] = {"name":"lollo-doc-tools-0000000001","external":true}' "must be the external lollo-doc-tools-$(docs_tag)"
 }
 
 test_check_refuses_an_app_server_without_its_default_network() {
@@ -3552,29 +3552,29 @@ test_check_refuses_another_service_on_the_doc_tools_network() {
   docs_refused '.services.bff.networks = {"doc-tools":null}' "bff join(s) the doc-tools network"
 }
 
-test_check_refuses_a_doc_tools_network_that_is_not_lettucectls() {
+test_check_refuses_a_doc_tools_network_that_is_not_lolloctls() {
   added
   with_docs
-  docs_refused '.networks["doc-tools"].external = false' "must be the external lettuce-doc-tools-alfred"
+  docs_refused '.networks["doc-tools"].external = false' "must be the external lollo-doc-tools-alfred"
   config_edit '.networks["doc-tools"].external = true'
-  echo "lettuce-doc-tools-alfred - false -" >>"$T/networks"
+  echo "lollo-doc-tools-alfred - false -" >>"$T/networks"
   ctl check alfred
   bad_rc
-  out_has "must be an internal network lettucectl made for alfred"
+  out_has "must be an internal network lolloctl made for alfred"
 }
 
 test_check_refuses_another_service_mounting_the_tools_whatever_the_profiles() {
   added
-  config_edit '.services.bff.volumes = [{"type":"image","source":"lettuce-doc-tools:x","target":"/x","read_only":true}]'
+  config_edit '.services.bff.volumes = [{"type":"image","source":"lollo-doc-tools:x","target":"/x","read_only":true}]'
   ctl check alfred
   bad_rc
   out_has "bff mount(s) an image or the document tools"
   config_edit '.services.bff.volumes = [{"type":"volume","source":"tools","target":"/x","read_only":true}]
-    | .volumes = {"tools":{"name":"lettuce-doc-tools-0000000001","external":true}}'
+    | .volumes = {"tools":{"name":"lollo-doc-tools-0000000001","external":true}}'
   ctl check alfred
   bad_rc
   out_has "bff mount(s) an image or the document tools"
-  config_edit '.services.bff.volumes = [{"type":"volume","source":"lettuce-doc-tools-0000000001","target":"/x"}] | .volumes = {}'
+  config_edit '.services.bff.volumes = [{"type":"volume","source":"lollo-doc-tools-0000000001","target":"/x"}] | .volumes = {}'
   ctl check alfred
   bad_rc
   out_has "bff mount(s) an image or the document tools"
@@ -3646,42 +3646,42 @@ test_up_fails_at_the_end_when_gotenberg_cannot_start() {
 test_sync_removes_the_networks_of_stacks_that_are_gone() {
   added
   with_docs
-  echo "lettuce-doc-tools-ghost ghost true gotenberg-id" >>"$T/networks"
+  echo "lollo-doc-tools-ghost ghost true gotenberg-id" >>"$T/networks"
   ctl up alfred
   ok_rc
-  log_has "network disconnect -f lettuce-doc-tools-ghost gotenberg-id"
-  log_has "network rm lettuce-doc-tools-ghost"
-  grep -q '^lettuce-doc-tools-ghost ' "$T/networks" && fail "the orphan network is still there"
-  grep -q '^lettuce-doc-tools-alfred ' "$T/networks" || fail "alfred's network went too"
+  log_has "network disconnect -f lollo-doc-tools-ghost gotenberg-id"
+  log_has "network rm lollo-doc-tools-ghost"
+  grep -q '^lollo-doc-tools-ghost ' "$T/networks" && fail "the orphan network is still there"
+  grep -q '^lollo-doc-tools-alfred ' "$T/networks" || fail "alfred's network went too"
 }
 
-test_sync_connects_gotenberg_only_to_networks_lettucectl_made() {
+test_sync_connects_gotenberg_only_to_networks_lolloctl_made() {
   added
   ctl add hal hal@example.com
   ok_rc
   with_docs
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$D/stacks/hal/stack.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,lollo-doc-tools/' "$D/stacks/hal/stack.env"
   # hal's name is taken by a network with a route out, made by someone else.
-  echo "lettuce-doc-tools-hal - false -" >>"$T/networks"
+  echo "lollo-doc-tools-hal - false -" >>"$T/networks"
   : >"$T/calls.log"
   ctl up alfred
   bad_rc
-  out_has "lettuce-doc-tools-hal must be an internal network lettucectl made for hal"
-  log_has "network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
-  log_lacks "network connect --alias gotenberg lettuce-doc-tools-hal"
+  out_has "lollo-doc-tools-hal must be an internal network lolloctl made for hal"
+  log_has "network connect --alias gotenberg lollo-doc-tools-alfred gotenberg-id"
+  log_lacks "network connect --alias gotenberg lollo-doc-tools-hal"
   # Nor one labelled for another stack, and Gotenberg leaves one it is already on.
-  sed -i 's/^lettuce-doc-tools-hal .*/lettuce-doc-tools-hal alfred true gotenberg-id/' "$T/networks"
+  sed -i 's/^lollo-doc-tools-hal .*/lollo-doc-tools-hal alfred true gotenberg-id/' "$T/networks"
   : >"$T/calls.log"
   ctl up alfred
   bad_rc
-  log_has "network disconnect -f lettuce-doc-tools-hal gotenberg-id"
-  log_lacks "network connect --alias gotenberg lettuce-doc-tools-hal"
+  log_has "network disconnect -f lollo-doc-tools-hal gotenberg-id"
+  log_lacks "network connect --alias gotenberg lollo-doc-tools-hal"
 }
 
 test_sync_fails_when_it_cannot_list_the_networks() {
   added
   with_docs
-  echo "lettuce-doc-tools-ghost ghost true -" >>"$T/networks"
+  echo "lollo-doc-tools-ghost ghost true -" >>"$T/networks"
   stub STUB_NETWORK_LS_RC=1
   ctl up alfred
   bad_rc
@@ -3696,10 +3696,10 @@ test_remove_drops_the_stacks_network_and_keeps_gotenberg() {
   : >"$T/calls.log"
   ctl remove alfred <<<"alfred"
   ok_rc
-  (($(line_of "down -v") < $(line_of "network disconnect -f lettuce-doc-tools-alfred gotenberg-id"))) || fail "network dropped before down"
-  log_has "network rm lettuce-doc-tools-alfred"
+  (($(line_of "down -v") < $(line_of "network disconnect -f lollo-doc-tools-alfred gotenberg-id"))) || fail "network dropped before down"
+  log_has "network rm lollo-doc-tools-alfred"
   log_lacks "-f $H/compose/shared/gotenberg.yml --env-file /dev/null down"
-  grep -qx 'lettuce_shared gotenberg' "$T/containers.txt" || fail "gotenberg removed with the stack"
+  grep -qx 'lollo_shared gotenberg' "$T/containers.txt" || fail "gotenberg removed with the stack"
 }
 
 test_remove_purge_renders_the_stack_without_doc_tools() {
@@ -3746,10 +3746,10 @@ test_profiles_dropping_doc_tools_stops_gotenberg_and_removes_the_networks() {
   : >"$T/calls.log"
   ctl profiles cloudflared
   ok_rc
-  log_has "-p lettuce_shared --project-directory $H/compose/shared -f $H/compose/shared/gotenberg.yml --env-file /dev/null down"
-  log_has "network rm lettuce-doc-tools-alfred"
+  log_has "-p lollo_shared --project-directory $H/compose/shared -f $H/compose/shared/gotenberg.yml --env-file /dev/null down"
+  log_has "network rm lollo-doc-tools-alfred"
   [[ ! -s $T/networks ]] || fail "networks left: $(cat "$T/networks")"
-  log_has "volume rm lettuce-doc-tools-$(docs_tag)"
+  log_has "volume rm lollo-doc-tools-$(docs_tag)"
   [[ ! -s $T/volumes ]] || fail "volumes left: $(cat "$T/volumes")"
   # A re-run has nothing left to do.
   : >"$T/calls.log"
@@ -3763,22 +3763,22 @@ test_profiles_dropping_doc_tools_stops_gotenberg_and_removes_the_networks() {
 test_profiles_adding_doc_tools_prints_the_mcp_entries_and_registers_nothing() {
   added
   docs_config
-  ctl profiles cloudflared,garden-doc-tools
+  ctl profiles cloudflared,lollo-doc-tools
   ok_rc
-  log_has "network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
-  out_has "office -> /opt/lettuce-doc-tools/bin/officeagent"
-  out_has "pdf -> /opt/lettuce-doc-tools/bin/pdf-mcp"
-  out_has "or run: lettucectl mcp alfred"
+  log_has "network connect --alias gotenberg lollo-doc-tools-alfred gotenberg-id"
+  out_has "office -> /opt/lollo-doc-tools/bin/officeagent"
+  out_has "pdf -> /opt/lollo-doc-tools/bin/pdf-mcp"
+  out_has "or run: lolloctl mcp alfred"
   log_lacks "node --input-type=module"
 }
 
 test_add_with_doc_tools_registers_the_mcp_servers() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-doc-tools/' "$D/config.env"
   docs_config
   mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
   ctl add alfred alfred@example.com
   ok_rc
-  log_has "network connect --alias gotenberg lettuce-doc-tools-alfred gotenberg-id"
+  log_has "network connect --alias gotenberg lollo-doc-tools-alfred gotenberg-id"
   log_has "$MCP_ADD"
   # After the stack and Gotenberg are up.
   (($(line_of "$MCP_ADD") > $(line_of "network connect --alias gotenberg"))) || fail "registered before Gotenberg"
@@ -3788,7 +3788,7 @@ test_add_with_doc_tools_registers_the_mcp_servers() {
 }
 
 test_add_with_the_vault_and_doc_tools_registers_both() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-vault,lollo-doc-tools/' "$D/config.env"
   docs_config
   vault_config
   mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}' doc-tools
@@ -3806,7 +3806,7 @@ test_add_with_the_vault_and_doc_tools_registers_both() {
 }
 
 test_add_still_succeeds_when_registering_the_vault_fails() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-vault/' "$D/config.env"
   vault_config
   stub STUB_EXEC_RC=3
   ctl add alfred alfred@example.com
@@ -3815,28 +3815,28 @@ test_add_still_succeeds_when_registering_the_vault_fails() {
   log_lacks "$MCP_ADD"
   eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
   out_has "Vault: in https://alfred.example.org Settings -> MCP, add an HTTP server:"
-  out_has "vault -> http://garden-vault:8000/mcp (docs/vault.md)"
-  out_has "or run: lettucectl mcp alfred"
+  out_has "vault -> http://lollo-vault:8000/mcp (docs/vault.md)"
+  out_has "or run: lolloctl mcp alfred"
 }
 
 test_profiles_adding_the_vault_prints_its_entry_and_registers_nothing() {
   added
   vault_config
-  ctl profiles cloudflared,garden-vault
+  ctl profiles cloudflared,lollo-vault
   ok_rc
-  out_has "vault -> http://garden-vault:8000/mcp"
-  out_has "or run: lettucectl mcp alfred"
+  out_has "vault -> http://lollo-vault:8000/mcp"
+  out_has "or run: lolloctl mcp alfred"
   out_lacks "Documents:"
   log_lacks "node --input-type=module"
 }
 
 test_add_still_succeeds_when_registering_the_mcp_servers_fails() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-doc-tools/' "$D/config.env"
   docs_config
   stub STUB_EXEC_RC=3
   ctl add alfred alfred@example.com
   ok_rc
-  out_has "run: lettucectl mcp alfred"
+  out_has "run: lolloctl mcp alfred"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
 }
 
@@ -3850,10 +3850,10 @@ VAULT_REMOVE="exec -T app-server node --input-type=module - remove /root/.letta/
 # exec's output), for every group or only for GROUP
 mcp_answer() { printf '%s\n' "$1" >"$T/exec-stdout${2:+-$2}"; }
 
-# with_docs_and_vault -> alfred runs the garden-doc-tools and garden-vault profiles
+# with_docs_and_vault -> alfred runs the lollo-doc-tools and lollo-vault profiles
 with_docs_and_vault() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-vault,garden-doc-tools/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-vault,lollo-doc-tools/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,lollo-vault,lollo-doc-tools/' "$D/stacks/alfred/stack.env"
   docs_config
   vault_config
 }
@@ -3895,7 +3895,7 @@ test_mcp_still_succeeds_when_the_bff_cannot_restart() {
   mcp_answer '{"added":["office","pdf"],"present":[],"conflicts":[],"removed":[],"attempts":1}'
   ctl mcp alfred
   ok_rc
-  out_has "alfred: could not restart its BFF; agents see the change after: lettucectl restart alfred"
+  out_has "alfred: could not restart its BFF; agents see the change after: lolloctl restart alfred"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
 }
 
@@ -3929,7 +3929,7 @@ test_mcp_needs_the_doc_tools_or_the_vault_profile() {
   added
   ctl mcp alfred
   bad_rc
-  out_has "the garden-doc-tools, garden-vault and garden-news-radar profiles are all off"
+  out_has "the lollo-doc-tools, lollo-vault and lollo-news-radar profiles are all off"
   log_lacks "node --input-type=module"
 }
 
@@ -3941,7 +3941,7 @@ test_mcp_registers_the_vault_with_its_profile() {
   ok_rc
   log_has "$VAULT_ADD"
   log_lacks "$MCP_ADD"
-  grep -q 'garden-vault:8000/mcp' "$T/exec-stdin.log" || fail "the script was not streamed"
+  grep -q 'lollo-vault:8000/mcp' "$T/exec-stdin.log" || fail "the script was not streamed"
   out_has "alfred: added vault to Settings -> MCP"
   eq "$(senv alfred VAULT_MCP_REGISTERED)" 1
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
@@ -4025,11 +4025,11 @@ test_profiles_dropping_the_vault_removes_its_registered_entry() {
   printf '%s\n' DOC_TOOLS_MCP_REGISTERED=1 VAULT_MCP_REGISTERED=1 >>"$D/stacks/alfred/stack.env"
   : >"$T/calls.log"
   mcp_answer '{"added":[],"present":[],"conflicts":[],"removed":["vault"],"attempts":1}' vault
-  ctl profiles cloudflared,garden-doc-tools
+  ctl profiles cloudflared,lollo-doc-tools
   ok_rc
   log_has "$VAULT_REMOVE"
   log_lacks "$MCP_REMOVE"
-  out_has "alfred: removed vault from Settings -> MCP (the garden-vault profile is off)"
+  out_has "alfred: removed vault from Settings -> MCP (the lollo-vault profile is off)"
   eq "$(senv alfred VAULT_MCP_REGISTERED)" ""
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" 1
   (($(line_of "restart --no-deps bff") > $(line_of "$VAULT_REMOVE"))) || fail "the BFF was not restarted after the removal"
@@ -4086,7 +4086,7 @@ test_profiles_dropping_doc_tools_removes_the_registered_servers() {
   ctl profiles cloudflared
   ok_rc
   log_has "$MCP_REMOVE"
-  out_has "alfred: removed office, pdf from Settings -> MCP (the garden-doc-tools profile is off)"
+  out_has "alfred: removed office, pdf from Settings -> MCP (the lollo-doc-tools profile is off)"
   eq "$(senv alfred DOC_TOOLS_MCP_REGISTERED)" ""
   (($(line_of "restart --no-deps bff") > $(line_of "$MCP_REMOVE"))) || fail "the BFF was not restarted after the removal"
 }
@@ -4122,50 +4122,50 @@ test_up_retries_a_removal_that_failed_and_skips_unregistered_stacks() {
 }
 
 test_shared_project_is_not_a_stack_named_shared() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-doc-tools/' "$D/config.env"
   docs_config shared
   ctl add shared shared@example.com
   ok_rc
-  log_has "-p lettuce-shared --project-directory $U/docker"
+  log_has "-p lollo-shared --project-directory $U/docker"
   # The stack's files never go to the shared project, nor the other way round.
-  grep -- '-p lettuce_shared ' "$T/calls.log" | grep -q upstream && fail "the shared project got a stack's files"
-  grep -- '-p lettuce-shared ' "$T/calls.log" | grep -q compose/shared && fail "the stack got the shared project's files"
+  grep -- '-p lollo_shared ' "$T/calls.log" | grep -q upstream && fail "the shared project got a stack's files"
+  grep -- '-p lollo-shared ' "$T/calls.log" | grep -q compose/shared && fail "the stack got the shared project's files"
   true
 }
 
 # ── code editor (code-server) ────────────────────────────────────────────────
 # code_config -> the rendered config also holds the three services and networks
 # compose/code-server.yml renders for alfred (taken from a real render), and
-# the garden service
+# the landing service
 code_config() {
   local st=$D/stacks/alfred/state
-  config_edit '.services["garden-code-server"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
-      "environment":'"$GARDEN_ENV"',"networks":{"default":null},
+  config_edit '.services["lollo-code-server"] = {"read_only":true,"cap_drop":["ALL"],"tmpfs":["/tmp"],
+      "environment":'"$LOLLO_ENV"',"networks":{"default":null},
       "volumes":[{"type":"volume","source":"code-server-sock","target":"/run/code-server","read_only":true,"volume":{}}]}
-    | .services["garden-code-server-editor"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
+    | .services["lollo-code-server-editor"] = {"read_only":true,"cap_drop":["ALL"],"user":"0","tmpfs":["/tmp"],
       "command":["--socket","/run/code-server/editor.sock","--socket-mode","666","--auth","none","--disable-proxy",
         "--disable-telemetry","--disable-update-check","--disable-getting-started-override","--extensions-dir",
-        "/opt/lettuce-editor/no-extensions","--user-data-dir","/data/user","--config","/opt/lettuce-editor/config.yaml"],
+        "/opt/lollo-editor/no-extensions","--user-data-dir","/data/user","--config","/opt/lollo-editor/config.yaml"],
       "environment":{"EXTENSIONS_GALLERY":"{}","TZ":"UTC"},
       "networks":{"code-exec":null},
       "volumes":[{"type":"bind","source":"'"$st"'/workspaces","target":"/work","bind":{"create_host_path":true}},
         {"type":"volume","source":"code-server-data","target":"/data","volume":{}},
         {"type":"volume","source":"code-exec-keys","target":"/keys","volume":{}},
         {"type":"volume","source":"code-server-sock","target":"/run/code-server","volume":{}}]}
-    | .services["garden-code-server-exec"] = {"cap_drop":["NET_RAW"],"init":true,
-      "depends_on":{"garden-code-server-editor":{"condition":"service_healthy","required":true}},
+    | .services["lollo-code-server-exec"] = {"cap_drop":["NET_RAW"],"init":true,
+      "depends_on":{"lollo-code-server-editor":{"condition":"service_healthy","required":true}},
       "networks":{"code-egress":null,"code-exec":null},
       "volumes":[{"type":"bind","source":"'"$st"'/workspaces","target":"/work","bind":{"create_host_path":true}},
         {"type":"bind","source":"'"$st"'/tools","target":"/opt/agent-tools","bind":{"create_host_path":true}},
         {"type":"volume","source":"code-exec-keys","target":"/keys","read_only":true,"volume":{}}]}
     | .networks = {"code-exec":{"internal":true},"code-egress":{},"default":{}}'
-  garden_config
+  landing_config
 }
 
-# with_code -> alfred runs the garden-code-server profile, with the services it renders
+# with_code -> alfred runs the lollo-code-server profile, with the services it renders
 with_code() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-code-server/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-code-server/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-code-server/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,lollo-code-server/' "$D/stacks/alfred/stack.env"
   code_config
 }
 
@@ -4179,9 +4179,9 @@ code_refused() {
   bad_rc
   out_has "alfred: $2"
 }
-CG='.services["garden-code-server"]'
-CE='.services["garden-code-server-editor"]'
-CX='.services["garden-code-server-exec"]'
+CG='.services["lollo-code-server"]'
+CE='.services["lollo-code-server-editor"]'
+CX='.services["lollo-code-server-exec"]'
 
 test_check_accepts_the_code_editor_as_rendered() {
   added
@@ -4192,23 +4192,23 @@ test_check_accepts_the_code_editor_as_rendered() {
 
 test_check_refuses_a_code_editor_service_missing() {
   local s
-  for s in garden-code-server garden-code-server-editor garden-code-server-exec; do
-    code_refused "del(.services[\"$s\"])" "the garden-code-server profile is on but $s is not in the rendered config"
+  for s in lollo-code-server lollo-code-server-editor lollo-code-server-exec; do
+    code_refused "del(.services[\"$s\"])" "the lollo-code-server profile is on but $s is not in the rendered config"
     teardown
     setup
   done
 }
 
 test_check_refuses_a_gate_without_its_hardening_or_on_another_network() {
-  code_refused "del($CG.read_only)" "garden-code-server must have read_only: true"
+  code_refused "del($CG.read_only)" "lollo-code-server must have read_only: true"
   teardown; setup
-  code_refused "$CG.volumes = [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden-code-server must not mount host paths"
+  code_refused "$CG.volumes = [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "lollo-code-server must not mount host paths"
   teardown; setup
-  code_refused "$CG.networks[\"code-exec\"] = null" "garden-code-server (the gate) must be on the default network only"
+  code_refused "$CG.networks[\"code-exec\"] = null" "lollo-code-server (the gate) must be on the default network only"
 }
 
 test_check_refuses_a_gate_without_the_editors_socket_or_with_more() {
-  local m="garden-code-server (the gate) may mount only the volume code-server-sock, read-only (at /run/code-server)"
+  local m="lollo-code-server (the gate) may mount only the volume code-server-sock, read-only (at /run/code-server)"
   code_refused "$CG.volumes = []" "$m"
   teardown; setup
   code_refused "$CG.volumes[0].read_only = false" "$m"
@@ -4217,39 +4217,39 @@ test_check_refuses_a_gate_without_the_editors_socket_or_with_more() {
 }
 
 test_check_refuses_an_editor_without_its_hardening() {
-  code_refused "$CE.cap_drop = [\"NET_RAW\"]" "garden-code-server-editor must drop all capabilities"
+  code_refused "$CE.cap_drop = [\"NET_RAW\"]" "lollo-code-server-editor must drop all capabilities"
   teardown; setup
-  code_refused "$CE.cap_add = [\"SYS_PTRACE\"]" "garden-code-server-editor must not set cap_add"
+  code_refused "$CE.cap_add = [\"SYS_PTRACE\"]" "lollo-code-server-editor must not set cap_add"
   teardown; setup
-  code_refused "$CE.pid = \"host\"" "garden-code-server-editor must not set pid"
+  code_refused "$CE.pid = \"host\"" "lollo-code-server-editor must not set pid"
 }
 
 test_check_refuses_an_editor_with_other_mounts() {
   code_refused "$CE.volumes += [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state/tools\",\"target\":\"/opt/agent-tools\"}]" \
-    "garden-code-server-editor may mount from the host only $D/stacks/alfred/state/workspaces (at /work)"
+    "lollo-code-server-editor may mount from the host only $D/stacks/alfred/state/workspaces (at /work)"
   teardown; setup
-  local m="garden-code-server-editor may mount only the volumes code-server-data (at /data), code-exec-keys (at /keys) and code-server-sock (at /run/code-server)"
+  local m="lollo-code-server-editor may mount only the volumes code-server-data (at /data), code-exec-keys (at /keys) and code-server-sock (at /run/code-server)"
   code_refused "$CE.volumes += [{\"type\":\"volume\",\"source\":\"scratch\",\"target\":\"/scratch\"}]" "$m"
   teardown; setup
   code_refused "$CE.volumes = [$CE.volumes[0], $CE.volumes[1], $CE.volumes[2]]" "$m"
 }
 
 test_check_refuses_an_editor_on_the_stack_network() {
-  code_refused "$CE.networks.default = null" "garden-code-server-editor must be on the code-exec network only"
+  code_refused "$CE.networks.default = null" "lollo-code-server-editor must be on the code-exec network only"
 }
 
 test_check_refuses_an_editor_that_runs_workspace_code_or_trusts_more() {
-  local flag m="garden-code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lettuce-editor/no-extensions, --user-data-dir /data/user and --config /opt/lettuce-editor/config.yaml, each once"
+  local flag m="lollo-code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lollo-editor/no-extensions, --user-data-dir /data/user and --config /opt/lollo-editor/config.yaml, each once"
   code_refused "$CE.command -= [\"--disable-proxy\"]" "$m"
   teardown; setup
   code_refused "$CE.command |= map(if . == \"none\" then \"password\" else . end)" "$m"
   teardown; setup
-  code_refused "$CE.command |= map(if . == \"/opt/lettuce-editor/no-extensions\" then \"/data/extensions\" else . end)" "$m"
+  code_refused "$CE.command |= map(if . == \"/opt/lollo-editor/no-extensions\" then \"/data/extensions\" else . end)" "$m"
   teardown; setup
   code_refused "$CE.command |= map(if . == \"/run/code-server/editor.sock\" then \"/tmp/editor.sock\" else . end)" "$m"
   # Without --config, code-server reads and writes its config file on /data.
   teardown; setup
-  code_refused "$CE.command -= [\"--config\", \"/opt/lettuce-editor/config.yaml\"]" "$m"
+  code_refused "$CE.command -= [\"--config\", \"/opt/lollo-editor/config.yaml\"]" "$m"
   # code-server takes the last of a repeated flag, in either form.
   for flag in '"--auth","password"' '"--auth=password"' '"--extensions-dir","/work/x"' '"--extensions-dir=/work/x"' \
     '"--user-data-dir","/work/x"' '"--user-data-dir=/work/x"' '"--socket=/tmp/x"' '"--disable-proxy=false"' \
@@ -4259,39 +4259,39 @@ test_check_refuses_an_editor_that_runs_workspace_code_or_trusts_more() {
   done
   for flag in --bind-addr --socket-fd; do
     teardown; setup
-    code_refused "$CE.command += [\"$flag\", \"3\"]" "garden-code-server-editor must not run with $flag"
+    code_refused "$CE.command += [\"$flag\", \"3\"]" "lollo-code-server-editor must not run with $flag"
   done
   for flag in --disable-workspace-trust --trusted-origins=evil.example.org --link --enable-proposed-api \
     --install-extension --github-auth --builtin-extensions-dir; do
     teardown; setup
-    code_refused "$CE.command += [\"$flag\"]" "garden-code-server-editor must not run with $flag"
+    code_refused "$CE.command += [\"$flag\"]" "lollo-code-server-editor must not run with $flag"
   done
   teardown; setup
   code_refused "$CE.environment.EXTENSIONS_GALLERY = \"{\\\"serviceUrl\\\":\\\"https://open-vsx.org/vscode/gallery\\\"}\"" \
-    "garden-code-server-editor must have EXTENSIONS_GALLERY={} (no marketplace)"
+    "lollo-code-server-editor must have EXTENSIONS_GALLERY={} (no marketplace)"
 }
 
 test_check_refuses_a_shell_with_more_reach() {
-  code_refused "$CX.networks.default = null" "garden-code-server-exec must be on the code-exec and code-egress networks only"
+  code_refused "$CX.networks.default = null" "lollo-code-server-exec must be on the code-exec and code-egress networks only"
   teardown; setup
-  code_refused "$CX.cap_drop = []" "garden-code-server-exec must drop NET_RAW"
+  code_refused "$CX.cap_drop = []" "lollo-code-server-exec must drop NET_RAW"
   teardown; setup
-  code_refused "$CX.privileged = true" "garden-code-server-exec must not set privileged"
+  code_refused "$CX.privileged = true" "lollo-code-server-exec must not set privileged"
   teardown; setup
-  code_refused "$CX.network_mode = \"service:app-server\"" "garden-code-server-exec must not set network_mode"
+  code_refused "$CX.network_mode = \"service:app-server\"" "lollo-code-server-exec must not set network_mode"
   teardown; setup
   code_refused "$CX.volumes += [{\"type\":\"bind\",\"source\":\"$D/stacks/alfred/state/letta-home\",\"target\":\"/root/.letta\"}]" \
-    "garden-code-server-exec may mount from the host only"
+    "lollo-code-server-exec may mount from the host only"
   teardown; setup
-  code_refused "$CX.volumes[2].read_only = false" "garden-code-server-exec may mount only the volume code-exec-keys, read-only"
+  code_refused "$CX.volumes[2].read_only = false" "lollo-code-server-exec may mount only the volume code-exec-keys, read-only"
 }
 
 test_check_refuses_others_on_the_code_editor_networks() {
   code_refused '.services["app-server"].networks = {"default":null,"code-exec":null}' \
-    "only garden-code-server-editor,garden-code-server-exec may join the code-exec network (found: app-server,garden-code-server-editor,garden-code-server-exec)"
+    "only lollo-code-server-editor,lollo-code-server-exec may join the code-exec network (found: app-server,lollo-code-server-editor,lollo-code-server-exec)"
   teardown; setup
   code_refused '.services.cloudflared = {"networks":{"default":null,"code-egress":null}}' \
-    "only garden-code-server-exec may join the code-egress network"
+    "only lollo-code-server-exec may join the code-egress network"
   teardown; setup
   code_refused '.networks["code-exec"].internal = false' "the code-exec network must be internal"
 }
@@ -4321,7 +4321,7 @@ test_check_guards_the_code_editor_volumes_whatever_the_profiles() {
   out_has "alfred: bff mount(s) the code editor's SSH keys"
   teardown; setup
   added
-  config_edit '.services.searxng = {"volumes_from":["garden-code-server-exec"]}'
+  config_edit '.services.searxng = {"volumes_from":["lollo-code-server-exec"]}'
   ctl check alfred
   bad_rc
   out_has "volumes_from reaches"
@@ -4330,12 +4330,12 @@ test_check_guards_the_code_editor_volumes_whatever_the_profiles() {
   config_edit '.services.bff.volumes = [{"type":"volume","source":"code-server-sock","target":"/run/code-server"}]'
   ctl check alfred
   bad_rc
-  out_has "alfred: bff mount(s) the code editor's socket; only garden-code-server and garden-code-server-editor may"
+  out_has "alfred: bff mount(s) the code editor's socket; only lollo-code-server and lollo-code-server-editor may"
 }
 
 test_check_refuses_sharing_a_code_editor_network_namespace_whatever_the_profiles() {
   local mode
-  for mode in service:garden-code-server-editor service:garden-code-server service:garden-code-server-exec container:lettuce-alfred-garden-code-server-editor-1; do
+  for mode in service:lollo-code-server-editor service:lollo-code-server service:lollo-code-server-exec container:lollo-alfred-lollo-code-server-editor-1; do
     teardown; setup
     added
     config_edit ".services.searxng = {\"network_mode\":\"$mode\"}"
@@ -4349,31 +4349,31 @@ test_compose_always_merges_the_code_editor_overlay() {
   added
   ctl up alfred
   ok_rc
-  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/garden.yml --env-file"
+  log_has "-f $H/compose/pipelock.yml -f $H/compose/code-server.yml -f $H/compose/landing.yml --env-file"
 }
 
 test_profiles_routes_the_code_editor_and_lists_it_on_the_landing_page() {
   added
   code_config
-  ctl profiles cloudflared,search,garden-code-server
+  ctl profiles cloudflared,search,lollo-code-server
   ok_rc
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/code-server(/|$)","service":"http://garden-code-server:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
-  eq "$(senv alfred GARDEN_PROFILES)" garden-code-server
+  eq "$(ingress)" '[{"hostname":"alfred-lollo.example.org","path":"^/code-server(/|$)","service":"http://lollo-code-server:8000"},'"$LANDING,$LOLLO_404,$LETTUCE_TAIL]"
+  eq "$(senv alfred LOLLO_PROFILES)" lollo-code-server
 }
 
 test_profiles_dropping_the_code_editor_removes_its_containers() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-code-server/' "$D/config.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-code-server/' "$D/config.env"
   code_config
   added
-  containers alfred app-server bff cloudflared garden-code-server garden-code-server-editor garden-code-server-exec
+  containers alfred app-server bff cloudflared lollo-code-server lollo-code-server-editor lollo-code-server-exec
   ctl profiles cloudflared
   ok_rc
-  log_lacks "garden-code-server:8000"
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden-code-server garden-code-server-editor garden-code-server-exec$' "$T/calls.log" ||
+  log_lacks "lollo-code-server:8000"
+  grep -q '^docker compose -p lollo-alfred .* rm -sf lollo-code-server lollo-code-server-editor lollo-code-server-exec$' "$T/calls.log" ||
     fail "the code editor's containers were not removed"
 }
 
-# ── garden host ──────────────────────────────────────────────────────────────
+# ── lollo host ──────────────────────────────────────────────────────────────
 test_up_makes_no_cloudflare_call() {
   added
   ctl up alfred
@@ -4395,103 +4395,103 @@ test_up_leaves_an_unfinished_stack_to_add() {
 test_profiles_gives_a_stack_back_its_deleted_executor_token() {
   added
   with_triggers
-  sed -i '/^GARDEN_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
-  containers alfred app-server garden-gmail-triggers
+  sed -i '/^LOLLO_EXECUTOR_TOKEN=/d' "$D/stacks/alfred/stack.env"
+  containers alfred app-server lollo-gmail-triggers
   : >"$T/exec-stdin.log"
   ctl profiles "$(senv alfred COMPOSE_PROFILES)"
   ok_rc
-  [[ $(senv alfred GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "no new executor token"
+  [[ $(senv alfred LOLLO_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] || fail "no new executor token"
   # The executor is installed with the new token, never without one.
-  eq "$(tar -xOf "$T/exec-stdin.log" token)" "$(senv alfred GARDEN_EXECUTOR_TOKEN)"
+  eq "$(tar -xOf "$T/exec-stdin.log" token)" "$(senv alfred LOLLO_EXECUTOR_TOKEN)"
 }
 
-# The garden service's root and assets go to it, whatever the asset; its
+# The landing service's root and assets go to it, whatever the asset; its
 # executor API and health check never reach the tunnel.
-test_garden_landing_path_routes_only_the_root_and_its_assets() {
+test_lollo_landing_path_routes_only_the_root_and_its_assets() {
   local path p
-  path=$(. "$ROOT/lib/cloudflare.sh" && printf '%s' "$GARDEN_LANDING_PATH")
-  for p in / /assets/garden.css /assets/icon-192.png /assets/new-icon.svg; do
-    grep -qE -- "$path" <<<"$p" || fail "$p is not routed to the garden service"
+  path=$(. "$ROOT/lib/cloudflare.sh" && printf '%s' "$LOLLO_LANDING_PATH")
+  for p in / /assets/lollo.css /assets/icon-192.png /assets/new-icon.svg; do
+    grep -qE -- "$path" <<<"$p" || fail "$p is not routed to the landing service"
   done
-  for p in /executor/v1/ /executor/v1/agents /healthz /assets/ /assets/a/b /garden.css /vault/; do
-    ! grep -qE -- "$path" <<<"$p" || fail "$p is routed to the garden service"
+  for p in /executor/v1/ /executor/v1/agents /healthz /assets/ /assets/a/b /lollo.css /vault/; do
+    ! grep -qE -- "$path" <<<"$p" || fail "$p is routed to the landing service"
   done
 }
 
-test_tunnel_routes_every_garden_page_on_the_garden_host_only() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-vault,garden-code-server/' "$D/config.env"
+test_tunnel_routes_every_lollo_page_on_the_lollo_host_only() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers,lollo-vault,lollo-code-server/' "$D/config.env"
   vault_config
   triggers_config
   code_config
   ctl add alfred alfred@example.com
   ok_rc
-  eq "$(ingress)" '[{"hostname":"alfred-garden.example.org","path":"^/vault(/|$)","service":"http://garden-vault:8000"},{"hostname":"alfred-garden.example.org","path":"^/gmail-triggers(/|$)","service":"http://garden-gmail-triggers:8000"},{"hostname":"alfred-garden.example.org","path":"^/code-server(/|$)","service":"http://garden-code-server:8000"},'"$LANDING,$GARDEN_404,$LETTUCE_TAIL]"
-  eq "$(senv alfred GARDEN_PROFILES)" garden-vault,garden-gmail-triggers,garden-code-server
+  eq "$(ingress)" '[{"hostname":"alfred-lollo.example.org","path":"^/vault(/|$)","service":"http://lollo-vault:8000"},{"hostname":"alfred-lollo.example.org","path":"^/gmail-triggers(/|$)","service":"http://lollo-gmail-triggers:8000"},{"hostname":"alfred-lollo.example.org","path":"^/code-server(/|$)","service":"http://lollo-code-server:8000"},'"$LANDING,$LOLLO_404,$LETTUCE_TAIL]"
+  eq "$(senv alfred LOLLO_PROFILES)" lollo-vault,lollo-gmail-triggers,lollo-code-server
 }
 
-# Only the garden service gets GARDEN_PROFILES: a recreate would relock the vault.
-test_only_the_garden_overlay_passes_the_garden_profiles() {
-  eq "$(grep -l 'GARDEN_PROFILES' "$ROOT"/compose/*.yml | xargs -n1 basename | paste -sd' ')" garden.yml
+# Only the landing service gets LOLLO_PROFILES: a recreate would relock the vault.
+test_only_the_landing_overlay_passes_the_lollo_profiles() {
+  eq "$(grep -l 'LOLLO_PROFILES' "$ROOT"/compose/*.yml | xargs -n1 basename | paste -sd' ')" landing.yml
 }
 
-# with_all_gardens -> alfred runs every garden page profile, with every garden service rendered
-with_all_gardens() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,garden-gmail-triggers,garden-news-radar,garden-vault,garden-code-server/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,garden-gmail-triggers,garden-news-radar,garden-vault,garden-code-server/' "$D/stacks/alfred/stack.env"
+# with_all_lollos -> alfred runs every lollo page profile, with every lollo service rendered
+with_all_lollos() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,google,lollo-gmail-triggers,lollo-news-radar,lollo-vault,lollo-code-server/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,google,lollo-gmail-triggers,lollo-news-radar,lollo-vault,lollo-code-server/' "$D/stacks/alfred/stack.env"
   vault_config
   triggers_config
   news_radar_config
   code_config
 }
 
-# garden_refused JQ EXPECTED -> with alfred's garden services edited by the jq
+# lollo_refused JQ EXPECTED -> with alfred's lollo services edited by the jq
 # filter JQ, `check` fails and says EXPECTED (on a fresh fixture, so a test may
 # call it more than once)
-garden_refused() {
+lollo_refused() {
   teardown
   setup
   added
-  with_all_gardens
+  with_all_lollos
   config_edit "$1"
   ctl check alfred
   bad_rc
   out_has "alfred: $2"
 }
-GS='.services.garden'
+GS='.services.landing'
 
-test_check_accepts_every_garden_service_as_rendered() {
+test_check_accepts_every_lollo_service_as_rendered() {
   added
-  with_all_gardens
+  with_all_lollos
   ctl check alfred
   ok_rc
 }
 
-test_check_refuses_a_garden_profile_without_the_garden() {
+test_check_refuses_a_lollo_profile_without_landing() {
   added
   with_vault
   config_edit "del($GS)"
   ctl check alfred
   bad_rc
-  out_has "alfred: the garden-vault profile is on but garden is not in the rendered config (compose/garden.yml)"
+  out_has "alfred: the lollo-vault profile is on but landing is not in the rendered config (compose/landing.yml)"
 }
 
-test_check_refuses_a_garden_that_is_not_hardened() {
-  garden_refused "del($GS.read_only)" "garden must have read_only: true"
-  garden_refused "$GS.cap_drop = [\"NET_RAW\"]" "garden must drop all capabilities"
-  garden_refused "$GS.network_mode = \"service:app-server\"" "garden must not set network_mode"
-  garden_refused "$GS.privileged = true" "garden must not set privileged"
+test_check_refuses_a_landing_that_is_not_hardened() {
+  lollo_refused "del($GS.read_only)" "landing must have read_only: true"
+  lollo_refused "$GS.cap_drop = [\"NET_RAW\"]" "landing must drop all capabilities"
+  lollo_refused "$GS.network_mode = \"service:app-server\"" "landing must not set network_mode"
+  lollo_refused "$GS.privileged = true" "landing must not set privileged"
 }
 
-test_check_refuses_a_garden_on_another_network_or_with_mounts() {
-  garden_refused "$GS.networks.other = null" "garden must be on the default network only"
-  garden_refused "$GS.networks = {\"backend\": null}" "garden must be on the default network only"
-  garden_refused "$GS.volumes = [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "garden must not mount host paths"
-  garden_refused "$GS.volumes = [{\"type\":\"volume\",\"source\":\"bff-auth\",\"target\":\"/x\"}]" "garden must not mount anything"
+test_check_refuses_a_landing_on_another_network_or_with_mounts() {
+  lollo_refused "$GS.networks.other = null" "landing must be on the default network only"
+  lollo_refused "$GS.networks = {\"backend\": null}" "landing must be on the default network only"
+  lollo_refused "$GS.volumes = [{\"type\":\"bind\",\"source\":\"/srv\",\"target\":\"/srv\"}]" "landing must not mount host paths"
+  lollo_refused "$GS.volumes = [{\"type\":\"volume\",\"source\":\"bff-auth\",\"target\":\"/x\"}]" "landing must not mount anything"
 }
 
-test_check_refuses_a_garden_profile_without_its_host_or_audience() {
+test_check_refuses_a_lollo_profile_without_its_host_or_audience() {
   local k
-  for k in GARDEN_ORIGIN CF_GARDEN_AUD; do
+  for k in LOLLO_ORIGIN CF_LOLLO_AUD; do
     teardown; setup
     added
     with_vault
@@ -4502,81 +4502,81 @@ test_check_refuses_a_garden_profile_without_its_host_or_audience() {
   done
 }
 
-test_check_refuses_a_garden_service_that_accepts_lettuces_token() {
+test_check_refuses_a_lollo_service_that_accepts_lettuces_token() {
   local s
-  for s in garden-vault garden-gmail-triggers garden-code-server garden; do
-    garden_refused ".services[\"$s\"].environment.CF_ACCESS_AUD = \"\${CF_ACCESS_AUD}\"" \
-      "$s must accept only the garden's Access application (CF_ACCESS_AUD = CF_GARDEN_AUD), never Lettuce's"
-    garden_refused "del(.services[\"$s\"].environment.CF_ACCESS_AUD)" "$s must accept only the garden's Access application"
-    garden_refused ".services[\"$s\"].environment.PUBLIC_ORIGIN = \"\${PUBLIC_ORIGIN}\"" \
-      "$s must have PUBLIC_ORIGIN = GARDEN_ORIGIN, the garden's own host"
+  for s in lollo-vault lollo-gmail-triggers lollo-code-server landing; do
+    lollo_refused ".services[\"$s\"].environment.CF_ACCESS_AUD = \"\${CF_ACCESS_AUD}\"" \
+      "$s must accept only the lollo's Access application (CF_ACCESS_AUD = CF_LOLLO_AUD), never Lettuce's"
+    lollo_refused "del(.services[\"$s\"].environment.CF_ACCESS_AUD)" "$s must accept only the lollo's Access application"
+    lollo_refused ".services[\"$s\"].environment.PUBLIC_ORIGIN = \"\${PUBLIC_ORIGIN}\"" \
+      "$s must have PUBLIC_ORIGIN = LOLLO_ORIGIN, the lollo's own host"
   done
 }
 
-test_check_refuses_a_garden_audience_that_is_lettuces() {
+test_check_refuses_a_lollo_audience_that_is_lettuces() {
   added
-  with_all_gardens
-  sed -i 's/^CF_GARDEN_AUD=.*/CF_GARDEN_AUD=aud1/' "$D/stacks/alfred/stack.env"
+  with_all_lollos
+  sed -i 's/^CF_LOLLO_AUD=.*/CF_LOLLO_AUD=aud1/' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "must accept only the garden's Access application"
+  out_has "must accept only the lollo's Access application"
 }
 
-test_check_refuses_a_garden_service_with_lettuces_token_whatever_the_profiles() {
+test_check_refuses_a_lollo_service_with_lettuces_token_whatever_the_profiles() {
   added
   vault_config
   # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
-  config_edit '.services["garden-vault"].environment.CF_ACCESS_AUD = "${CF_ACCESS_AUD}"'
+  config_edit '.services["lollo-vault"].environment.CF_ACCESS_AUD = "${CF_ACCESS_AUD}"'
   ctl check alfred
   bad_rc
-  out_has "alfred: garden-vault must accept only the garden's Access application"
+  out_has "alfred: lollo-vault must accept only the lollo's Access application"
 }
 
-test_profiles_dropping_every_garden_profile_removes_the_garden() {
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-vault,garden-code-server/' "$D/config.env"
+test_profiles_dropping_every_lollo_profile_removes_landing() {
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-vault,lollo-code-server/' "$D/config.env"
   vault_config
   code_config
   added
-  containers alfred app-server bff cloudflared garden-vault garden garden-code-server garden-code-server-editor garden-code-server-exec
-  ctl profiles cloudflared,garden-vault
+  containers alfred app-server bff cloudflared lollo-vault landing lollo-code-server lollo-code-server-editor lollo-code-server-exec
+  ctl profiles cloudflared,lollo-vault
   ok_rc
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden-code-server garden-code-server-editor garden-code-server-exec$' "$T/calls.log" ||
-    fail "the code editor's containers were not removed, or the garden went with them"
+  grep -q '^docker compose -p lollo-alfred .* rm -sf lollo-code-server lollo-code-server-editor lollo-code-server-exec$' "$T/calls.log" ||
+    fail "the code editor's containers were not removed, or landing went with them"
   : >"$T/calls.log"
   # (The stub still lists the code editor's containers.)
-  sed -i '/ garden-code-server/d' "$T/containers.txt"
+  sed -i '/ lollo-code-server/d' "$T/containers.txt"
   ctl profiles cloudflared
   ok_rc
-  grep -q '^docker compose -p lettuce-alfred .* rm -sf garden garden-vault$' "$T/calls.log" || fail "the garden was not removed"
-  eq "$(ingress)" "[$GARDEN_404,$LETTUCE_TAIL]"
+  grep -q '^docker compose -p lollo-alfred .* rm -sf landing lollo-vault$' "$T/calls.log" || fail "landing was not removed"
+  eq "$(ingress)" "[$LOLLO_404,$LETTUCE_TAIL]"
 }
 
-# Every garden sidecar of PROFILE_ROUTES is held to the garden's audience,
+# Every lollo sidecar of PROFILE_ROUTES is held to the lollo's audience,
 # including one added later.
-test_check_holds_every_routed_garden_sidecar_to_the_garden_audience() {
+test_check_holds_every_routed_lollo_sidecar_to_the_lollo_audience() {
   added
   with_vault
-  sed -i "s#^  'garden-code-server .*#&\n  'garden-notes ^/notes(/|\$) http://notes:8000'#" "$H/lib/cloudflare.sh"
-  grep -q "^  'garden-notes " "$H/lib/cloudflare.sh" || fail "fixture: no notes route"
+  sed -i "s#^  'lollo-code-server .*#&\n  'lollo-notes ^/notes(/|\$) http://notes:8000'#" "$H/lib/cloudflare.sh"
+  grep -q "^  'lollo-notes " "$H/lib/cloudflare.sh" || fail "fixture: no notes route"
   # shellcheck disable=SC2016 # ${KEY} is for the stub, not for bash
-  config_edit '.services.notes = {"environment":{"CF_ACCESS_AUD":"${CF_ACCESS_AUD}","PUBLIC_ORIGIN":"${GARDEN_ORIGIN}"}}'
+  config_edit '.services.notes = {"environment":{"CF_ACCESS_AUD":"${CF_ACCESS_AUD}","PUBLIC_ORIGIN":"${LOLLO_ORIGIN}"}}'
   ctl check alfred
   bad_rc
-  out_has "alfred: notes must accept only the garden's Access application"
+  out_has "alfred: notes must accept only the lollo's Access application"
 }
 
-# Compose starts the garden with any of its profiles; they must be the garden pages'.
-test_the_garden_overlay_has_exactly_the_garden_profiles() {
+# Compose starts landing with any of its profiles; they must be the lollo pages'.
+test_the_landing_overlay_has_exactly_the_lollo_profiles() {
   local routes yml
   routes=$(. "$ROOT/lib/cloudflare.sh" && for r in "${PROFILE_ROUTES[@]}"; do echo "${r%% *}"; done | sort | paste -sd,)
-  yml=$(sed -n 's/^ *profiles: *\[\(.*\)\]/\1/p' "$ROOT/compose/garden.yml" | tr -d '" ' | tr , '\n' | sort | paste -sd,)
+  yml=$(sed -n 's/^ *profiles: *\[\(.*\)\]/\1/p' "$ROOT/compose/landing.yml" | tr -d '" ' | tr , '\n' | sort | paste -sd,)
   [[ -n $routes ]] || fail "no PROFILE_ROUTES"
   eq "$yml" "$routes"
 }
 
-# Only the garden service links back to Lettuce; the vault would relock on a change.
-test_only_the_garden_overlay_passes_lettuces_origin() {
-  eq "$(grep -l 'LETTUCE_ORIGIN' "$ROOT"/compose/*.yml | xargs -n1 basename | paste -sd' ')" garden.yml
+# Only the landing service links back to Lettuce; the vault would relock on a change.
+test_only_the_landing_overlay_passes_lettuces_origin() {
+  eq "$(grep -l 'LETTUCE_ORIGIN' "$ROOT"/compose/*.yml | xargs -n1 basename | paste -sd' ')" landing.yml
 }
 
 # ── images built on this host (build_local_images) ──────────────────────────
@@ -4585,21 +4585,21 @@ test_only_the_garden_overlay_passes_lettuces_origin() {
 builds_config() {
   vault_config
   config_edit '.services["app-server"].build = {"context":"x"} | .services.bff.build = {"context":"x"}
-    | .services["garden-vault"].build = {"context":"x"}
-    | .services["garden-code-server-exec"] = {"build":{"context":"x"},"image":"lettuce-code-server-exec:local"}'
+    | .services["lollo-vault"].build = {"context":"x"}
+    | .services["lollo-code-server-exec"] = {"build":{"context":"x"},"image":"lollo-code-server-exec:local"}'
 }
 
-test_up_builds_upstreams_images_then_the_gardens_from_a_clone() {
+test_up_builds_upstreams_images_then_the_lollo_images_from_a_clone() {
   added
   builds_config
   ctl up alfred
   ok_rc
   local up gd st
   up=$(grep -n "compose .* build app-server bff$" "$T/calls.log" | cut -d: -f1)
-  gd=$(grep -n "compose .* build garden-vault garden-code-server-exec$" "$T/calls.log" | cut -d: -f1)
+  gd=$(grep -n "compose .* build lollo-vault lollo-code-server-exec$" "$T/calls.log" | cut -d: -f1)
   st=$(grep -n "compose .* up -d --no-build --pull missing --remove-orphans$" "$T/calls.log" | cut -d: -f1)
   [[ -n $up && -n $gd && -n $st ]] || fail "builds or up missing"
-  ((up < gd && gd < st)) || fail "expected upstream's build, then the garden's, then up"
+  ((up < gd && gd < st)) || fail "expected upstream's build, then the lollo's, then up"
   log_lacks "up -d --build"
 }
 
@@ -4613,7 +4613,7 @@ test_up_pulls_upstreams_images_when_published() {
   ctl up alfred
   ok_rc
   log_lacks "build app-server"
-  log_has "build garden-vault garden-code-server-exec"
+  log_has "build lollo-vault lollo-code-server-exec"
   log_has "APP_SERVER_IMAGE=ghcr.io/example/lettuce-app-server:$REF"
 }
 
@@ -4621,7 +4621,7 @@ test_compose_passes_the_code_and_the_shells_base() {
   added
   ctl up alfred
   ok_rc
-  log_has "docker-env-images LETTUCE_HOME=$H APP_SERVER_IMAGE=lettuce-app-server:$REF LETTA_IMAGE_NS= GARDEN_IMAGE_VAULT="
+  log_has "docker-env-images LOLLO_HOME=$H APP_SERVER_IMAGE=lettuce-app-server:$REF LETTA_IMAGE_NS= LOLLO_IMAGE_VAULT="
 }
 
 test_check_refuses_a_shell_built_on_another_app_server_image() {
@@ -4636,15 +4636,15 @@ test_check_refuses_a_shell_built_on_another_app_server_image() {
 test_check_refuses_doc_tools_on_an_arm64_host() {
   added
   stub STUB_PLATFORM=linux/arm64
-  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,garden-doc-tools/' "$D/config.env"
-  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,garden-doc-tools/' "$D/stacks/alfred/stack.env"
+  sed -i 's/^PROFILES=.*/PROFILES=cloudflared,lollo-doc-tools/' "$D/config.env"
+  sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared,lollo-doc-tools/' "$D/stacks/alfred/stack.env"
   ctl check alfred
   bad_rc
-  out_has "garden-doc-tools needs a linux/amd64 host"
+  out_has "lollo-doc-tools needs a linux/amd64 host"
 }
 
 # ── release mode ────────────────────────────────────────────────────────────
-# release_on -> the copy of the repo is a released lettucectl: a RELEASE, its
+# release_on -> the copy of the repo is a released lolloctl: a RELEASE, its
 # data directory passed as the wrapper passes it, and its container's mounts
 # (mounts.json) holding that directory at the same path
 release_on() {
@@ -4652,44 +4652,44 @@ release_on() {
   {
     echo VERSION=1.2.3
     echo "LETTUCE_REF=$REF"
-    echo REPOSITORY=example/lettuce-garden
+    echo REPOSITORY=example/lollo-rozzo
     while read -r img _rest; do
-      echo "GARDEN_IMAGE_$(tr 'a-z-' 'A-Z_' <<<"$img")=ghcr.io/example/lettuce-$img:c0ffee@sha256:$(printf '%064d' 0)"
+      echo "LOLLO_IMAGE_$(tr 'a-z-' 'A-Z_' <<<"$img")=ghcr.io/example/lollo-$img:c0ffee@sha256:$(printf '%064d' 0)"
     done < <(awk '!/^[[:space:]]*(#|$)/' "$H/release/images")
   } >"$H/RELEASE"
   CTL_DATA=$D
   mounts "$D"
 }
 
-# mounts PATH... -> lettucectl's container has PATHs bound at the same path
+# mounts PATH... -> lolloctl's container has PATHs bound at the same path
 mounts() {
   local p
   for p in "$@"; do printf '{"Type":"bind","Source":"%s","Destination":"%s"}\n' "$p" "$p"; done | jq -s . >"$T/mounts.json"
 }
 
-vault_image() { printf 'ghcr.io/example/lettuce-vault:c0ffee@sha256:%064d' 0; }
+vault_image() { printf 'ghcr.io/example/lollo-vault:c0ffee@sha256:%064d' 0; }
 
 test_release_mode_names_the_published_images() {
   added
   release_on
   vault_config
-  config_edit '.services["garden-vault"].image = "'"$(vault_image)"'"'
+  config_edit '.services["lollo-vault"].image = "'"$(vault_image)"'"'
   ctl up alfred
   ok_rc
-  log_has "GARDEN_IMAGE_VAULT=$(vault_image)"
+  log_has "LOLLO_IMAGE_VAULT=$(vault_image)"
 }
 
 test_release_mode_builds_only_the_shell() {
   added
   release_on
   builds_config
-  config_edit '.services["garden-vault"].image = "'"$(vault_image)"'"'
+  config_edit '.services["lollo-vault"].image = "'"$(vault_image)"'"'
   echo LETTA_IMAGE_NS=ghcr.io/example/ >>"$D/config.env"
   config_edit '.services["app-server"].image = "ghcr.io/example/lettuce-app-server:'"$REF"'"'
   ctl up alfred
   ok_rc
-  log_has "build garden-code-server-exec"
-  log_lacks "build garden-vault"
+  log_has "build lollo-code-server-exec"
+  log_lacks "build lollo-vault"
   log_lacks "build app-server"
   log_has "up -d --no-build --pull missing --remove-orphans"
 }
@@ -4698,21 +4698,21 @@ test_release_mode_builds_upstreams_images_where_none_are_published() {
   added
   release_on
   builds_config
-  config_edit '.services["garden-vault"].image = "'"$(vault_image)"'"'
+  config_edit '.services["lollo-vault"].image = "'"$(vault_image)"'"'
   ctl up alfred
   ok_rc
   log_has "build app-server bff"
-  log_has "build garden-code-server-exec"
+  log_has "build lollo-code-server-exec"
 }
 
 test_check_release_images() {
   added
   release_on
   vault_config
-  config_edit '.services["garden-vault"].image = "ghcr.io/evil/lettuce-vault:latest"'
+  config_edit '.services["lollo-vault"].image = "ghcr.io/evil/lollo-vault:latest"'
   ctl check alfred
   bad_rc
-  out_has "garden-vault runs ghcr.io/evil/lettuce-vault:latest, not the release's"
+  out_has "lollo-vault runs ghcr.io/evil/lollo-vault:latest, not the release's"
 }
 
 test_release_mode_needs_the_data_directory_from_the_wrapper() {
@@ -4720,7 +4720,7 @@ test_release_mode_needs_the_data_directory_from_the_wrapper() {
   CTL_DATA=""
   ctl list
   bad_rc
-  out_has "run lettucectl through its wrapper"
+  out_has "run lolloctl through its wrapper"
 }
 
 test_release_mode_needs_the_same_path_inside_and_outside() {
@@ -4748,12 +4748,12 @@ test_release_mode_fails_closed_without_its_own_container() {
 }
 
 # The wrapper says when the operator's stdin is a terminal but stdout is not
-# (`lettucectl apply | tee log`): it gives the container no terminal then, so
+# (`lolloctl apply | tee log`): it gives the container no terminal then, so
 # apply asks anyway. Only in release mode: from a clone stdin is the operator's.
 test_release_mode_apply_asks_when_the_wrapper_says_stdin_is_a_terminal() {
   added
   release_on
-  LETTUCECTL_STDIN_TTY=1 ctl apply </dev/null
+  LOLLOCTL_STDIN_TTY=1 ctl apply </dev/null
   bad_rc
   out_has "Apply? [y/N]"
   out_has "aborted"
@@ -4761,7 +4761,7 @@ test_release_mode_apply_asks_when_the_wrapper_says_stdin_is_a_terminal() {
 
 test_apply_ignores_the_wrappers_terminal_flag_from_a_clone() {
   printf 'alfred  alfred@example.com\n' >>"$D/stacks.conf"
-  LETTUCECTL_STDIN_TTY=1 ctl apply </dev/null
+  LOLLOCTL_STDIN_TTY=1 ctl apply </dev/null
   bad_rc
   out_has "--yes"
 }
@@ -4772,13 +4772,13 @@ test_release_mode_backup_needs_a_mounted_destination() {
   mkdir -p "$T/backups"
   ctl backup alfred "$T/backups" --live
   bad_rc
-  out_has "is not mounted into lettucectl's container"
+  out_has "is not mounted into lolloctl's container"
   mounts "$D" "$T/backups"
-  stub STUB_IMAGES_MISSING=ghcr.io/example/lettuce-backup
+  stub STUB_IMAGES_MISSING=ghcr.io/example/lollo-backup
   ctl backup alfred "$T/backups" --live
   ok_rc
-  log_has "pull -q ghcr.io/example/lettuce-backup:c0ffee"
-  log_lacks "docker build -q -t lettuce-backup"
+  log_has "pull -q ghcr.io/example/lollo-backup:c0ffee"
+  log_lacks "docker build -q -t lollo-backup"
 }
 
 test_backup_refuses_the_data_directory() {
@@ -4800,13 +4800,13 @@ test_init_in_release_mode_starts_on_the_tested_lettuce() {
 
 test_a_clone_refuses_a_released_data_directory() {
   mkdir -p "$D/bin"
-  touch "$D/bin/lettucectl"
+  touch "$D/bin/lolloctl"
   ctl list
   bad_rc
   out_has "a clone may not use it"
 }
 
-test_a_clone_uses_lettuce_data_when_set() {
+test_a_clone_uses_lollo_data_when_set() {
   local other=$T/other
   mkdir -p "$other"
   cp -a "$D/." "$other/"
@@ -4814,7 +4814,7 @@ test_a_clone_uses_lettuce_data_when_set() {
   CTL_DATA=$other
   ctl add alfred alfred@example.com
   ok_rc
-  [[ -f $other/stacks/alfred/stack.env ]] || fail "stack not in LETTUCE_DATA"
+  [[ -f $other/stacks/alfred/stack.env ]] || fail "stack not in LOLLO_DATA"
   eq "$(senv_in "$other" alfred LETTA_STATE_DIR)" "$other/stacks/alfred/state"
 }
 senv_in() { awk -v k="$3" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) } END { printf "%s", v }' "$1/stacks/$2/stack.env"; }
@@ -4823,7 +4823,7 @@ test_version_names_the_release() {
   release_on
   ctl version
   ok_rc
-  out_has "lettuce-garden 1.2.3"
+  out_has "lollo-rozzo 1.2.3"
   CTL_DATA=""
   rm "$H/RELEASE"
   ctl version
@@ -4865,7 +4865,7 @@ test_upgrade_warns_about_an_untested_tag_in_release_mode() {
   mkdir -p "$U/docker" && touch "$U/docker/compose.yml"
   sed -i "s/^LETTUCE_REF=.*/LETTUCE_REF=$REF/" "$D/config.env"
   ctl upgrade v-new
-  out_has "is not the version lettuce-garden 1.2.3 was tested with"
+  out_has "is not the version lollo-rozzo 1.2.3 was tested with"
 }
 
 test_after_upgrade_moves_lettuce_forward_only() {
@@ -4973,7 +4973,7 @@ test_apply_reports_an_unlisted_stack_and_never_removes_it() {
   ctl apply --yes
   ok_rc
   out_has "'alfred' is not in stacks.conf"
-  out_has "lettucectl remove alfred"
+  out_has "lolloctl remove alfred"
   log_lacks "curl DELETE"
   [[ -f $D/stacks/alfred/stack.env ]] || fail "the stack went"
 }
@@ -4983,7 +4983,7 @@ test_apply_reports_out_of_step_profiles_and_never_changes_them() {
   sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=cloudflared/' "$D/stacks/alfred/stack.env"
   ctl apply --dry-run
   ok_rc
-  out_has "run: lettucectl profiles cloudflared,search"
+  out_has "run: lolloctl profiles cloudflared,search"
   eq "$(senv alfred COMPOSE_PROFILES)" cloudflared
 }
 
@@ -5014,7 +5014,7 @@ test_apply_refuses_a_malformed_stacks_conf() {
 # content_repo -> a copy of what the content tags read, in $T/repo
 content_repo() {
   mkdir -p "$T/repo"
-  cp -r "$ROOT/release" "$ROOT/REBUILD" "$ROOT/vault" "$ROOT/garden-common" "$ROOT/pipelock" "$ROOT/code-server" "$T/repo/"
+  cp -r "$ROOT/release" "$ROOT/REBUILD" "$ROOT/vault" "$ROOT/lollo-common" "$ROOT/pipelock" "$ROOT/code-server" "$T/repo/"
 }
 ctag() { "$T/repo/release/content-tag" "$1"; }
 
@@ -5036,8 +5036,8 @@ test_content_tags_follow_what_goes_into_each_image() {
   echo '# x' >>"$T/repo/vault/pyproject.toml"
   [[ $(ctag vault) != "$v" ]] || fail "a context change kept the tag"
   v=$(ctag vault)
-  echo '# x' >>"$T/repo/garden-common/pyproject.toml"
-  [[ $(ctag vault) != "$v" ]] || fail "a garden-common change kept the vault's tag"
+  echo '# x' >>"$T/repo/lollo-common/pyproject.toml"
+  [[ $(ctag vault) != "$v" ]] || fail "a lollo-common change kept the vault's tag"
   eq "$(ctag pipelock)" "$p"
   echo 2027-01-01 >"$T/repo/REBUILD"
   [[ $(ctag pipelock) != "$p" ]] || fail "REBUILD kept the tag"
@@ -5048,19 +5048,30 @@ test_every_published_image_has_an_overlay_variable() {
   while read -r img _c _s svc; do
     [[ $svc != - ]] || continue
     k=$(tr 'a-z-' 'A-Z_' <<<"$img")
-    grep -qF "\${GARDEN_IMAGE_$k:-lettuce-$img:local}" "$ROOT"/compose/*.yml || fail "no overlay names GARDEN_IMAGE_$k"
+    grep -qF "\${LOLLO_IMAGE_$k:-lollo-$img:local}" "$ROOT"/compose/*.yml || fail "no overlay names LOLLO_IMAGE_$k"
   done < <(awk '!/^[[:space:]]*(#|$)/' "$ROOT/release/images")
 }
 
-# ── the wrapper (release/lettucectl-wrapper.sh) ─────────────────────────────
+# An image's name can start another's (code-server, code-server-editor), so a
+# pattern such as digest-code-server-* also fetches the other image's digests,
+# whose files have the same names (amd64, arm64) and overwrite its own.
+test_publish_fetches_each_images_own_digests_by_exact_name() {
+  local p="$ROOT/.github/workflows/publish.yml" arch
+  grep -nE 'pattern: *digest-' "$p" && fail "publish.yml fetches digests by pattern"
+  for arch in amd64 arm64; do
+    grep -qF "name: digest-\${{ matrix.image }}-$arch" "$p" || fail "publish.yml does not fetch the $arch digest by name"
+  done
+}
+
+# ── the wrapper (release/lolloctl-wrapper.sh) ─────────────────────────────
 # wrapper_in DIR -> the wrapper, filled in as publish.yml fills it, in DIR/bin,
 # and a socket for it to find
-WIMAGE=ghcr.io/example/lettucectl:v1.2.3@sha256:0000000000000000000000000000000000000000000000000000000000000001
+WIMAGE=ghcr.io/example/lolloctl:v1.2.3@sha256:0000000000000000000000000000000000000000000000000000000000000001
 wrapper_in() {
   mkdir -p "$1/bin"
-  sed -e 's|@VERSION@|v1.2.3|' -e "s|@IMAGE@|$WIMAGE|" -e 's|@REPOSITORY@|example/lettuce-garden|' \
-    "$ROOT/release/lettucectl-wrapper.sh" >"$1/bin/lettucectl"
-  chmod 755 "$1/bin/lettucectl"
+  sed -e 's|@VERSION@|v1.2.3|' -e "s|@IMAGE@|$WIMAGE|" -e 's|@REPOSITORY@|example/lollo-rozzo|' \
+    "$ROOT/release/lolloctl-wrapper.sh" >"$1/bin/lolloctl"
+  chmod 755 "$1/bin/lolloctl"
   python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1])' "$T/docker.sock"
 }
 # wctl DIR ARGS... -> runs DIR's wrapper with the stubs; like ctl
@@ -5068,7 +5079,7 @@ wctl() {
   local dir=$1
   shift
   RC=0
-  DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$dir/bin/lettucectl" "$@" >"$OUT" 2>&1 || RC=$?
+  DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$dir/bin/lolloctl" "$@" >"$OUT" 2>&1 || RC=$?
 }
 
 test_wrapper_runs_the_pinned_image_with_the_data_directory_at_the_same_path() {
@@ -5081,7 +5092,7 @@ test_wrapper_runs_the_pinned_image_with_the_data_directory_at_the_same_path() {
   [[ $run == *" --user $(id -u):$(id -g) "* ]] || fail "not as the operator: $run"
   [[ $run == *" -e HOME=/tmp "* ]] || fail "no writable HOME: $run"
   [[ $run == *" -v $T/srv:$T/srv "* ]] || fail "data not at the same path: $run"
-  [[ $run == *" -e LETTUCE_DATA=$T/srv "* ]] || fail "LETTUCE_DATA not passed: $run"
+  [[ $run == *" -e LOLLO_DATA=$T/srv "* ]] || fail "LOLLO_DATA not passed: $run"
   [[ $run == *" -v $T/docker.sock:$T/docker.sock "* ]] || fail "socket not at the same path: $run"
   [[ $run == *" $WIMAGE list" ]] || fail "not the pinned image: $run"
 }
@@ -5089,11 +5100,11 @@ test_wrapper_runs_the_pinned_image_with_the_data_directory_at_the_same_path() {
 test_wrapper_says_when_only_stdin_is_a_terminal() {
   wrapper_in "$T/srv"
   RC=0
-  DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" script -qec "$T/srv/bin/lettucectl list | cat" /dev/null >"$OUT" 2>&1 || RC=$?
+  DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" script -qec "$T/srv/bin/lolloctl list | cat" /dev/null >"$OUT" 2>&1 || RC=$?
   ok_rc
   local run
   run=$(grep '^docker run ' "$T/calls.log")
-  [[ $run == *" -e LETTUCECTL_STDIN_TTY=1 "* ]] || fail "stdin a terminal not passed on: $run"
+  [[ $run == *" -e LOLLOCTL_STDIN_TTY=1 "* ]] || fail "stdin a terminal not passed on: $run"
   [[ $run != *" -t "* ]] || fail "a terminal given with stdout piped: $run"
 }
 
@@ -5101,15 +5112,15 @@ test_wrapper_passes_no_terminal_flag_without_one() {
   wrapper_in "$T/srv"
   wctl "$T/srv" list </dev/null
   ok_rc
-  log_lacks "LETTUCECTL_STDIN_TTY"
+  log_lacks "LOLLOCTL_STDIN_TTY"
 }
 
 test_wrapper_refuses_to_run_outside_a_data_directory() {
   mkdir -p "$T/elsewhere"
   wrapper_in "$T/srv"
-  mv "$T/srv/bin/lettucectl" "$T/elsewhere/lettucectl"
+  mv "$T/srv/bin/lolloctl" "$T/elsewhere/lolloctl"
   RC=0
-  DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/elsewhere/lettucectl" list >"$OUT" 2>&1 || RC=$?
+  DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/elsewhere/lolloctl" list >"$OUT" 2>&1 || RC=$?
   bad_rc
   out_has "sudo install -d"
   log_lacks "docker run"
@@ -5127,56 +5138,56 @@ test_wrapper_passes_toolbox_tokens_by_name_only() {
   wrapper_in "$T/srv"
   stub STUB_GH_TOKEN=gh-token-123
   stub STUB_SECRET_TOOL=claude-token-456
-  mkdir -p "$T/home-op/.config/lettucectl"
-  printf 'secret NPM_TOKEN echo npm-token-789\n' >"$T/home-op/.config/lettucectl/toolbox"
-  chmod 600 "$T/home-op/.config/lettucectl/toolbox"
+  mkdir -p "$T/home-op/.config/lolloctl"
+  printf 'secret NPM_TOKEN echo npm-token-789\n' >"$T/home-op/.config/lolloctl/toolbox"
+  chmod 600 "$T/home-op/.config/lolloctl/toolbox"
   RC=0
   HOME=$T/home-op XDG_CONFIG_HOME="" CLAUDE_CONFIG_DIR="" CLAUDE_CODE_OAUTH_TOKEN="" \
-    DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
+    DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lolloctl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
   ok_rc
   log_lacks "gh-token-123"
   log_lacks "claude-token-456"
   log_lacks "npm-token-789"
-  log_has "-e LETTUCECTL_GH_TOKEN"
-  log_has "-e LETTUCECTL_CLAUDE_TOKEN"
-  log_has "-e LETTUCECTL_SECRET_NPM_TOKEN"
-  log_has "-v $T/home-op:$T/home-op:ro -e LETTUCECTL_HOST_HOME=$T/home-op"
-  grep -qx 'LETTUCECTL_GH_TOKEN=gh-token-123' "$T/run-env.log" || fail "the gh token did not reach the container"
+  log_has "-e LOLLOCTL_GH_TOKEN"
+  log_has "-e LOLLOCTL_CLAUDE_TOKEN"
+  log_has "-e LOLLOCTL_SECRET_NPM_TOKEN"
+  log_has "-v $T/home-op:$T/home-op:ro -e LOLLOCTL_HOST_HOME=$T/home-op"
+  grep -qx 'LOLLOCTL_GH_TOKEN=gh-token-123' "$T/run-env.log" || fail "the gh token did not reach the container"
 }
 
 test_wrapper_self_upgrade_swaps_only_after_the_new_image_is_pulled() {
   wrapper_in "$T/srv"
   local before
-  before=$(sha256sum <"$T/srv/bin/lettucectl")
+  before=$(sha256sum <"$T/srv/bin/lolloctl")
   # What the current image's _fetch-wrapper leaves: a new wrapper whose image
   # cannot be pulled.
   # shellcheck disable=SC2016 # a script for the new wrapper, expanded when it runs
-  printf '#!/usr/bin/env bash\n[[ $1 == _pull ]] && exit 1\necho new "$@"\n' >"$T/srv/bin/.lettucectl.new"
+  printf '#!/usr/bin/env bash\n[[ $1 == _pull ]] && exit 1\necho new "$@"\n' >"$T/srv/bin/.lolloctl.new"
   wctl "$T/srv" self-upgrade v1.2.4
   bad_rc
   out_has "this install is unchanged"
-  eq "$(sha256sum <"$T/srv/bin/lettucectl")" "$before"
-  [[ ! -e $T/srv/bin/.lettucectl.new ]] || fail "the new wrapper stayed"
+  eq "$(sha256sum <"$T/srv/bin/lolloctl")" "$before"
+  [[ ! -e $T/srv/bin/.lolloctl.new ]] || fail "the new wrapper stayed"
   log_has "$WIMAGE _fetch-wrapper v1.2.4"
   # Now one whose image pulls.
   # shellcheck disable=SC2016 # a script for the new wrapper, expanded when it runs
-  printf '#!/usr/bin/env bash\n[[ $1 == _pull ]] && exit 0\necho new "$@"\n' >"$T/srv/bin/.lettucectl.new"
+  printf '#!/usr/bin/env bash\n[[ $1 == _pull ]] && exit 0\necho new "$@"\n' >"$T/srv/bin/.lolloctl.new"
   wctl "$T/srv" self-upgrade v1.2.4
   ok_rc
   out_has "new _after-upgrade"
-  [[ $(sha256sum <"$T/srv/bin/lettucectl.previous") == "$before" ]] || fail "the previous wrapper was not kept"
-  grep -q 'echo new' "$T/srv/bin/lettucectl" || fail "the new wrapper is not in place"
+  [[ $(sha256sum <"$T/srv/bin/lolloctl.previous") == "$before" ]] || fail "the previous wrapper was not kept"
+  grep -q 'echo new' "$T/srv/bin/lolloctl" || fail "the new wrapper is not in place"
 }
 
 # ── review fixes ────────────────────────────────────────────────────────────
 test_wrapper_refuses_a_toolbox_file_others_can_write() {
   wrapper_in "$T/srv"
-  mkdir -p "$T/home-op/.config/lettucectl"
-  printf 'secret X touch %s\n' "$T/ran" >"$T/home-op/.config/lettucectl/toolbox"
-  chmod 664 "$T/home-op/.config/lettucectl/toolbox"
+  mkdir -p "$T/home-op/.config/lolloctl"
+  printf 'secret X touch %s\n' "$T/ran" >"$T/home-op/.config/lolloctl/toolbox"
+  chmod 664 "$T/home-op/.config/lolloctl/toolbox"
   RC=0
   HOME=$T/home-op XDG_CONFIG_HOME="" CLAUDE_CONFIG_DIR="" CLAUDE_CODE_OAUTH_TOKEN="" \
-    DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
+    DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" "$T/srv/bin/lolloctl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
   bad_rc
   out_has "writable by others"
   [[ ! -e $T/ran ]] || fail "the wrapper ran a secret command from a file others can write"
@@ -5220,13 +5231,13 @@ test_apply_carries_on_past_a_stack_that_fails() {
   printf 'alfred  alfred@example.com\nhal  hal@example.com\n' >>"$D/stacks.conf"
   # alfred's add gets through Cloudflare, then its check refuses it.
   mkdir -p "$D/stacks/alfred"
-  printf 'LETTUCE_HOSTNAME=alfred.example.org\nGARDEN_HOSTNAME=alfred-garden.example.org\nALLOWED_USERS=alfred@example.com\n' >"$D/stacks/alfred/stack.env"
+  printf 'LETTUCE_HOSTNAME=alfred.example.org\nLOLLO_HOSTNAME=alfred-lollo.example.org\nALLOWED_USERS=alfred@example.com\n' >"$D/stacks/alfred/stack.env"
   chmod 644 "$D/stacks/alfred/stack.env"
   ctl apply --yes
   bad_rc
   out_has "apply did not finish: add alfred"
   [[ -n $(senv hal CF_DNS_RECORD_ID) ]] || fail "hal was not added after alfred failed"
-  grep -q '^docker compose -p lettuce-hal .* up -d --no-build' "$T/calls.log" || fail "hal was not started"
+  grep -q '^docker compose -p lollo-hal .* up -d --no-build' "$T/calls.log" || fail "hal was not started"
   log_has "/root/.letta/skills"
 }
 
@@ -5248,15 +5259,15 @@ test_apply_starts_the_other_stacks_when_one_fails_to_start() {
 
 # ── each stack rendered and started once ────────────────────────────────────
 # starts NAME -> how many times the stack was started
-starts() { grep -c "^docker compose -p lettuce-$1 .* up -d --no-build" "$T/calls.log" || true; }
+starts() { grep -c "^docker compose -p lollo-$1 .* up -d --no-build" "$T/calls.log" || true; }
 
 test_up_renders_the_stack_config_once() {
   added
   builds_config
   ctl up alfred
   ok_rc
-  eq "$(grep -c '^docker compose -p lettuce-alfred .* config --format json$' "$T/calls.log")" 1
-  log_has "build garden-vault garden-code-server-exec"
+  eq "$(grep -c '^docker compose -p lollo-alfred .* config --format json$' "$T/calls.log")" 1
+  log_has "build lollo-vault lollo-code-server-exec"
 }
 
 test_apply_starts_each_stack_once() {
@@ -5296,17 +5307,17 @@ test_compose_takes_the_upstream_namespace_from_config_env() {
 }
 
 # A toolbox file or Claude config outside the home is mounted too, read-only at
-# the same path, or lettucectl would skip it without a word.
+# the same path, or lolloctl would skip it without a word.
 test_wrapper_mounts_toolbox_config_outside_the_home() {
   wrapper_in "$T/srv"
-  mkdir -p "$T/home-op" "$T/cfg/lettucectl" "$T/claude-cfg"
-  printf 'env FOO=bar\n' >"$T/cfg/lettucectl/toolbox"
-  chmod 600 "$T/cfg/lettucectl/toolbox"
+  mkdir -p "$T/home-op" "$T/cfg/lolloctl" "$T/claude-cfg"
+  printf 'env FOO=bar\n' >"$T/cfg/lolloctl/toolbox"
+  chmod 600 "$T/cfg/lolloctl/toolbox"
   RC=0
   HOME=$T/home-op XDG_CONFIG_HOME=$T/cfg CLAUDE_CONFIG_DIR=$T/claude-cfg DOCKER_HOST=unix://$T/docker.sock PATH="$T/bin:$PATH" \
-    "$T/srv/bin/lettucectl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
+    "$T/srv/bin/lolloctl" toolbox alfred agent >"$OUT" 2>&1 || RC=$?
   ok_rc
-  log_has "-v $T/cfg/lettucectl/toolbox:$T/cfg/lettucectl/toolbox:ro"
+  log_has "-v $T/cfg/lolloctl/toolbox:$T/cfg/lolloctl/toolbox:ro"
   log_has "-v $T/claude-cfg:$T/claude-cfg:ro"
   log_lacks "-v $T/cfg:"
 }
@@ -5323,7 +5334,7 @@ JOBS=${TEST_JOBS:-$(nproc)}
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 ADDED_CACHE=$WORK/added
-# Every temp dir, the tests' $T and lettucectl's own, goes under $WORK, so the
+# Every temp dir, the tests' $T and lolloctl's own, goes under $WORK, so the
 # run leaves nothing behind, also when a test makes a second fixture.
 export TMPDIR=$WORK/tmp
 mkdir "$ADDED_CACHE" "$TMPDIR"

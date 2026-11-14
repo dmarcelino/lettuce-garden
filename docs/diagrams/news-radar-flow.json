@@ -7,7 +7,7 @@
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
@@ -19,7 +19,7 @@
       "type": "external",
       "icon": "person",
       "label": "You",
-      "sublabel": "chat, and <garden>/news-radar/",
+      "sublabel": "chat, and <lollo>/news-radar/",
       "sources": [
         {
           "path": "docs/news-radar.md",
@@ -71,7 +71,7 @@
     {
       "id": "executor",
       "type": "backend",
-      "label": "Garden executor",
+      "label": "Lollo executor",
       "sublabel": "every minute",
       "sources": [
         {
@@ -208,7 +208,7 @@
       "dot": "emerald",
       "title": "What you see",
       "items": [
-        "Every monitor and source on <garden>/news-radar/, with Delete",
+        "Every monitor and source on <lollo>/news-radar/, with Delete",
         "Reports in Lettuce's Tasks tab as \"News Radar: <schedule>\"",
         "Nothing at all when nothing is new"
       ]

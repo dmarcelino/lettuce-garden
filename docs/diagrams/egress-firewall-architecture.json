@@ -7,7 +7,7 @@
     "quality_profile": "showcase",
     "locale": "en",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
@@ -75,8 +75,8 @@
     {
       "id": "vault",
       "type": "backend",
-      "label": "garden services",
-      "sublabel": "vault, gmail-triggers, news-radar, garden",
+      "label": "lollo services",
+      "sublabel": "vault, gmail-triggers, news-radar, landing",
       "pos": [
         40,
         460
@@ -132,7 +132,7 @@
     {
       "id": "pipelock",
       "type": "security",
-      "label": "garden-pipelock :8888",
+      "label": "lollo-pipelock :8888",
       "sublabel": "forward proxy + /fetch",
       "tag": "balanced, advisory",
       "pos": [
@@ -193,14 +193,14 @@
           "path": "lib/common.sh",
           "line": 785,
           "end_line": 786,
-          "label": "only garden-pipelock mounts it"
+          "label": "only lollo-pipelock mounts it"
         }
       ]
     },
     {
-      "id": "lettucectl",
+      "id": "lolloctl",
       "type": "external",
-      "label": "lettucectl",
+      "label": "lolloctl",
       "sublabel": "receipts, backup",
       "pos": [
         440,
@@ -212,13 +212,13 @@
       ],
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1977,
           "end_line": 2011,
           "label": "receipts: no network, read-only"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1814,
           "end_line": 1814,
           "label": "backup mounts it read-only"
@@ -287,7 +287,7 @@
     },
     {
       "kind": "security-group",
-      "label": "mounted by garden-pipelock only",
+      "label": "mounted by lollo-pipelock only",
       "wraps": [
         "evidence"
       ]
@@ -336,8 +336,8 @@
       "variant": "security"
     },
     {
-      "id": "lettucectl-reads",
-      "from": "lettucectl",
+      "id": "lolloctl-reads",
+      "from": "lolloctl",
       "to": "evidence",
       "label": "read-only, no network"
     },
@@ -365,16 +365,16 @@
       "items": [
         "Advisory, not a boundary: the stack network still reaches the internet, and any agent can unset HTTPS_PROXY",
         "No TLS interception: for HTTPS it sees the host name, not paths, bodies or responses",
-        "The BFF (its Remote Pi SSH runs included), garden-vault, google-mcp, garden-gmail-triggers, garden-news-radar and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct"
+        "The BFF (its Remote Pi SSH runs included), lollo-vault, google-mcp, lollo-gmail-triggers, lollo-news-radar and the Telegram gateway connect directly; NO_PROXY also keeps searxng, ddg-mcp, gotenberg, host.docker.internal and the hosts in PIPELOCK_DIRECT direct"
       ]
     },
     {
       "dot": "slate",
-      "title": "Guarded by lettucectl check",
+      "title": "Guarded by lolloctl check",
       "items": [
-        "garden-pipelock hardened: read-only, no capabilities, no host mounts",
-        "Only garden-pipelock mounts pipelock-data, whatever the profiles",
-        "The app-server's proxy variables point at garden-pipelock, and its NO_PROXY lists garden-vault, garden-gmail-triggers, garden-news-radar and garden, so pipelock never sees the vault's values or the executor's token"
+        "lollo-pipelock hardened: read-only, no capabilities, no host mounts",
+        "Only lollo-pipelock mounts pipelock-data, whatever the profiles",
+        "The app-server's proxy variables point at lollo-pipelock, and its NO_PROXY lists lollo-vault, lollo-gmail-triggers, lollo-news-radar and lollo, so pipelock never sees the vault's values or the executor's token"
       ]
     }
   ]
