@@ -84,18 +84,21 @@ def sample_of(page: Page) -> str:
 
 
 async def _index_entries(spec: Spec, index: Page, fetcher: Fetcher, max_wait: float | None) -> list[tuple[str, str]]:
-    """A sitemap index's newest files of the spec's families, read and combined. The
-    newest must be read (its error, a pause included, is the run's: a file broken for
-    good must show); an older one that can't be is left out."""
-    lists = []
-    for rank, url in enumerate(pick_sitemaps(spec, index)):
-        try:
-            page = await fetcher.get(url, accept=ACCEPT["sitemap"], max_wait=max_wait)
-            lists.append(sitemap_entries(spec, page))
-        except (FetchError, ExtractError):
-            if rank == 0:
-                raise
-    return combine_entries(lists)
+    """A sitemap index's newest files of each of the spec's families, read and
+    combined. Each family's newest must be read (its error, a pause included, is the
+    run's: a file broken for good must show); an older one that can't be is left out."""
+    families = []
+    for files in pick_sitemaps(spec, index):
+        lists = []
+        for rank, url in enumerate(files):
+            try:
+                page = await fetcher.get(url, accept=ACCEPT["sitemap"], max_wait=max_wait)
+                lists.append(sitemap_entries(spec, page))
+            except (FetchError, ExtractError):
+                if rank == 0:
+                    raise
+        families.append(lists)
+    return combine_entries(families)
 
 
 async def run_source(

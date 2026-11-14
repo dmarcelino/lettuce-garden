@@ -242,7 +242,10 @@ class Service:
             fill_rates=rates,
             items=[i.as_dict() for i in items[:TEST_ITEMS]],
         )
-        warnings = [w for w in (window_warning(items, spec, today), _block_warning(spec, result)) if w]
+        # A test that stopped at TEST_PAGES of a longer spec can't tell how far the listing reaches.
+        cut_by_test = bool(spec.pages) and result.pages >= TEST_PAGES and int(spec.pages["max"]) > TEST_PAGES
+        window = "" if cut_by_test else window_warning(items, spec, today)
+        warnings = [w for w in (window, _block_warning(spec, result)) if w]
         if warnings:
             out["warnings"] = warnings
         if problems:
@@ -269,13 +272,9 @@ class Service:
         current = self._stored_spec(spec.name)
         if current is None and self.store.count_sources() >= self.settings.max_sources:
             raise ToolError(f"this stack has {self.settings.max_sources} sources, the most allowed; delete one")
-        reset = current is None or (current.url, current.kind, current.extract, current.pages, current.follow) != (
-            spec.url,
-            spec.kind,
-            spec.extract,
-            spec.pages,
-            spec.follow,
-        )
+        # Any change but its interval reads the items differently: forget the run state, so
+        # that it is fetched again (an unused source too) and no 304 keeps the old items.
+        reset = current is None or current.fingerprint != spec.fingerprint
         self.store.put_source(spec.name, spec.raw, reset)
         return {"saved": spec.name, "spec": spec.raw, "first_fetch": "within a minute"}
 
@@ -435,6 +434,15 @@ class Service:
                 "of source_put; save again then, or from_now would let what they already hold through as new"
             )
         now = self.store.now()
+        stale = self._fetched_long_ago(monitor.sources, now) if from_now else []
+        if stale:
+            # An unused source is fetched once, then left alone: what it lists now may be
+            # far from what is stored, and would come through as new.
+            self.store.fetch_again(stale)
+            raise ToolError(
+                f"these sources were last fetched too long ago: {', '.join(stale)}. They are fetched again within "
+                "a minute; save again then, or from_now would let what they listed since through as new"
+            )
         stored = self.store.put_monitor(monitor, delivered_upto=now if from_now else None)
         out = {
             "saved": stored.name,
@@ -515,6 +523,9 @@ class Service:
         last = self.store.last_report(m.id) if not draft else None
         states = self.store.source_states()
         skipped = 0
+        # What each term does is told on the items the sources hold now, even when
+        # from_now leaves them out: otherwise every term finds nothing.
+        terms = term_counts(self.store, m, now, self.settings.tz)
         if from_now:
             before = monitor_digest(self.store, m, now, self.settings.tz, states)
             skipped = len(before.rows) + before.left_out
@@ -528,7 +539,7 @@ class Service:
             "rows": d.rows[:20],
             "rows_total": len(d.rows) + d.left_out,
             "needs_repair": [{"source": a.source, "reason": a.reason} for a in d.alerts],
-            "terms": term_counts(self.store, m, now, self.settings.tz),
+            "terms": terms,
         }
         if from_now:
             out["existing_skipped"] = skipped
@@ -566,6 +577,21 @@ class Service:
         """A timestamp in the stack's timezone, the one people and schedules use."""
         return datetime.fromtimestamp(ts, self.settings.tz)
 
+    def _fetched_long_ago(self, sources: list[str], now: int) -> list[str]:
+        """Sources last run longer ago than their interval: due, had they been in use."""
+        states = self.store.source_states()
+        out = []
+        for name in sources:
+            spec, st = self._stored_spec(name), states.get(name)
+            if spec and st and st.last_run is not None and now - st.last_run >= self._interval(spec):
+                out.append(name)
+        return out
+
+    def _interval(self, spec: Spec) -> int:
+        """How often a used source runs: the admin's minimum applies to sources saved
+        before it was raised, too."""
+        return max(spec.every, self.settings.min_interval)
+
     def _not_fetched(self, sources: list[str]) -> list[str]:
         """Sources saved but not fetched yet: a preview can't show what they hold."""
         states = self.store.source_states()
@@ -600,8 +626,7 @@ class Service:
             last = st.last_run if st else None
             if last is not None and name not in used:
                 continue  # unused: fetched once after source_put, for previews, then left alone
-            # The admin's minimum applies to sources saved before it was raised, too.
-            every = max(spec.every, self.settings.min_interval)
+            every = self._interval(spec)
             if last is None or now - last >= every or (name in soon and now - last >= FETCH_AHEAD_SECONDS):
                 due.append((last or 0, name))
         return [name for _, name in sorted(due)]

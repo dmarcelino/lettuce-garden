@@ -49,6 +49,7 @@ ACCOUNT_SEGMENTS = frozenset(
 )
 # Script code, not a URL: template literals and placeholders.
 NOT_A_URL = re.compile(r"\$\{|\{\{|<%|\\")
+JSON_ESCAPE = re.compile(r"\\u([0-9a-fA-F]{4})")
 FEED_TYPES = (
     "application/rss+xml",
     "application/atom+xml",
@@ -148,14 +149,21 @@ def _sitemap(page: Page) -> dict[str, Any]:
     return {"sitemap_pages": sitemap.total, "newest": [{"url": u, "lastmod": m} for u, m in sitemap.entries[:10]]}
 
 
+def _unescaped(match: re.Match[str]) -> str:
+    """A \\uXXXX escape as its character when that can be part of a URL; else kept,
+    and the backslash then marks script code."""
+    char = chr(int(match.group(1), 16))
+    return char if char.isprintable() and not char.isspace() else match.group(0)
+
+
 def rank_data_urls(urls: list[str]) -> tuple[list[str], int]:
-    """Data URLs as found in script text, cleaned (JSON-escaped slashes, trailing
-    backslashes), without script code or account-like ones, those that look like
-    listings first; and how many were left out."""
+    """Data URLs as found in script text, cleaned (JSON-escaped slashes and
+    characters, trailing backslashes), without script code or account-like ones,
+    those that look like listings first; and how many were left out."""
     kept: dict[str, None] = {}
     left_out = 0
     for raw in urls:
-        url = raw.replace("\\/", "/").rstrip("\\")
+        url = JSON_ESCAPE.sub(_unescaped, raw.replace("\\/", "/")).rstrip("\\")
         if NOT_A_URL.search(url):
             continue
         try:

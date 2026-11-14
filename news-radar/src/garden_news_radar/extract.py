@@ -12,6 +12,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from itertools import zip_longest
 from typing import Any
 from urllib.parse import parse_qsl, unquote, urlencode, urljoin, urlsplit, urlunsplit
 
@@ -86,17 +87,21 @@ def canonical_url(href: str, base: str) -> str:
     return url if len(url) <= MAX_URL else ""
 
 
-# A date written without a year further back than this is next year's: a listing's
-# yearless dates are upcoming, or ongoing since a little while.
+# A date written without a year is the one in the year from YEARLESS_PAST_DAYS back
+# to the rest of a year ahead: a listing's yearless dates are upcoming, or ongoing
+# since a little while.
 YEARLESS_PAST_DAYS = 90
 YEAR = re.compile(r"\b\d{4}\b")
+# Read again from this much earlier, a yearless date keeps its day and month and a
+# relative one ("2 hours ago", "há 4 meses") does not: not a whole number of years.
+REREAD_SHIFT = timedelta(days=400)
 
 
-def parse_date(value: str, languages: tuple[str, ...], today: date | None = None) -> str:
+def parse_date(value: str, languages: tuple[str, ...], now: datetime | None = None) -> str:
     """ISO 8601 ("2026-11-08" or "2026-11-08T21:00", with the offset when given),
-    or "" when the text is not a date this can read. A date without a year
-    ("27 Outubro", "sáb 14 nov") is this year's, or next year's when this year's
-    is more than YEARLESS_PAST_DAYS before `today` (default: the real today)."""
+    or "" when the text is not a date this can read. Relative dates count from
+    `now` (default: the real now). A date without a year ("27 Outubro", "sáb 14
+    nov") is the nearest from YEARLESS_PAST_DAYS before `now` onwards."""
     text = value.strip()
     if not text:
         return ""
@@ -109,25 +114,38 @@ def parse_date(value: str, languages: tuple[str, ...], today: date | None = None
             if len(text) == 10:
                 return parsed.date().isoformat()
             return parsed.isoformat(timespec="minutes")
-    import dateparser  # slow to import; only text dates need it
-
-    today = today or date.today()
-    settings = {
-        "RETURN_AS_TIMEZONE_AWARE": False,
-        "PREFER_DAY_OF_MONTH": "first",
-        "RELATIVE_BASE": datetime(today.year, today.month, today.day),
-    }
-    parsed = dateparser.parse(text[:120], languages=list(languages) or None, settings=settings)
+    now = now or datetime.now()
+    parsed = _dateparser(text, languages, now)
     if parsed is None:
         return ""
-    if not YEAR.search(text) and parsed.date() < today - timedelta(days=YEARLESS_PAST_DAYS):
-        try:
-            parsed = parsed.replace(year=parsed.year + 1)
-        except ValueError:  # 29 February
-            pass
+    if not YEAR.search(text):
+        earlier = _dateparser(text, languages, now - REREAD_SHIFT)
+        if earlier is not None and earlier != parsed and earlier.timetuple()[1:6] == parsed.timetuple()[1:6]:
+            parsed = _nearest_year(parsed, now.date())
     if parsed.hour == 0 and parsed.minute == 0 and not re.search(r"\d:\d", text):
         return parsed.date().isoformat()
     return parsed.isoformat(timespec="minutes")
+
+
+def _dateparser(text: str, languages: tuple[str, ...], base: datetime) -> datetime | None:
+    import dateparser  # slow to import; only text dates need it
+
+    settings = {"RETURN_AS_TIMEZONE_AWARE": False, "PREFER_DAY_OF_MONTH": "first", "RELATIVE_BASE": base}
+    return dateparser.parse(text[:120], languages=list(languages) or None, settings=settings)
+
+
+def _nearest_year(parsed: datetime, today: date) -> datetime:
+    """A yearless date moved to the year that puts it from YEARLESS_PAST_DAYS before
+    today to the rest of a year after."""
+    years = 0
+    if parsed.date() < today - timedelta(days=YEARLESS_PAST_DAYS):
+        years = 1
+    elif parsed.date() >= today + timedelta(days=365 - YEARLESS_PAST_DAYS):
+        years = -1
+    try:
+        return parsed.replace(year=parsed.year + years)
+    except ValueError:  # 29 February
+        return parsed
 
 
 def _extra_scalar(value: Any) -> str:
@@ -470,9 +488,9 @@ def sitemap_family(url: str) -> tuple[str, tuple[int, ...]]:
     return NUMBER.sub("", name), tuple(int(n) for n in NUMBER.findall(name))
 
 
-def pick_sitemaps(spec: Spec, page: Page) -> list[str]:
-    """The index's files of the families in extract.sitemaps (gzipped ones left out),
-    the SITEMAPS_READ highest-numbered, newest first."""
+def pick_sitemaps(spec: Spec, page: Page) -> list[list[str]]:
+    """For each family in extract.sitemaps found in the index, its SITEMAPS_READ
+    highest-numbered files (gzipped ones left out), newest first."""
     sitemap = read_sitemap(spec, page)
     if not sitemap.children:
         raise ExtractError("extract.sitemaps is for a sitemap index; this is a sitemap: drop it, or use the index")
@@ -483,18 +501,26 @@ def pick_sitemaps(spec: Spec, page: Page) -> list[str]:
         families = ", ".join(dict.fromkeys(sitemap_family(u)[0] for u in readable[:200]))
         raise ExtractError(f"no sitemap family {', '.join(names)} in the index; its families are {families}")
     chosen.sort(key=lambda u: sitemap_family(u)[1])  # stable: the index's order among equals
-    return chosen[-SITEMAPS_READ:][::-1]
+    families = []
+    for name in dict.fromkeys(names):
+        files = [u for u in chosen if sitemap_family(u)[0] == name]
+        if files:
+            families.append(files[-SITEMAPS_READ:][::-1])
+    return families
 
 
-def combine_entries(lists: list[list[tuple[str, str]]]) -> list[tuple[str, str]]:
-    """Several sitemaps' entries (each newest first; the files newest first) as one:
-    each page once, newest first by lastmod, then the newer file's and the later
-    listed, at most MAX_SITEMAP_ITEMS."""
-    ranked: dict[str, tuple[str, int, int]] = {}
-    for file_rank, entries in enumerate(lists):
-        for position, (url, lastmod) in enumerate(entries):
-            ranked.setdefault(url, (lastmod, -file_rank, -position))
-    return [(url, key[0]) for url, key in sorted(ranked.items(), key=lambda e: e[1], reverse=True)][:MAX_SITEMAP_ITEMS]
+def combine_entries(families: list[list[list[tuple[str, str]]]]) -> list[tuple[str, str]]:
+    """Sitemaps' entries (each file's newest first; each family's files newest first)
+    as one list, each page once, at most MAX_SITEMAP_ITEMS: a family's newer file
+    before its older one, whatever their lastmods (a new file may have none), and
+    the families in turn, so that none crowds out another."""
+    queues = [[entry for entries in files for entry in entries] for files in families]
+    out: dict[str, str] = {}
+    for row in zip_longest(*queues):
+        for entry in row:
+            if entry is not None:
+                out.setdefault(*entry)
+    return list(out.items())[:MAX_SITEMAP_ITEMS]
 
 
 def sitemap_items(entries: list[tuple[str, str]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
@@ -669,8 +695,9 @@ def run_problem(items: list[Item], spec: Spec, today: date) -> str:
 
 def window_warning(items: list[Item], spec: Spec, today: date) -> str:
     """A listing whose upcoming events span only a few days is often cut by a page
-    size; "" when it looks whole (or is too short to tell)."""
-    if not _dated(spec):
+    size; "" when it looks whole (or is too short to tell, or is only the pages a
+    followed listing's run read)."""
+    if not _dated(spec) or not _whole_listing(spec):
         return ""
     starts = sorted(s[:10] for i in items if (s := i.fields.get("start", "")) and s[:10] >= today.isoformat())
     if len(starts) < SHORT_WINDOW_ITEMS:

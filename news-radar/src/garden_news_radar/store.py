@@ -311,6 +311,11 @@ class Store:
                 self._db.execute("DELETE FROM source_state WHERE name = ?", (name,))
             self._db.execute("INSERT OR IGNORE INTO source_state (name) VALUES (?)", (name,))
 
+    def fetch_again(self, names: Sequence[str]) -> None:
+        """Makes sources due now, as if never run: their items and health are kept."""
+        with self._db:
+            self._db.executemany("UPDATE source_state SET last_run = NULL WHERE name = ?", [(n,) for n in names])
+
     def source_versions(self, name: str) -> list[tuple[int, dict[str, Any]]]:
         rows = self._db.execute(
             "SELECT at, spec FROM source_versions WHERE name = ? ORDER BY at DESC, rowid DESC", (name,)

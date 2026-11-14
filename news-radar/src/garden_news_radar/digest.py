@@ -220,18 +220,32 @@ def event_key(row: dict[str, Any]) -> tuple[str, str] | None:
     return (title, when[:10]) if title else None
 
 
+def _time_and_place(row: dict[str, Any]) -> tuple[str, str]:
+    """A row's start time ("21:00", or "" for a day) and its venue, folded."""
+    when = str(row.get("when") or "").split(" ")[0]
+    venue = " ".join(NOT_A_WORD.sub(" ", fold(str(row.get("where") or ""))).split())
+    return (when[11:16] if when[10:11] == "T" else ""), venue
+
+
+def _same_event(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Whether two rows of one title and day can be one event: neither their times
+    nor their venues differ where both give one (two sessions, two bars)."""
+    return all(x == y or not x or not y for x, y in zip(_time_and_place(a), _time_and_place(b), strict=True))
+
+
 def merged_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Rows of one event listed by several sources (or twice by one), as one row: the
     newest, with the others' source and link under also_in; new if any of them is."""
     out: list[dict[str, Any]] = []
-    first_of: dict[tuple[str, str], dict[str, Any]] = {}
+    firsts_of: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for row in rows:
         key = event_key(row)
-        first = first_of.get(key) if key else None
+        firsts = firsts_of.setdefault(key, []) if key else []
+        first = next((f for f in firsts if _same_event(f, row)), None)
         if first is None:
             out.append(dict(row))
             if key:
-                first_of[key] = out[-1]
+                firsts.append(out[-1])
             continue
         listing = {"source": row["source"], **({"url": row["url"]} if row.get("url") else {})}
         same = listing == {"source": first["source"], **({"url": first["url"]} if first.get("url") else {})}

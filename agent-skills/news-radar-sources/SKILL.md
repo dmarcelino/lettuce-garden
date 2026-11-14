@@ -149,7 +149,8 @@ skips the turn when there is nothing to report.
    - **`from_now: true`** when the person wants to hear about what is announced or new ("tell
      me when new shows are announced"): reports then hold only what the sources list or change
      after saving, not everything already there. Leave it off when they want to know what's on.
-     It is refused until every source has been fetched once;
+     It is refused until every source has been fetched once, and recently: a source last
+     fetched long ago is fetched again first, so save again a minute later;
    - **`set_up_in`: always your `$LETTA_CONVERSATION_ID`** for a new monitor. Reports then come
      to this conversation, where the person asked (to change a saved one, see below);
    - `include` / `exclude`: up to 60 words or phrases an item must have / must not have. They

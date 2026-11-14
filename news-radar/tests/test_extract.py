@@ -514,9 +514,9 @@ def test_text_from_json_and_json_ld_is_decoded():
     ],
 )
 def test_dates_without_a_year_take_the_nearest_upcoming_year(text, languages, expected):
-    from datetime import date
+    from datetime import datetime
 
-    assert parse_date(text, languages, today=date(2026, 11, 13)) == expected
+    assert parse_date(text, languages, now=datetime(2026, 11, 13, 12, 0)) == expected
 
 
 def test_blocks_see_dates_written_without_a_year():
@@ -695,3 +695,90 @@ async def test_inspect_leaves_out_gzipped_files_and_says_so(fetcher, web):
     out = await inspect(fetcher, f"{SM}/sitemap_index.xml")
     assert out["sitemap_families"] == {"post-sitemap": 1}
     assert out["gzipped_left_out"] == 2
+
+
+# -- rc.4 review: families, undated files, relative dates, escaped URLs ------------------
+def add_families(web, events_newest="events-sitemap5.xml"):
+    files = ("events-sitemap4.xml", "events-sitemap5.xml", "post-sitemap-2026-09.xml", "post-sitemap-2026-10.xml")
+    rows = "".join(f"<sitemap><loc>{SM}/{f}</loc></sitemap>" for f in files)
+    web.add(f"{SM}/sitemap_index.xml", f"<sitemapindex {NS}>{rows}</sitemapindex>", "application/xml")
+    web.add(f"{SM}/events-sitemap4.xml", urlset([("ev-4", "2027-01-04")]), "application/xml")
+    web.add(f"{SM}/events-sitemap5.xml", urlset([("ev-5", "2027-01-05")]), "application/xml")
+    web.add(f"{SM}/post-sitemap-2026-09.xml", urlset([("post-9", "2026-09-30")]), "application/xml")
+    web.add(f"{SM}/post-sitemap-2026-10.xml", urlset([("post-10", "2026-10-31")]), "application/xml")
+
+
+async def test_an_index_source_reads_the_newest_files_of_each_family(fetcher, web):
+    add_families(web)
+    two = index_spec(extract={"sitemaps": ["events-sitemap", "post-sitemap"], "match": ["/events/"]})
+    result = await run_source(spec(two), fetcher)
+    assert result.ok
+    assert {i.fields["title"] for i in result.items} == {"ev 5", "ev 4", "post 10", "post 9"}
+    # Each family's newest file must be read, not only the one that numbers highest overall.
+    web.add(f"{SM}/events-sitemap5.xml", "boom", "text/plain", status=500)
+    assert "HTTP 500" in (await run_source(spec(two), fetcher)).error
+
+
+async def test_an_undated_newest_file_comes_before_a_dated_older_one(fetcher, web):
+    from garden_news_radar.extract import MAX_SITEMAP_ITEMS
+
+    rows = "".join(f"<sitemap><loc>{SM}/{f}</loc></sitemap>" for f in ("events-sitemap2.xml", "events-sitemap3.xml"))
+    web.add(f"{SM}/sitemap_index.xml", f"<sitemapindex {NS}>{rows}</sitemapindex>", "application/xml")
+    dated = [(f"old-{i}", f"2027-01-{1 + i % 28:02d}") for i in range(MAX_SITEMAP_ITEMS + 50)]
+    web.add(f"{SM}/events-sitemap2.xml", urlset(dated), "application/xml")
+    new = "".join(f"<url><loc>{SM}/events/new-{i}/</loc></url>" for i in range(3))
+    web.add(f"{SM}/events-sitemap3.xml", f"<urlset {NS}>{new}</urlset>", "application/xml")
+    result = await run_source(spec(index_spec()), fetcher)
+    assert [i.fields["title"] for i in result.items][:3] == ["new 2", "new 1", "new 0"]
+
+
+@pytest.mark.parametrize(
+    "text, languages, expected",
+    [
+        ("2 hours ago", ("en",), "2026-11-13T13:00"),  # from now, not from midnight
+        ("há 2 horas", ("pt",), "2026-11-13T13:00"),
+        ("4 months ago", ("en",), "2026-07-13T15:00"),  # relative: never moved a year on
+        ("há 4 meses", ("pt",), "2026-07-13T15:00"),
+        ("01.03.26", ("de",), "2026-03-01"),  # a two-digit year is a year given
+    ],
+)
+def test_relative_dates_and_short_years_are_kept_as_written(text, languages, expected):
+    from datetime import datetime
+
+    assert parse_date(text, languages, now=datetime(2026, 11, 13, 15, 0)) == expected
+
+
+def test_a_yearless_date_far_ahead_is_last_years():
+    from datetime import datetime
+
+    january = datetime(2027, 1, 10, 12, 0)
+    assert parse_date("28 Dez", ("de",), now=january) == "2026-12-28"  # began last month
+    assert parse_date("20 Jan", ("de",), now=january) == "2027-01-20"
+
+
+def test_followed_listings_are_not_judged_by_their_span():
+    from datetime import date
+
+    from garden_news_radar.extract import Item, window_warning
+
+    items = [Item(f"k{i}", {"title": f"E{i}", "start": f"2027-01-{16 + i % 3:02d}"}) for i in range(12)]
+    today = date(2027, 1, 15)
+    assert "span only" in window_warning(items, spec(json_spec()), today)
+    # A followed listing's items are only the pages a run read, never the whole listing.
+    followed = spec({"name": "v", "url": "https://v.example.org/list", "kind": "schema_org", "follow": {"links": "a"}})
+    assert window_warning(items, followed, today) == ""
+
+
+async def test_inspect_keeps_json_escaped_data_urls(fetcher, web):
+    from garden_news_radar.inspect import inspect
+
+    script = (
+        'var a = "https://site.example.org/api/events?from=1\\u0026size=50";'
+        ' var b = "https://site.example.org\\u002Fapi\\u002Fshows.json"; var c = `/api/x/${id}.json`;'
+    )
+    web.add("https://site.example.org/", f"<html><body><script>{script}</script></body></html>")
+    out = await inspect(fetcher, "https://site.example.org/")
+    assert out["data_urls"] == [
+        "https://site.example.org/api/events?from=1&size=50",
+        "https://site.example.org/api/shows.json",
+    ]
