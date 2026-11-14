@@ -20,7 +20,7 @@
     <div class="item-main">
       <span class="item-name">{{ m.name }}{% if m.paused %} <span class="pill warn">Paused</span>{% endif %}{% if m.news %} <span class="pill">News</span>{% endif %}</span>
       <span class="item-desc">{{ describe(m.schedule) }} &middot; Reports: {{ where_reports_go(m) }}</span>
-      <span class="item-desc">Sources: {{ m.sources | join(", ") }}{% if m.include %} &middot; only with: {{ m.include | join(", ") }}{% endif %}{% if m.exclude %} &middot; never with: {{ m.exclude | join(", ") }}{% endif %}{% if m.days_ahead is not none %} &middot; events in the next {{ m.days_ahead }} days{% endif %}</span>
+      <span class="item-desc">Sources: {{ m.sources | join(", ") }}{% if m.include %} &middot; only with: {{ m.include | join(", ") }}{% endif %}{% if m.exclude %} &middot; never with: {{ m.exclude | join(", ") }}{% endif %}{% if m.where %} &middot; only at: {{ m.where | join(", ") }}{% endif %}{% if m.days_ahead is not none %} &middot; events in the next {{ m.days_ahead }} days{% endif %}</span>
       <span class="item-desc">
         {% if last %}Last report: {{ status_text(last.status)[1] }} <span class="muted">{{ last.at | time }}</span>{% if last.error %} <span class="muted">({{ last.error }})</span>{% endif %}{% else %}<span class="muted">No report yet</span>{% endif %}
         {% if m.last_empty %} &middot; <span class="muted">nothing new at {{ m.last_empty | time }}</span>{% endif %}
@@ -58,8 +58,8 @@
   {% for s in sources %}
   <li class="item">
     <div class="item-main">
-      <span class="item-name">{{ s.name }} {% if s.healthy %}<span class="pill ok">Working</span>{% else %}<span class="pill bad">Broken</span>{% endif %}</span>
-      <span class="item-desc">{{ s.kind }} from {{ s.host }} &middot; every {{ s.every }}{% if s.used_by %} &middot; used by {{ s.used_by | join(", ") }}{% endif %}</span>
+      <span class="item-name">{{ s.name }} {% if s.unused %}<span class="pill">Unused</span>{% elif s.healthy %}<span class="pill ok">Working</span>{% else %}<span class="pill bad">Broken</span>{% endif %}</span>
+      <span class="item-desc">{{ s.kind }} from {{ s.host }} &middot; {% if s.unused %}not fetched until a monitor uses it{% else %}every {{ s.every }}{% endif %}{% if s.used_by %} &middot; used by {{ s.used_by | join(", ") }}{% endif %}</span>
       <span class="item-desc">{% if s.last_ok %}Last read {{ s.last_ok | time }}{% else %}<span class="muted">Not read yet</span>{% endif %}{% if s.reason %} &middot; {{ s.reason }}{% endif %}</span>
     </div>
     {% if not s.used_by %}

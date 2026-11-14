@@ -195,3 +195,34 @@ async def test_a_name_that_resolves_inside_the_stack_is_refused_as_such(clock, s
     fetcher = Fetcher(transport=httpx.MockTransport(handler), clock=clock, sleep=sleeps)
     with pytest.raises(FetchError, match="not a public address"):
         await fetcher.get("http://garden-vault:8000/")
+
+
+async def test_a_name_that_does_not_resolve_says_so(clock, sleeps):
+    import socket
+
+    import httpx
+
+    from garden_news_radar.fetch import Fetcher, UnknownHost
+
+    async def resolve(host, port):
+        raise socket.gaierror(socket.EAI_NONAME, "Name or service not known")
+
+    with pytest.raises(UnknownHost):
+        await PublicOnlyBackend(resolve, FakeInner()).connect_tcp("nope.example.org", 443)
+
+    def handler(request):
+        raise UnknownHost(request.url.host)  # what PublicOnlyBackend raises
+
+    fetcher = Fetcher(transport=httpx.MockTransport(handler), clock=clock, sleep=sleeps)
+    with pytest.raises(FetchError, match="no such host: nope.example.org"):
+        await fetcher.get("https://nope.example.org/")
+
+
+async def test_a_pause_says_how_long(fetcher, web):
+    web.add("https://p.example.org/x", "slow down", status=429, **{"retry-after": "300"})
+    with pytest.raises(FetchError) as first:
+        await fetcher.get("https://p.example.org/x")
+    assert first.value.retry_after == 300
+    with pytest.raises(FetchError, match="asked to wait") as second:
+        await fetcher.get("https://p.example.org/x")
+    assert 290 <= second.value.retry_after <= 300

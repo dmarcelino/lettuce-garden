@@ -6,13 +6,28 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-import lxml.html
 from garden_common.text import one_line
 from lxml import etree
 
-from .extract import ExtractError, Item, extract, follow_links, normalize, schema_items
+from .blocks import repeated_blocks
+from .extract import (
+    ExtractError,
+    Item,
+    combine_entries,
+    extract,
+    follow_links,
+    html_document,
+    items_of,
+    normalize,
+    pick_sitemaps,
+    schema_items,
+    sitemap_entries,
+    sitemap_items,
+    slug_title,
+)
 from .fetch import Fetcher, FetchError, Page
 from .spec import Spec
 
@@ -22,6 +37,7 @@ ACCEPT = {
     "html": "text/html, application/xhtml+xml, */*;q=0.5",
     "schema_org": "text/html, application/xhtml+xml, */*;q=0.5",
     "ical": "text/calendar, */*;q=0.5",
+    "sitemap": "application/xml, text/xml;q=0.9, */*;q=0.5",
 }
 SAMPLE = 600
 
@@ -34,9 +50,13 @@ class RunResult:
     etag: str = ""
     last_modified: str = ""
     sample: str = ""
+    # Seconds the site asked to be left alone (a 429 or 503, or a pause still running).
+    retry_after: int = 0
     pages: int = 0
     followed: int = 0
     follow_errors: int = 0
+    # The first page's most likely listing blocks (blocks.repeated_blocks), when asked for.
+    largest_block: dict[str, Any] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -54,13 +74,31 @@ def sample_of(page: Page) -> str:
     """A short look at what was fetched, for an agent repairing a source."""
     if page.content_type in ("text/html", "application/xhtml+xml"):
         try:
-            root = lxml.html.document_fromstring(page.body)
+            root = html_document(page)
             for bad in root.xpath("//script|//style|//noscript"):
                 bad.drop_tree()
             return one_line(root.text_content(), SAMPLE)
         except (etree.ParserError, ValueError):
             pass
     return one_line(page.text(), SAMPLE)
+
+
+async def _index_entries(spec: Spec, index: Page, fetcher: Fetcher, max_wait: float | None) -> list[tuple[str, str]]:
+    """A sitemap index's newest files of each of the spec's families, read and
+    combined. Each family's newest must be read (its error, a pause included, is the
+    run's: a file broken for good must show); an older one that can't be is left out."""
+    families = []
+    for files in pick_sitemaps(spec, index):
+        lists = []
+        for rank, url in enumerate(files):
+            try:
+                page = await fetcher.get(url, accept=ACCEPT["sitemap"], max_wait=max_wait)
+                lists.append(sitemap_entries(spec, page))
+            except (FetchError, ExtractError):
+                if rank == 0:
+                    raise
+        families.append(lists)
+    return combine_entries(families)
 
 
 async def run_source(
@@ -73,12 +111,16 @@ async def run_source(
     max_pages: int | None = None,
     max_follow: int | None = None,
     max_wait: float | None = None,
+    look_for_blocks: bool = False,
 ) -> RunResult:
-    """Never raises for what a site does: the result's error says why the run failed."""
+    """Never raises for what a site does: the result's error says why the run failed.
+    look_for_blocks (source_test): keep the first page's top repeated block, to
+    compare with the items found."""
     result = RunResult()
     accept = ACCEPT[spec.kind]
     # Conditional requests only make sense for a source that is a single request.
-    conditional = spec.pages is None and spec.follow is None
+    # A sitemap index's 304 must not hide a changed file of it: never conditional.
+    conditional = spec.pages is None and spec.follow is None and not spec.extract.get("sitemaps")
     urls = [spec.url]
     if spec.pages:
         count = min(spec.pages["max"], max_pages or spec.pages["max"])
@@ -86,6 +128,7 @@ async def run_source(
         urls = [page_url(spec.url, param, int(start) + i * int(step)) for i in range(count)]
     items: dict[str, Item] = {}
     first: Page | None = None
+    sitemap_links: list[str] = []
     for i, url in enumerate(urls):
         try:
             page = await fetcher.get(
@@ -98,6 +141,7 @@ async def run_source(
         except FetchError as e:
             if i == 0:
                 result.error = str(e)
+                result.retry_after = e.retry_after
                 return result
             break  # a later page failing ends the paging, not the run
         result.pages += 1
@@ -109,11 +153,29 @@ async def run_source(
             first = page
             result.sample = sample_of(page)
             result.etag, result.last_modified = page.etag, page.last_modified
+            if look_for_blocks and spec.kind in ("html", "schema_org") and spec.follow is None:
+                try:
+                    blocks = repeated_blocks(html_document(page))
+                except (etree.ParserError, ValueError):
+                    blocks = []
+                result.largest_block = blocks[0] if blocks else {}
         try:
-            found = extract(spec, page)
-        except ExtractError as e:
+            # A followed sitemap's items come from its pages; its own entries are only links,
+            # read here once so that a page that is not a sitemap fails the run.
+            if spec.kind == "sitemap" and spec.extract.get("sitemaps"):
+                entries = await _index_entries(spec, page, fetcher, max_wait)
+                if spec.follow:
+                    found, sitemap_links = [], [url for url, _ in entries]
+                else:
+                    found = items_of(sitemap_items(entries), spec, page.url)
+            elif spec.kind == "sitemap" and spec.follow:
+                found, sitemap_links = [], follow_links(spec, page)
+            else:
+                found = extract(spec, page)
+        except (ExtractError, FetchError) as e:  # FetchError: an index's sitemap file
             if i == 0:
                 result.error = str(e)
+                result.retry_after = getattr(e, "retry_after", 0)
                 return result
             break
         fresh = [it for it in found if it.key not in items]
@@ -124,18 +186,28 @@ async def run_source(
     if spec.follow and first is not None:
         most = min(spec.follow["max"], max_follow or spec.follow["max"])
         try:
-            links = [u for u in follow_links(spec, first) if not known_url(u)][:most]
+            if spec.kind == "sitemap":
+                # Only the newest pages: digging further would bring a sitemap's backlog in as new.
+                listed = sitemap_links[: spec.follow["max"]]
+            else:
+                listed = follow_links(spec, first)
+            links = [u for u in listed if not known_url(u)][:most]
         except ExtractError:
             links = []
         for link in links:
             try:
                 page = await fetcher.get(link, accept=ACCEPT["html"], max_wait=max_wait)
-                root = lxml.html.document_fromstring(page.body, base_url=page.url)
+                root = html_document(page)
             except (FetchError, etree.ParserError, ValueError):
                 result.follow_errors += 1
                 continue
             result.followed += 1
-            for raw, extra in schema_items(root, spec.extract["types"]):
+            described = schema_items(root, spec.extract["types"])
+            if not described and spec.kind == "sitemap":
+                # A page without schema.org data still counts as seen: its title, or its URL's words.
+                title = one_line(" ".join(root.xpath("//title//text()")), 300) or slug_title(link)
+                described = [({"title": title, "url": link}, {})]
+            for raw, extra in described:
                 if not raw.get("url"):
                     raw["url"] = link
                 item = normalize(raw, extra, spec, page.url)

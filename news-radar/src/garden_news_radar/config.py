@@ -36,6 +36,13 @@ MAX_RESPONSE = 5 * 1024 * 1024
 MAX_REDIRECTS = 5
 MAX_PAGES = 10
 MAX_FOLLOW = 20
+# The files of a sitemap family read per run: the two highest-numbered, since a file
+# just begun holds only a few pages and the rest of the newest are at the end of the
+# one before. The index's own order and dates are no help: sites sort it as text, or
+# give every file the same date.
+SITEMAPS_READ = 2
+# Files of a sitemap index looked at; the protocol allows 50,000.
+MAX_INDEX_FILES = 5000
 # Between two requests to one host, unless its robots.txt asks for more.
 HOST_SPACING = 2.0
 MAX_CRAWL_DELAY = 60.0
@@ -81,7 +88,7 @@ HISTORY_RUNS = 10
 
 # -- sizes of what agents and people send ---------------------------------------
 MAX_NAME = 64
-MAX_TERMS = 30
+MAX_TERMS = 60
 MAX_TERM = 80
 MAX_SOURCES_PER_MONITOR = 20
 MAX_SCHEDULE = 200

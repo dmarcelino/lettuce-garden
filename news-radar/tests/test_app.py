@@ -193,3 +193,19 @@ def test_the_tools_offer_set_up_in_drafts_and_any_conversation(service, authenti
     preview = tools["monitor_preview"]["inputSchema"]["properties"]
     assert {"sources", "include", "exclude", "days_ahead", "news"} <= set(preview)
     assert "group_by" in tools["source_test"]["description"]
+
+
+@pytest.mark.anyio
+async def test_the_page_shows_where_a_monitor_looks(client, service, web):
+    await setup_monitor(service, web)
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * 1-5", where=["northtown", "easttown"])
+    assert "only at: northtown, easttown" in client.get(f"{B}/").text
+
+
+@pytest.mark.anyio
+async def test_the_page_marks_unused_sources(client, service, web):
+    web.add("https://agenda.example.org/api/events", EVENTS_JSON, "application/json")
+    assert (await service.source_test(json_spec()))["passed"]
+    service.source_put(json_spec())
+    page = client.get(f"{B}/").text
+    assert "Unused" in page and "not fetched until a monitor uses it" in page

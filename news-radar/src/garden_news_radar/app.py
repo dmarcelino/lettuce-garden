@@ -215,6 +215,7 @@ def create_app(
                     "reason": st.unhealthy_reason if st else "",
                     "last_ok": st.last_ok if st else None,
                     "used_by": users.get(name, []),
+                    "unused": not users.get(name),
                 }
             )
         return render(

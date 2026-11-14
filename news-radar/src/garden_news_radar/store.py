@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS monitors (
   paused INTEGER NOT NULL DEFAULT 0,
   last_empty INTEGER,
   set_up_in TEXT NOT NULL DEFAULT '',
+  where_terms TEXT NOT NULL DEFAULT '[]',
   UNIQUE (agent_id, name)
 );
 CREATE TABLE IF NOT EXISTS reports (
@@ -130,6 +131,8 @@ class Monitor:
     conversation: str = "new"
     include: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
+    # Places an event's venue must name; events without a venue are kept.
+    where: list[str] = field(default_factory=list)
     days_ahead: int | None = None
     news: bool = False
     id: str = ""
@@ -161,6 +164,7 @@ class Monitor:
             "set_up_in": self.set_up_in,
             "include": self.include,
             "exclude": self.exclude,
+            "where": self.where,
             "days_ahead": self.days_ahead,
             "news": self.news,
             "paused": self.paused,
@@ -241,11 +245,15 @@ class Store:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL" if path != ":memory:" else "PRAGMA journal_mode=MEMORY")
         self._db.executescript(SCHEMA)
-        # Stores made before set_up_in existed: add the column, keeping their monitors.
+        # Stores made before a column existed: add it, keeping their monitors.
         columns = {r["name"] for r in self._db.execute("PRAGMA table_info(monitors)")}
-        if "set_up_in" not in columns:
-            with self._db:
-                self._db.execute("ALTER TABLE monitors ADD COLUMN set_up_in TEXT NOT NULL DEFAULT ''")
+        for name, definition in (
+            ("set_up_in", "TEXT NOT NULL DEFAULT ''"),
+            ("where_terms", "TEXT NOT NULL DEFAULT '[]'"),
+        ):
+            if name not in columns:
+                with self._db:
+                    self._db.execute(f"ALTER TABLE monitors ADD COLUMN {name} {definition}")
 
     def now(self) -> int:
         return int(self._clock())
@@ -303,6 +311,11 @@ class Store:
                 self._db.execute("DELETE FROM source_state WHERE name = ?", (name,))
             self._db.execute("INSERT OR IGNORE INTO source_state (name) VALUES (?)", (name,))
 
+    def fetch_again(self, names: Sequence[str]) -> None:
+        """Makes sources due now, as if never run: their items and health are kept."""
+        with self._db:
+            self._db.executemany("UPDATE source_state SET last_run = NULL WHERE name = ?", [(n,) for n in names])
+
     def source_versions(self, name: str) -> list[tuple[int, dict[str, Any]]]:
         rows = self._db.execute(
             "SELECT at, spec FROM source_versions WHERE name = ? ORDER BY at DESC, rowid DESC", (name,)
@@ -350,7 +363,7 @@ class Store:
         *,
         items: Sequence[Item] | None,
         watch: tuple[str, ...],
-        required: tuple[str, ...],
+        problem: str = "",
         error: str = "",
         not_modified: bool = False,
         etag: str = "",
@@ -359,7 +372,8 @@ class Store:
         fill: dict[str, float] | None = None,
     ) -> None:
         """One run's outcome in one transaction: new and changed items, the
-        conditional-request state, and the source's health."""
+        conditional-request state, and the source's health. problem: what is wrong
+        with the run's items (extract.run_problem), "" when nothing is."""
         now = self.now()
         state = self.source_state(name)
         with self._db:
@@ -393,11 +407,7 @@ class Store:
                 if not items and previous and statistics.median(previous) >= UNHEALTHY_EMPTY_MEDIAN:
                     reason = f"no items, where runs usually find about {int(statistics.median(previous))}"
                 elif items:
-                    for f in required:
-                        missing = sum(1 for i in items if not i.fields.get(f))
-                        if missing * 2 > len(items):
-                            reason = f"{missing} of {len(items)} items have no {f}"
-                            break
+                    reason = problem
             if reason:
                 self._db.execute(
                     "UPDATE source_state SET unhealthy_since = COALESCE(unhealthy_since, ?), unhealthy_reason = ? "
@@ -487,6 +497,7 @@ class Store:
             sources=json.loads(row["sources"]),
             include=json.loads(row["include"]),
             exclude=json.loads(row["exclude"]),
+            where=json.loads(row["where_terms"]),
             days_ahead=row["days_ahead"],
             news=bool(row["news"]),
             schedule=row["schedule"],
@@ -520,14 +531,16 @@ class Store:
     def count_monitors(self) -> int:
         return self._db.execute("SELECT COUNT(*) FROM monitors").fetchone()[0]
 
-    def put_monitor(self, m: Monitor) -> Monitor:
+    def put_monitor(self, m: Monitor, delivered_upto: int | None = None) -> Monitor:
         """Creates or replaces the agent's monitor of that name. A replaced one
-        keeps what it has delivered, and comes back from a pause."""
+        keeps what it has delivered, and comes back from a pause. delivered_upto,
+        when given, is where its next report starts (from_now)."""
         now = self.now()
         values = (
             json.dumps(m.sources),
             json.dumps(m.include),
             json.dumps(m.exclude),
+            json.dumps(m.where),
             m.days_ahead,
             int(m.news),
             m.schedule,
@@ -537,18 +550,21 @@ class Store:
             current = self.monitor_named(m.agent_id, m.name)
             if current:
                 self._db.execute(
-                    "UPDATE monitors SET sources=?, include=?, exclude=?, days_ahead=?, news=?, schedule=?, "
-                    "conversation=?, set_up_in=?, updated=?, paused=0, failures=0 WHERE id=?",
+                    "UPDATE monitors SET sources=?, include=?, exclude=?, where_terms=?, days_ahead=?, news=?, "
+                    "schedule=?, conversation=?, set_up_in=?, updated=?, paused=0, failures=0 WHERE id=?",
                     (*values, m.set_up_in, now, current.id),
                 )
                 monitor_id = current.id
             else:
                 monitor_id = uuid.uuid4().hex[:16]
                 self._db.execute(
-                    "INSERT INTO monitors (sources, include, exclude, days_ahead, news, schedule, conversation, "
-                    "set_up_in, created, updated, id, agent_id, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO monitors (sources, include, exclude, where_terms, days_ahead, news, schedule, "
+                    "conversation, set_up_in, created, updated, id, agent_id, name) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (*values, m.set_up_in, now, now, monitor_id, m.agent_id, m.name),
                 )
+            if delivered_upto is not None:
+                self._db.execute("UPDATE monitors SET delivered_upto = ? WHERE id = ?", (delivered_upto, monitor_id))
         stored = self.monitor(monitor_id)
         assert stored is not None
         return stored
@@ -654,6 +670,15 @@ class Store:
             for mid in report.monitors:
                 out[mid] = report
         return out
+
+    def last_report(self, monitor_id: str) -> Report | None:
+        """The monitor's latest report, whatever its status."""
+        row = self._db.execute(
+            "SELECT * FROM reports WHERE EXISTS (SELECT 1 FROM json_each(reports.monitors) WHERE value = ?) "
+            "ORDER BY at DESC, rowid DESC LIMIT 1",
+            (monitor_id,),
+        ).fetchone()
+        return self._report(row) if row else None
 
     def failures_since(self, since: int) -> int:
         return self._db.execute(

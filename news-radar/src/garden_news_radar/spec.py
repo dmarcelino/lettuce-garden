@@ -12,10 +12,10 @@ from typing import Any
 import jmespath
 from cssselect import GenericTranslator, SelectorError
 
-from .config import MAX_FOLLOW, MAX_PAGES, MAX_URL, NAME, parse_duration
+from .config import MAX_FOLLOW, MAX_PAGES, MAX_URL, NAME, SITEMAPS_READ, parse_duration
 from .fetch import FetchError, check_url
 
-KINDS = ("rss", "json", "html", "schema_org", "ical")
+KINDS = ("rss", "json", "html", "schema_org", "ical", "sitemap")
 ITEM_KINDS = ("event", "article")
 ITEM_FIELDS = ("title", "url", "start", "end", "venue", "summary", "image", "published", "outlet")
 EXTRA_NAME = re.compile(r"[a-z][a-z0-9_]{0,30}")
@@ -23,6 +23,9 @@ PARAM = re.compile(r"[A-Za-z0-9_.\[\]-]{1,40}")
 LANGUAGE = re.compile(r"[a-z]{2,3}")
 SCHEMA_TYPE = re.compile(r"[A-Za-z]{1,60}")
 MAX_EXTRA = 10
+MAX_MATCH = 10
+MAX_MATCH_TEXT = 200
+MAX_SITEMAP_NAMES = 5
 MAX_EXPRESSION = 300
 MAX_EVERY = 7 * 86400
 
@@ -59,6 +62,15 @@ class SpecError(ValueError):
     pass
 
 
+# Fields that belong inside another one, for the error that says where.
+PLACES = {
+    **{f: f"extract.{f}" for f in ("types", "items", "fields", "extra", "match", "sitemaps", "key")},
+    "languages": "dates.languages",
+    "links": "follow.links",
+    "param": "pages.param",
+}
+
+
 @dataclass(frozen=True)
 class Spec:
     name: str
@@ -79,8 +91,10 @@ class Spec:
 
     @property
     def fingerprint(self) -> str:
-        """The same for two specs that mean the same thing, whatever their key order."""
-        return hashlib.sha256(json.dumps(self.raw, sort_keys=True).encode()).hexdigest()
+        """The same for two specs that read the same items, whatever their key order
+        and however often they run: a passing source_test covers a new interval too."""
+        what = {k: v for k, v in self.raw.items() if k != "every"}
+        return hashlib.sha256(json.dumps(what, sort_keys=True).encode()).hexdigest()
 
     @property
     def extra_names(self) -> tuple[str, ...]:
@@ -148,6 +162,17 @@ def _mapping(obj: Any, where: str, check: Any, names: tuple[str, ...] | None) ->
     return out
 
 
+def _url_texts(value: Any, message: str, most: int) -> list[str]:
+    """A list of plain pieces of URL text (extract.match, extract.sitemaps): never patterns."""
+    if (
+        not isinstance(value, list)
+        or not 1 <= len(value) <= most
+        or not all(isinstance(m, str) and 0 < len(m.strip()) <= MAX_MATCH_TEXT for m in value)
+    ):
+        raise SpecError(message)
+    return [m.strip() for m in value]
+
+
 def parse_spec(obj: Any, min_interval: int) -> Spec:
     """A validated Spec, or SpecError saying what is wrong."""
     if not isinstance(obj, dict):
@@ -155,7 +180,8 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
     allowed = {"name", "url", "kind", "item_kind", "every", "extract", "pages", "follow", "dates", "watch", "group_by"}
     unknown = sorted(set(obj) - allowed)
     if unknown:
-        raise SpecError(f"unknown field(s): {', '.join(unknown)}")
+        hints = [f"{u} (it goes inside {PLACES[u].split('.')[0]}: {PLACES[u]})" if u in PLACES else u for u in unknown]
+        raise SpecError(f"unknown field(s): {', '.join(hints)}")
     name = _text(obj, "name", 64)
     if not NAME.fullmatch(name):
         raise SpecError("name must be lowercase letters, digits and -, starting with a letter or digit")
@@ -167,7 +193,9 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
     kind = obj.get("kind")
     if kind not in KINDS:
         raise SpecError(f"kind must be one of {', '.join(KINDS)}")
-    item_kind = obj.get("item_kind", "article" if kind == "rss" else "event")
+    # A sitemap's own entries have no event dates; the pages it follows do.
+    plain = kind == "rss" or (kind == "sitemap" and obj.get("follow") is None)
+    item_kind = obj.get("item_kind", "article" if plain else "event")
     if item_kind not in ITEM_KINDS:
         raise SpecError(f"item_kind must be one of {', '.join(ITEM_KINDS)}")
     try:
@@ -183,9 +211,12 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
     if not isinstance(extract_in, dict):
         raise SpecError("extract must be an object")
     extract: dict[str, Any] = {}
-    allowed_extract = {"rss": {"key"}, "ical": {"key"}, "schema_org": {"types", "key"}}.get(
-        kind, {"items", "fields", "extra", "key"}
-    )
+    allowed_extract = {
+        "rss": {"key"},
+        "ical": {"key"},
+        "schema_org": {"types", "key"},
+        "sitemap": {"match", "sitemaps", "types", "key"},
+    }.get(kind, {"items", "fields", "extra", "key"})
     unknown = sorted(set(extract_in) - allowed_extract)
     if unknown:
         raise SpecError(f"extract: {', '.join(unknown)} not used by kind {kind}")
@@ -202,7 +233,22 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
         extract["extra"] = _mapping(extract_in.get("extra"), "extract.extra", check, None)
     if kind in ("json", "html") and "title" not in extract["fields"]:
         raise SpecError("extract.fields needs at least title")
-    if kind == "schema_org":
+    if kind == "sitemap" and extract_in.get("match") is not None:
+        extract["match"] = _url_texts(
+            extract_in["match"],
+            f"extract.match is a list of 1 to {MAX_MATCH} pieces of URL text, such as /events/ (plain text, "
+            "not a pattern): only the sitemap's URLs holding one are kept",
+            MAX_MATCH,
+        )
+    if kind == "sitemap" and extract_in.get("sitemaps") is not None:
+        extract["sitemaps"] = _url_texts(
+            extract_in["sitemaps"],
+            f"extract.sitemaps is a list of 1 to {MAX_SITEMAP_NAMES} families of a sitemap index's files, as "
+            "source_inspect lists them in sitemap_families (events-sitemap for events-sitemap2.xml): the "
+            f"{SITEMAPS_READ} highest-numbered files of each are read",
+            MAX_SITEMAP_NAMES,
+        )
+    if kind in ("schema_org", "sitemap"):
         types = extract_in.get("types", list(DEFAULT_SCHEMA_TYPES))
         if not isinstance(types, list) or not 1 <= len(types) <= 40:
             raise SpecError("extract.types must be a list of 1 to 40 schema.org types")
@@ -238,22 +284,27 @@ def parse_spec(obj: Any, min_interval: int) -> Spec:
         ):
             if not isinstance(value, int) or isinstance(value, bool) or not low <= value <= high:
                 raise SpecError(f"pages.{label} must be a whole number from {low} to {high}")
-        if kind in ("rss", "ical"):
+        if kind in ("rss", "ical", "sitemap"):
             raise SpecError(f"pages is not used by kind {kind}")
         pages = {"param": param, "start": start, "step": step, "max": most}
 
     follow = None
     if obj.get("follow") is not None:
         f = obj["follow"]
-        if kind != "schema_org":
-            raise SpecError("follow is for kind schema_org: listings whose events are described on their own pages")
-        if not isinstance(f, dict) or set(f) - {"links", "max"}:
+        if kind not in ("schema_org", "sitemap"):
+            raise SpecError(
+                "follow is for kind schema_org (listings whose events are described on their own pages) and "
+                "sitemap (its pages read for schema.org data)"
+            )
+        if kind == "sitemap":
+            if not isinstance(f, dict) or set(f) - {"max"}:
+                raise SpecError("a sitemap's follow takes only max: the pages are the sitemap's URLs")
+        elif not isinstance(f, dict) or set(f) - {"links", "max"}:
             raise SpecError("follow takes links (a CSS selector, @href by default) and max")
-        links = _css(f.get("links"), "follow.links")
         most = f.get("max", MAX_FOLLOW)
         if not isinstance(most, int) or isinstance(most, bool) or not 1 <= most <= MAX_FOLLOW:
             raise SpecError(f"follow.max must be a whole number from 1 to {MAX_FOLLOW}")
-        follow = {"links": links, "max": most}
+        follow = {"max": most} if kind == "sitemap" else {"links": _css(f.get("links"), "follow.links"), "max": most}
 
     languages: tuple[str, ...] = ()
     if obj.get("dates") is not None:

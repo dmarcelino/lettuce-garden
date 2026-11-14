@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 from conftest import AGENT, EVENTS_JSON, OTHER_AGENT, json_spec
 
-from garden_news_radar.config import MAX_PROMPT
+from garden_news_radar.config import CARRY_SECONDS, MAX_PROMPT
 from garden_news_radar.service import ToolError, minutes_between
 from garden_news_radar.store import CLAIMED, FAILED, LOST, OK, QUEUED
 
@@ -36,7 +36,8 @@ async def test_put_needs_a_passing_test_of_that_exact_spec(service, web, clock):
     assert result["passed"] and result["items_found"] == 2
     assert result["fill_rates"]["title"] == 1.0
     with pytest.raises(ToolError, match="source_test"):
-        service.source_put(json_spec(every="12h"))
+        service.source_put(json_spec(url="https://agenda.example.org/api/other"))
+    assert service.source_put(json_spec(every="12h"))["spec"]["every"] == "12h"  # only how often: no new test
     clock.t += 16 * 60
     with pytest.raises(ToolError, match="source_test"):
         service.source_put(json_spec())
@@ -306,6 +307,7 @@ async def test_a_lost_report_counts_toward_the_daily_cap(service, web, store, cl
 
 async def test_a_raised_minimum_interval_slows_sources_already_saved(service, web, store, clock):
     await add_source(service, web, every="1h")
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *")
     await service.fetch_source("city-agenda")
     service.settings = dataclasses.replace(service.settings, min_interval=6 * 3600)
     clock.t += 2 * 3600
@@ -693,3 +695,391 @@ async def test_saving_again_keeps_where_reports_go(service, web, store):
     # "here" without set_up_in means where it was set up, when that is known.
     out = service.monitor_put(AGENT, "films", ["city-agenda"], conversation="here")
     assert out["monitor"]["conversation"] == "local-conv-12" and "note" not in out
+
+
+# -- what source_test and health catch -------------------------------------------------------
+def events_body(dates, venue="Hall A"):
+    items = [{"name": f"E{i}", "date": d, "link": f"/e/{i}", "place": {"name": venue}} for i, d in enumerate(dates)]
+    return json.dumps({"data": {"list": {"items": items}}})
+
+
+async def test_a_listing_of_past_events_fails_its_test_and_makes_its_source_unhealthy(service, web, store, clock):
+    web.add(URL, events_body(["2027-01-10", "2027-01-12"]), "application/json")  # T0 is 2027-01-15
+    out = await service.source_test(json_spec())
+    assert not out["passed"] and "every event is in the past" in out["problems"][0]
+    await add_source(service, web, body=events_body(["2027-01-20"]))
+    await service.fetch_source("city-agenda")
+    assert store.source_state("city-agenda").healthy
+    clock.t += 10 * 86400  # a date fixed in the URL: the listing stops moving
+    await service.fetch_source("city-agenda")
+    st = store.source_state("city-agenda")
+    assert not st.healthy and "every event is in the past" in st.unhealthy_reason
+
+
+async def test_event_sources_need_their_dates(service, web):
+    web.add(URL, json.dumps({"data": {"list": {"items": [{"name": f"E{i}", "link": f"/e/{i}"} for i in range(4)]}}}))
+    out = await service.source_test(json_spec())
+    assert not out["passed"] and out["problems"] == ["4 of 4 items have no start"]
+
+
+async def test_a_listing_cut_short_is_flagged(service, web):
+    web.add(URL, events_body([f"2027-01-{d:02d}" for d in range(16, 28)]), "application/json")
+    out = await service.source_test(json_spec())
+    assert out["passed"] and "span only 12 days" in out["warnings"][0]
+    web.add(URL, events_body([f"2027-{m:02d}-01" for m in range(2, 13)]), "application/json")
+    assert "warnings" not in await service.source_test(json_spec())
+
+
+async def test_a_paused_site_says_when_to_try_again(service, web):
+    web.add(URL, "slow down", "text/plain", status=429, **{"retry-after": "300"})
+    first = await service.source_test(json_spec())
+    second = await service.source_test(json_spec())
+    for out in (first, second):
+        assert not out["passed"] and out["retry_after"] > 0
+        assert "do not call source_test or source_inspect for this site before" in out["next"]
+    inspected = await service.source_inspect(URL)
+    assert inspected["retry_after"] > 0 and "before" in inspected["next"]
+
+
+# -- filters ------------------------------------------------------------------------------------
+TITLES = [
+    "Tool live in Northtown",
+    "Toolbox workshop",
+    "Post-punk night",
+    "Caricaturas ao vivo",
+    "Cinderela, o musical",
+    "Panorama musical: The Example Band confirmed",
+]
+
+
+async def add_titles(service, web, titles=TITLES, venues=None):
+    items = [
+        {"name": t, "date": "2027-02-01", "link": f"/e/{i}", "place": {"name": (venues or {}).get(t, "")}}
+        for i, t in enumerate(titles)
+    ]
+    await add_source(service, web, body=json.dumps({"data": {"list": {"items": items}}}))
+    await service.fetch_source("city-agenda")
+
+
+def titles_of(service, **filters):
+    return [r["title"] for r in service.monitor_preview(AGENT, "x", sources=["city-agenda"], **filters)["rows"]]
+
+
+async def test_terms_match_whole_words_and_star_makes_a_prefix(service, web):
+    await add_titles(service, web)
+    assert titles_of(service, include=["tool"]) == ["Tool live in Northtown"]
+    assert titles_of(service, include=["punk"]) == ["Post-punk night"]
+    assert titles_of(service, include=["caric"]) == []
+    assert titles_of(service, include=["caric*"]) == ["Caricaturas ao vivo"]
+    assert titles_of(service, include=["The Example Band"]) == ["Panorama musical: The Example Band confirmed"]
+
+
+async def test_a_preview_says_what_each_term_did(service, web):
+    await add_titles(service, web)
+    out = service.monitor_preview(
+        AGENT, "x", sources=["city-agenda"], include=["tool", "musical", "shoegaze"], exclude=["musical"]
+    )
+    assert [r["title"] for r in out["rows"]] == ["Tool live in Northtown"]
+    terms = out["terms"]
+    assert terms["include"] == {"tool": 1, "musical": 2, "shoegaze": 0}
+    assert terms["exclude"]["musical"]["removed"] == 2
+    assert "Panorama musical: The Example Band confirmed" in terms["exclude"]["musical"]["examples"]
+
+
+async def test_where_keeps_events_at_the_places_named(service, web):
+    venues = {TITLES[0]: "Arena, Southtown", TITLES[2]: "Hall One, Northtown"}
+    await add_titles(service, web, venues=venues)
+    kept = titles_of(service, where=["northtown", "easttown"])
+    assert TITLES[0] not in kept and TITLES[2] in kept
+    assert TITLES[1] in kept  # no venue: kept, since it may be anywhere
+    out = service.monitor_preview(AGENT, "x", sources=["city-agenda"], where=["northtown"])
+    assert out["terms"]["where"] == {"northtown": 1}
+    service.monitor_put(AGENT, "lx", ["city-agenda"], where=["northtown"], schedule="0 9 * * *")
+    assert service.monitor_list(AGENT)["monitors"][0]["where"] == ["northtown"]
+
+
+async def test_monitors_take_up_to_sixty_terms(service, web):
+    await add_source(service, web)
+    service.monitor_put(AGENT, "many", ["city-agenda"], include=[f"t{i}" for i in range(60)])
+    with pytest.raises(ToolError, match="at most 60"):
+        service.monitor_put(AGENT, "many", ["city-agenda"], include=[f"t{i}" for i in range(61)])
+
+
+def test_a_store_from_before_where_gains_the_column(settings, clock):
+    import sqlite3
+
+    from garden_news_radar.store import Store
+
+    Store(settings.db_path, clock=clock)
+    db = sqlite3.connect(settings.db_path)
+    db.execute("ALTER TABLE monitors DROP COLUMN where_terms")
+    db.execute(
+        "INSERT INTO monitors (id, agent_id, name, sources, include, exclude, news, schedule, conversation, "
+        f"created, updated) VALUES ('0123456789abcdef', '{AGENT}', 'films', '[\"a\"]', '[]', '[]', 0, "
+        "'0 9 * * *', 'default', 1, 1)"
+    )
+    db.commit()
+    db.close()
+    [m] = Store(settings.db_path, clock=clock).monitors()
+    assert m.where == []
+
+
+# -- rc.2: listings, merged rows, from_now, previews, unused sources ---------------------------
+URL2 = "https://other.example.org/api/events"
+URL3 = "https://third.example.org/api/events"
+
+
+async def add_named(service, web, name, url, body):
+    web.add(url, body, "application/json")
+    spec = json_spec(name=name, url=url)
+    assert (await service.source_test(spec))["passed"]
+    service.source_put(spec)
+    await service.fetch_source(name)
+
+
+async def test_a_listing_bigger_than_what_its_spec_reads_is_flagged(service, web):
+    events = "".join(
+        '<script type="application/ld+json">'
+        f'{{"@type": "Event", "name": "E{i}", "startDate": "2027-02-0{i + 1}"}}</script>'
+        for i in range(2)
+    )
+    cards = "".join(
+        f'<article class="card"><h3>Show {i}</h3><a href="/e/{i}">more</a>'
+        f' <span class="d">2{i % 9}.02.2027</span></article>'
+        for i in range(25)
+    )
+    web.add("https://venue.example.org/agenda", f"<html><head>{events}</head><body>{cards}</body></html>")
+    schema = {"name": "venue", "url": "https://venue.example.org/agenda", "kind": "schema_org"}
+    out = await service.source_test(schema)
+    assert out["passed"] and any("repeats article.card 25 times, linking to 25" in w for w in out["warnings"])
+    html = {
+        **schema,
+        "kind": "html",
+        "extract": {"items": "article.card", "fields": {"title": "h3", "url": "a@href", "start": "span.d"}},
+    }
+    out = await service.source_test(html)
+    assert out["passed"] and not any("repeats" in w for w in out.get("warnings", []))
+    # A calendar repeats its few events in every day's cell: that is not a bigger listing.
+    cells = "".join(
+        f'<div class="cell"><a href="/e/{i % 2}">Show {i % 2}</a> <span>2{i % 9}.02.2027</span></div>'
+        for i in range(25)
+    )
+    web.add("https://venue.example.org/agenda", f"<html><head>{events}</head><body>{cells}</body></html>")
+    out = await service.source_test(schema)
+    assert out["passed"] and not any("repeats" in w for w in out.get("warnings", []))
+
+
+async def test_one_event_listed_by_several_sources_is_one_row(service, web, store):
+    one = events_body(["2027-02-01"])
+    await add_named(service, web, "city-agenda", URL, one)
+    await add_named(service, web, "other", URL2, one.replace('"E0"', '"  e0! "'))
+    await add_named(service, web, "third", URL3, events_body(["2027-02-02"]))  # E0 on another day
+    out = service.monitor_preview(AGENT, "x", sources=["city-agenda", "other", "third"])
+    assert out["rows_total"] == 2
+    merged = next(r for r in out["rows"] if r.get("also_in"))
+    assert {a["source"] for a in merged["also_in"]} | {merged["source"]} == {"city-agenda", "other"}
+
+
+async def test_from_now_reports_only_what_comes_after(service, web, store, clock):
+    web.add(URL, EVENTS_JSON, "application/json")
+    assert (await service.source_test(json_spec()))["passed"]
+    service.source_put(json_spec())
+    with pytest.raises(ToolError, match="not been fetched"):
+        service.monitor_put(AGENT, "news", ["city-agenda"], schedule="0 9 * * *", from_now=True)
+    await service.fetch_source("city-agenda")
+    draft = service.monitor_preview(AGENT, "news", sources=["city-agenda"], from_now=True)
+    assert draft["rows"] == [] and draft["existing_skipped"] == 2
+    out = service.monitor_put(AGENT, "news", ["city-agenda"], schedule="0 9 * * *", from_now=True)
+    assert "from now" in out["from_now"]
+    assert service.monitor_preview(AGENT, "news")["rows"] == []
+    clock.t += 7 * 3600
+    web.add(
+        URL,
+        EVENTS_JSON.replace('{"id": 3', '{"id": 4, "name": "Fresh", "date": "2027-03-01", "link": "/e/4"}, {"id": 3'),
+        "application/json",
+    )
+    await service.fetch_source("city-agenda")
+    assert [r["title"] for r in service.monitor_preview(AGENT, "news")["rows"]] == ["Fresh"]
+
+
+def local(service, ts):
+    return datetime.fromtimestamp(ts, service.settings.tz).strftime("%Y-%m-%d %H:%M")
+
+
+async def test_a_saved_monitors_preview_says_since_when_and_its_last_report(service, web, store, clock):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *", set_up_in="conv-1")
+    # Never reported: it shows what a report reaches back to, and has no last report.
+    fresh = service.monitor_preview(AGENT, "films")
+    assert len(fresh["rows"]) == 2
+    assert fresh["shows_since"] == local(service, store.now() - CARRY_SECONDS)
+    assert "last_report" not in fresh
+    clock.t += 60
+    [rid] = fire_at(service, "2027-01-15T09:00")
+    store.claim(20)
+    assert store.finish(rid, True, "task-1", "")
+    out = service.monitor_preview(AGENT, "films")
+    assert out["rows"] == []
+    report = store.report(rid)
+    assert out["shows_since"] == local(service, report.upto)
+    [listed] = service.monitor_list(AGENT)["monitors"]
+    assert out["last_report"] == {
+        "at": local(service, report.at),
+        "status": OK,
+        "to": listed["conversation_in_words"],
+    }
+    assert f"since {out['shows_since']}" in out["note"] and "already reported" in out["note"]
+    # A draft is not the saved monitor: neither.
+    draft = service.monitor_preview(AGENT, "films", sources=["city-agenda"])
+    assert len(draft["rows"]) == 2
+    assert "shows_since" not in draft and "last_report" not in draft
+    # With from_now the preview starts now: existing_skipped says so, not shows_since.
+    skipping = service.monitor_preview(AGENT, "films", from_now=True)
+    assert "shows_since" not in skipping and "existing_skipped" in skipping
+    # Moved elsewhere after the report: the last report still says where it went.
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *", conversation="new")
+    assert service.monitor_preview(AGENT, "films")["last_report"]["to"] == "this conversation (where it was set up)"
+    # Long after the last report, a report reaches back only so far, and says so.
+    clock.t += CARRY_SECONDS + 86400
+    late = service.monitor_preview(AGENT, "films")
+    assert late["shows_since"] == local(service, store.now() - CARRY_SECONDS)
+    assert f"{CARRY_SECONDS // 86400} days" in late["note"]
+
+
+async def test_a_failed_report_shows_in_the_preview(service, web, store, clock):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *")
+    clock.t += 60
+    [rid] = fire_at(service, "2027-01-15T09:00")
+    store.claim(20)
+    assert store.finish(rid, False, "", "no such conversation")
+    out = service.monitor_preview(AGENT, "films")
+    assert out["last_report"]["status"] == FAILED
+    assert len(out["rows"]) == 2  # nothing delivered: the rows come again
+
+
+async def test_a_from_now_monitors_preview_says_where_it_starts(service, web, store):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    service.monitor_put(AGENT, "news", ["city-agenda"], schedule="0 9 * * *", from_now=True)
+    out = service.monitor_preview(AGENT, "news")
+    assert out["rows"] == [] and out["shows_since"] == local(service, store.now())
+    assert "last_report" not in out
+
+
+async def test_a_preview_says_what_is_not_fetched_yet_and_over_the_cap(service, web, store):
+    many = events_body([f"2027-02-{1 + i % 27:02d}" for i in range(55)])
+    web.add(URL, many.replace('"E', '"Show E'), "application/json")
+    assert (await service.source_test(json_spec()))["passed"]
+    service.source_put(json_spec())
+    early = service.monitor_preview(AGENT, "x", sources=["city-agenda"])
+    assert early["not_fetched_yet"] == ["city-agenda"] and "preview again" in early["note"]
+    assert service.monitor_put(AGENT, "x", ["city-agenda"], schedule="0 9 * * *")["not_fetched_yet"] == ["city-agenda"]
+    await service.fetch_source("city-agenda")
+    out = service.monitor_preview(AGENT, "x")
+    assert "not_fetched_yet" not in out
+    assert out["over_cap"] == {"cap": 50, "left_out": 5}
+
+
+async def test_unused_sources_are_fetched_once_then_left_alone(service, web, store, clock):
+    await add_source(service, web)
+    assert service.due_sources(store.now()) == ["city-agenda"]  # once, so a draft can be previewed
+    await service.fetch_source("city-agenda")
+    clock.t += 7 * 3600
+    assert service.due_sources(store.now()) == []
+    assert service.source_list()["sources"][0]["unused"] is True
+    service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 9 * * *")
+    assert service.due_sources(store.now()) == ["city-agenda"]
+    assert service.source_list()["sources"][0]["unused"] is False
+
+
+# -- rc.4 review: merged rows, paged tests, from_now, re-saved unused sources -----------------
+def sessions_body(rows):
+    items = [{"name": t, "date": d, "link": link, "place": {"name": v}} for t, d, link, v in rows]
+    return json.dumps({"data": {"list": {"items": items}}})
+
+
+async def test_sessions_and_venues_of_one_title_stay_rows_of_their_own(service, web, store):
+    films = sessions_body(
+        [("Dune", "2027-02-01T18:00", "/f/dune", "Cinema"), ("Dune", "2027-02-01T21:00", "/f/dune", "Cinema")]
+    )
+    web.add(URL, films, "application/json")
+    spec = json_spec()
+    spec["extract"] = {**spec["extract"], "key": ["url", "start"]}
+    assert (await service.source_test(spec))["passed"]
+    service.source_put(spec)
+    await service.fetch_source("city-agenda")
+    await add_named(service, web, "bar-a", URL2, sessions_body([("Jazz Night", "2027-02-02", "/j", "Bar A")]))
+    await add_named(service, web, "bar-b", URL3, sessions_body([("Jazz Night", "2027-02-02", "/j", "Bar B")]))
+    out = service.monitor_preview(AGENT, "x", sources=["city-agenda", "bar-a", "bar-b"])
+    rows = sorted((r["title"], r["when"], r.get("where", "")) for r in out["rows"])
+    assert rows == [
+        ("Dune", "2027-02-01T18:00", "Cinema"),
+        ("Dune", "2027-02-01T21:00", "Cinema"),
+        ("Jazz Night", "2027-02-02", "Bar A"),
+        ("Jazz Night", "2027-02-02", "Bar B"),
+    ]
+    assert not any(r.get("also_in") for r in out["rows"])
+
+
+async def test_one_event_with_and_without_its_time_or_venue_is_still_one_row(service, web, store):
+    await add_named(service, web, "city-agenda", URL, sessions_body([("Gig", "2027-02-01T21:00", "/g", "Hall A")]))
+    await add_named(service, web, "other", URL2, sessions_body([("Gig", "2027-02-01", "/g", "")]))
+    out = service.monitor_preview(AGENT, "x", sources=["city-agenda", "other"])
+    assert out["rows_total"] == 1 and out["rows"][0]["also_in"]
+
+
+async def test_a_test_that_reads_fewer_pages_than_its_spec_does_not_say_the_list_is_cut(service, web):
+    for n in range(1, 5):
+        days = [f"2027-01-{16 + (n - 1) * 3 + d % 3:02d}" for d in range(4)]
+        body = events_body(days).replace('"/e/', f'"/p{n}/e/').replace('"E', f'"P{n}E')
+        web.add(f"{URL}?page={n}", body, "application/json")
+    paged = json_spec(pages={"param": "page", "start": 1, "max": 10})
+    out = await service.source_test(paged)
+    assert out["passed"] and out["pages_fetched"] == 3
+    assert "warnings" not in out
+    # A spec that reads no more than the test did is judged as before.
+    short = await service.source_test(json_spec(pages={"param": "page", "start": 1, "max": 3}))
+    assert "span only" in short["warnings"][0]
+
+
+async def test_a_from_now_preview_still_says_what_each_term_finds(service, web):
+    await add_titles(service, web)
+    out = service.monitor_preview(AGENT, "x", sources=["city-agenda"], include=["tool"], from_now=True)
+    assert out["rows"] == [] and out["existing_skipped"] == 1
+    assert out["terms"]["include"] == {"tool": 1}
+
+
+@pytest.mark.parametrize(
+    "change", [{"dates": {"languages": ["pt"]}}, {"item_kind": "article"}, {"watch": ["title"]}, {"group_by": "venue"}]
+)
+async def test_an_unused_source_saved_again_is_fetched_again(service, web, store, clock, change):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    clock.t += 7 * 3600
+    assert service.due_sources(store.now()) == []
+    changed = json_spec(**change)
+    assert (await service.source_test(changed))["passed"]
+    service.source_put(changed)
+    assert service.due_sources(store.now()) == ["city-agenda"]
+
+
+async def test_an_unused_sources_interval_alone_does_not_fetch_it_again(service, web, store, clock):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    service.source_put(json_spec(every="12h"))
+    assert service.due_sources(store.now()) == []
+
+
+async def test_from_now_waits_for_a_source_fetched_long_ago(service, web, store, clock):
+    await add_source(service, web)
+    await service.fetch_source("city-agenda")
+    clock.t += 3 * 86400  # unused since: never fetched again
+    with pytest.raises(ToolError, match="fetched again"):
+        service.monitor_put(AGENT, "news", ["city-agenda"], schedule="0 9 * * *", from_now=True)
+    assert service.due_sources(store.now()) == ["city-agenda"]
+    await service.fetch_source("city-agenda")
+    out = service.monitor_put(AGENT, "news", ["city-agenda"], schedule="0 9 * * *", from_now=True)
+    assert "from now" in out["from_now"]
