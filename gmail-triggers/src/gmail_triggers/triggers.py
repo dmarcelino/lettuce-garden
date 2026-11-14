@@ -9,7 +9,7 @@ import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from garden_common.text import one_line
+from lollo_common.text import one_line
 
 from .config import MAX_LISTED_MESSAGES
 from .matcher import Message

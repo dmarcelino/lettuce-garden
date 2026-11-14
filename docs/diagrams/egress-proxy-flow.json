@@ -7,7 +7,7 @@
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "93813779acb85f629c8f8d25219bbb8678bfdf24"
@@ -106,7 +106,7 @@
       "id": "receipts",
       "type": "database",
       "label": "Signed receipts",
-      "sublabel": "lettucectl receipts",
+      "sublabel": "lolloctl receipts",
       "pos": [
         400,
         300

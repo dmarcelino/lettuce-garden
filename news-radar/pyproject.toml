@@ -1,10 +1,10 @@
 [project]
-name = "garden-news-radar"
+name = "lollo-news-radar"
 version = "0.1.0"
-description = "Lettuce Garden sidecar: sources agents configure, checked on a timer, reported on a schedule"
+description = "Lollo Rozzo sidecar: sources agents configure, checked on a timer, reported on a schedule"
 requires-python = ">=3.12"
-# Pinned: this is an application image, rebuilt on every `lettucectl up`. Shared
-# libraries use the vault's and gmail-triggers' pins. garden-common is installed by
+# Pinned: this is an application image, rebuilt on every `lolloctl up`. Shared
+# libraries use the vault's and gmail-triggers' pins. lollo-common is installed by
 # the Dockerfile from its build context and deliberately not listed here, so pip
 # never looks for a package of that name on PyPI.
 dependencies = [
@@ -38,7 +38,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-garden_news_radar = ["templates/*.html", "static/*"]
+lollo_news_radar = ["templates/*.html", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

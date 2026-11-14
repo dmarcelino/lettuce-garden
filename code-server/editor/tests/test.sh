@@ -6,7 +6,7 @@
 set -uo pipefail
 
 EXT=/opt/code-server/lib/vscode/extensions
-HERE=/opt/lettuce-editor
+HERE=/opt/lollo-editor
 FAKES=$(mktemp -d)
 passed=0 failed=0
 
@@ -94,7 +94,7 @@ test_code_server_runs_from_the_image() {
 
 # The real code-server, before the fake replaces it: with --config it reads only the
 # image's file and writes none of its own on /data, where a file could set what
-# lettucectl check refuses on the command line.
+# lolloctl check refuses on the command line.
 test_code_server_reads_only_the_images_config() {
   local home pid started=
   home=$(mktemp -d)
@@ -117,7 +117,7 @@ test_the_terminal_prints_the_notice_and_opens_bash_through_agent_env() {
   cd /work/agent-2 || exit 1
   out=$(FAKE_LOG=$FAKES/term.log PATH=$FAKES:$PATH "$HERE/bin/exec-shell")
   grep -q "never store tokens or passwords here" <<<"$out" || fail "no notice"
-  eq "$(sed -n '1,4p' "$FAKES/term.log" | tr '\n' ' ')" "-F /opt/lettuce-editor/ssh_config -tt garden-code-server-exec "
+  eq "$(sed -n '1,4p' "$FAKES/term.log" | tr '\n' ' ')" "-F /opt/lollo-editor/ssh_config -tt lollo-code-server-exec "
   out=$(cd / && FAKE_LOG=$FAKES/term.log remote)
   eq "$out" "pwd=/work/agent-2
 [TERM=xterm-256color]
@@ -170,7 +170,7 @@ test_git_runs_in_the_shell_with_every_argument_intact() {
   cd "$dir" || exit 1
   FAKE_LOG=$FAKES/git.log PATH=$FAKES:$PATH "$HERE/bin/shell-git" -c a=b status -- 'f;rm -rf /' "\$(x)" '' 'a
 b'
-  eq "$(sed -n '1,4p' "$FAKES/git.log" | tr '\n' ' ')" "-F /opt/lettuce-editor/ssh_config -T garden-code-server-exec "
+  eq "$(sed -n '1,4p' "$FAKES/git.log" | tr '\n' ' ')" "-F /opt/lollo-editor/ssh_config -T lollo-code-server-exec "
   out=$(cd / && FAKE_LOG=$FAKES/git.log remote)
   eq "$out" "pwd=$dir
 $GIT_ENV
@@ -254,7 +254,7 @@ $GIT_ENV
 
 # The entrypoint, with the real code-server swapped for a fake that records its arguments.
 start_editor() {
-  /opt/lettuce-editor/entrypoint.sh --auth none /work >/dev/null
+  /opt/lollo-editor/entrypoint.sh --auth none /work >/dev/null
 }
 
 # VS Code opens $SHELL, then the login shell, when no setting names a terminal
@@ -284,7 +284,7 @@ test_the_entrypoint_makes_keys_once_and_trusts_only_its_own() {
   client=$(cat /data/ssh/id_ed25519.pub)
   host=$(cat /keys/ssh_host_ed25519_key.pub)
   eq "$(cat /keys/authorized_keys)" "$client"
-  eq "$(cat /data/ssh/known_hosts)" "garden-code-server-exec $(cut -d' ' -f1,2 <<<"$host")"
+  eq "$(cat /data/ssh/known_hosts)" "lollo-code-server-exec $(cut -d' ' -f1,2 <<<"$host")"
   eq "$(stat -c %a /data/ssh/id_ed25519 /keys/ssh_host_ed25519_key | tr '\n' ' ')" "600 600 "
   [[ ! -e /keys/id_ed25519 ]] || fail "the client key reached the shell's volume"
   start_editor

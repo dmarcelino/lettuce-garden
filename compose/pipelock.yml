@@ -1,7 +1,7 @@
-# Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
+# Merged by lolloctl on top of upstream/docker/compose.yml for every stack.
 # Pipelock (pipelock/, docs/egress-firewall.md): an egress proxy that checks
 # where the agents' tools connect and signs a receipt for every decision.
-# Opt-in behind the `garden-pipelock` profile; without it this file adds nothing.
+# Opt-in behind the `lollo-pipelock` profile; without it this file adds nothing.
 # compose/pipelock-proxy.yml, merged only with the profile, points the agents'
 # tools at it.
 #
@@ -10,15 +10,15 @@
 # No TLS interception: for HTTPS it sees the host name, not the content.
 #
 # Its data (the receipt signing key and the receipts) lives on a named volume
-# that no other service mounts; `lettucectl check` refuses a stack where one
+# that no other service mounts; `lolloctl check` refuses a stack where one
 # does, or where this service loses its hardening or gains a host path.
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
-  garden-pipelock:
-    profiles: ["garden-pipelock"]
+  lollo-pipelock:
+    profiles: ["lollo-pipelock"]
     build:
-      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/pipelock
-    image: ${GARDEN_IMAGE_PIPELOCK:-lettuce-pipelock:local}
+      context: ${LOLLO_HOME:?LOLLO_HOME is not set}/pipelock
+    image: ${LOLLO_IMAGE_PIPELOCK:-lollo-pipelock:local}
     environment:
       TZ: ${TZ:-UTC}
     volumes:
@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  # Deleted by `lettucectl remove` (compose down -v) with the stack. Not under
-  # stacks/<name>/, where agents could write; `lettucectl backup` copies it
+  # Deleted by `lolloctl remove` (compose down -v) with the stack. Not under
+  # stacks/<name>/, where agents could write; `lolloctl backup` copies it
   # from a one-off container that mounts it read-only.
   pipelock-data:

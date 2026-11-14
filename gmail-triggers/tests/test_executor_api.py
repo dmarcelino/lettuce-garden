@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from garden_common.executor import AGENTS_FRESH_SECONDS
+from lollo_common.executor import AGENTS_FRESH_SECONDS
 from starlette.testclient import TestClient
 
 from gmail_triggers.app import create_app
@@ -18,7 +18,7 @@ AUTH = {"authorization": f"Bearer {TOKEN}"}
 @pytest.fixture
 def api(env, authenticator):
     app = create_app(env.store, env.google, authenticator, TOKEN)
-    with TestClient(app, base_url="http://garden-gmail-triggers:8000") as c:
+    with TestClient(app, base_url="http://lollo-gmail-triggers:8000") as c:
         yield c
 
 
@@ -104,14 +104,14 @@ def test_settings_refuse_a_missing_or_malformed_token():
         "CF_ACCESS_TEAM_DOMAIN": "team1",
         "CF_ACCESS_AUD": "aud1",
         "ALLOWED_USERS": "alfred@gmail.com",
-        "PUBLIC_ORIGIN": "https://alfred-garden.example.com",
+        "PUBLIC_ORIGIN": "https://alfred-lollo.example.com",
     }
     for token in ("", "abc", TOKEN.upper(), TOKEN + "0", "g" * 64):
         with pytest.raises(ConfigError):
-            Settings.from_env({**base, "GARDEN_EXECUTOR_TOKEN": token})
-    settings = Settings.from_env({**base, "GARDEN_EXECUTOR_TOKEN": TOKEN})
+            Settings.from_env({**base, "LOLLO_EXECUTOR_TOKEN": token})
+    settings = Settings.from_env({**base, "LOLLO_EXECUTOR_TOKEN": TOKEN})
     assert settings.executor_token == TOKEN and TOKEN not in repr(settings)
-    assert not hasattr(settings, "garden_profiles")
+    assert not hasattr(settings, "lollo_profiles")
 
 
 # -- requests and results ---------------------------------------------------------

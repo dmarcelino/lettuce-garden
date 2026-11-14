@@ -1,0 +1,16 @@
+# The lolloctl image takes only what lolloctl reads at run time (its Dockerfile).
+*
+!lolloctl
+!lib
+!compose
+!agent-skills
+!config.env.example
+!RELEASE
+!release/images
+!scripts/dns-preflight.sh
+!landing/executor/run.mjs
+!doc-tools
+!code-server/exec
+**/__pycache__
+**/*.pyc
+**/.pytest_cache

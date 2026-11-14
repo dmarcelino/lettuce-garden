@@ -7,7 +7,7 @@
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
@@ -17,20 +17,20 @@
     {
       "id": "ctl",
       "type": "external",
-      "label": "lettucectl",
+      "label": "lolloctl",
       "sublabel": "up, profiles, add, mcp",
       "pos": [40, 250],
       "size": [170, 64],
       "sources": [
-        { "path": "lettucectl", "line": 390, "end_line": 402, "label": "up_stack: volume and network first" },
-        { "path": "lettucectl", "line": 504, "end_line": 576, "label": "sync_doc_tools" },
-        { "path": "lettucectl", "line": 635, "end_line": 651, "label": "mcp_servers, refresh_mcp_skill" }
+        { "path": "lolloctl", "line": 390, "end_line": 402, "label": "up_stack: volume and network first" },
+        { "path": "lolloctl", "line": 504, "end_line": 576, "label": "sync_doc_tools" },
+        { "path": "lolloctl", "line": 635, "end_line": 651, "label": "mcp_servers, refresh_mcp_skill" }
       ]
     },
     {
       "id": "image",
       "type": "external",
-      "label": "lettuce-doc-tools:<tag>",
+      "label": "lollo-doc-tools:<tag>",
       "sublabel": "FROM scratch, never run",
       "tag": "tag = content hash",
       "pos": [300, 40],
@@ -38,7 +38,7 @@
       "sources": [
         { "path": "doc-tools/Dockerfile", "line": 1, "end_line": 6, "label": "what the image holds" },
         { "path": "doc-tools/Dockerfile", "line": 66, "end_line": 69, "label": "only the tree" },
-        { "path": "lettucectl", "line": 418, "end_line": 425, "label": "ensure_doc_tools_image" }
+        { "path": "lolloctl", "line": 418, "end_line": 425, "label": "ensure_doc_tools_image" }
       ]
     },
     {
@@ -49,21 +49,21 @@
       "pos": [600, 40],
       "size": [185, 64],
       "sources": [
-        { "path": "lettucectl", "line": 444, "end_line": 482, "label": "fill_doc_tools_volume" },
-        { "path": "lettucectl", "line": 1455, "end_line": 1456, "label": "BACKUP_RUN options" }
+        { "path": "lolloctl", "line": 444, "end_line": 482, "label": "fill_doc_tools_volume" },
+        { "path": "lolloctl", "line": 1455, "end_line": 1456, "label": "BACKUP_RUN options" }
       ]
     },
     {
       "id": "volume",
       "type": "database",
-      "label": "lettuce-doc-tools-<tag>",
+      "label": "lollo-doc-tools-<tag>",
       "sublabel": "one per host, marker written last",
       "pos": [930, 40],
       "size": [200, 64],
       "sources": [
         { "path": "compose/doc-tools.yml", "line": 5, "end_line": 12, "label": "shared, external volume" },
-        { "path": "lettucectl", "line": 410, "end_line": 416, "label": "label and marker" },
-        { "path": "lettucectl", "line": 427, "end_line": 442, "label": "host-wide lock" }
+        { "path": "lolloctl", "line": 410, "end_line": 416, "label": "label and marker" },
+        { "path": "lolloctl", "line": 427, "end_line": 442, "label": "host-wide lock" }
       ]
     },
     {
@@ -74,7 +74,7 @@
       "pos": [370, 250],
       "size": [170, 64],
       "sources": [
-        { "path": "lettucectl", "line": 641, "end_line": 651, "label": "restarted alone after a list change" },
+        { "path": "lolloctl", "line": 641, "end_line": 651, "label": "restarted alone after a list change" },
         { "path": "lib/mcp-servers.mjs", "line": 7, "end_line": 15, "label": "the list is the BFF's" }
       ]
     },
@@ -112,7 +112,7 @@
       "size": [200, 64],
       "sources": [
         { "path": "lib/mcp-servers.mjs", "line": 26, "end_line": 53, "label": "office and pdf entries" },
-        { "path": "lettucectl", "line": 587, "end_line": 590, "label": "file and markers" }
+        { "path": "lolloctl", "line": 587, "end_line": 590, "label": "file and markers" }
       ]
     },
     {
@@ -145,7 +145,7 @@
     },
     {
       "kind": "region",
-      "label": "lettuce_shared (one per host)",
+      "label": "lollo_shared (one per host)",
       "wraps": ["gotenberg"],
       "pad": 16
     }
@@ -154,9 +154,9 @@
     { "from": "ctl", "to": "image", "label": "docker build if missing" },
     { "from": "image", "to": "fill", "label": "docker cp | tar" },
     { "from": "fill", "to": "volume", "label": "untar, then marker", "variant": "emphasis" },
-    { "from": "volume", "to": "servers", "label": "read-only at /opt/lettuce-doc-tools", "variant": "emphasis" },
+    { "from": "volume", "to": "servers", "label": "read-only at /opt/lollo-doc-tools", "variant": "emphasis" },
     { "from": "app", "to": "servers", "label": "letta mcp call", "variant": "emphasis" },
-    { "from": "servers", "to": "gotenberg", "label": "pdf uploads, lettuce-doc-tools-<name>", "variant": "security" },
+    { "from": "servers", "to": "gotenberg", "label": "pdf uploads, lollo-doc-tools-<name>", "variant": "security" },
     { "from": "ctl", "to": "bff", "label": "restart --no-deps" },
     { "from": "ctl", "to": "settings", "label": "mcp: mcp-servers.mjs" },
     { "from": "app", "to": "settings", "label": "reads office, pdf" }
@@ -164,18 +164,18 @@
   "cards": [
     {
       "dot": "emerald",
-      "title": "Owned by lettucectl, not Compose",
+      "title": "Owned by lolloctl, not Compose",
       "items": [
-        "The image, the volume and each stack's internal network are made by lettucectl; compose/doc-tools.yml declares the volume and network external, so down -v never removes them",
-        "sync_doc_tools starts the shared Gotenberg (Compose project lettuce_shared), connects it with the alias gotenberg to every complete stack's internal, labelled network, and deletes stale networks and volumes",
+        "The image, the volume and each stack's internal network are made by lolloctl; compose/doc-tools.yml declares the volume and network external, so down -v never removes them",
+        "sync_doc_tools starts the shared Gotenberg (Compose project lollo_shared), connects it with the alias gotenberg to every complete stack's internal, labelled network, and deletes stale networks and volumes",
         "mcp adds office and pdf to Settings -> MCP once per stack (DOC_TOOLS_MCP_REGISTERED), then restarts the BFF so the mcp-servers skill names them"
       ]
     },
     {
       "dot": "slate",
-      "title": "Guarded by lettucectl check",
+      "title": "Guarded by lolloctl check",
       "items": [
-        "Only the app-server mounts the tools' volume, read-only at /opt/lettuce-doc-tools, and only it joins the doc-tools network, keeping its default network",
+        "Only the app-server mounts the tools' volume, read-only at /opt/lollo-doc-tools, and only it joins the doc-tools network, keeping its default network",
         "The doc-tools network must be internal and labelled for this stack",
         "Gotenberg: hardened, non-root, no ports, no mounts, internal networks only, and every flag that stops a document fetching URLs"
       ]

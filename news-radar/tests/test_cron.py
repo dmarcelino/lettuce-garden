@@ -4,8 +4,8 @@ from datetime import date, datetime
 
 import pytest
 
-from garden_news_radar.config import default_schedule, parse_duration
-from garden_news_radar.cron import Schedule, ScheduleError, max_fires_per_day
+from lollo_news_radar.config import default_schedule, parse_duration
+from lollo_news_radar.cron import Schedule, ScheduleError, max_fires_per_day
 
 
 def at(text: str) -> datetime:

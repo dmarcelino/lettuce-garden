@@ -7,7 +7,7 @@
     "quality_profile": "showcase",
     "locale": "en",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
@@ -39,7 +39,7 @@
       "id": "cf-edge",
       "type": "security",
       "label": "Cloudflare Access",
-      "sublabel": "garden's own Access app",
+      "sublabel": "lollo's own Access app",
       "pos": [
         210,
         220
@@ -125,7 +125,7 @@
     {
       "id": "news-radar",
       "type": "backend",
-      "label": "garden-news-radar",
+      "label": "lollo-news-radar",
       "sublabel": "page, /mcp, fetcher, schedules",
       "pos": [
         790,
@@ -143,13 +143,13 @@
           "label": "service and hardening"
         },
         {
-          "path": "news-radar/src/garden_news_radar/app.py",
+          "path": "news-radar/src/lollo_news_radar/app.py",
           "line": 296,
           "end_line": 302,
           "label": "page, executor routes, /mcp"
         },
         {
-          "path": "news-radar/src/garden_news_radar/service.py",
+          "path": "news-radar/src/lollo_news_radar/service.py",
           "line": 423,
           "label": "fire: a report only when something is new"
         }
@@ -158,7 +158,7 @@
     {
       "id": "executor",
       "type": "backend",
-      "label": "garden executor",
+      "label": "lollo executor",
       "sublabel": "run.mjs --news-radar, every minute",
       "pos": [
         1145,
@@ -170,13 +170,13 @@
       ],
       "sources": [
         {
-          "path": "garden/executor/run.mjs",
+          "path": "landing/executor/run.mjs",
           "line": 33,
           "end_line": 36,
           "label": "QUEUES"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 283,
           "label": "executor_cron"
         }
@@ -197,7 +197,7 @@
       ],
       "sources": [
         {
-          "path": "news-radar/src/garden_news_radar/store.py",
+          "path": "news-radar/src/lollo_news_radar/store.py",
           "line": 1,
           "end_line": 4,
           "label": "what it keeps"
@@ -205,7 +205,7 @@
         {
           "path": "lib/common.sh",
           "line": 787,
-          "label": "mounted by garden-news-radar only"
+          "label": "mounted by lollo-news-radar only"
         }
       ]
     },
@@ -224,7 +224,7 @@
       ],
       "sources": [
         {
-          "path": "news-radar/src/garden_news_radar/fetch.py",
+          "path": "news-radar/src/lollo_news_radar/fetch.py",
           "line": 95,
           "label": "PublicOnlyBackend"
         }
@@ -301,7 +301,7 @@
   "boundaries": [
     {
       "kind": "region",
-      "label": "Stack lettuce-<name>: one Docker Compose project per person",
+      "label": "Stack lollo-<name>: one Docker Compose project per person",
       "wraps": [
         "cloudflared",
         "bff",
@@ -323,17 +323,17 @@
   "cards": [
     {
       "dot": "emerald",
-      "title": "garden-news-radar (stack network)",
+      "title": "lollo-news-radar (stack network)",
       "items": [
-        "Page at /news-radar/ on the garden host: an Access JWT of the garden's own application, Fetch Metadata, CSRF and Origin on every POST",
-        "/mcp for agents: the host garden-news-radar only, no Origin; the tunnel never routes it",
+        "Page at /news-radar/ on the lollo host: an Access JWT of the lollo's own application, Fetch Metadata, CSRF and Origin on every POST",
+        "/mcp for agents: the host lollo-news-radar only, no Origin; the tunnel never routes it",
         "Fetches public addresses only, honours robots.txt, runs no script; no model",
         "Never connects to the app-server; uid 10002, read-only, no capabilities"
       ]
     },
     {
       "dot": "violet",
-      "title": "Garden executor (inside the app-server)",
+      "title": "Lollo executor (inside the app-server)",
       "items": [
         "With --news-radar, claims queued reports from /executor/v1/ with the stack's token",
         "Runs letta cron add --once from an argument array; posts results, the agent list and a heartbeat",
@@ -342,10 +342,10 @@
     },
     {
       "dot": "amber",
-      "title": "lettucectl (host)",
+      "title": "lolloctl (host)",
       "items": [
-        "compose/news-radar.yml behind the garden-news-radar profile; check_news_radar keeps it hardened",
-        "lettucectl mcp registers the News Radar server; lettucectl skills installs news-radar-sources",
+        "compose/news-radar.yml behind the lollo-news-radar profile; check_news_radar keeps it hardened",
+        "lolloctl mcp registers the News Radar server; lolloctl skills installs news-radar-sources",
         "up copies the NEWS_RADAR_* settings from config.env; backup copies news-radar-data"
       ]
     },
@@ -355,7 +355,7 @@
       "items": [
         "A report is queued only at a schedule, when something is new, within the daily cap per agent",
         "Website text reaches the agent between markers, as data; a site can't write the end marker",
-        "Left out: the garden landing page, Gmail triggers, the vault, the code editor"
+        "Left out: the lollo landing page, Gmail triggers, the vault, the code editor"
       ]
     }
   ]

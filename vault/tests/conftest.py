@@ -7,13 +7,13 @@ import anyio
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from garden_common.auth import Authenticator
+from lollo_common.auth import Authenticator
 
-from garden_vault.config import Settings
-from garden_vault.crypto import KdfParams
-from garden_vault.push import Pusher
-from garden_vault.service import Service
-from garden_vault.vault import Vault, build_fields
+from lollo_vault.config import Settings
+from lollo_vault.crypto import KdfParams
+from lollo_vault.push import Pusher
+from lollo_vault.service import Service
+from lollo_vault.vault import Vault, build_fields
 
 # Deterministic fakes; tests that can see service output assert they never leak.
 SECRET = "TEST_SECRET_DO_NOT_USE_938742"
@@ -21,10 +21,10 @@ STREET = "Rua Falsa 123"
 CARD = "4111111111114242"
 PASSPHRASE = "correct horse battery staple"
 EMAIL = "alfred@gmail.com"
-ORIGIN = "https://alfred-garden.example.com"
+ORIGIN = "https://alfred-lollo.example.com"
 
 # What a browser sends when a person opens a page or posts its form (Fetch
-# Metadata), and when a page's own script calls fetch(); see garden_common.auth.check_fetch.
+# Metadata), and when a page's own script calls fetch(); see lollo_common.auth.check_fetch.
 NAVIGATE = {"sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-site": "same-origin"}
 SCRIPT_FETCH = {"sec-fetch-mode": "cors", "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin"}
 FAST_KDF = KdfParams(n=2**10, r=8, p=1)

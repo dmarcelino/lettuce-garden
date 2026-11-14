@@ -9,8 +9,8 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SERVER_IMAGE=busybox:1.37.0
 CLIENT_IMAGE=curlimages/curl:8.11.1
-image=lettuce-pipelock:test
-id=lettuce-pipelock-test-$$
+image=lollo-pipelock:test
+id=lollo-pipelock-test-$$
 tmp=$(mktemp -d)
 trap 'docker rm -f "$id-web" "$id" >/dev/null 2>&1; docker network rm "$id" >/dev/null 2>&1
   docker volume rm "$id" >/dev/null 2>&1; rm -rf "$tmp"' EXIT
@@ -35,17 +35,17 @@ docker volume create "$id" >/dev/null
 # The same server under a second name, which pipelock does not trust.
 docker run -d --name "$id-web" --network "$id" --network-alias web-trusted --network-alias web-private \
   -v "$tmp/www:/www:ro" "$SERVER_IMAGE" httpd -f -p 80 -h /www >/dev/null
-docker run -d --name "$id" --network "$id" --network-alias garden-pipelock -v "$id:/data" \
+docker run -d --name "$id" --network "$id" --network-alias lollo-pipelock -v "$id:/data" \
   -v "$tmp/pipelock.yaml:/etc/pipelock/pipelock.yaml:ro" "$image" >/dev/null
 
 # fetch URL -> "<status> <body>" of pipelock's /fetch for URL
 fetch() {
-  docker run --rm --network "$id" "$CLIENT_IMAGE" -s -w '\n%{http_code}' --get http://garden-pipelock:8888/fetch \
+  docker run --rm --network "$id" "$CLIENT_IMAGE" -s -w '\n%{http_code}' --get http://lollo-pipelock:8888/fetch \
     --data-urlencode "url=$1" | { body=$(cat); printf '%s %s\n' "${body##*$'\n'}" "${body%$'\n'*}"; }
 }
 
 for _ in $(seq 30); do
-  docker run --rm --network "$id" "$CLIENT_IMAGE" -sf http://garden-pipelock:8888/health >/dev/null 2>&1 && break
+  docker run --rm --network "$id" "$CLIENT_IMAGE" -sf http://lollo-pipelock:8888/health >/dev/null 2>&1 && break
   sleep 1
 done
 

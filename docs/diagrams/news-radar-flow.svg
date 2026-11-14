@@ -1065,15 +1065,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
 
         <!-- Participants -->
-        <g id="node-you" data-node-id="you" data-node-label="You" tabindex="0" role="button" aria-label="Focus You, chat, and &lt;garden&gt;/news-radar/, Sequence participant" aria-pressed="false" data-node-kind="external" data-node-sublabel="chat, and &lt;garden&gt;/news-radar/" data-node-context="Sequence participant">
-          <title>You · chat, and &lt;garden&gt;/news-radar/ · Sequence participant</title>
+        <g id="node-you" data-node-id="you" data-node-label="You" tabindex="0" role="button" aria-label="Focus You, chat, and &lt;lollo&gt;/news-radar/, Sequence participant" aria-pressed="false" data-node-kind="external" data-node-sublabel="chat, and &lt;lollo&gt;/news-radar/" data-node-context="Sequence participant">
+          <title>You · chat, and &lt;lollo&gt;/news-radar/ · Sequence participant</title>
           <rect x="62" y="72" width="135" height="60" rx="6" class="c-mask"/>
           <rect x="62" y="72" width="135" height="60" rx="6" class="c-external" data-animate="node" style="--step: 0; --flow-node-name: archify-relay-node-0;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="person" class="semantic-sigil s-external" transform="translate(68 78) scale(0.6875)">
             <circle cx="8" cy="4.5" r="2.5"/><path d="M3 14v-2a5 5 0 0 1 10 0v2"/>
           </g>
           <text data-node-label="" x="129.5" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">You</text>
-          <text x="129.5" y="122" class="t-muted" font-size="7" text-anchor="middle">chat, and &lt;garden&gt;/news-radar/</text>
+          <text x="129.5" y="122" class="t-muted" font-size="7" text-anchor="middle">chat, and &lt;lollo&gt;/news-radar/</text>
         </g>
 
         <g id="node-agent" data-node-id="agent" data-node-label="Your agent" tabindex="0" role="button" aria-label="Focus Your agent, sets it up, writes reports, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="sets it up, writes reports" data-node-context="Sequence participant">
@@ -1110,14 +1110,14 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <text x="634.0999999999999" y="122" class="t-muted" font-size="7" text-anchor="middle">feeds, data, pages</text>
         </g>
 
-        <g id="node-executor" data-node-id="executor" data-node-label="Garden executor" tabindex="0" role="button" aria-label="Focus Garden executor, every minute, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="every minute" data-node-context="Sequence participant">
-          <title>Garden executor · every minute · Sequence participant</title>
+        <g id="node-executor" data-node-id="executor" data-node-label="Lollo executor" tabindex="0" role="button" aria-label="Focus Lollo executor, every minute, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="every minute" data-node-context="Sequence participant">
+          <title>Lollo executor · every minute · Sequence participant</title>
           <rect x="734.8" y="72" width="135" height="60" rx="6" class="c-mask"/>
           <rect x="734.8" y="72" width="135" height="60" rx="6" class="c-backend" data-animate="node" style="--step: 4; --flow-node-name: archify-relay-node-4;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(740.8 78) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="802.3" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Garden executor</text>
+          <text data-node-label="" x="802.3" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Lollo executor</text>
           <text x="802.3" y="122" class="t-muted" font-size="7" text-anchor="middle">every minute</text>
         </g>
 

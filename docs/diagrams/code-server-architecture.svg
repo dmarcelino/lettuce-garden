@@ -1068,7 +1068,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <!-- Boundaries (behind everything) -->
         <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Cloudflare" x="236" y="16" width="178" height="106" rx="12" class="c-region" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="Compose project lettuce-&lt;name&gt;" x="16" y="186" width="1168" height="446" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="Compose project lollo-&lt;name&gt;" x="16" y="186" width="1168" height="446" rx="12" class="c-region" stroke-width="1"/>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="2" data-composition-frame-label="shared network namespace" x="28" y="356" width="174" height="276" rx="8" class="c-security-group" stroke-width="1"/>
 
@@ -1081,7 +1081,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
         <g data-graph-role="automatic-crossover" style="--step:1">
           <path data-graph-role="automatic-crossover-underlay" d="M 325 102 L 325 210" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="access" data-edge-to="cloudflared" data-edge-label="tunnel + garden JWT" data-edge-key="1" data-composition-points="325,102;325,210" data-composition-crossover="halo" data-composition-independent="true" d="M 325 102 L 325 210" class="a-emphasis" data-animate="edge" style="--step: 1;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-edge-from="access" data-edge-to="cloudflared" data-edge-label="tunnel + lollo JWT" data-edge-key="1" data-composition-points="325,102;325,210" data-composition-crossover="halo" data-composition-independent="true" d="M 325 102 L 325 210" class="a-emphasis" data-animate="edge" style="--step: 1;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:2">
           <path data-graph-role="automatic-crossover-underlay" d="M 400 241 L 700 241" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -1089,7 +1089,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
         <g data-graph-role="automatic-crossover" style="--step:3">
           <path data-graph-role="automatic-crossover-underlay" d="M 325 272 L 325 380" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="cloudflared" data-edge-to="garden" data-edge-label="/ and /assets/" data-edge-key="3" data-composition-points="325,272;325,380" data-composition-crossover="halo" data-composition-independent="true" d="M 325 272 L 325 380" class="a-default" data-animate="edge" style="--step: 3;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-edge-from="cloudflared" data-edge-to="lollo" data-edge-label="/ and /assets/" data-edge-key="3" data-composition-points="325,272;325,380" data-composition-crossover="halo" data-composition-independent="true" d="M 325 272 L 325 380" class="a-default" data-animate="edge" style="--step: 3;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:4">
           <path data-graph-role="automatic-crossover-underlay" d="M 250 256 L 182 256 Q 174 256 174 264 L 174 380" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -1141,8 +1141,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
 
         <!-- Components -->
-        <g id="node-browser" data-node-id="browser" data-node-label="Person's browser" tabindex="0" role="button" aria-label="Focus Person's browser, garden host tab, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="garden host tab" data-node-context="Architecture component">
-          <title>Person's browser · garden host tab · Architecture component</title>
+        <g id="node-browser" data-node-id="browser" data-node-label="Person's browser" tabindex="0" role="button" aria-label="Focus Person's browser, lollo host tab, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="lollo host tab" data-node-context="Architecture component">
+          <title>Person's browser · lollo host tab · Architecture component</title>
           <rect x="40" y="40" width="130" height="62" rx="8" class="c-mask"/>
           <rect x="40" y="40" width="130" height="62" rx="8" class="c-external" data-animate="node" style="--step: 0; --flow-node-name: archify-relay-node-0;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(46 46) scale(0.6875)">
@@ -1150,11 +1150,11 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
           <text data-node-label="" x="105" y="69" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Person's browser</text>
-        <text x="105" y="85" class="t-muted" font-size="9" text-anchor="middle">garden host tab</text>
+        <text x="105" y="85" class="t-muted" font-size="9" text-anchor="middle">lollo host tab</text>
         </g>
 
-        <g id="node-access" data-node-id="access" data-node-label="Cloudflare Access" tabindex="0" role="button" aria-label="Focus Cloudflare Access, garden app, Google login, Cloudflare" aria-pressed="false" data-node-kind="security" data-node-sublabel="garden app, Google login" data-node-context="Cloudflare">
-          <title>Cloudflare Access · garden app, Google login · Cloudflare</title>
+        <g id="node-access" data-node-id="access" data-node-label="Cloudflare Access" tabindex="0" role="button" aria-label="Focus Cloudflare Access, lollo app, Google login, Cloudflare" aria-pressed="false" data-node-kind="security" data-node-sublabel="lollo app, Google login" data-node-context="Cloudflare">
+          <title>Cloudflare Access · lollo app, Google login · Cloudflare</title>
           <rect x="250" y="40" width="150" height="62" rx="8" class="c-mask"/>
           <rect x="250" y="40" width="150" height="62" rx="8" class="c-security" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-2;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(256 46) scale(0.6875)">
@@ -1162,11 +1162,11 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
           <text data-node-label="" x="325" y="69" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Cloudflare Access</text>
-        <text x="325" y="85" class="t-muted" font-size="9" text-anchor="middle">garden app, Google login</text>
+        <text x="325" y="85" class="t-muted" font-size="9" text-anchor="middle">lollo app, Google login</text>
         </g>
 
-        <g id="node-cloudflared" data-node-id="cloudflared" data-node-label="cloudflared" tabindex="0" role="button" aria-label="Focus cloudflared, tunnel container, Compose project lettuce-&lt;name&gt;" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="tunnel container" data-node-context="Compose project lettuce-&lt;name&gt;">
-          <title>cloudflared · tunnel container · Compose project lettuce-&lt;name&gt;</title>
+        <g id="node-cloudflared" data-node-id="cloudflared" data-node-label="cloudflared" tabindex="0" role="button" aria-label="Focus cloudflared, tunnel container, Compose project lollo-&lt;name&gt;" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="tunnel container" data-node-context="Compose project lollo-&lt;name&gt;">
+          <title>cloudflared · tunnel container · Compose project lollo-&lt;name&gt;</title>
           <rect x="250" y="210" width="150" height="62" rx="8" class="c-mask"/>
           <rect x="250" y="210" width="150" height="62" rx="8" class="c-cloud" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-8;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(256 216) scale(0.6875)">
@@ -1176,20 +1176,20 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="325" y="255" class="t-muted" font-size="9" text-anchor="middle">tunnel container</text>
         </g>
 
-        <g id="node-gate" data-node-id="gate" data-node-label="garden-code-server" tabindex="0" role="button" aria-label="Focus garden-code-server, gate: JWT, Origin, headers, Compose project lettuce-&lt;name&gt;" aria-pressed="false" data-node-kind="security" data-node-sublabel="gate: JWT, Origin, headers" data-node-context="Compose project lettuce-&lt;name&gt;">
-          <title>garden-code-server · gate: JWT, Origin, headers · Compose project lettuce-&lt;name&gt;</title>
+        <g id="node-gate" data-node-id="gate" data-node-label="lollo-code-server" tabindex="0" role="button" aria-label="Focus lollo-code-server, gate: JWT, Origin, headers, Compose project lollo-&lt;name&gt;" aria-pressed="false" data-node-kind="security" data-node-sublabel="gate: JWT, Origin, headers" data-node-context="Compose project lollo-&lt;name&gt;">
+          <title>lollo-code-server · gate: JWT, Origin, headers · Compose project lollo-&lt;name&gt;</title>
           <rect x="700" y="210" width="200" height="62" rx="8" class="c-mask"/>
           <rect x="700" y="210" width="200" height="62" rx="8" class="c-security" data-animate="node" style="--step: 3; --flow-node-name: archify-relay-node-10;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(706 216) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" x="800" y="239" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-code-server</text>
+          <text data-node-label="" x="800" y="239" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo-code-server</text>
         <text x="800" y="255" class="t-muted" font-size="9" text-anchor="middle">gate: JWT, Origin, headers</text>
         </g>
 
-        <g id="node-bff" data-node-id="bff" data-node-label="BFF" tabindex="0" role="button" aria-label="Focus BFF, Lettuce UI :8080, Compose project lettuce-&lt;name&gt; › shared network namespace" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="Lettuce UI :8080" data-node-context="Compose project lettuce-&lt;name&gt; › shared network namespace">
-          <title>BFF · Lettuce UI :8080 · Compose project lettuce-&lt;name&gt; › shared network namespace</title>
+        <g id="node-bff" data-node-id="bff" data-node-label="BFF" tabindex="0" role="button" aria-label="Focus BFF, Lettuce UI :8080, Compose project lollo-&lt;name&gt; › shared network namespace" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="Lettuce UI :8080" data-node-context="Compose project lollo-&lt;name&gt; › shared network namespace">
+          <title>BFF · Lettuce UI :8080 · Compose project lollo-&lt;name&gt; › shared network namespace</title>
           <rect x="40" y="380" width="150" height="62" rx="8" class="c-mask"/>
           <rect x="40" y="380" width="150" height="62" rx="8" class="c-frontend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-12;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(46 386) scale(0.6875)">
@@ -1202,8 +1202,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="115" y="425" class="t-muted" font-size="9" text-anchor="middle">Lettuce UI :8080</text>
         </g>
 
-        <g id="node-garden" data-node-id="garden" data-node-label="garden" tabindex="0" role="button" aria-label="Focus garden, landing page, agent links, Compose project lettuce-&lt;name&gt;" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="landing page, agent links" data-node-context="Compose project lettuce-&lt;name&gt;">
-          <title>garden · landing page, agent links · Compose project lettuce-&lt;name&gt;</title>
+        <g id="node-lollo" data-node-id="lollo" data-node-label="landing" tabindex="0" role="button" aria-label="Focus lollo, landing page, agent links, Compose project lollo-&lt;name&gt;" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="landing page, agent links" data-node-context="Compose project lollo-&lt;name&gt;">
+          <title>landing · landing page, agent links · Compose project lollo-&lt;name&gt;</title>
           <rect x="250" y="380" width="150" height="62" rx="8" class="c-mask"/>
           <rect x="250" y="380" width="150" height="62" rx="8" class="c-frontend" data-animate="node" style="--step: 4; --flow-node-name: archify-relay-node-11;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(256 386) scale(0.6875)">
@@ -1212,12 +1212,12 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" x="325" y="409" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden</text>
+          <text data-node-label="" x="325" y="409" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">landing</text>
         <text x="325" y="425" class="t-muted" font-size="9" text-anchor="middle">landing page, agent links</text>
         </g>
 
-        <g id="node-data" data-node-id="data" data-node-label="code-server-data" tabindex="0" role="button" aria-label="Focus code-server-data, settings, SSH key, Compose project lettuce-&lt;name&gt;" aria-pressed="false" data-node-kind="database" data-node-sublabel="settings, SSH key" data-node-context="Compose project lettuce-&lt;name&gt;">
-          <title>code-server-data · settings, SSH key · Compose project lettuce-&lt;name&gt;</title>
+        <g id="node-data" data-node-id="data" data-node-label="code-server-data" tabindex="0" role="button" aria-label="Focus code-server-data, settings, SSH key, Compose project lollo-&lt;name&gt;" aria-pressed="false" data-node-kind="database" data-node-sublabel="settings, SSH key" data-node-context="Compose project lollo-&lt;name&gt;">
+          <title>code-server-data · settings, SSH key · Compose project lollo-&lt;name&gt;</title>
           <rect x="460" y="380" width="150" height="62" rx="8" class="c-mask"/>
           <rect x="460" y="380" width="150" height="62" rx="8" class="c-database" data-animate="node" style="--step: 10; --flow-node-name: archify-relay-node-5;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(466 386) scale(0.6875)">
@@ -1228,8 +1228,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="535" y="425" class="t-muted" font-size="9" text-anchor="middle">settings, SSH key</text>
         </g>
 
-        <g id="node-sock" data-node-id="sock" data-node-label="code-server-sock" tabindex="0" role="button" aria-label="Focus code-server-sock, volume: editor.sock, Compose project lettuce-&lt;name&gt;" aria-pressed="false" data-node-kind="database" data-node-sublabel="volume: editor.sock" data-node-context="Compose project lettuce-&lt;name&gt;">
-          <title>code-server-sock · volume: editor.sock · Compose project lettuce-&lt;name&gt;</title>
+        <g id="node-sock" data-node-id="sock" data-node-label="code-server-sock" tabindex="0" role="button" aria-label="Focus code-server-sock, volume: editor.sock, Compose project lollo-&lt;name&gt;" aria-pressed="false" data-node-kind="database" data-node-sublabel="volume: editor.sock" data-node-context="Compose project lollo-&lt;name&gt;">
+          <title>code-server-sock · volume: editor.sock · Compose project lollo-&lt;name&gt;</title>
           <rect x="700" y="380" width="200" height="62" rx="8" class="c-mask"/>
           <rect x="700" y="380" width="200" height="62" rx="8" class="c-database" data-animate="node" style="--step: 7; --flow-node-name: archify-relay-node-3;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(706 386) scale(0.6875)">
@@ -1240,8 +1240,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="800" y="425" class="t-muted" font-size="9" text-anchor="middle">volume: editor.sock</text>
         </g>
 
-        <g id="node-keys" data-node-id="keys" data-node-label="code-exec-keys" tabindex="0" role="button" aria-label="Focus code-exec-keys, host key, authorized_keys, Compose project lettuce-&lt;name&gt;" aria-pressed="false" data-node-kind="database" data-node-sublabel="host key, authorized_keys" data-node-context="Compose project lettuce-&lt;name&gt;">
-          <title>code-exec-keys · host key, authorized_keys · Compose project lettuce-&lt;name&gt;</title>
+        <g id="node-keys" data-node-id="keys" data-node-label="code-exec-keys" tabindex="0" role="button" aria-label="Focus code-exec-keys, host key, authorized_keys, Compose project lollo-&lt;name&gt;" aria-pressed="false" data-node-kind="database" data-node-sublabel="host key, authorized_keys" data-node-context="Compose project lollo-&lt;name&gt;">
+          <title>code-exec-keys · host key, authorized_keys · Compose project lollo-&lt;name&gt;</title>
           <rect x="990" y="380" width="170" height="62" rx="8" class="c-mask"/>
           <rect x="990" y="380" width="170" height="62" rx="8" class="c-database" data-animate="node" style="--step: 11; --flow-node-name: archify-relay-node-6;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(996 386) scale(0.6875)">
@@ -1252,8 +1252,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="1075" y="425" class="t-muted" font-size="9" text-anchor="middle">host key, authorized_keys</text>
         </g>
 
-        <g id="node-appserver" data-node-id="appserver" data-node-label="app-server" tabindex="0" role="button" aria-label="Focus app-server, agents run as root, Compose project lettuce-&lt;name&gt; › shared network namespace" aria-pressed="false" data-node-kind="backend" data-node-sublabel="agents run as root" data-node-context="Compose project lettuce-&lt;name&gt; › shared network namespace">
-          <title>app-server · agents run as root · Compose project lettuce-&lt;name&gt; › shared network namespace</title>
+        <g id="node-appserver" data-node-id="appserver" data-node-label="app-server" tabindex="0" role="button" aria-label="Focus app-server, agents run as root, Compose project lollo-&lt;name&gt; › shared network namespace" aria-pressed="false" data-node-kind="backend" data-node-sublabel="agents run as root" data-node-context="Compose project lollo-&lt;name&gt; › shared network namespace">
+          <title>app-server · agents run as root · Compose project lollo-&lt;name&gt; › shared network namespace</title>
           <rect x="40" y="550" width="150" height="62" rx="8" class="c-mask"/>
           <rect x="40" y="550" width="150" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 6; --flow-node-name: archify-relay-node-13;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 556) scale(0.6875)">
@@ -1263,8 +1263,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="115" y="595" class="t-muted" font-size="9" text-anchor="middle">agents run as root</text>
         </g>
 
-        <g id="node-editor" data-node-id="editor" data-node-label="garden-code-server-editor" tabindex="0" role="button" aria-label="Focus garden-code-server-editor, code-server, Restricted Mode, Compose project lettuce-&lt;name&gt; › code-exec (internal network)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="code-server, Restricted Mode" data-node-context="Compose project lettuce-&lt;name&gt; › code-exec (internal network)">
-          <title>garden-code-server-editor · code-server, Restricted Mode · Compose project lettuce-&lt;name&gt; › code-exec (internal network)</title>
+        <g id="node-editor" data-node-id="editor" data-node-label="lollo-code-server-editor" tabindex="0" role="button" aria-label="Focus lollo-code-server-editor, code-server, Restricted Mode, Compose project lollo-&lt;name&gt; › code-exec (internal network)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="code-server, Restricted Mode" data-node-context="Compose project lollo-&lt;name&gt; › code-exec (internal network)">
+          <title>lollo-code-server-editor · code-server, Restricted Mode · Compose project lollo-&lt;name&gt; › code-exec (internal network)</title>
           <rect x="700" y="550" width="200" height="62" rx="8" class="c-mask"/>
           <rect x="700" y="550" width="200" height="62" rx="8" class="c-frontend" data-animate="node" style="--step: 7; --flow-node-name: archify-relay-node-1;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(706 556) scale(0.6875)">
@@ -1273,18 +1273,18 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" x="800" y="579" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-code-server-editor</text>
+          <text data-node-label="" x="800" y="579" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo-code-server-editor</text>
         <text x="800" y="595" class="t-muted" font-size="9" text-anchor="middle">code-server, Restricted Mode</text>
         </g>
 
-        <g id="node-shell" data-node-id="shell" data-node-label="garden-code-server-exec" tabindex="0" role="button" aria-label="Focus garden-code-server-exec, sshd on app-server image, Compose project lettuce-&lt;name&gt; › code-exec (internal network)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="sshd on app-server image" data-node-context="Compose project lettuce-&lt;name&gt; › code-exec (internal network)">
-          <title>garden-code-server-exec · sshd on app-server image · Compose project lettuce-&lt;name&gt; › code-exec (internal network)</title>
+        <g id="node-shell" data-node-id="shell" data-node-label="lollo-code-server-exec" tabindex="0" role="button" aria-label="Focus lollo-code-server-exec, sshd on app-server image, Compose project lollo-&lt;name&gt; › code-exec (internal network)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="sshd on app-server image" data-node-context="Compose project lollo-&lt;name&gt; › code-exec (internal network)">
+          <title>lollo-code-server-exec · sshd on app-server image · Compose project lollo-&lt;name&gt; › code-exec (internal network)</title>
           <rect x="990" y="550" width="170" height="62" rx="8" class="c-mask"/>
           <rect x="990" y="550" width="170" height="62" rx="8" class="c-backend" data-animate="node" style="--step: 9; --flow-node-name: archify-relay-node-4;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(996 556) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="1075" y="579" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-code-server-exec</text>
+          <text data-node-label="" x="1075" y="579" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo-code-server-exec</text>
         <text x="1075" y="595" class="t-muted" font-size="9" text-anchor="middle">sshd on app-server image</text>
         </g>
 
@@ -1317,15 +1317,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <rect x="193" y="51" width="34" height="14" rx="3" class="c-mask"/>
           <text x="210" y="61" class="t-edge-emphasis" font-size="8" text-anchor="middle">HTTPS</text>
         </g>
-        <g data-edge-from="access" data-edge-to="cloudflared" data-edge-label="tunnel + garden JWT" data-edge-key="1">
+        <g data-edge-from="access" data-edge-to="cloudflared" data-edge-label="tunnel + lollo JWT" data-edge-key="1">
           <rect x="217.79999999999998" y="149" width="101.2" height="14" rx="3" class="c-mask"/>
-          <text x="268.4" y="159" class="t-edge-emphasis" font-size="8" text-anchor="middle">tunnel + garden JWT</text>
+          <text x="268.4" y="159" class="t-edge-emphasis" font-size="8" text-anchor="middle">tunnel + lollo JWT</text>
         </g>
         <g data-edge-from="cloudflared" data-edge-to="gate" data-edge-label="/code-server/ :8000" data-edge-key="2">
           <rect x="499.4" y="221" width="101.2" height="14" rx="3" class="c-mask"/>
           <text x="550" y="231" class="t-edge-emphasis" font-size="8" text-anchor="middle">/code-server/ :8000</text>
         </g>
-        <g data-edge-from="cloudflared" data-edge-to="garden" data-edge-label="/ and /assets/" data-edge-key="3">
+        <g data-edge-from="cloudflared" data-edge-to="lollo" data-edge-label="/ and /assets/" data-edge-key="3">
           <rect x="241.79999999999998" y="319" width="77.2" height="14" rx="3" class="c-mask"/>
           <text x="280.4" y="329" class="t-edge-default" font-size="8" text-anchor="middle">/ and /assets/</text>
         </g>
@@ -1384,9 +1384,9 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <text data-boundary-label="" x="244" y="33" class="t-cloud" font-size="9" font-weight="600">Cloudflare</text>
         </g>
 
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="region" data-composition-frame-label="Compose project lettuce-&lt;name&gt;">
+        <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="region" data-composition-frame-label="Compose project lollo-&lt;name&gt;">
           <rect data-graph-role="structural-frame-label-mask" x="20" y="190" width="172" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="24" y="203" class="t-cloud" font-size="9" font-weight="600">Compose project lettuce-&lt;name&gt;</text>
+          <text data-boundary-label="" x="24" y="203" class="t-cloud" font-size="9" font-weight="600">Compose project lollo-&lt;name&gt;</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="2" data-composition-frame-kind="security-group" data-composition-frame-label="shared network namespace">

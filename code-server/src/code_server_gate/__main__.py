@@ -6,7 +6,7 @@ import logging
 import sys
 
 import uvicorn
-from garden_common.auth import Authenticator
+from lollo_common.auth import Authenticator
 
 from .app import create_app, editor_client, unix_socket_connect
 from .config import ConfigError, Settings

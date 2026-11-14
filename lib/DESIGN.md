@@ -7,7 +7,7 @@ below, and released. The plan below stays as the design record. Where the build 
   showed that building a service with `additional_contexts: base: service:app-server` makes Compose
   build the app-server too, over a pulled image. `compose/code-server.yml` names it instead
   (`docker-image://${APP_SERVER_IMAGE}`, which BuildKit took from the local store without a
-  registry), lettucectl passes the name (`app_server_image`), and `check_images` compares it with
+  registry), lolloctl passes the name (`app_server_image`), and `check_images` compares it with
   the render. `up` builds upstream's services first, when they are built here, in a call of their
   own.
 - **The Docker CLI, Compose and Buildx come from Docker's `docker:<version>-cli` image**, pinned by
@@ -23,12 +23,12 @@ below, and released. The plan below stays as the design record. Where the build 
 - **`toolbox` in release mode:** the wrapper runs the toolbox file's `secret` lines on the host
   too, and passes their values by name; a toolbox mount outside the operator's home is refused,
   since only the home is mounted.
-- **`lettucectl dns-preflight`** runs `scripts/dns-preflight.sh` (step 2.6 of the Cloudflare guide),
+- **`lolloctl dns-preflight`** runs `scripts/dns-preflight.sh` (step 2.6 of the Cloudflare guide),
   which the image carries, so a release install needs no clone for it either.
 - **`LETTA_IMAGE_NS` stays in `config.env`.** Rather than copied into every `stack.env` (which
   would go stale until the next `up`), `compose_env` passes it on every call, as it passes
-  `LETTUCE_HOME`; Compose prefers it to the `--env-file`'s.
-- **`lettucectl version`** names the release, its tested Lettuce tag, and the backup image the
+  `LOLLO_HOME`; Compose prefers it to the `--env-file`'s.
+- **`lolloctl version`** names the release, its tested Lettuce tag, and the backup image the
   restore steps use.
 - **The GHCR packages needed no step by hand.** `publish.yml`'s first run (`v0.1.0-rc.1`)
   created them public, as the repository is, so hosts pull without credentials; the release
@@ -43,54 +43,54 @@ are still open.
 
 ## Goal
 
-Today an admin installs lettuce-garden by cloning this repo, and the clone does four jobs at once:
+Today an admin installs lollo-rozzo by cloning this repo, and the clone does four jobs at once:
 
-1. **It ships the CLI:** `lettucectl` and `lib/`, which need `git`, `curl`, `jq`, `openssl`, `dig`
+1. **It ships the CLI:** `lolloctl` and `lib/`, which need `git`, `curl`, `jq`, `openssl`, `dig`
    and Docker Compose >= 2.24 on the host.
-2. **It holds the build contexts** of every garden image, all built on the host by `lettucectl up`
+2. **It holds the build contexts** of every lollo image, all built on the host by `lolloctl up`
    (`compose up -d --build`), which is why a first boot takes minutes.
-3. **It holds the files lettucectl uses at run time:** the overlays in `compose/`, `agent-skills/`,
-   `garden/executor/run.mjs`, `lib/mcp-servers.mjs` and `config.env.example`.
+3. **It holds the files lolloctl uses at run time:** the overlays in `compose/`, `agent-skills/`,
+   `landing/executor/run.mjs`, `lib/mcp-servers.mjs` and `config.env.example`.
 4. **It holds the instance data:** `config.env`, `.secrets/`, `upstream/` (a second clone, Lettuce
-   at `LETTUCE_REF`) and `stacks/`. Upgrading lettuce-garden is a `git pull` over the data.
+   at `LETTUCE_REF`) and `stacks/`. Upgrading lollo-rozzo is a `git pull` over the data.
 
 After this change:
 
 - The host needs Docker Engine, and one downloaded file: the wrapper script.
-- `lettucectl` runs from a published image, pinned by digest, which carries every file the CLI uses.
-- The garden's images are pulled, not built, except the two that cannot be published (below).
+- `lolloctl` runs from a published image, pinned by digest, which carries every file the CLI uses.
+- The lollo's images are pulled, not built, except the two that cannot be published (below).
 - All instance data lives in one data directory, apart from the code.
 - Who has a stack, and with which addresses, is one file, `stacks.conf`, applied with
-  `lettucectl apply`.
-- `lettucectl init` walks the admin through the one-time Cloudflare and Google setup.
+  `lolloctl apply`.
+- `lolloctl init` walks the admin through the one-time Cloudflare and Google setup.
 - An upgrade restarts only the sidecars whose image changed, so a vault is locked only when the
   vault itself changed.
 
-A clone stays the way to develop: from a clone, `lettucectl` builds every image locally, as today,
+A clone stays the way to develop: from a clone, `lolloctl` builds every image locally, as today,
 against a data directory of its own.
 
 ## Decisions
 
 | Question | Decision |
 |---|---|
-| How is it distributed? | A `lettucectl` image on GHCR, and a wrapper script attached to each GitHub release that names that image by digest. No tarball release, no packages. |
-| What is published? | Every garden image but `doc-tools` and the code editor's shell, for `linux/amd64` and `linux/arm64`. |
+| How is it distributed? | A `lolloctl` image on GHCR, and a wrapper script attached to each GitHub release that names that image by digest. No tarball release, no packages. |
+| What is published? | Every lollo image but `doc-tools` and the code editor's shell, for `linux/amd64` and `linux/arm64`. |
 | Where are images published? | A new `.github/workflows/publish.yml`, on `v*` tags only, after every check of `ci.yml` passes. No `latest`. |
 | How are images named? | By a hash of what goes into each one, plus its digest; never by the release number. An image that did not change keeps its name, so its container is not recreated. |
-| How is Lettuce fetched? | The source archive of the tag `LETTUCE_REF`, over HTTPS; no `git clone`. Each garden release names the Lettuce tag it was tested with. |
-| Is the people list declarative? | Yes: `stacks.conf` and `lettucectl apply`. `add`, `users` and `remove` keep the file in step, so `apply` never undoes them. A stack missing from the file is reported, never removed. |
-| Are profiles declarative? | No: they keep changing only through `lettucectl profiles` ([lib/README.md](README.md#rules)). `apply` reports a stack out of step, and never changes a profile. |
+| How is Lettuce fetched? | The source archive of the tag `LETTUCE_REF`, over HTTPS; no `git clone`. Each lollo release names the Lettuce tag it was tested with. |
+| Is the people list declarative? | Yes: `stacks.conf` and `lolloctl apply`. `add`, `users` and `remove` keep the file in step, so `apply` never undoes them. A stack missing from the file is reported, never removed. |
+| Are profiles declarative? | No: they keep changing only through `lolloctl profiles` ([lib/README.md](README.md#rules)). `apply` reports a stack out of step, and never changes a profile. |
 | A daemon that reconciles on its own? | No: `apply` is a command the admin runs. |
 | Terraform or OpenTofu for Cloudflare? | No: `lib/cloudflare.sh` stays (see [Not in scope](#not-in-scope)). |
 
 ## The data directory
 
-All instance data moves out of the code into one directory, `LETTUCE_DATA`:
+All instance data moves out of the code into one directory, `LOLLO_DATA`:
 
 ```
-/srv/lettuce-garden/
-  bin/lettucectl                 the wrapper (release mode only)
-  bin/lettucectl.previous        the one before the last self-upgrade
+/srv/lollo-rozzo/
+  bin/lolloctl                 the wrapper (release mode only)
+  bin/lolloctl.previous        the one before the last self-upgrade
   config.env
   stacks.conf
   .secrets/cloudflare-api-token
@@ -100,36 +100,36 @@ All instance data moves out of the code into one directory, `LETTUCE_DATA`:
   stacks/.doc-tools.lock
 ```
 
-Where it is depends on how `lettucectl` runs:
+Where it is depends on how `lolloctl` runs:
 
 - **Release mode** (the published image): the wrapper's own directory's parent, so a wrapper in
-  `/srv/lettuce-garden/bin/` uses `/srv/lettuce-garden`. The admin links it onto their `PATH`.
-- **Dev mode** (a clone): `$LETTUCE_HOME/data/`, which is gitignored, unless `LETTUCE_DATA` is set.
+  `/srv/lollo-rozzo/bin/` uses `/srv/lollo-rozzo`. The admin links it onto their `PATH`.
+- **Dev mode** (a clone): `$LOLLO_HOME/data/`, which is gitignored, unless `LOLLO_DATA` is set.
   A clone or a worktree never reaches the real stacks by default. Dev mode also refuses a data
-  directory that a release runs (one with `bin/lettucectl`): running a branch's code and images
+  directory that a release runs (one with `bin/lolloctl`): running a branch's code and images
   against people's stacks would recreate them from unreviewed code and lock every vault.
 
-`LETTUCE_HOME` keeps its meaning: where the code is (the clone, or `/opt/lettuce-garden` in the
+`LOLLO_HOME` keeps its meaning: where the code is (the clone, or `/opt/lollo-rozzo` in the
 image). In `lib/common.sh`, `config_file`, `token_file`, `upstream_dir`, `stack_dir`, `stack_env` and
-`list_stacks` move from `LETTUCE_HOME` to `LETTUCE_DATA`, and so does the doc-tools lock in
+`list_stacks` move from `LOLLO_HOME` to `LOLLO_DATA`, and so does the doc-tools lock in
 `ensure_doc_tools_volume`. Everything that reads code (`compose/`, `agent-skills/`,
-`garden/executor/`, `lib/mcp-servers.mjs`, `config.env.example`, the `doc-tools/` and `backup/` build
-contexts) stays on `LETTUCE_HOME`.
+`landing/executor/`, `lib/mcp-servers.mjs`, `config.env.example`, the `doc-tools/` and `backup/` build
+contexts) stays on `LOLLO_HOME`.
 
-`LETTA_STATE_DIR` in each `stack.env` is written from `LETTUCE_DATA`, so it is an absolute path in the
+`LETTA_STATE_DIR` in each `stack.env` is written from `LOLLO_DATA`, so it is an absolute path in the
 data directory.
 
 **The overlays' build contexts must change.** They are relative to Compose's project directory,
-`upstream/docker`, and so assume `upstream/` lives inside the code (`context: ../../garden`). With
-`upstream/` in the data directory they would point nowhere. `compose_env` passes `LETTUCE_HOME` to
-Compose, as it passes `DOC_TOOLS_NETWORK` today, and the overlays use `${LETTUCE_HOME}/garden`,
-`${LETTUCE_HOME}/garden-common` and so on.
+`upstream/docker`, and so assume `upstream/` lives inside the code (`context: ../../landing`). With
+`upstream/` in the data directory they would point nowhere. `compose_env` passes `LOLLO_HOME` to
+Compose, as it passes `DOC_TOOLS_NETWORK` today, and the overlays use `${LOLLO_HOME}/landing`,
+`${LOLLO_HOME}/lollo-common` and so on.
 
-`backup` and `receipts` keep refusing a destination inside `LETTUCE_HOME` (a clone is public), and
-also refuse one inside `LETTUCE_DATA`, where a backup would back up its own earlier backups.
+`backup` and `receipts` keep refusing a destination inside `LOLLO_HOME` (a clone is public), and
+also refuse one inside `LOLLO_DATA`, where a backup would back up its own earlier backups.
 
 `.gitignore` keeps `/config.env`, `/.secrets/`, `/upstream/` and `/stacks/`, and adds `/data/`. A
-clone no longer holds instance data by design, but a `LETTUCE_DATA` pointed inside one still must
+clone no longer holds instance data by design, but a `LOLLO_DATA` pointed inside one still must
 not be committable.
 
 ## Lettuce without a clone
@@ -169,7 +169,7 @@ image is larger but Settings shows nothing more. That is upstream's documented c
 
 ### The tested Lettuce version
 
-Each garden release records the Lettuce tag it was tested with, `LETTUCE_REF` in its `RELEASE` file.
+Each lollo release records the Lettuce tag it was tested with, `LETTUCE_REF` in its `RELEASE` file.
 
 - `init` on a new install writes it to `config.env`.
 - `self-upgrade` moves `LETTUCE_REF` to it, through `upgrade`, when it is newer than the one in
@@ -184,11 +184,11 @@ Each garden release records the Lettuce tag it was tested with, `LETTUCE_REF` in
 
 | Image | Published | Why |
 |---|---|---|
-| `garden`, `vault`, `gmail-triggers`, `code-server` (the gate), `backup` | yes | This repo's code (MIT) on Debian and Python base images |
+| `landing`, `vault`, `gmail-triggers`, `code-server` (the gate), `backup` | yes | This repo's code (MIT) on Debian and Python base images |
 | `pipelock` | yes | Built without the `enterprise` build tag, and the build fails when anything under `enterprise/` would be linked in, so the binary is Apache-2.0 only ([pipelock/README.md](../pipelock/README.md#licence)) |
 | `code-server-editor` | yes | Coder's code-server is MIT. Microsoft's VS Code Server, whose licence forbids hosting it for others, is not used ([code-server/DESIGN.md](../code-server/DESIGN.md#why-code-server)) |
-| `lettucectl` (new) | yes | This repo's code, plus the Docker CLI and its plugins, `curl`, `jq`, `openssl`, `dig` and `util-linux` |
-| `doc-tools` | **no** | The PDF server uses PyMuPDF, which is AGPL-3.0 ([docs/doc-tools.md](../docs/doc-tools.md)); publishing the image would make it AGPL. It is never run, only copied into a volume, so building it on the host costs one build per tools change. Its build context ships inside the `lettucectl` image. |
+| `lolloctl` (new) | yes | This repo's code, plus the Docker CLI and its plugins, `curl`, `jq`, `openssl`, `dig` and `util-linux` |
+| `doc-tools` | **no** | The PDF server uses PyMuPDF, which is AGPL-3.0 ([docs/doc-tools.md](../docs/doc-tools.md)); publishing the image would make it AGPL. It is never run, only copied into a volume, so building it on the host costs one build per tools change. Its build context ships inside the `lolloctl` image. |
 | `code-server-exec` (the shell) | **no** | Built `FROM` the app-server image (`base: service:app-server`), so it would need one image per Lettuce tag. It only adds `openssh-server` to that image, so the local build is short. |
 
 `gotenberg` is already pulled from Docker Hub, pinned by digest.
@@ -197,15 +197,15 @@ Each garden release records the Lettuce tag it was tested with, `LETTUCE_REF` in
 
 Compose recreates a container when its service's `image:` name changes, even when the image is the
 same ([Verified so far](#verified-so-far)), and recreating the vault locks it. If each release
-renamed every image (`lettuce-vault:v1.4.0`, then `:v1.4.1`), every upgrade would lock every
+renamed every image (`lollo-vault:v1.4.0`, then `:v1.4.1`), every upgrade would lock every
 person's vault, and restart every sidecar, for a release that changed one of them.
 
 So each published image is named by what goes into it, the way `doc_tools_tag` names the document
 tools today:
 
-- **The content tag** is a hash of the image's build context, of `garden-common/` for the images
+- **The content tag** is a hash of the image's build context, of `lollo-common/` for the images
   that use it, and of `REBUILD`, a file at the root of the repo.
-- **The full name** is `ghcr.io/<owner>/lettuce-<name>:<content tag>@sha256:<digest>`.
+- **The full name** is `ghcr.io/<owner>/lollo-<name>:<content tag>@sha256:<digest>`.
 - `publish.yml` builds an image only when its content tag is not in the registry yet; otherwise the
   release reuses the existing image, and so its digest.
 - An unchanged image therefore keeps the exact same name from release to release, and Compose leaves
@@ -220,24 +220,24 @@ tools today:
 
 ### Release mode and dev mode
 
-`lettucectl` decides how to get images from one file, `$LETTUCE_HOME/RELEASE`, which only the
-published `lettucectl` image has. `publish.yml` writes it: the version, the tested `LETTUCE_REF`,
-and one `GARDEN_IMAGE_<NAME>` line per published image with its full name.
+`lolloctl` decides how to get images from one file, `$LOLLO_HOME/RELEASE`, which only the
+published `lolloctl` image has. `publish.yml` writes it: the version, the tested `LETTUCE_REF`,
+and one `LOLLO_IMAGE_<NAME>` line per published image with its full name.
 
 - The overlays name each image by its own variable, with today's name as the default:
-  `image: ${GARDEN_IMAGE_VAULT:-lettuce-vault:local}`. `compose_env` passes the variables from
+  `image: ${LOLLO_IMAGE_VAULT:-lollo-vault:local}`. `compose_env` passes the variables from
   `RELEASE` in release mode, and none in dev mode.
 - **Release mode:** `up_stack` builds, by name, only the services that are built on this host: the
   code editor's shell (with its profile on), and upstream's services when `LETTA_IMAGE_NS` is empty.
   It then runs `up -d --no-build --pull missing --remove-orphans`. An image that is already on the
   host is not pulled again, so `up` needs the registry only after an upgrade; a published image that
   is missing fails the command instead of being built from a context the image does not carry.
-  `backup` and `receipts` use `lettuce-backup` and `lettuce-pipelock` by the same names.
-- **Dev mode** (a clone): the default names, `lettuce-<name>:local`, and `up -d --build`, as today. A
+  `backup` and `receipts` use `lollo-backup` and `lollo-pipelock` by the same names.
+- **Dev mode** (a clone): the default names, `lollo-<name>:local`, and `up -d --build`, as today. A
   branch never runs images that are not its own code.
 
 The switch is a file in the image instead of a setting, so an admin cannot point a clone at
-published images by mistake. `doc-tools` is built by lettucectl in both modes, as today.
+published images by mistake. `doc-tools` is built by lolloctl in both modes, as today.
 
 ### `publish.yml`
 
@@ -249,33 +249,33 @@ published images by mistake. `doc-tools` is built by lettucectl in both modes, a
   `shellcheck`, `tests/run.sh`, the Node tests, every sidecar's tests, `tests/run-pipelock.sh` and
   the link checker. It also fails when `VERSION` and the tag disagree.
 - **Build:** each published image for `linux/amd64` and `linux/arm64`, with Buildx and QEMU, skipping
-  those whose content tag exists. `lettucectl` is built last, since its `RELEASE` holds the others'
+  those whose content tag exists. `lolloctl` is built last, since its `RELEASE` holds the others'
   digests.
 - **Supply chain:** every image is pushed with an SBOM and a provenance attestation, and signed
   through GitHub's artifact attestations (`actions/attest-build-provenance`), so
-  `gh attestation verify oci://<image> --repo <owner>/lettuce-garden` proves it was built by this
+  `gh attestation verify oci://<image> --repo <owner>/lollo-rozzo` proves it was built by this
   workflow from this tag.
 - **Check:** after the push, `docker buildx imagetools inspect` confirms that every image is in the
   registry for both platforms: upstream found that `compose build --push` can exit 0 having pushed
   nothing.
-- **Release:** it attaches the wrapper (with the `lettucectl` image's digest filled in),
+- **Release:** it attaches the wrapper (with the `lolloctl` image's digest filled in),
   `SHA256SUMS` and the release notes (the changed images) to the GitHub release, with an
   attestation for the wrapper too.
 - The GHCR packages are made public once, by hand, so a host pulls without credentials.
 
 `code-server-editor` is already pinned for both platforms (`SHA256_AMD64`, `SHA256_ARM64`).
-`doc-tools` stays `amd64` only (OfficeAgent is pinned for x86_64), so `garden-doc-tools` is
+`doc-tools` stays `amd64` only (OfficeAgent is pinned for x86_64), so `lollo-doc-tools` is
 unavailable on `arm64` hosts, as today; `check_stack` should say so instead of failing the build.
 
-## `lettucectl` in a container
+## `lolloctl` in a container
 
 ### The image
 
 Debian slim with `curl`, `jq`, `openssl`, `dnsutils` and `util-linux` (`flock`); the Docker CLI and
 its Compose and Buildx plugins as Docker's own static releases, each pinned by version and SHA-256,
-not Debian's packages, which lag; and this repo's code at `/opt/lettuce-garden` without `tests/`,
+not Debian's packages, which lag; and this repo's code at `/opt/lollo-rozzo` without `tests/`,
 `docs/` and the sidecars' sources (it keeps the `doc-tools/` and `code-server/exec/` build contexts).
-Its entrypoint is `lettucectl`.
+Its entrypoint is `lolloctl`.
 
 In release mode the Compose that runs is the image's, not the host's, so the host's Compose version
 no longer matters. What matters is the Docker Engine: the image's CLI negotiates down to the
@@ -284,8 +284,8 @@ Engine's API version, and the README's requirements name the oldest Engine it su
 
 ### The wrapper
 
-A script of a few dozen lines, one per release, with that release's version and the `lettucectl`
-image's digest written into it. It lives in `$LETTUCE_DATA/bin/` and the admin links it onto their
+A script of a few dozen lines, one per release, with that release's version and the `lolloctl`
+image's digest written into it. It lives in `$LOLLO_DATA/bin/` and the admin links it onto their
 `PATH`. It runs, in essence:
 
 ```bash
@@ -293,15 +293,15 @@ docker run --rm -i [-t] --init \
   --user "$(id -u):$(id -g)" --group-add "<the docker socket's group>" \
   --tmpfs /tmp -e HOME=/tmp/home \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$LETTUCE_DATA:$LETTUCE_DATA" -e LETTUCE_DATA="$LETTUCE_DATA" \
+  -v "$LOLLO_DATA:$LOLLO_DATA" -e LOLLO_DATA="$LOLLO_DATA" \
   -e TERM \
-  ghcr.io/<owner>/lettucectl:vX.Y.Z@sha256:<digest> "$@"
+  ghcr.io/<owner>/lolloctl:vX.Y.Z@sha256:<digest> "$@"
 ```
 
-- **`--init`:** as PID 1, `lettucectl` would ignore the signal Docker forwards on Ctrl-C. `BACKUP_RUN`
+- **`--init`:** as PID 1, `lolloctl` would ignore the signal Docker forwards on Ctrl-C. `BACKUP_RUN`
   passes `--init` for the same reason.
 - **`--user`:** the files it writes are owned by the admin, not root. The socket gives it the same
-  power over Docker that `lettucectl` has today, no more.
+  power over Docker that `lolloctl` has today, no more.
 - **A writable `HOME`:** the Docker CLI and Buildx write their configuration under `$HOME/.docker`;
   with `--user` and no `HOME`, that is `/` and the builds of the shell and `doc-tools` fail. Nothing
   there needs to outlive the command.
@@ -310,39 +310,39 @@ docker run --rm -i [-t] --init \
   registry token, cannot change what an installed wrapper runs.
 - **A missing data directory is refused.** Otherwise Docker would create the bind source itself,
   owned by root, and the first write would fail. The wrapper prints what to run once, for example
-  `sudo install -d -o "$USER" -g "$(id -gn)" -m 700 /srv/lettuce-garden/bin`, and how to download the
+  `sudo install -d -o "$USER" -g "$(id -gn)" -m 700 /srv/lollo-rozzo/bin`, and how to download the
   wrapper into it.
 
 ### Installing and upgrading
 
-- **Install:** download the release's wrapper into `/srv/lettuce-garden/bin/`, check it against
+- **Install:** download the release's wrapper into `/srv/lollo-rozzo/bin/`, check it against
   `SHA256SUMS` (and, for those with the `gh` CLI, `gh attestation verify`), link it onto the `PATH`,
-  then `lettucectl init`.
-- **`lettucectl self-upgrade vX.Y.Z`** is handled by the wrapper, so a failure leaves the running
+  then `lolloctl init`.
+- **`lolloctl self-upgrade vX.Y.Z`** is handled by the wrapper, so a failure leaves the running
   install as it was:
   1. it asks the current image to download that release's wrapper and `SHA256SUMS` into
-     `bin/.lettucectl.new`, and to check the sum;
+     `bin/.lolloctl.new`, and to check the sum;
   2. it pulls the image the new wrapper names, by digest; a typo in the version, or a release
      without that image, stops here;
-  3. only then does it keep the current wrapper as `bin/lettucectl.previous`, move the new one into
-     place, and run `lettucectl up all` with it (and `upgrade`, when the release's tested
+  3. only then does it keep the current wrapper as `bin/lolloctl.previous`, move the new one into
+     place, and run `lolloctl up all` with it (and `upgrade`, when the release's tested
      `LETTUCE_REF` is newer).
-- **Going back:** `bin/lettucectl.previous` is a complete wrapper; run it, or move it back into place.
+- **Going back:** `bin/lolloctl.previous` is a complete wrapper; run it, or move it back into place.
 - The checksum comes from the same release as the wrapper, so it catches a broken download, not a
   forged release; the attestation is what proves where the wrapper came from.
 
 ### The catch: every host path must be the same inside and outside
 
-`lettucectl` tells Docker to mount host paths, for example
-`/srv/lettuce-garden/stacks/alfred/state/workspaces` into Alfred's app-server. Docker reads that path
-on the host, not inside the `lettucectl` container. If the wrapper mounted the data directory at
+`lolloctl` tells Docker to mount host paths, for example
+`/srv/lollo-rozzo/stacks/alfred/state/workspaces` into Alfred's app-server. Docker reads that path
+on the host, not inside the `lolloctl` container. If the wrapper mounted the data directory at
 another path, say `/data`, then `stack.env` would record `/data/stacks/alfred/state`, Docker would not
 find it on the host and would create it empty and owned by root, and Alfred's stack would start with
 no memory and no workspaces, with no error.
 
-So the wrapper mounts every host path at the same path, and in release mode `lettucectl` checks it
+So the wrapper mounts every host path at the same path, and in release mode `lolloctl` checks it
 before anything else: it reads its own container's mounts (`docker inspect "$HOSTNAME"`) and stops
-unless every bind mount has the same source and destination, and `LETTUCE_DATA` is one of them. It is
+unless every bind mount has the same source and destination, and `LOLLO_DATA` is one of them. It is
 one API call, with no extra container and no state file, and it covers the `backup` and `receipts`
 destinations too ([Verified so far](#verified-so-far)).
 
@@ -350,17 +350,17 @@ destinations too ([Verified so far](#verified-so-far)).
 
 - **`backup <name> <dir>` and `receipts <name> [report]`** write to a directory the admin names. The
   wrapper mounts it at the same path (the `realpath` of `<dir>`, or the report's directory), and
-  `lettucectl` checks that the destination it was given is one of its mounts.
+  `lolloctl` checks that the destination it was given is one of its mounts.
 - **`toolbox`** uses the admin's own credentials. Its mounts (`~/.ssh/known_hosts`, `~/.gitconfig`,
-  `~/.claude/...`, the toolbox file's mounts) are read by Docker on the host, but `lettucectl` checks
+  `~/.claude/...`, the toolbox file's mounts) are read by Docker on the host, but `lolloctl` checks
   that they exist and resolves `~` itself, and runs `gh auth token` and `secret-tool lookup`. For
   `toolbox` the wrapper also mounts the admin's home read-only at the same path and passes it as
-  `LETTUCECTL_HOST_HOME`, which `toolbox` uses instead of `HOME`; forwards `SSH_AUTH_SOCK`; and runs
+  `LOLLOCTL_HOST_HOME`, which `toolbox` uses instead of `HOME`; forwards `SSH_AUTH_SOCK`; and runs
   the two token lookups on the host, passing the tokens with `-e NAME`, never in argv. `toolbox`
   reads them from the environment when `gh` and `secret-tool` are not installed.
 - **`$EDITOR config.env`** happens on the host, as today.
 
-## `stacks.conf` and `lettucectl apply`
+## `stacks.conf` and `lolloctl apply`
 
 `stacks.conf` in the data directory lists the stacks and who may sign in to each, one per line:
 
@@ -370,7 +370,7 @@ alfred   alfred@gmail.com
 hal      hal@example.com,hal@work.example.com
 ```
 
-It is plain text in the style of `config.env`, so it needs no YAML parser, and `lettucectl` reads and
+It is plain text in the style of `config.env`, so it needs no YAML parser, and `lolloctl` reads and
 writes it only through helpers in `lib/common.sh`, as it does `config.env`.
 
 ### The commands keep it in step
@@ -382,7 +382,7 @@ If the file cannot be written, the command says so and fails, so the two never d
 
 ### What `apply` does
 
-`lettucectl apply` makes the stacks match `stacks.conf`, through the existing commands, so their
+`lolloctl apply` makes the stacks match `stacks.conf`, through the existing commands, so their
 order and rules are kept:
 
 1. `init`'s checks, when `CF_ZONE_ID` and the others are empty.
@@ -391,17 +391,17 @@ order and rules are kept:
 3. `users <name> <emails>` for each stack whose `ALLOWED_USERS` differs.
 4. `up all`, then `skills all` (which the quickstart asks for by hand today).
 5. A report, with the command to run for each:
-   - each stack not in `stacks.conf`: `lettucectl remove <name>`. `apply` never removes one: a
+   - each stack not in `stacks.conf`: `lolloctl remove <name>`. `apply` never removes one: a
      mistake in the file must not delete a person's data;
    - each stack whose `COMPOSE_PROFILES` differs from `PROFILES` (an interrupted `profiles`):
-     `lettucectl profiles <PROFILES>`.
+     `lolloctl profiles <PROFILES>`.
 
 `apply` first prints its plan, with each address that gains or loses access by name, and asks to go
 on when it is run from a terminal; `apply --dry-run` prints the plan and stops, and `apply --yes`
 skips the question for scripts.
 
 Profiles are not in `stacks.conf` and `apply` never changes them: they stay global, in `config.env`,
-changed only by `lettucectl profiles` ([lib/README.md](README.md#rules), "Docs never tell operators
+changed only by `lolloctl profiles` ([lib/README.md](README.md#rules), "Docs never tell operators
 to edit the lists by hand").
 
 ## A guided `init`
@@ -423,7 +423,7 @@ need payment details or a browser sign-in.
 
 ## This repo's rules, checked
 
-- **Overlays restrict, never redefine.** Only the garden's own services change `image:` and
+- **Overlays restrict, never redefine.** Only the lollo's own services change `image:` and
   `build:`; no upstream service is touched. `LETTA_IMAGE_NS` is upstream's own switch.
 - **Every Compose call goes through `compose`.** The new variables pass through `compose_env`, like
   `DOC_TOOLS_NETWORK`.
@@ -432,12 +432,12 @@ need payment details or a browser sign-in.
 - **`up` makes no Cloudflare call.** `apply` calls `add` and `users`, which do; `up` still does not.
 - **Never source `config.env`.** `stacks.conf` gets helpers like `env_get` and `env_set`; the wrapper
   reads nothing from the data directory.
-- **Profiles change only through `lettucectl profiles`.** Kept: `apply` reports, and never edits a
+- **Profiles change only through `lolloctl profiles`.** Kept: `apply` reports, and never edits a
   profile list or tells anyone to.
 - **`users` changes the Access policy and `ALLOWED_USERS` together.** Kept, and `stacks.conf` with
   them.
 - **A new safety rule goes into `check_stack`, with a `test_check_*` test.** Release mode adds one:
-  every published garden service runs its `RELEASE` name, so a hand edit cannot swap an image in
+  every published lollo service runs its `RELEASE` name, so a hand edit cannot swap an image in
   (`test_check_release_images`).
 - **Nothing secret under `stacks/<name>/state/`:** unchanged; `stacks/` moves as a whole.
 
@@ -449,17 +449,17 @@ need payment details or a browser sign-in.
 - `docs/operations.md`: files on the host, upgrades (`self-upgrade`, `upgrade`, going back), which
   upgrades lock the vault, adding people with `stacks.conf`.
 - `docs/architecture.md`: where the data lives; and the paths shown in the
-  `lettuce-garden-overview` and `lettuce-garden-at-a-glance` diagrams, if any.
+  `lollo-rozzo-overview` and `lollo-rozzo-at-a-glance` diagrams, if any.
 - ARCHITECTURE.md "What lives where", `lib/README.md` (rules for `stacks.conf`, release mode, the
   same-path check), `compose/README.md` (the image variables), `tests/README.md`.
-- CONTRIBUTING.md and AGENTS.md: the commands block ("`lettucectl up` builds the sidecar images" is
+- CONTRIBUTING.md and AGENTS.md: the commands block ("`lolloctl up` builds the sidecar images" is
   true only from a clone), the release steps (`VERSION`, the tag, `REBUILD`), and
   `.github/workflows/ci.yml` (reusable, called by `publish.yml`), kept in step as today.
 
 ## Tests
 
 - `tests/run.sh`, with the existing stubs:
-  - paths come from `LETTUCE_DATA`, code paths from `LETTUCE_HOME`; dev mode defaults to `data/` in
+  - paths come from `LOLLO_DATA`, code paths from `LOLLO_HOME`; dev mode defaults to `data/` in
     the clone and refuses a release's data directory;
   - `init` and `upgrade` download and unpack the archive (`curl` stubbed), keep a complete tag and
     replace a `.partial` one, and set `LETTA_IMAGE_NS` from the registry lookup, empty when the
@@ -469,14 +469,14 @@ need payment details or a browser sign-in.
     unchanged;
   - `test_check_release_images`;
   - the same-path check refuses a bind mount whose source and destination differ, a missing
-    `LETTUCE_DATA` mount, and a `backup` destination that is not mounted (`docker inspect` stubbed);
+    `LOLLO_DATA` mount, and a `backup` destination that is not mounted (`docker inspect` stubbed);
   - `add`, `users` and `remove` update `stacks.conf`, and fail when they cannot;
   - `apply`: each kind of difference calls the right command, an address revoked with `users` stays
     revoked, an unlisted stack and an out-of-step profile list are reported and changed by nothing,
     `--dry-run` calls nothing;
   - `self-upgrade` moves `LETTUCE_REF` forward only.
 - The content tags: a test that the same tree gives the same tag, and a change in a context, in
-  `garden-common/` or in `REBUILD` gives a new one.
+  `lollo-common/` or in `REBUILD` gives a new one.
 - The wrapper: `shellcheck`, and tests with `docker` stubbed: the mounts and flags (`--init`,
   `--user`, `HOME`, the digest), a missing data directory refused, tokens never in argv, and
   `self-upgrade` swapping the wrapper only after the new image is pulled.
@@ -487,11 +487,11 @@ need payment details or a browser sign-in.
 
 ## Steps
 
-1. The data directory, including the overlays' `LETTUCE_HOME` contexts and dev mode's default.
+1. The data directory, including the overlays' `LOLLO_HOME` contexts and dev mode's default.
 2. Lettuce from the source archive, the upstream image lookup, and the tested `LETTUCE_REF`.
 3. The content tags, `RELEASE`, release mode in `up_stack`, `backup` and `receipts`,
    `test_check_release_images`; then `ci.yml` as a reusable workflow and `publish.yml`.
-4. The `lettucectl` image, the wrapper, `self-upgrade`, the same-path check, and the `backup`,
+4. The `lolloctl` image, the wrapper, `self-upgrade`, the same-path check, and the `backup`,
    `receipts` and `toolbox` mounts.
 5. `stacks.conf`, the commands that keep it in step, and `apply`.
 6. Docs.
@@ -519,7 +519,7 @@ On 2026-11-07, with Docker Compose 2.40.3:
   `linux/amd64` only.
 - **Licences:** as in [What can be published](#what-can-be-published), from
   `doc-tools/pyproject.toml`, `docs/doc-tools.md`, `pipelock/README.md` and `code-server/DESIGN.md`.
-- **Paths:** every use of `LETTUCE_HOME` in `lettucectl` and `lib/`; `stack.env` stores
+- **Paths:** every use of `LOLLO_HOME` in `lolloctl` and `lib/`; `stack.env` stores
   `LETTA_STATE_DIR` as an absolute path; the overlays' build contexts are relative to
   `upstream/docker`.
 - **Rules:** `BACKUP_RUN` passes `--init` because PID 1 ignores Ctrl-C's signal; `lib/README.md`
@@ -540,7 +540,7 @@ On 2026-11-07, with Docker Compose 2.40.3:
 
 ## Not in scope
 
-- **A release tarball or packages** (`.deb`, an apt repository): the `lettucectl` image is the
+- **A release tarball or packages** (`.deb`, an apt repository): the `lolloctl` image is the
   release.
 - **A manager service that reconciles on its own:** a long-running container holding the Docker
   socket and the Cloudflare token, and a rewrite of the CLI into a reconciler, for what `apply` gives
@@ -555,5 +555,5 @@ On 2026-11-07, with Docker Compose 2.40.3:
 - **A `latest` tag, or images published from `main`:** see [`publish.yml`](#publishyml).
 - **Ansible, cloud-init or VPS images.**
 - **One Compose project for every stack:** each person's own project is the isolation.
-- **Moving garden extras into upstream Lettuce.**
+- **Moving lollo extras into upstream Lettuce.**
 - **Publishing `doc-tools`:** see [What can be published](#what-can-be-published).

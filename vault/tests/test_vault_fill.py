@@ -137,7 +137,7 @@ def test_piped_into_a_command_under_vault_run(tmp_path, vault_url):  # noqa: F81
     sink = tmp_path / "received.json"
     pipeline = f'python3 {HELPER} {template} - | tee {sink}'
     env = {k: v for k, v in os.environ.items() if not k.startswith("VAULT_")}
-    env["GARDEN_VAULT_URL"] = vault_url[0]
+    env["LOLLO_VAULT_URL"] = vault_url[0]
     r = subprocess.run(
         [sys.executable, str(VAULT_RUN), "home", "--", "sh", "-c", pipeline], env=env, capture_output=True, timeout=30
     )

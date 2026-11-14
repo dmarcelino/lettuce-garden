@@ -1073,8 +1073,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <text x="149.5" y="122" class="t-muted" font-size="7" text-anchor="middle">phone or browser</text>
         </g>
 
-        <g id="node-vault" data-node-id="vault" data-node-label="Your vault" tabindex="0" role="button" aria-label="Focus Your vault, &lt;garden&gt;/vault/, Sequence participant" aria-pressed="false" data-node-kind="security" data-node-sublabel="&lt;garden&gt;/vault/" data-node-context="Sequence participant">
-          <title>Your vault · &lt;garden&gt;/vault/ · Sequence participant</title>
+        <g id="node-vault" data-node-id="vault" data-node-label="Your vault" tabindex="0" role="button" aria-label="Focus Your vault, &lt;lollo&gt;/vault/, Sequence participant" aria-pressed="false" data-node-kind="security" data-node-sublabel="&lt;lollo&gt;/vault/" data-node-context="Sequence participant">
+          <title>Your vault · &lt;lollo&gt;/vault/ · Sequence participant</title>
           <rect x="276.33333333333337" y="72" width="175" height="60" rx="6" class="c-mask"/>
           <rect x="276.33333333333337" y="72" width="175" height="60" rx="6" class="c-security" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-1;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(282.33333333333337 78) scale(0.6875)">
@@ -1082,7 +1082,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
           <text data-node-label="" x="363.83333333333337" y="108" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Your vault</text>
-          <text x="363.83333333333337" y="122" class="t-muted" font-size="7" text-anchor="middle">&lt;garden&gt;/vault/</text>
+          <text x="363.83333333333337" y="122" class="t-muted" font-size="7" text-anchor="middle">&lt;lollo&gt;/vault/</text>
         </g>
 
         <g id="node-agent" data-node-id="agent" data-node-label="An agent" tabindex="0" role="button" aria-label="Focus An agent, in your stack, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="in your stack" data-node-context="Sequence participant">

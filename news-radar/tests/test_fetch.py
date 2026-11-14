@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpcore
 import pytest
 
-from garden_news_radar.fetch import BlockedAddress, FetchError, PublicOnlyBackend, check_url, is_public
+from lollo_news_radar.fetch import BlockedAddress, FetchError, PublicOnlyBackend, check_url, is_public
 
 pytestmark = pytest.mark.anyio
 
@@ -142,7 +142,7 @@ async def test_conditional_requests_and_not_modified(fetcher, web):
     assert page.not_modified
     sent = [r for r in web.requests if str(r.url).endswith("/feed")][0]
     assert sent.headers["if-none-match"] == '"v1"'
-    assert sent.headers["user-agent"].startswith("lettuce-garden-news-radar/")
+    assert sent.headers["user-agent"].startswith("lollo-rozzo-news-radar/")
     assert "cookie" not in sent.headers
 
 
@@ -187,14 +187,14 @@ async def test_a_call_can_wait_less_than_a_site_asks(fetcher, web, sleeps):
 async def test_a_name_that_resolves_inside_the_stack_is_refused_as_such(clock, sleeps):
     import httpx
 
-    from garden_news_radar.fetch import Fetcher
+    from lollo_news_radar.fetch import Fetcher
 
     def handler(request):
         raise BlockedAddress(request.url.host)  # what PublicOnlyBackend raises for a private address
 
     fetcher = Fetcher(transport=httpx.MockTransport(handler), clock=clock, sleep=sleeps)
     with pytest.raises(FetchError, match="not a public address"):
-        await fetcher.get("http://garden-vault:8000/")
+        await fetcher.get("http://lollo-vault:8000/")
 
 
 async def test_a_name_that_does_not_resolve_says_so(clock, sleeps):
@@ -202,7 +202,7 @@ async def test_a_name_that_does_not_resolve_says_so(clock, sleeps):
 
     import httpx
 
-    from garden_news_radar.fetch import Fetcher, UnknownHost
+    from lollo_news_radar.fetch import Fetcher, UnknownHost
 
     async def resolve(host, port):
         raise socket.gaierror(socket.EAI_NONAME, "Name or service not known")

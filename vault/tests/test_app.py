@@ -5,13 +5,13 @@ import time
 
 import jwt
 import pytest
-from garden_common.auth import Authenticator
+from lollo_common.auth import Authenticator
 from starlette.testclient import TestClient
 
-from garden_vault.app import create_app
-from garden_vault.config import ERASE_REQUESTS_PER_HOUR, PREFIX
-from garden_vault.service import ERASE_DELAY
-from garden_vault.vault import Vault
+from lollo_vault.app import create_app
+from lollo_vault.config import ERASE_REQUESTS_PER_HOUR, PREFIX
+from lollo_vault.service import ERASE_DELAY
+from lollo_vault.vault import Vault
 
 from .conftest import (
     CARD,
@@ -28,7 +28,7 @@ from .conftest import (
     make_jwt,
 )
 
-MCP = "http://garden-vault:8000/mcp"
+MCP = "http://lollo-vault:8000/mcp"
 B = PREFIX
 
 
@@ -215,12 +215,12 @@ def test_assets_load_as_subresources(env):
     worker = {"sec-fetch-mode": "same-origin", "sec-fetch-dest": "serviceworker", "sec-fetch-site": "same-origin"}
     style = {"sec-fetch-mode": "no-cors", "sec-fetch-dest": "style", "sec-fetch-site": "same-origin"}
     assert client.get(f"{B}/sw.js", headers=worker).status_code == 200
-    for path in ("/garden.css", "/app.css", "/app.js", "/icon-192.png", "/manifest.webmanifest"):
+    for path in ("/lollo.css", "/app.css", "/app.js", "/icon-192.png", "/manifest.webmanifest"):
         assert client.get(f"{B}{path}", headers=style).status_code == 200, path
 
 
 def test_every_response_isolates_its_window(env):
-    """COOP same-origin: a garden page opened by another same-origin tab without it (the code
+    """COOP same-origin: a lollo page opened by another same-origin tab without it (the code
     editor) lands in a separate browsing context group, so that tab gets no handle on it."""
     client = env[0]
     for r in (
@@ -232,29 +232,29 @@ def test_every_response_isolates_its_window(env):
         assert r.headers["cross-origin-opener-policy"] == "same-origin", r.url
 
 
-def test_pages_use_the_garden_look_and_link_to_the_garden(env):
+def test_pages_use_the_lollo_look_and_link_to_the_lollo(env):
     client = env[0]
     page = client.get(f"{B}/").text
     assert B == "/vault"
-    assert f'href="{B}/garden.css"' in page and 'href="/">Lettuce Garden</a>' in page
-    assert "/garden/" not in page
+    assert f'href="{B}/lollo.css"' in page and 'href="/">Lollo Rozzo</a>' in page
+    assert "/lollo/" not in page
     # app.js and the manifest take the prefix from the page and their own URL.
     assert f'<meta name="base" content="{B}">' in page
     assert client.get(f"{B}/manifest.webmanifest").json()["scope"] == "./"
-    css = client.get(f"{B}/garden.css")
+    css = client.get(f"{B}/lollo.css")
     assert css.status_code == 200 and "--accent: #0b1020" in css.text
 
 
-def test_the_garden_landing_page_is_not_served_here(env):
-    """The garden service owns / on the garden's host; here / is only /mcp's
+def test_the_lollo_landing_page_is_not_served_here(env):
+    """The landing service owns / on the lollo's host; here / is only /mcp's
     mount, which answers nothing on the public name."""
     client = env[0]
-    for path in ("/", "/garden", "/garden/"):
+    for path in ("/", "/lollo", "/lollo/"):
         r = client.get(path)
-        assert r.status_code >= 400 and "Lettuce Garden" not in r.text, path
+        assert r.status_code >= 400 and "Lollo Rozzo" not in r.text, path
 
 
-def test_garden_refusals_log_why(env, caplog):
+def test_lollo_refusals_log_why(env, caplog):
     client = env[0]
     caplog.set_level(logging.INFO)
     assert client.get(f"{B}/", headers=SCRIPT_FETCH).status_code == 403
@@ -719,7 +719,7 @@ def test_mcp_cannot_approve(env):
     secret = add(client, ADDRESS)
     sub, _ = call_tool(client, "request_secret", {"secret_id": secret, "purpose": "x"})
     r = client.post(
-        f"http://garden-vault:8000{B}/r/{sub['id']}/decide",
+        f"http://lollo-vault:8000{B}/r/{sub['id']}/decide",
         data={"action": "share", "fields": "city", "csrf": "x"},
         headers={"cf-access-jwt-assertion": "", "origin": ORIGIN},
     )
@@ -771,7 +771,7 @@ def test_locked_vault_answers_agents_and_notifies(env):
 
 # ── placeholders and /redeem ─────────────────────────────────────────────────
 
-REDEEM = "http://garden-vault:8000/redeem"
+REDEEM = "http://lollo-vault:8000/redeem"
 
 
 def redeem(client, handle, url=REDEEM, **headers):
@@ -813,7 +813,7 @@ def test_redeem_is_internal_only(env):
     for r in (
         redeem(client, handle, url=f"{ORIGIN}/redeem"),
         redeem(client, handle, url="http://evil.example:8000/redeem"),
-        redeem(client, handle, origin="http://garden-vault:8000"),
+        redeem(client, handle, origin="http://lollo-vault:8000"),
     ):
         assert r.status_code == 403 and STREET not in r.text
     get = client.get(f"{REDEEM}?handle={handle}", headers={"cf-access-jwt-assertion": ""})

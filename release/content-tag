@@ -7,7 +7,7 @@
 # It hashes, with their paths: every file of the image's build context and of
 # its shared context, but the docs (README.md, AGENTS.md, CLAUDE.md, DESIGN.md),
 # tests/, Python caches and build output, and the top-level names the context's
-# .dockerignore lists (code-server's editor/ and exec/, garden's executor/); then
+# .dockerignore lists (code-server's editor/ and exec/, landing's executor/); then
 # the image's name and REBUILD, which a release changes to rebuild every image on
 # fresh base images. Twelve hex characters.
 set -euo pipefail

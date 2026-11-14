@@ -2,12 +2,12 @@
   "schema_version": 2,
   "diagram_type": "workflow",
   "meta": {
-    "title": "lettucectl up: from stack.env to a running stack",
+    "title": "lolloctl up: from stack.env to a running stack",
     "output": "docs/diagrams/compose-up-workflow.html",
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "27e55f992e8bae65855edb05090f8482f08a8dd3"
@@ -15,7 +15,7 @@
     "legend": {
       "entries": {
         "backend": {
-          "label": "lettucectl step"
+          "label": "lolloctl step"
         },
         "security": {
           "label": "Gate or refusal"
@@ -35,7 +35,7 @@
   "lanes": [
     {
       "id": "cli",
-      "label": "lettucectl on the host"
+      "label": "lolloctl on the host"
     },
     {
       "id": "refusal",
@@ -48,7 +48,7 @@
     },
     {
       "id": "project",
-      "label": "Compose project lettuce-<name>"
+      "label": "Compose project lollo-<name>"
     },
     {
       "id": "inside",
@@ -92,17 +92,17 @@
       "lane": "cli",
       "col": 0,
       "type": "external",
-      "label": "lettucectl up",
+      "label": "lolloctl up",
       "sublabel": "<name> or all",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1322,
           "end_line": 1327,
           "label": "cmd_up"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 2098,
           "end_line": 2124,
           "label": "main dispatch"
@@ -115,10 +115,10 @@
       "col": 1,
       "type": "backend",
       "label": "up_stack",
-      "sublabel": "push contact, token, garden list, settings",
+      "sublabel": "push contact, token, lollo list, settings",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 406,
           "end_line": 410,
           "label": "up_stack"
@@ -133,7 +133,7 @@
           "path": "lib/common.sh",
           "line": 689,
           "end_line": 718,
-          "label": "NEWS_RADAR_* settings, GARDEN_PROFILES"
+          "label": "NEWS_RADAR_* settings, LOLLO_PROFILES"
         }
       ]
     },
@@ -162,7 +162,7 @@
       "sublabel": "renders, then refuses",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 411,
           "label": "called before anything starts"
         },
@@ -229,16 +229,16 @@
       "col": 3,
       "type": "database",
       "label": "tools volume + network",
-      "sublabel": "garden-doc-tools only",
+      "sublabel": "lollo-doc-tools only",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 412,
           "end_line": 416,
           "label": "only with the profile"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 481,
           "end_line": 540,
           "label": "fill volume, create network"
@@ -254,7 +254,7 @@
       "sublabel": "compose build, only what is built here",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 425,
           "end_line": 450,
           "label": "build_local_images"
@@ -276,7 +276,7 @@
       "sublabel": "--no-build --pull missing",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 418,
           "end_line": 422,
           "label": "up --no-build --pull missing"
@@ -304,19 +304,19 @@
       "sublabel": "install or remove",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 387,
           "end_line": 397,
           "label": "sync_executor"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 357,
           "end_line": 377,
           "label": "tar over compose exec"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 284,
           "end_line": 286,
           "label": "executor_wanted"
@@ -332,13 +332,13 @@
       "sublabel": "groups whose profile is off",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 752,
           "end_line": 766,
           "label": "drop_mcp_group"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 692,
           "end_line": 706,
           "label": "mcp-servers.mjs, BFF restart"
@@ -351,10 +351,10 @@
       "col": 5,
       "type": "cloud",
       "label": "sync_doc_tools",
-      "sublabel": "lettuce_shared Gotenberg",
+      "sublabel": "lollo_shared Gotenberg",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 565,
           "end_line": 626,
           "label": "sync_doc_tools"
@@ -381,13 +381,13 @@
       "sublabel": "fail at the end",
       "sources": [
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 1331,
           "end_line": 1344,
           "label": "collected failures"
         },
         {
-          "path": "lettucectl",
+          "path": "lolloctl",
           "line": 401,
           "end_line": 403,
           "label": "executor_out_of_step"
@@ -444,7 +444,7 @@
       "id": "check-docs",
       "from": "check",
       "to": "doc-prep",
-      "label": "garden-doc-tools",
+      "label": "lollo-doc-tools",
       "variant": "dashed",
       "role": "branch"
     },
@@ -499,9 +499,9 @@
       "dot": "cyan",
       "title": "Compose files, in order",
       "items": [
-        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, news-radar, pipelock, code-server, garden",
-        "doc-tools.yml only with garden-doc-tools, pipelock-proxy.yml last and only with garden-pipelock",
-        "-p lettuce-<name>, --project-directory upstream/docker, --env-file stack.env"
+        "upstream/docker/compose.yml, then hardening, multi, vault, gmail-triggers, news-radar, pipelock, code-server, lollo",
+        "doc-tools.yml only with lollo-doc-tools, pipelock-proxy.yml last and only with lollo-pipelock",
+        "-p lollo-<name>, --project-directory upstream/docker, --env-file stack.env"
       ]
     },
     {
@@ -509,7 +509,7 @@
       "title": "What is built here",
       "items": [
         "upstream's images, when Lettuce publishes none for this host (LETTA_IMAGE_NS empty)",
-        "from a clone every garden image; in release mode only the code editor's shell, named by RELEASE otherwise",
+        "from a clone every lollo image; in release mode only the code editor's shell, named by RELEASE otherwise",
         "then up never builds: a published image that is missing fails"
       ]
     },

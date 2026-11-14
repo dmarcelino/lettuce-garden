@@ -123,7 +123,7 @@ refuse() {
 }
 
 echo "building the images (the first build downloads code-server)"
-docker build -q --target test --build-context "garden-common=$ROOT/garden-common" \
+docker build -q --target test --build-context "lollo-common=$ROOT/lollo-common" \
   -t "$P-gate:test" "$ROOT/code-server" >/dev/null
 docker build -q -t "$P-editor:e2e" "$ROOT/code-server/editor" >/dev/null
 docker build -q --build-context "base=docker-image://$APP" -t "$P-exec:e2e" "$ROOT/code-server/exec" >/dev/null
@@ -141,14 +141,14 @@ docker volume create "$P-keys" >/dev/null
 docker volume create "$P-sock" >/dev/null
 
 # As compose/code-server.yml runs it: on its socket, which only the gate mounts besides it.
-docker create --name "$P-editor" --network "$P-exec" --network-alias garden-code-server-editor \
+docker create --name "$P-editor" --network "$P-exec" --network-alias lollo-code-server-editor \
   --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true --user 0 \
   -e EXTENSIONS_GALLERY='{}' \
   -v "$TMP/workspaces:/work" -v "$P-data:/data" -v "$P-keys:/keys" -v "$P-sock:/run/code-server" \
   "$P-editor:e2e" --socket /run/code-server/editor.sock --socket-mode 666 --auth none --disable-proxy \
   --disable-telemetry --disable-update-check --disable-getting-started-override \
-  --extensions-dir /opt/lettuce-editor/no-extensions --user-data-dir /data/user \
-  --config /opt/lettuce-editor/config.yaml >/dev/null
+  --extensions-dir /opt/lollo-editor/no-extensions --user-data-dir /data/user \
+  --config /opt/lollo-editor/config.yaml >/dev/null
 docker start "$P-editor" >/dev/null
 # listening -> success once the editor serves (its log is read whole: grep -q
 # would end the pipe early and fail it under pipefail)
@@ -159,7 +159,7 @@ for _ in $(seq 60); do
 done
 listening || die "the editor did not start: $(docker logs "$P-editor" 2>&1 | tail -5)"
 
-docker create --name "$P-exec" --network "$P-exec" --network-alias garden-code-server-exec --init \
+docker create --name "$P-exec" --network "$P-exec" --network-alias lollo-code-server-exec --init \
   --cap-drop NET_RAW --security-opt no-new-privileges:true -w /work \
   -v "$TMP/workspaces:/work" -v "$TMP/tools:/opt/agent-tools" -v "$P-keys:/keys:ro" \
   "$P-exec:e2e" >/dev/null
@@ -180,7 +180,7 @@ echo "the shell"
 # in_shell COMMAND -> runs COMMAND in agent-1's workspace in the shell, the way a
 # terminal does: over the editor's SSH session, through agent-env
 in_shell() {
-  docker exec "$P-editor" ssh -F /opt/lettuce-editor/ssh_config -T garden-code-server-exec \
+  docker exec "$P-editor" ssh -F /opt/lollo-editor/ssh_config -T lollo-code-server-exec \
     "cd -- /work/agent-1 && exec agent-env bash -c $(printf '%q' "$1")"
 }
 GITC="git -c user.name=e2e -c user.email=e2e@example.com"
@@ -193,11 +193,11 @@ refuse "the hook did not run in the editor" docker exec "$P-editor" test -e /tmp
 shell_env=$(in_shell 'echo $PATH; npm config get prefix' 2>&1 || true)
 expect "the terminal's PATH has the agents' tools" grep -q '/opt/agent-tools/bin' <<<"$shell_env"
 expect "npm installs into /opt/agent-tools" grep -qx '/opt/agent-tools' <<<"$shell_env"
-expect "the terminal prints the notice" bash -c "docker exec -w /work/agent-1 $P-editor bash -c 'exec 0</dev/null; /opt/lettuce-editor/bin/exec-shell' 2>/dev/null | grep -q 'never store tokens or passwords here'"
+expect "the terminal prints the notice" bash -c "docker exec -w /work/agent-1 $P-editor bash -c 'exec 0</dev/null; /opt/lollo-editor/bin/exec-shell' 2>/dev/null | grep -q 'never store tokens or passwords here'"
 
 echo "Source Control's git (shell-git)"
 # editor_git ARGS... -> git as the git extension runs it, from agent-1's workspace
-editor_git() { docker exec -w /work/agent-1 "$P-editor" /opt/lettuce-editor/bin/shell-git "$@"; }
+editor_git() { docker exec -w /work/agent-1 "$P-editor" /opt/lollo-editor/bin/shell-git "$@"; }
 refuse "the editor has no git" docker exec "$P-editor" sh -c 'command -v git'
 expect "shell-git reaches git in the shell" editor_git --version
 toplevel=$(editor_git rev-parse --show-toplevel 2>/dev/null || true)
@@ -208,17 +208,17 @@ expect "shell-git status runs" editor_git status --porcelain
 # the terminals share; the first ones find no connection yet and each make one.
 # shellcheck disable=SC2016 # expanded in the editor
 burst='rm -f /tmp/burst.err; pids=()
-for _ in $(seq 30); do /opt/lettuce-editor/bin/shell-git rev-parse --git-dir >/dev/null 2>>/tmp/burst.err & pids+=($!); done
+for _ in $(seq 30); do /opt/lollo-editor/bin/shell-git rev-parse --git-dir >/dev/null 2>>/tmp/burst.err & pids+=($!); done
 for p in "${pids[@]}"; do wait "$p" || exit 1; done
 ! test -s /tmp/burst.err'
-docker exec "$P-editor" ssh -F /opt/lettuce-editor/ssh_config -O exit garden-code-server-exec 2>/dev/null || true
+docker exec "$P-editor" ssh -F /opt/lollo-editor/ssh_config -O exit lollo-code-server-exec 2>/dev/null || true
 expect "30 git calls at once all succeed, quietly" docker exec -w /work/agent-1 "$P-editor" bash -c "$burst"
 expect "the repository's fsmonitor ran in the shell" docker exec "$P-exec" test -e /tmp/fsmonitor-ran
 refuse "and not in the editor" docker exec "$P-editor" test -e /tmp/fsmonitor-ran
 in_shell "git config --unset core.fsmonitor"
 
 echo "the editor's limits"
-refuse "nothing can be installed into its extensions dir" docker exec "$P-editor" touch /opt/lettuce-editor/no-extensions/x
+refuse "nothing can be installed into its extensions dir" docker exec "$P-editor" touch /opt/lollo-editor/no-extensions/x
 refuse "its root is read-only" docker exec "$P-editor" touch /opt/code-server/x
 refuse "it has no way to the internet" docker exec "$P-editor" bash -c 'exec 3<>/dev/tcp/1.1.1.1/443'
 # listeners CONTAINER -> the TCP sockets listening in CONTAINER (state 0A), one per
@@ -227,14 +227,14 @@ refuse "it has no way to the internet" docker exec "$P-editor" bash -c 'exec 3<>
 listeners() { docker exec "$1" awk 'NR > 1 && $4 == "0A" && $2 !~ /^0B00007F:/' /proc/net/tcp /proc/net/tcp6; }
 expect "it listens on no port, only on its socket" test -z "$(listeners "$P-editor")"
 refuse "it keeps no config file of its own on its volume" docker exec "$P-editor" test -e /data/home/.config/code-server
-expect "its fallback shell is the terminal profile" bash -c "docker exec $P-editor getent passwd root | grep -q ':/opt/lettuce-editor/bin/exec-shell\$'"
-refuse "the shell can't reach the editor" docker exec "$P-exec" bash -c 'exec 3<>/dev/tcp/garden-code-server-editor/8080'
+expect "its fallback shell is the terminal profile" bash -c "docker exec $P-editor getent passwd root | grep -q ':/opt/lollo-editor/bin/exec-shell\$'"
+refuse "the shell can't reach the editor" docker exec "$P-exec" bash -c 'exec 3<>/dev/tcp/lollo-code-server-editor/8080'
 docker run -d --name "$P-probe" --network "$P-default" "$DEBIAN" sleep 300 >/dev/null
-refuse "the stack network can't reach the editor" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/garden-code-server-editor/8080'
-refuse "the stack network can't reach the shell" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/garden-code-server-exec/22'
+refuse "the stack network can't reach the editor" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/lollo-code-server-editor/8080'
+refuse "the stack network can't reach the shell" docker exec "$P-probe" bash -c 'exec 3<>/dev/tcp/lollo-code-server-exec/22'
 docker exec "$P-editor" ssh-keygen -q -t ed25519 -N '' -f /tmp/stranger
 refuse "the shell lets in no other key" docker exec "$P-editor" ssh -F /dev/null -i /tmp/stranger -o IdentitiesOnly=yes \
-  -o BatchMode=yes -o UserKnownHostsFile=/data/ssh/known_hosts root@garden-code-server-exec true
+  -o BatchMode=yes -o UserKnownHostsFile=/data/ssh/known_hosts root@lollo-code-server-exec true
 
 if ((BROWSER)); then
   echo "the workbench in a browser, with a planted workspace"

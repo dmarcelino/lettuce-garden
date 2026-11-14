@@ -1025,15 +1025,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="130" y="86" class="t-muted" font-size="9" text-anchor="middle">one directory per skill</text>
         </g>
 
-        <g id="node-ctl" data-node-id="ctl" data-node-label="lettucectl skills" tabindex="0" role="button" aria-label="Focus lettucectl skills, sync_skills, per stack, operator's host" aria-pressed="false" data-node-kind="external" data-node-sublabel="sync_skills, per stack" data-node-context="operator's host">
-          <title>lettucectl skills · sync_skills, per stack · operator's host</title>
+        <g id="node-ctl" data-node-id="ctl" data-node-label="lolloctl skills" tabindex="0" role="button" aria-label="Focus lolloctl skills, sync_skills, per stack, operator's host" aria-pressed="false" data-node-kind="external" data-node-sublabel="sync_skills, per stack" data-node-context="operator's host">
+          <title>lolloctl skills · sync_skills, per stack · operator's host</title>
           <rect x="380" y="40" width="190" height="64" rx="8" class="c-mask"/>
           <rect x="380" y="40" width="190" height="64" rx="8" class="c-external" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-6;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(386 46) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" x="475" y="70" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lettucectl skills</text>
+          <text data-node-label="" x="475" y="70" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lolloctl skills</text>
         <text x="475" y="86" class="t-muted" font-size="9" text-anchor="middle">sync_skills, per stack</text>
         </g>
 
@@ -1063,8 +1063,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="130" y="276" class="t-muted" font-size="9" text-anchor="middle">upstream's skills, mcp-servers</text>
         </g>
 
-        <g id="node-dir" data-node-id="dir" data-node-label="/root/.letta/skills" tabindex="0" role="button" aria-label="Focus /root/.letta/skills, .lettucectl-skills manifest, shared network namespace › app-server container: agents run as root" aria-pressed="false" data-node-kind="database" data-node-sublabel=".lettucectl-skills manifest" data-node-context="shared network namespace › app-server container: agents run as root">
-          <title>/root/.letta/skills · .lettucectl-skills manifest · shared network namespace › app-server container: agents run as root</title>
+        <g id="node-dir" data-node-id="dir" data-node-label="/root/.letta/skills" tabindex="0" role="button" aria-label="Focus /root/.letta/skills, .lolloctl-skills manifest, shared network namespace › app-server container: agents run as root" aria-pressed="false" data-node-kind="database" data-node-sublabel=".lolloctl-skills manifest" data-node-context="shared network namespace › app-server container: agents run as root">
+          <title>/root/.letta/skills · .lolloctl-skills manifest · shared network namespace › app-server container: agents run as root</title>
           <rect x="380" y="230" width="190" height="64" rx="8" class="c-mask"/>
           <rect x="380" y="230" width="190" height="64" rx="8" class="c-database" data-animate="node" style="--step: 3; --flow-node-name: archify-relay-node-7;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(386 236) scale(0.6875)">
@@ -1072,18 +1072,18 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
           <text data-node-label="" x="475" y="260" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">/root/.letta/skills</text>
-        <text x="475" y="276" class="t-muted" font-size="9" text-anchor="middle">.lettucectl-skills manifest</text>
+        <text x="475" y="276" class="t-muted" font-size="9" text-anchor="middle">.lolloctl-skills manifest</text>
         </g>
 
-        <g id="node-docs" data-node-id="docs" data-node-label="office, pdf" tabindex="0" role="button" aria-label="Focus office, pdf, stdio MCP, garden-doc-tools, shared network namespace › app-server container: agents run as root" aria-pressed="false" data-node-kind="backend" data-node-sublabel="stdio MCP, garden-doc-tools" data-node-context="shared network namespace › app-server container: agents run as root">
-          <title>office, pdf · stdio MCP, garden-doc-tools · shared network namespace › app-server container: agents run as root</title>
+        <g id="node-docs" data-node-id="docs" data-node-label="office, pdf" tabindex="0" role="button" aria-label="Focus office, pdf, stdio MCP, lollo-doc-tools, shared network namespace › app-server container: agents run as root" aria-pressed="false" data-node-kind="backend" data-node-sublabel="stdio MCP, lollo-doc-tools" data-node-context="shared network namespace › app-server container: agents run as root">
+          <title>office, pdf · stdio MCP, lollo-doc-tools · shared network namespace › app-server container: agents run as root</title>
           <rect x="720" y="230" width="190" height="64" rx="8" class="c-mask"/>
           <rect x="720" y="230" width="190" height="64" rx="8" class="c-backend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-8;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(726 236) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" x="815" y="260" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">office, pdf</text>
-        <text x="815" y="276" class="t-muted" font-size="9" text-anchor="middle">stdio MCP, garden-doc-tools</text>
+        <text x="815" y="276" class="t-muted" font-size="9" text-anchor="middle">stdio MCP, lollo-doc-tools</text>
         </g>
 
         <g id="node-vaultskill" data-node-id="vaultskill" data-node-label="using-vault-secrets" tabindex="0" role="button" aria-label="Focus using-vault-secrets, SKILL.md, vault-run, vault-fill, shared network namespace › app-server container: agents run as root" aria-pressed="false" data-node-kind="backend" data-node-sublabel="SKILL.md, vault-run, vault-fill" data-node-context="shared network namespace › app-server container: agents run as root">
@@ -1119,27 +1119,27 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="1095" y="466" class="t-muted" font-size="9" text-anchor="middle">only when HTTPS_PROXY is set</text>
         </g>
 
-        <g id="node-vault" data-node-id="vault" data-node-label="garden-vault" tabindex="0" role="button" aria-label="Focus garden-vault, /mcp, /redeem, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="/mcp, /redeem" data-node-context="Architecture component">
-          <title>garden-vault · /mcp, /redeem · Architecture component</title>
+        <g id="node-vault" data-node-id="vault" data-node-label="lollo-vault" tabindex="0" role="button" aria-label="Focus lollo-vault, /mcp, /redeem, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="/mcp, /redeem" data-node-context="Architecture component">
+          <title>lollo-vault · /mcp, /redeem · Architecture component</title>
           <rect x="380" y="610" width="190" height="64" rx="8" class="c-mask"/>
           <rect x="380" y="610" width="190" height="64" rx="8" class="c-security" data-animate="node" style="--step: 6; --flow-node-name: archify-relay-node-9;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(386 616) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" x="475" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-vault</text>
+          <text data-node-label="" x="475" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo-vault</text>
         <text x="475" y="656" class="t-muted" font-size="9" text-anchor="middle">/mcp, /redeem</text>
         </g>
 
-        <g id="node-pipelock" data-node-id="pipelock" data-node-label="garden-pipelock" tabindex="0" role="button" aria-label="Focus garden-pipelock, :8888 proxy and /fetch, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel=":8888 proxy and /fetch" data-node-context="Architecture component">
-          <title>garden-pipelock · :8888 proxy and /fetch · Architecture component</title>
+        <g id="node-pipelock" data-node-id="pipelock" data-node-label="lollo-pipelock" tabindex="0" role="button" aria-label="Focus lollo-pipelock, :8888 proxy and /fetch, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel=":8888 proxy and /fetch" data-node-context="Architecture component">
+          <title>lollo-pipelock · :8888 proxy and /fetch · Architecture component</title>
           <rect x="1000" y="610" width="190" height="64" rx="8" class="c-mask"/>
           <rect x="1000" y="610" width="190" height="64" rx="8" class="c-security" data-animate="node" style="--step: 7; --flow-node-name: archify-relay-node-10;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(1006 616) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" x="1095" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-pipelock</text>
+          <text data-node-label="" x="1095" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo-pipelock</text>
         <text x="1095" y="656" class="t-muted" font-size="9" text-anchor="middle">:8888 proxy and /fetch</text>
         </g>
 
@@ -1154,14 +1154,14 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="1375" y="466" class="t-muted" font-size="9" text-anchor="middle">set up, report, repair</text>
         </g>
 
-        <g id="node-news-radar" data-node-id="news-radar" data-node-label="garden-news-radar" tabindex="0" role="button" aria-label="Focus garden-news-radar, /mcp, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="/mcp" data-node-context="Architecture component">
-          <title>garden-news-radar · /mcp · Architecture component</title>
+        <g id="node-news-radar" data-node-id="news-radar" data-node-label="lollo-news-radar" tabindex="0" role="button" aria-label="Focus lollo-news-radar, /mcp, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="/mcp" data-node-context="Architecture component">
+          <title>lollo-news-radar · /mcp · Architecture component</title>
           <rect x="1280" y="610" width="190" height="64" rx="8" class="c-mask"/>
           <rect x="1280" y="610" width="190" height="64" rx="8" class="c-backend" data-animate="node" style="--step: 8; --flow-node-name: archify-relay-node-11;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1286 616) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="1375" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-news-radar</text>
+          <text data-node-label="" x="1375" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo-news-radar</text>
         <text x="1375" y="656" class="t-muted" font-size="9" text-anchor="middle">/mcp</text>
         </g>
 

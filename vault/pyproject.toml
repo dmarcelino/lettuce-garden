@@ -1,9 +1,9 @@
 [project]
-name = "garden-vault"
+name = "lollo-vault"
 version = "0.1.0"
 description = "Lettuce vault: personal data agents may use only when the user agrees"
 requires-python = ">=3.12"
-# Pinned: this is an application image, rebuilt on every `lettucectl up`.
+# Pinned: this is an application image, rebuilt on every `lolloctl up`.
 dependencies = [
   "mcp==2.3.0",
   "anyio==4.15.1",
@@ -27,7 +27,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-garden_vault = ["templates/*.html", "static/*"]
+lollo_vault = ["templates/*.html", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

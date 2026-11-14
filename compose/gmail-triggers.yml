@@ -1,14 +1,14 @@
-# Merged by lettucectl on top of upstream/docker/compose.yml for every stack.
+# Merged by lolloctl on top of upstream/docker/compose.yml for every stack.
 # Gmail triggers (gmail-triggers/, gmail-triggers/DESIGN.md): a page where
 # each person says "when an email arrives in label X, ask agent Y to do Z",
 # and a poller that watches Gmail and queues each match for the executor
-# lettucectl installs in the app-server. Opt-in behind the `garden-gmail-triggers`
+# lolloctl installs in the app-server. Opt-in behind the `lollo-gmail-triggers`
 # profile, which needs `google`; without it this file adds nothing.
 #
-# The tunnel forwards https://<name>-garden.<domain>/gmail-triggers/ to it
+# The tunnel forwards https://<name>-lollo.<domain>/gmail-triggers/ to it
 # (cf_tunnel_configure); every page there needs a Cloudflare Access JWT of the
-# garden's own Access application. The garden executor reaches /executor/v1/
-# over the stack network with GARDEN_EXECUTOR_TOKEN, and turns each request
+# lollo's own Access application. The lollo executor reaches /executor/v1/
+# over the stack network with LOLLO_EXECUTOR_TOKEN, and turns each request
 # into `letta cron add --once`; the tunnel never routes that prefix. It runs
 # on the stack network, not in the app-server's namespace, so no agent can take
 # over its port.
@@ -18,31 +18,31 @@
 # path for a symlink that Docker would follow. It shares no directory with the
 # app-server. It reads the Google token Settings -> Google stores
 # (google-creds, declared upstream) read-only and never writes it back.
-# `lettucectl check` refuses a stack where this service loses its hardening,
+# `lolloctl check` refuses a stack where this service loses its hardening,
 # gains another host path or a writable Google volume, or where another
 # service can reach the rules.
 # Relative paths resolve against --project-directory (upstream/docker).
 services:
-  garden-gmail-triggers:
-    profiles: ["garden-gmail-triggers"]
+  lollo-gmail-triggers:
+    profiles: ["lollo-gmail-triggers"]
     build:
-      context: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/gmail-triggers
+      context: ${LOLLO_HOME:?LOLLO_HOME is not set}/gmail-triggers
       additional_contexts:
-        garden-common: ${LETTUCE_HOME:?LETTUCE_HOME is not set}/garden-common
-    image: ${GARDEN_IMAGE_GMAIL_TRIGGERS:-lettuce-gmail-triggers:local}
+        lollo-common: ${LOLLO_HOME:?LOLLO_HOME is not set}/lollo-common
+    image: ${LOLLO_IMAGE_GMAIL_TRIGGERS:-lollo-gmail-triggers:local}
     environment:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
-      # The garden's own Access application and host, never Lettuce's.
-      CF_ACCESS_AUD: ${CF_GARDEN_AUD:-}
+      # The lollo's own Access application and host, never Lettuce's.
+      CF_ACCESS_AUD: ${CF_LOLLO_AUD:-}
       CF_ACCESS_ISSUER: ${CF_ACCESS_ISSUER:-}
       ALLOWED_USERS: ${ALLOWED_USERS:-}
-      PUBLIC_ORIGIN: ${GARDEN_ORIGIN:-}
-      GARDEN_EXECUTOR_TOKEN: ${GARDEN_EXECUTOR_TOKEN:-}
+      PUBLIC_ORIGIN: ${LOLLO_ORIGIN:-}
+      LOLLO_EXECUTOR_TOKEN: ${LOLLO_EXECUTOR_TOKEN:-}
       TZ: ${TZ:-UTC}
     # Root (with no capabilities) so it owns the state directory Docker creates.
     user: "0"
     volumes:
-      - ${LETTA_STATE_DIR:?LETTA_STATE_DIR is not set}/garden/gmail-triggers:/data
+      - ${LETTA_STATE_DIR:?LETTA_STATE_DIR is not set}/lollo/gmail-triggers:/data
       - google-creds:/creds:ro
       - google-policy:/policy:ro
     read_only: true

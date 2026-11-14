@@ -6,10 +6,10 @@ from typing import Any
 import pytest
 from conftest import EVENTS_JSON, json_spec
 
-from garden_news_radar.extract import canonical_url, extract, outlet_of, parse_date
-from garden_news_radar.fetch import Page
-from garden_news_radar.runner import run_source
-from garden_news_radar.spec import SpecError, parse_spec
+from lollo_news_radar.extract import canonical_url, extract, outlet_of, parse_date
+from lollo_news_radar.fetch import Page
+from lollo_news_radar.runner import run_source
+from lollo_news_radar.spec import SpecError, parse_spec
 
 pytestmark = pytest.mark.anyio
 
@@ -196,7 +196,7 @@ async def test_not_json_is_an_error_with_a_sample(fetcher, web):
 
 
 async def test_inspect_keeps_to_its_cap_of_data_urls(fetcher, web):
-    from garden_news_radar.inspect import MAX_CANDIDATES, inspect
+    from lollo_news_radar.inspect import MAX_CANDIDATES, inspect
 
     attrs = "".join(f'<div data-src="/api/item/{i}.json"></div>' for i in range(200))
     web.add("https://site.example.org/", f"<html><body>{attrs}</body></html>")
@@ -205,7 +205,7 @@ async def test_inspect_keeps_to_its_cap_of_data_urls(fetcher, web):
 
 
 async def test_inspect_reads_the_app_script_behind_library_and_tracking_ones(fetcher, web):
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.inspect import inspect
 
     site = "https://cinema.example.org"
     scripts = ["/.rum/micro.js", "/libs/jquery.min.js", "/libs/granite/csrf.js", "/clientlibs/site.min.js"]
@@ -221,7 +221,7 @@ async def test_inspect_reads_the_app_script_behind_library_and_tracking_ones(fet
 
 
 async def test_inspect_reads_at_most_its_cap_of_scripts(fetcher, web):
-    from garden_news_radar.inspect import MAX_SCRIPTS, inspect
+    from lollo_news_radar.inspect import MAX_SCRIPTS, inspect
 
     site = "https://many.example.org"
     tags = "".join(f'<script src="/app/part-{i}.js"></script>' for i in range(MAX_SCRIPTS + 3))
@@ -264,7 +264,7 @@ async def test_pages_are_read_in_their_encoding(fetcher, web, body, content_type
 
 
 async def test_inspect_reads_the_header_charset(fetcher, web):
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.inspect import inspect
 
     web.add("https://venue.example.org/", CARDS.encode("utf-8"), "text/html; charset=utf-8")
     out = await inspect(fetcher, "https://venue.example.org/")
@@ -353,7 +353,7 @@ def test_bad_sitemap_specs_are_refused(obj, message):
 
 # -- source_inspect -------------------------------------------------------------------
 async def test_inspect_offers_sitemaps_and_reads_them(fetcher, web):
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.inspect import inspect
 
     web.add(
         "https://venue.example.org/robots.txt",
@@ -370,7 +370,7 @@ async def test_inspect_offers_sitemaps_and_reads_them(fetcher, web):
 
 
 async def test_inspect_cleans_and_ranks_data_urls(fetcher, web):
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.inspect import inspect
 
     script = (
         'a("https://site.example.org/api/account/delete\\\\"); b(`https://${host}/api/oembed.json`);'
@@ -387,7 +387,7 @@ async def test_inspect_cleans_and_ranks_data_urls(fetcher, web):
 
 
 async def test_inspect_offers_repeated_blocks_for_html(fetcher, web):
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.inspect import inspect
 
     cards = "".join(
         f'<div class="event-card big"><h3>Band {i}</h3><p class="when">2{i}.11.2027</p><a href="/e/{i}">more</a></div>'
@@ -404,8 +404,8 @@ async def test_inspect_offers_repeated_blocks_for_html(fetcher, web):
 
 @pytest.mark.parametrize("charset", ["EUC-JP", "base64", "rot13", "x-unknown"])
 async def test_any_declared_charset_is_read_or_ignored_without_crashing(fetcher, web, charset):
-    from garden_news_radar.fetch import charset_of
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.fetch import charset_of
+    from lollo_news_radar.inspect import inspect
 
     body = '<?xml version="1.0" encoding="EUC-JP"?><html><body><h3>日本の夜</h3><h3>Late Set</h3></body></html>'
     data = body.encode("euc_jp")
@@ -422,7 +422,7 @@ async def test_any_declared_charset_is_read_or_ignored_without_crashing(fetcher,
 def test_only_unfollowed_listings_are_judged_by_past_events():
     from datetime import date
 
-    from garden_news_radar.extract import Item, run_problem
+    from lollo_news_radar.extract import Item, run_problem
 
     past = [Item("k", {"title": "Old", "start": "2027-01-01"})]
     today = date(2027, 1, 15)
@@ -433,8 +433,8 @@ def test_only_unfollowed_listings_are_judged_by_past_events():
 
 
 async def test_inspect_counts_a_whole_sitemap(fetcher, web):
-    from garden_news_radar.extract import MAX_SITEMAP_ITEMS
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.extract import MAX_SITEMAP_ITEMS
+    from lollo_news_radar.inspect import inspect
 
     urls = "".join(f"<url><loc>https://big.example.org/e/{i}</loc></url>" for i in range(MAX_SITEMAP_ITEMS + 50))
     web.add(
@@ -447,7 +447,7 @@ async def test_inspect_counts_a_whole_sitemap(fetcher, web):
 
 
 async def test_inspect_keeps_listing_urls_that_share_a_word_with_account_ones(fetcher, web):
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.inspect import inspect
 
     script = (
         'a("https://site.example.org/api/events?category=piano"); b("https://site.example.org/api/artists/profile.json");'
@@ -522,7 +522,7 @@ def test_dates_without_a_year_take_the_nearest_upcoming_year(text, languages, ex
 def test_blocks_see_dates_written_without_a_year():
     import lxml.html
 
-    from garden_news_radar.blocks import repeated_blocks
+    from lollo_news_radar.blocks import repeated_blocks
 
     cards = "".join(f'<article class="card"><a href="/e/{i}">Show {i}</a> sáb {i + 10} nov</article>' for i in range(4))
     cards += "".join(f'<div class="tile"><a href="/x/{i}">Show {i}</a> 2{i} de Outubro</div>' for i in range(4))
@@ -627,7 +627,7 @@ def test_bad_sitemaps_are_refused(extract_in, message):
 
 
 async def test_inspect_groups_an_index_into_families(fetcher, web):
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.inspect import inspect
 
     add_index(web)
     out = await inspect(fetcher, f"{SM}/sitemap_index.xml")
@@ -637,7 +637,7 @@ async def test_inspect_groups_an_index_into_families(fetcher, web):
 
 # -- rc.3 review: families, order, undated files, pauses ----------------------------------
 def test_sitemap_families_ignore_numbers_dates_and_order():
-    from garden_news_radar.extract import sitemap_family
+    from lollo_news_radar.extract import sitemap_family
 
     assert sitemap_family(f"{SM}/events-sitemap2.xml") == ("events-sitemap", (2,))
     assert sitemap_family(f"{SM}/events-sitemap.xml") == ("events-sitemap", ())
@@ -687,7 +687,7 @@ async def test_the_newest_file_of_a_family_must_be_read(fetcher, web):
 
 
 async def test_inspect_leaves_out_gzipped_files_and_says_so(fetcher, web):
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.inspect import inspect
 
     files = ("events-sitemap1.xml.gz", "events-sitemap2.xml.gz", "post-sitemap.xml")
     rows = "".join(f"<sitemap><loc>{SM}/{f}</loc></sitemap>" for f in files)
@@ -720,7 +720,7 @@ async def test_an_index_source_reads_the_newest_files_of_each_family(fetcher, we
 
 
 async def test_an_undated_newest_file_comes_before_a_dated_older_one(fetcher, web):
-    from garden_news_radar.extract import MAX_SITEMAP_ITEMS
+    from lollo_news_radar.extract import MAX_SITEMAP_ITEMS
 
     rows = "".join(f"<sitemap><loc>{SM}/{f}</loc></sitemap>" for f in ("events-sitemap2.xml", "events-sitemap3.xml"))
     web.add(f"{SM}/sitemap_index.xml", f"<sitemapindex {NS}>{rows}</sitemapindex>", "application/xml")
@@ -759,7 +759,7 @@ def test_a_yearless_date_far_ahead_is_last_years():
 def test_followed_listings_are_not_judged_by_their_span():
     from datetime import date
 
-    from garden_news_radar.extract import Item, window_warning
+    from lollo_news_radar.extract import Item, window_warning
 
     items = [Item(f"k{i}", {"title": f"E{i}", "start": f"2027-01-{16 + i % 3:02d}"}) for i in range(12)]
     today = date(2027, 1, 15)
@@ -770,7 +770,7 @@ def test_followed_listings_are_not_judged_by_their_span():
 
 
 async def test_inspect_keeps_json_escaped_data_urls(fetcher, web):
-    from garden_news_radar.inspect import inspect
+    from lollo_news_radar.inspect import inspect
 
     script = (
         'var a = "https://site.example.org/api/events?from=1\\u0026size=50";'

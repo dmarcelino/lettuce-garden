@@ -1,6 +1,6 @@
 # Publishes a release (release/README.md): on a vX.Y.Z or vX.Y.Z-rc.N tag, and
 # only after every check of ci.yml passes. Nothing is published from main, and
-# there is no `latest`: the lettucectl image holds the Docker socket, so a
+# there is no `latest`: the lolloctl image holds the Docker socket, so a
 # moving tag would let one push reach every host.
 #
 # Each platform builds on a runner of its own architecture (ubuntu-24.04 for
@@ -16,9 +16,9 @@
 #    an unchanged image keeps its name and digest; and a GitHub attestation.
 # 4. release-file: RELEASE (the version, the tested Lettuce tag, each image's
 #    full name), once every image is published for both platforms.
-# 5. ctl (one job per platform): the lettucectl image, carrying RELEASE, pushed
+# 5. ctl (one job per platform): the lolloctl image, carrying RELEASE, pushed
 #    by digest.
-# 6. release: the lettucectl image's tag on both digests, the wrapper pinned to
+# 6. release: the lolloctl image's tag on both digests, the wrapper pinned to
 #    its digest, SHA256SUMS, the release notes (which images changed, and so
 #    which sidecars restart), and the GitHub release.
 # The GHCR packages it creates come out public, as this repository is, so hosts
@@ -97,7 +97,7 @@ jobs:
       - name: Build and push by digest, unless this content is published already
         run: |
           set -euo pipefail
-          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lettuce-$IMAGE
+          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lollo-$IMAGE
           tag=$(release/content-tag "$IMAGE")
           mkdir -p "$RUNNER_TEMP/digest"
           if docker buildx imagetools inspect "$name:$tag" >/dev/null 2>&1; then
@@ -152,7 +152,7 @@ jobs:
         id: build
         run: |
           set -euo pipefail
-          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lettuce-$IMAGE
+          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lollo-$IMAGE
           tag=$(release/content-tag "$IMAGE")
           if digest=$(docker buildx imagetools inspect "$name:$tag" --format '{{json .Manifest}}' 2>/dev/null | jq -er .digest); then
             echo "$IMAGE: $name:$tag is published; reused"
@@ -173,7 +173,7 @@ jobs:
             echo "digest=$digest"
             echo "built=$built"
           } >>"$GITHUB_OUTPUT"
-          key=GARDEN_IMAGE_$(tr 'a-z-' 'A-Z_' <<<"$IMAGE")
+          key=LOLLO_IMAGE_$(tr 'a-z-' 'A-Z_' <<<"$IMAGE")
           mkdir -p "$RUNNER_TEMP/ref"
           echo "$key=$name:$tag@$digest" >"$RUNNER_TEMP/ref/$IMAGE.env"
       - if: steps.build.outputs.built == 'true'
@@ -226,7 +226,7 @@ jobs:
           cat RELEASE
           # compose build --push has exited 0 having pushed nothing (upstream's
           # publish.yml); this reads the registry back.
-          sed -n 's/^GARDEN_IMAGE_[A-Z_]*=//p' RELEASE | while read -r ref; do
+          sed -n 's/^LOLLO_IMAGE_[A-Z_]*=//p' RELEASE | while read -r ref; do
             p=$(docker buildx imagetools inspect --raw "$ref" | jq -r '[.manifests[].platform | "\(.os)/\(.architecture)"] | join(" ")')
             [[ " $p " == *" linux/amd64 "* && " $p " == *" linux/arm64 "* ]] || { echo "::error::$ref is not published for both platforms ($p)"; exit 1; }
           done
@@ -266,14 +266,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build the lettucectl image and push it by digest
+      - name: Build the lolloctl image and push it by digest
         run: |
           set -euo pipefail
-          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lettucectl
+          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lolloctl
           mkdir -p "$RUNNER_TEMP/digest"
           docker buildx build --platform "linux/$ARCH" --provenance mode=max --sbom true \
             --output "type=image,name=$name,push-by-digest=true,name-canonical=true,push=true" \
-            --metadata-file "$RUNNER_TEMP/ctl.json" -f release/lettucectl.Dockerfile .
+            --metadata-file "$RUNNER_TEMP/ctl.json" -f release/lolloctl.Dockerfile .
           jq -er '."containerimage.digest"' "$RUNNER_TEMP/ctl.json" >"$RUNNER_TEMP/digest/$ARCH"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -313,15 +313,15 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Tag the lettucectl image on both platforms' digests
+      - name: Tag the lolloctl image on both platforms' digests
         id: ctl
         run: |
           set -euo pipefail
-          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lettucectl
+          name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lolloctl
           refs=()
           for arch in amd64 arm64; do
             d=$(cat "$RUNNER_TEMP/ctl/$arch")
-            [[ $d =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no lettucectl build for $arch"; exit 1; }
+            [[ $d =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no lolloctl build for $arch"; exit 1; }
             refs+=("$name@$d")
           done
           docker buildx imagetools create -t "$name:$TAG" "${refs[@]}"
@@ -340,26 +340,26 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           sed -e "s|@VERSION@|$TAG|" -e "s|@IMAGE@|$IMAGE|" -e "s|@REPOSITORY@|$GITHUB_REPOSITORY|" \
-            release/lettucectl-wrapper.sh >dist/lettucectl
-          if grep -q '@[A-Z]*@' dist/lettucectl; then echo "::error::the wrapper still has a placeholder"; exit 1; fi
+            release/lolloctl-wrapper.sh >dist/lolloctl
+          if grep -q '@[A-Z]*@' dist/lolloctl; then echo "::error::the wrapper still has a placeholder"; exit 1; fi
           cp RELEASE dist/RELEASE
-          (cd dist && sha256sum lettucectl RELEASE >SHA256SUMS)
+          (cd dist && sha256sum lolloctl RELEASE >SHA256SUMS)
           # The images whose name changed since the last release: their
           # containers restart on self-upgrade; a changed vault relocks.
           prev=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty')
           : >"$RUNNER_TEMP/prev"
           [[ -z $prev ]] || gh release download "$prev" --pattern RELEASE --output "$RUNNER_TEMP/prev" --clobber || true
           {
-            echo "lettuce-garden $TAG, tested with Lettuce $(sed -n 's/^LETTUCE_REF=//p' RELEASE)."
+            echo "lollo-rozzo $TAG, tested with Lettuce $(sed -n 's/^LETTUCE_REF=//p' RELEASE)."
             echo
-            echo "Install or upgrade: release/README.md. Verify the wrapper: \`gh attestation verify lettucectl --repo $GITHUB_REPOSITORY\`."
+            echo "Install or upgrade: release/README.md. Verify the wrapper: \`gh attestation verify lolloctl --repo $GITHUB_REPOSITORY\`."
             echo
             if [[ -z $prev ]]; then
               echo "First release: every container is new."
             else
-              changed=$(comm -13 <(grep '^GARDEN_IMAGE_' "$RUNNER_TEMP/prev" | sort) <(grep '^GARDEN_IMAGE_' RELEASE | sort) | cut -d= -f1 | sed 's/^GARDEN_IMAGE_//' | tr 'A-Z_' 'a-z-')
+              changed=$(comm -13 <(grep '^LOLLO_IMAGE_' "$RUNNER_TEMP/prev" | sort) <(grep '^LOLLO_IMAGE_' RELEASE | sort) | cut -d= -f1 | sed 's/^LOLLO_IMAGE_//' | tr 'A-Z_' 'a-z-')
               if [[ -z $changed ]]; then
-                echo "No garden image changed since $prev: no sidecar restarts."
+                echo "No lollo image changed since $prev: no sidecar restarts."
               else
                 echo "Images changed since $prev (their containers restart on self-upgrade):"
                 for i in $changed; do echo "- $i"; done
@@ -373,11 +373,11 @@ jobs:
           cat dist/NOTES.md
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: dist/lettucectl
+          subject-path: dist/lolloctl
       - name: Create the GitHub release
         run: |
           set -euo pipefail
           flags=()
           [[ $TAG != *-rc.* ]] || flags+=(--prerelease)
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" \
-            --notes-file dist/NOTES.md "${flags[@]}" dist/lettucectl dist/RELEASE dist/SHA256SUMS
+            --notes-file dist/NOTES.md "${flags[@]}" dist/lolloctl dist/RELEASE dist/SHA256SUMS

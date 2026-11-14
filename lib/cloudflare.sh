@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Cloudflare API v4 helpers (curl + jq). Sourced by lettucectl after common.sh.
+# Cloudflare API v4 helpers (curl + jq). Sourced by lolloctl after common.sh.
 #
 # The API token never reaches argv: curl reads it from a config block on stdin,
 # so it does not show up in `ps` or shell history. Request bodies carry no
@@ -70,8 +70,8 @@ cf_policy_update() {
 }
 
 # cf_app_body NAME HOST IDP SESSION_DURATION POLICY_ID -> the stack's Access application as
-# lettucectl defines it; each stack has two, Lettuce's and the garden's, with the same policy.
-# Its cookie is HttpOnly, so no script on the host (Lettuce, the garden pages, the code
+# lolloctl defines it; each stack has two, Lettuce's and the lollo's, with the same policy.
+# Its cookie is HttpOnly, so no script on the host (Lettuce, the lollo pages, the code
 # editor) can read the person's Access token and hand it to an agent, and SameSite=Lax. Cloudflare's docs disagree on the defaults, so both are explicit.
 cf_app_body() {
   jq -cn --arg name "$1" --arg host "$2" --arg idp "$3" --arg dur "$4" --arg pol "$5" '{
@@ -111,25 +111,25 @@ cf_tunnel_token() {
   jq -r '.' <<<"$r"
 }
 
-# Routes that profiles add on the stack's garden host (GARDEN_HOSTNAME):
+# Routes that profiles add on the stack's lollo host (LOLLO_HOSTNAME):
 # "<profile> <path regex> <service>". Each service has its own UI and checks the
-# garden's Access application. A profile garden-<page> serves /<page>/, which the
-# garden landing page links to.
+# lollo's Access application. A profile lollo-<page> serves /<page>/, which the
+# lollo landing page links to.
 PROFILE_ROUTES=(
-  'garden-vault ^/vault(/|$) http://garden-vault:8000'
-  'garden-gmail-triggers ^/gmail-triggers(/|$) http://garden-gmail-triggers:8000'
-  'garden-news-radar ^/news-radar(/|$) http://garden-news-radar:8000'
-  'garden-code-server ^/code-server(/|$) http://garden-code-server:8000'
+  'lollo-vault ^/vault(/|$) http://lollo-vault:8000'
+  'lollo-gmail-triggers ^/gmail-triggers(/|$) http://lollo-gmail-triggers:8000'
+  'lollo-news-radar ^/news-radar(/|$) http://lollo-news-radar:8000'
+  'lollo-code-server ^/code-server(/|$) http://lollo-code-server:8000'
 )
-# The landing page and its assets (any file under /assets/), served by the garden
-# service (compose/garden.yml) whenever a garden page profile is on. Its /executor/v1/
+# The landing page and its assets (any file under /assets/), served by the landing
+# service (compose/landing.yml) whenever a lollo page profile is on. Its /executor/v1/
 # API and /healthz never match.
-GARDEN_LANDING_PATH='^/(assets/[^/]+)?$'
-GARDEN_LANDING_SERVICE=http://garden:8000
+LOLLO_LANDING_PATH='^/(assets/[^/]+)?$'
+LOLLO_LANDING_SERVICE=http://landing:8000
 
-# garden_profiles PROFILES -> the PROFILE_ROUTES profiles in PROFILES, comma-separated,
+# lollo_profiles PROFILES -> the PROFILE_ROUTES profiles in PROFILES, comma-separated,
 # in PROFILE_ROUTES order
-garden_profiles() {
+lollo_profiles() {
   local r p out=''
   for r in "${PROFILE_ROUTES[@]}"; do
     p=${r%% *}
@@ -138,21 +138,21 @@ garden_profiles() {
   printf '%s\n' "$out"
 }
 
-# garden_services -> the services the garden host routes to, one per line: each
+# lollo_services -> the services the lollo host routes to, one per line: each
 # PROFILE_ROUTES service, then the landing page's
-garden_services() {
+lollo_services() {
   local r p path svc
   for r in "${PROFILE_ROUTES[@]}"; do
     read -r p path svc <<<"$r"
     svc=${svc#http://}
     printf '%s\n' "${svc%%:*}"
   done
-  svc=${GARDEN_LANDING_SERVICE#http://}
+  svc=${LOLLO_LANDING_SERVICE#http://}
   printf '%s\n' "${svc%%:*}"
 }
 
-# cf_tunnel_configure ACCOUNT TUNNEL_ID HOST GARDEN_HOST PROFILES -> on
-# GARDEN_HOST, the PROFILE_ROUTES of the profiles that are on, then the landing
+# cf_tunnel_configure ACCOUNT TUNNEL_ID HOST LOLLO_HOST PROFILES -> on
+# LOLLO_HOST, the PROFILE_ROUTES of the profiles that are on, then the landing
 # page when any of them is, then 404 for anything else; HOST to the stack's
 # app-server, and nothing else.
 cf_tunnel_configure() {
@@ -164,7 +164,7 @@ cf_tunnel_configure() {
     first=${first:-$svc}
   done
   if [[ -n $first ]]; then
-    routes=$(jq -c --arg h "$4" --arg p "$GARDEN_LANDING_PATH" --arg s "$GARDEN_LANDING_SERVICE" \
+    routes=$(jq -c --arg h "$4" --arg p "$LOLLO_LANDING_PATH" --arg s "$LOLLO_LANDING_SERVICE" \
       '. + [{hostname: $h, path: $p, service: $s}]' <<<"$routes")
   fi
   routes=$(jq -c --arg h "$4" '. + [{hostname: $h, service: "http_status:404"}]' <<<"$routes")

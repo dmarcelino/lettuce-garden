@@ -7,7 +7,7 @@
     "FileSystemConnections": [
       {
         "ConnectionId": "workspace",
-        "RootPath": "/opt/lettuce-doc-tools/office/no-workspace",
+        "RootPath": "/opt/lollo-doc-tools/office/no-workspace",
         "AllowedExtensions": [".docx", ".pptx", ".xlsx"],
         "DefaultChangeMode": "Tracked",
         "MaximumBytes": 52428800,

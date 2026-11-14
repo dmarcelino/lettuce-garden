@@ -950,7 +950,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <!-- Boundaries (behind everything) -->
         <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="0" data-composition-frame-label="app-server: agents run here as root" x="10" y="70" width="280" height="294" rx="8" class="c-security-group" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="1" data-composition-frame-label="mounted by garden-pipelock only" x="410" y="430" width="240" height="114" rx="8" class="c-security-group" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="1" data-composition-frame-label="mounted by lollo-pipelock only" x="410" y="430" width="240" height="114" rx="8" class="c-security-group" stroke-width="1"/>
 
         <!-- Connection paths (before components for correct z-order) -->
         <g data-graph-role="automatic-crossover" style="--step:0">
@@ -979,7 +979,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
         <g data-graph-role="automatic-crossover" style="--step:6">
           <path data-graph-role="automatic-crossover-underlay" d="M 530 640 L 530 524" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="lettucectl" data-edge-to="evidence" data-edge-label="read-only, no network" data-edge-key="6" data-edge-id="lettucectl-reads" data-composition-points="530,640;530,524" data-composition-crossover="halo" data-composition-independent="true" d="M 530 640 L 530 524" class="a-default" data-animate="edge" style="--step: 6;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-edge-from="lolloctl" data-edge-to="evidence" data-edge-label="read-only, no network" data-edge-key="6" data-edge-id="lolloctl-reads" data-composition-points="530,640;530,524" data-composition-crossover="halo" data-composition-independent="true" d="M 530 640 L 530 524" class="a-default" data-animate="edge" style="--step: 6;" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:7">
           <path data-graph-role="automatic-crossover-underlay" d="M 150 344 L 150 460" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -1011,15 +1011,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="150" y="336" class="t-backend" font-size="7" text-anchor="middle">HTTPS_PROXY set</text>
         </g>
 
-        <g id="node-vault" data-node-id="vault" data-node-label="garden services" tabindex="0" role="button" aria-label="Focus garden services, vault, gmail-triggers, news-radar, garden, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="vault, gmail-triggers, news-radar, garden" data-node-context="Architecture component">
-          <title>garden services · vault, gmail-triggers, news-radar, garden · Architecture component</title>
+        <g id="node-vault" data-node-id="vault" data-node-label="lollo services" tabindex="0" role="button" aria-label="Focus lollo services, vault, gmail-triggers, news-radar, lollo, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="vault, gmail-triggers, news-radar, landing" data-node-context="Architecture component">
+          <title>lollo services · vault, gmail-triggers, news-radar, lollo · Architecture component</title>
           <rect x="40" y="460" width="220" height="64" rx="8" class="c-mask"/>
           <rect x="40" y="460" width="220" height="64" rx="8" class="c-backend" data-animate="node" style="--step: 8; --flow-node-name: archify-relay-node-5;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 466) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="150" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden services</text>
-        <text x="150" y="506" class="t-muted" font-size="8.6" text-anchor="middle">vault, gmail-triggers, news-radar, garden</text>
+          <text data-node-label="" x="150" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo services</text>
+        <text x="150" y="506" class="t-muted" font-size="8.6" text-anchor="middle">vault, gmail-triggers, news-radar, landing</text>
         </g>
 
         <g id="node-search" data-node-id="search" data-node-label="searxng, ddg-mcp" tabindex="0" role="button" aria-label="Focus searxng, ddg-mcp, queries and page fetches, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="queries and page fetches" data-node-tag="HTTPS_PROXY set" data-node-context="Architecture component">
@@ -1034,21 +1034,21 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="530" y="156" class="t-backend" font-size="7" text-anchor="middle">HTTPS_PROXY set</text>
         </g>
 
-        <g id="node-pipelock" data-node-id="pipelock" data-node-label="garden-pipelock :8888" tabindex="0" role="button" aria-label="Focus garden-pipelock :8888, forward proxy + /fetch, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="forward proxy + /fetch" data-node-tag="balanced, advisory" data-node-context="Architecture component">
-          <title>garden-pipelock :8888 · forward proxy + /fetch · Architecture component · balanced, advisory</title>
+        <g id="node-pipelock" data-node-id="pipelock" data-node-label="lollo-pipelock :8888" tabindex="0" role="button" aria-label="Focus lollo-pipelock :8888, forward proxy + /fetch, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="forward proxy + /fetch" data-node-tag="balanced, advisory" data-node-context="Architecture component">
+          <title>lollo-pipelock :8888 · forward proxy + /fetch · Architecture component · balanced, advisory</title>
           <rect x="440" y="280" width="180" height="64" rx="8" class="c-mask"/>
           <rect x="440" y="280" width="180" height="64" rx="8" class="c-security" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-4;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(446 286) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" x="530" y="310" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-pipelock :8888</text>
+          <text data-node-label="" x="530" y="310" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo-pipelock :8888</text>
         <text x="530" y="326" class="t-muted" font-size="9" text-anchor="middle">forward proxy + /fetch</text>
         <text x="530" y="336" class="t-security" font-size="7" text-anchor="middle">balanced, advisory</text>
         </g>
 
-        <g id="node-evidence" data-node-id="evidence" data-node-label="pipelock-data" tabindex="0" role="button" aria-label="Focus pipelock-data, signing key + receipts, mounted by garden-pipelock only" aria-pressed="false" data-node-kind="database" data-node-sublabel="signing key + receipts" data-node-context="mounted by garden-pipelock only">
-          <title>pipelock-data · signing key + receipts · mounted by garden-pipelock only</title>
+        <g id="node-evidence" data-node-id="evidence" data-node-label="pipelock-data" tabindex="0" role="button" aria-label="Focus pipelock-data, signing key + receipts, mounted by lollo-pipelock only" aria-pressed="false" data-node-kind="database" data-node-sublabel="signing key + receipts" data-node-context="mounted by lollo-pipelock only">
+          <title>pipelock-data · signing key + receipts · mounted by lollo-pipelock only</title>
           <rect x="440" y="460" width="180" height="64" rx="8" class="c-mask"/>
           <rect x="440" y="460" width="180" height="64" rx="8" class="c-database" data-animate="node" style="--step: 6; --flow-node-name: archify-relay-node-6;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(446 466) scale(0.6875)">
@@ -1059,15 +1059,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="530" y="506" class="t-muted" font-size="9" text-anchor="middle">signing key + receipts</text>
         </g>
 
-        <g id="node-lettucectl" data-node-id="lettucectl" data-node-label="lettucectl" tabindex="0" role="button" aria-label="Focus lettucectl, receipts, backup, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="receipts, backup" data-node-context="Architecture component">
-          <title>lettucectl · receipts, backup · Architecture component</title>
+        <g id="node-lolloctl" data-node-id="lolloctl" data-node-label="lolloctl" tabindex="0" role="button" aria-label="Focus lolloctl, receipts, backup, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="receipts, backup" data-node-context="Architecture component">
+          <title>lolloctl · receipts, backup · Architecture component</title>
           <rect x="440" y="640" width="180" height="64" rx="8" class="c-mask"/>
           <rect x="440" y="640" width="180" height="64" rx="8" class="c-external" data-animate="node" style="--step: 6; --flow-node-name: archify-relay-node-3;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(446 646) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" x="530" y="670" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lettucectl</text>
+          <text data-node-label="" x="530" y="670" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lolloctl</text>
         <text x="530" y="686" class="t-muted" font-size="9" text-anchor="middle">receipts, backup</text>
         </g>
 
@@ -1120,7 +1120,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <rect x="384.4" y="395" width="139.6" height="14" rx="3" class="c-mask"/>
           <text x="454.2" y="405" class="t-edge-security" font-size="8" text-anchor="middle">signed receipt per decision</text>
         </g>
-        <g data-edge-from="lettucectl" data-edge-to="evidence" data-edge-label="read-only, no network" data-edge-key="6" data-edge-id="lettucectl-reads">
+        <g data-edge-from="lolloctl" data-edge-to="evidence" data-edge-label="read-only, no network" data-edge-key="6" data-edge-id="lolloctl-reads">
           <rect x="474.6" y="620" width="110.8" height="14" rx="3" class="c-mask"/>
           <text x="530" y="630" class="t-edge-default" font-size="8" text-anchor="middle">read-only, no network</text>
         </g>
@@ -1135,9 +1135,9 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <text data-boundary-label="" x="18" y="93" class="t-security" font-size="9" font-weight="600">app-server: agents run here as root</text>
         </g>
 
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="security-group" data-composition-frame-label="mounted by garden-pipelock only">
+        <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="security-group" data-composition-frame-label="mounted by lollo-pipelock only">
           <rect data-graph-role="structural-frame-label-mask" x="414" y="440" width="177.4" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="418" y="453" class="t-security" font-size="9" font-weight="600">mounted by garden-pipelock only</text>
+          <text data-boundary-label="" x="418" y="453" class="t-security" font-size="9" font-weight="600">mounted by lollo-pipelock only</text>
         </g>
 
         <!-- Legend -->

@@ -1,14 +1,14 @@
 # The images publish.yml publishes, one per line (release/README.md):
 #   <image> <build context> <shared context, or -> <Compose service, or ->
-# Each is published as ghcr.io/<owner>/lettuce-<image>, named by its content
-# tag (release/content-tag), and lettucectl names it by RELEASE's
-# GARDEN_IMAGE_<IMAGE> (release_key). Not here, built on the host instead:
+# Each is published as ghcr.io/<owner>/lollo-<image>, named by its content
+# tag (release/content-tag), and lolloctl names it by RELEASE's
+# LOLLO_IMAGE_<IMAGE> (release_key). Not here, built on the host instead:
 # doc-tools (AGPL-3.0 PyMuPDF) and code-server/exec (FROM the app-server's image).
-garden              garden              garden-common  garden
-vault               vault               garden-common  garden-vault
-gmail-triggers      gmail-triggers      garden-common  garden-gmail-triggers
-news-radar          news-radar          garden-common  garden-news-radar
-pipelock            pipelock            -              garden-pipelock
-code-server         code-server         garden-common  garden-code-server
-code-server-editor  code-server/editor  -              garden-code-server-editor
+landing            landing            lollo-common  landing
+vault               vault               lollo-common  lollo-vault
+gmail-triggers      gmail-triggers      lollo-common  lollo-gmail-triggers
+news-radar          news-radar          lollo-common  lollo-news-radar
+pipelock            pipelock            -              lollo-pipelock
+code-server         code-server         lollo-common  lollo-code-server
+code-server-editor  code-server/editor  -              lollo-code-server-editor
 backup              backup              -              -

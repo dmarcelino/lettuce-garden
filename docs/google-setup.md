@@ -19,8 +19,8 @@ Menu labels were checked against Google's docs in October 2026. Labels marked *(
 
 ## 1. Turn the profile on
 ```bash
-lettucectl profiles                                  # shows the current list
-lettucectl profiles cloudflared,search,google        # your list plus google
+lolloctl profiles                                  # shows the current list
+lolloctl profiles cloudflared,search,google        # your list plus google
 ```
 `profiles` checks every stack, writes the list to `config.env` and every `stack.env`, and rebuilds and restarts the stacks. Whenever the list contains `google` it prints each stack's redirect URI, even when nothing changed. Copy those URIs for step 4. Later, `add` prints the URI of each new stack and `remove` reminds you to delete it.
 
@@ -52,7 +52,7 @@ Create a new client; don't add these URIs to the Cloudflare login client:
 - **The secret is kept in every stack.** A client of its own can be rotated without touching Cloudflare.
 
 1. Go to **Google Auth Platform** -> **Clients** -> **Create client**.
-2. **Application type:** **Web application**. **Name:** `lettuce-google`.
+2. **Application type:** **Web application**. **Name:** `lollo-google`.
 3. If the form asks whether the client will be used by an AI-powered agent, answer **yes**: it will. What this changes was not documented when this guide was written.
 4. Under **Authorized redirect URIs**, click **Add URI** once per stack and enter the URIs from step 1, for example:
    - `https://alfred.example.com/api/google/oauth/callback`
@@ -82,4 +82,4 @@ The client ID, secret and token are stored in the stack's `google-policy` and `g
 | Access stops working after about a week | The consent screen is in **Testing**. Publish it (step 3), then reconnect in Settings -> Google. |
 | An agent's Google call fails saying an API is disabled or has not been used | That API isn't enabled in the project (step 2). |
 
-To turn Google off, drop it from the list with `lettucectl profiles`. That removes the `google-mcp` container from every stack, and you can delete the redirect URIs and the client. `lettucectl remove` deletes a stack's volumes, its Google token included; a backup of `stacks/` doesn't include them, so after a restore on another host each person connects again.
+To turn Google off, drop it from the list with `lolloctl profiles`. That removes the `google-mcp` container from every stack, and you can delete the redirect URIs and the client. `lolloctl remove` deletes a stack's volumes, its Google token included; a backup of `stacks/` doesn't include them, so after a restore on another host each person connects again.

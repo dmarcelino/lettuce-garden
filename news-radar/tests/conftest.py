@@ -7,15 +7,15 @@ import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from garden_common.auth import Authenticator
+from lollo_common.auth import Authenticator
 
-from garden_news_radar.config import Settings
-from garden_news_radar.fetch import Fetcher
-from garden_news_radar.service import Service
-from garden_news_radar.store import Store
+from lollo_news_radar.config import Settings
+from lollo_news_radar.fetch import Fetcher
+from lollo_news_radar.service import Service
+from lollo_news_radar.store import Store
 
 EMAIL = "alfred@gmail.com"
-ORIGIN = "https://alfred-garden.example.com"
+ORIGIN = "https://alfred-lollo.example.com"
 TOKEN = "ab" * 32
 AGENT = "agent-11111111-2222-3333-4444-555555555555"
 OTHER_AGENT = "agent-66666666-7777-8888-9999-000000000000"

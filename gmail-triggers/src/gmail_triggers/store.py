@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from garden_common.executor import AgentAsks
+from lollo_common.executor import AgentAsks
 
 from .config import HANDLED_KEEP_SECONDS, MAX_PENDING_PER_RULE, RUNS_KEEP_PER_RULE
 

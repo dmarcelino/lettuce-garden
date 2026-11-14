@@ -1,6 +1,6 @@
 # shellcheck shell=bash
-# Shared helpers for lettucectl: messages, env files, config, validation, compose.
-# Sourced by lettucectl; expects LETTUCE_HOME to be set.
+# Shared helpers for lolloctl: messages, env files, config, validation, compose.
+# Sourced by lolloctl; expects LOLLO_HOME to be set.
 
 info() { printf '%s\n' "$*" >&2; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
@@ -53,29 +53,29 @@ file_mode() { stat -c '%a' "$1"; }
 version_ge() { printf '%s\n%s\n' "$2" "$1" | sort -V -C; }
 
 # ── release mode ─────────────────────────────────────────────────────────────
-# The published lettucectl image has a RELEASE file (written by publish.yml):
+# The published lolloctl image has a RELEASE file (written by publish.yml):
 # its version, the Lettuce tag it was tested with, and the full name of each
 # published image. A clone has none, and builds every image itself (lib/DESIGN.md).
-release_file() { printf '%s/RELEASE' "$LETTUCE_HOME"; }
+release_file() { printf '%s/RELEASE' "$LOLLO_HOME"; }
 release_mode() { [[ -f $(release_file) ]]; }
 release_get() { env_get "$(release_file)" "$1"; }
 
 # stdin_is_terminal -> success when the operator types into stdin. In release
 # mode the wrapper gives the container a terminal only when stdout is one too,
-# and says so in LETTUCECTL_STDIN_TTY when only stdin is (`apply | tee log`).
+# and says so in LOLLOCTL_STDIN_TTY when only stdin is (`apply | tee log`).
 stdin_is_terminal() {
-  [[ -t 0 ]] || { release_mode && [[ ${LETTUCECTL_STDIN_TTY:-} == 1 ]]; }
+  [[ -t 0 ]] || { release_mode && [[ ${LOLLOCTL_STDIN_TTY:-} == 1 ]]; }
 }
 
 # published_images -> "<image> <context> <shared context or -> <service or ->" per
 # image publish.yml publishes, from release/images
-published_images() { awk '!/^[[:space:]]*(#|$)/ { print $1, $2, $3, $4 }' "$LETTUCE_HOME/release/images"; }
+published_images() { awk '!/^[[:space:]]*(#|$)/ { print $1, $2, $3, $4 }' "$LOLLO_HOME/release/images"; }
 
-# release_key IMAGE -> its key in RELEASE and the overlays' variable: vault -> GARDEN_IMAGE_VAULT
-release_key() { printf 'GARDEN_IMAGE_%s' "$(tr 'a-z-' 'A-Z_' <<<"$1")"; }
+# release_key IMAGE -> its key in RELEASE and the overlays' variable: vault -> LOLLO_IMAGE_VAULT
+release_key() { printf 'LOLLO_IMAGE_%s' "$(tr 'a-z-' 'A-Z_' <<<"$1")"; }
 
 # image_name IMAGE -> the name the stacks use for it: RELEASE's in release mode,
-# else the one a clone builds, lettuce-IMAGE:local
+# else the one a clone builds, lollo-IMAGE:local
 image_name() {
   local n
   if release_mode; then
@@ -83,41 +83,41 @@ image_name() {
     [[ -n $n ]] || die "RELEASE names no $(release_key "$1")"
     printf '%s' "$n"
   else
-    printf 'lettuce-%s:local' "$1"
+    printf 'lollo-%s:local' "$1"
   fi
 }
 
 # ── paths and config ─────────────────────────────────────────────────────────
-# LETTUCE_HOME is the code; LETTUCE_DATA (resolve_data_dir) the instance's data.
-config_file() { printf '%s/config.env' "$LETTUCE_DATA"; }
-upstream_root() { printf '%s/upstream' "$LETTUCE_DATA"; }
+# LOLLO_HOME is the code; LOLLO_DATA (resolve_data_dir) the instance's data.
+config_file() { printf '%s/config.env' "$LOLLO_DATA"; }
+upstream_root() { printf '%s/upstream' "$LOLLO_DATA"; }
 upstream_dir() { printf '%s/%s' "$(upstream_root)" "$(cfg LETTUCE_REF)"; }
-token_file() { printf '%s/.secrets/cloudflare-api-token' "$LETTUCE_DATA"; }
-stack_dir() { printf '%s/stacks/%s' "$LETTUCE_DATA" "$1"; }
-stack_env() { printf '%s/stacks/%s/stack.env' "$LETTUCE_DATA" "$1"; }
-stacks_conf() { printf '%s/stacks.conf' "$LETTUCE_DATA"; }
+token_file() { printf '%s/.secrets/cloudflare-api-token' "$LOLLO_DATA"; }
+stack_dir() { printf '%s/stacks/%s' "$LOLLO_DATA" "$1"; }
+stack_env() { printf '%s/stacks/%s/stack.env' "$LOLLO_DATA" "$1"; }
+stacks_conf() { printf '%s/stacks.conf' "$LOLLO_DATA"; }
 
-# resolve_data_dir -> sets LETTUCE_DATA. In release mode the wrapper passes it
+# resolve_data_dir -> sets LOLLO_DATA. In release mode the wrapper passes it
 # (its own directory's parent). From a clone it is the clone's data/ unless set,
 # so a clone or a worktree never reaches the real stacks by default, and it
 # refuses a data directory a release runs: a branch's code and images would
 # recreate people's stacks and lock every vault.
 resolve_data_dir() {
   if release_mode; then
-    [[ -n ${LETTUCE_DATA:-} ]] || die "LETTUCE_DATA is not set; run lettucectl through its wrapper, bin/lettucectl in the data directory"
+    [[ -n ${LOLLO_DATA:-} ]] || die "LOLLO_DATA is not set; run lolloctl through its wrapper, bin/lolloctl in the data directory"
   else
-    LETTUCE_DATA=${LETTUCE_DATA:-$LETTUCE_HOME/data}
+    LOLLO_DATA=${LOLLO_DATA:-$LOLLO_HOME/data}
   fi
-  [[ $LETTUCE_DATA == /* ]] || die "LETTUCE_DATA must be an absolute path: $LETTUCE_DATA"
-  LETTUCE_DATA=$(realpath -m -- "$LETTUCE_DATA")
-  if ! release_mode && [[ -e $LETTUCE_DATA/bin/lettucectl ]]; then
-    die "$LETTUCE_DATA is run by a released lettucectl ($LETTUCE_DATA/bin/lettucectl); a clone may not use it"
+  [[ $LOLLO_DATA == /* ]] || die "LOLLO_DATA must be an absolute path: $LOLLO_DATA"
+  LOLLO_DATA=$(realpath -m -- "$LOLLO_DATA")
+  if ! release_mode && [[ -e $LOLLO_DATA/bin/lolloctl ]]; then
+    die "$LOLLO_DATA is run by a released lolloctl ($LOLLO_DATA/bin/lolloctl); a clone may not use it"
   fi
 }
 
 # ── the same-path check (release mode) ───────────────────────────────────────
-# lettucectl tells Docker to mount host paths; Docker reads them on the host,
-# not in lettucectl's container. So every host path lettucectl uses must be
+# lolloctl tells Docker to mount host paths; Docker reads them on the host,
+# not in lolloctl's container. So every host path lolloctl uses must be
 # mounted into its container at the same path, or Docker would create an empty,
 # root-owned directory in its place and a stack would start with no data.
 # BIND_MOUNTS holds this container's bind destinations once check_mounts ran.
@@ -125,18 +125,18 @@ BIND_MOUNTS=""
 
 # check_mounts -> in release mode, reads this container's own mounts (one API
 # call) and dies unless every bind mount has the same source and destination
-# and LETTUCE_DATA is one of them. It fails closed: no container found, no run.
+# and LOLLO_DATA is one of them. It fails closed: no container found, no run.
 check_mounts() {
   local mounts bad
   release_mode || return 0
   mounts=$(host_docker inspect --format '{{json .Mounts}}' "$HOSTNAME" 2>/dev/null) ||
-    die "could not read this container's mounts (docker inspect $HOSTNAME); run lettucectl through its wrapper, which never sets --hostname"
+    die "could not read this container's mounts (docker inspect $HOSTNAME); run lolloctl through its wrapper, which never sets --hostname"
   bad=$(jq -r '[.[] | select(.Type == "bind" and .Source != .Destination) | "\(.Source) at \(.Destination)"] | join(", ")' <<<"$mounts") ||
     die "could not read this container's mounts"
-  [[ -z $bad ]] || die "host paths must be mounted at the same path inside lettucectl's container; these are not: $bad"
+  [[ -z $bad ]] || die "host paths must be mounted at the same path inside lolloctl's container; these are not: $bad"
   BIND_MOUNTS=$(jq -r '.[] | select(.Type == "bind") | .Destination' <<<"$mounts")
-  if [[ $(stat -c %u "$LETTUCE_DATA" 2>/dev/null) != "$(id -u)" ]] || ! grep -qxF -- "$LETTUCE_DATA" <<<"$BIND_MOUNTS"; then
-    die "$LETTUCE_DATA is not mounted, at the same path and owned by you, into lettucectl's container; run lettucectl through its wrapper"
+  if [[ $(stat -c %u "$LOLLO_DATA" 2>/dev/null) != "$(id -u)" ]] || ! grep -qxF -- "$LOLLO_DATA" <<<"$BIND_MOUNTS"; then
+    die "$LOLLO_DATA is not mounted, at the same path and owned by you, into lolloctl's container; run lolloctl through its wrapper"
   fi
 }
 
@@ -150,7 +150,7 @@ require_mounted() {
   while IFS= read -r m; do
     [[ -n $m && ($p == "$m" || $p == "${m%/}"/*) ]] && return 0
   done <<<"$BIND_MOUNTS"
-  die "$p is not mounted into lettucectl's container; the wrapper mounts the directory you name, so name an existing one"
+  die "$p is not mounted into lolloctl's container; the wrapper mounts the directory you name, so name an existing one"
 }
 
 # ── stacks.conf ──────────────────────────────────────────────────────────────
@@ -161,9 +161,9 @@ require_mounted() {
 conf_create() {
   local f
   f=$(stacks_conf)
-  (umask 077 && mkdir -p "$LETTUCE_DATA" && cat >"$f" <<'EOF'
+  (umask 077 && mkdir -p "$LOLLO_DATA" && cat >"$f" <<'EOF'
 # Who has a stack, one per line: <name> <email>[,<email>...]
-# `lettucectl apply` makes the stacks match this file; `add`, `users` and
+# `lolloctl apply` makes the stacks match this file; `add`, `users` and
 # `remove` keep it in step. A stack missing here is reported, never removed.
 #alfred  alfred@gmail.com
 EOF
@@ -232,7 +232,7 @@ TAG_RE='^[A-Za-z0-9][A-Za-z0-9._-]*$'
 require_config() {
   local f
   f=$(config_file)
-  [[ -f $f ]] || die "no config.env in $LETTUCE_DATA; run: lettucectl init"
+  [[ -f $f ]] || die "no config.env in $LOLLO_DATA; run: lolloctl init"
   [[ $(file_mode "$f") == 600 ]] || die "config.env must be mode 600 (chmod 600 $f)"
   [[ -n $(cfg DOMAIN) && $(cfg DOMAIN) != example.com ]] || die "set DOMAIN in config.env"
   has_profile "$(cfg PROFILES)" cloudflared || die "PROFILES in config.env must contain cloudflared"
@@ -244,9 +244,9 @@ require_initialised() {
   require_config
   local k
   for k in CF_ACCOUNT_ID CF_ZONE_ID CF_TEAM_DOMAIN CF_GOOGLE_IDP_ID; do
-    [[ -n $(cfg "$k") ]] || die "$k is empty; run: lettucectl init"
+    [[ -n $(cfg "$k") ]] || die "$k is empty; run: lolloctl init"
   done
-  [[ -f $(upstream_dir)/docker/compose.yml ]] || die "Lettuce $(cfg LETTUCE_REF) is not in $(upstream_root); run: lettucectl init"
+  [[ -f $(upstream_dir)/docker/compose.yml ]] || die "Lettuce $(cfg LETTUCE_REF) is not in $(upstream_root); run: lolloctl init"
 }
 
 # ── upstream Lettuce ─────────────────────────────────────────────────────────
@@ -385,8 +385,8 @@ normalise_profiles() {
 # profile_unmet "a,b,c" -> why a profile in the list cannot run without another
 # that is missing; nothing when every dependency is on
 profile_unmet() {
-  if has_profile "$1" garden-gmail-triggers && ! has_profile "$1" google; then
-    printf 'the garden-gmail-triggers profile needs google (it uses the connection made in Settings -> Google)'
+  if has_profile "$1" lollo-gmail-triggers && ! has_profile "$1" google; then
+    printf 'the lollo-gmail-triggers profile needs google (it uses the connection made in Settings -> Google)'
   fi
 }
 
@@ -417,7 +417,7 @@ normalise_emails() {
 
 list_stacks() {
   local d
-  for d in "$LETTUCE_DATA"/stacks/*/stack.env; do
+  for d in "$LOLLO_DATA"/stacks/*/stack.env; do
     [[ -f $d ]] || continue
     d=${d%/stack.env}
     printf '%s\n' "${d##*/}"
@@ -425,7 +425,7 @@ list_stacks() {
 }
 
 require_stack() {
-  [[ -f $(stack_env "$1") ]] || die "no stack named '$1' (see: lettucectl list)"
+  [[ -f $(stack_env "$1") ]] || die "no stack named '$1' (see: lolloctl list)"
 }
 
 # expand_targets NAME|all -> stack names, one per line
@@ -478,39 +478,39 @@ compose_env() {
   # The overlays' build contexts are under the code, which upstream/ is not
   # under; the shell's image builds FROM the app-server's, by name; upstream's
   # own switch, LETTA_IMAGE_NS, is global (init and upgrade set it). In release
-  # mode each published garden image is named by RELEASE; from a clone, the
-  # overlays' defaults name the local builds. All lettucectl's, never stack.env's:
+  # mode each published lollo image is named by RELEASE; from a clone, the
+  # overlays' defaults name the local builds. All lolloctl's, never stack.env's:
   # Compose prefers them to the --env-file's, so nothing there can go stale.
-  vars+=(LETTUCE_HOME="$LETTUCE_HOME" APP_SERVER_IMAGE="$(app_server_image)" LETTA_IMAGE_NS="$(cfg LETTA_IMAGE_NS)")
+  vars+=(LOLLO_HOME="$LOLLO_HOME" APP_SERVER_IMAGE="$(app_server_image)" LETTA_IMAGE_NS="$(cfg LETTA_IMAGE_NS)")
   if release_mode; then
     while read -r img _; do
       vars+=("$(release_key "$img")=$(image_name "$img")")
     done < <(published_images)
   fi
   # Only with the profile: without it, the app-server has no doc-tools mount or
-  # network. The values are lettucectl's, never stack.env's.
-  if has_profile "$profiles" garden-doc-tools; then
-    extra+=(-f "$LETTUCE_HOME/compose/doc-tools.yml")
+  # network. The values are lolloctl's, never stack.env's.
+  if has_profile "$profiles" lollo-doc-tools; then
+    extra+=(-f "$LOLLO_HOME/compose/doc-tools.yml")
     vars+=(DOC_TOOLS_NETWORK="$(doc_tools_network "$name")" DOC_TOOLS_VOLUME="$(doc_tools_volume)")
   fi
   # Only with the profile: without it, no container gets a proxy setting.
-  if has_profile "$profiles" garden-pipelock; then
-    extra+=(-f "$LETTUCE_HOME/compose/pipelock-proxy.yml")
+  if has_profile "$profiles" lollo-pipelock; then
+    extra+=(-f "$LOLLO_HOME/compose/pipelock-proxy.yml")
     direct=$(pipelock_direct "$name" "$env_file") || exit 1
     vars+=(PIPELOCK_DIRECT="$direct")
   fi
   env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} "${vars[@]}" \
-    docker compose -p "lettuce-$name" \
+    docker compose -p "lollo-$name" \
     --project-directory "$up/docker" \
     -f "$up/docker/compose.yml" \
-    -f "$LETTUCE_HOME/compose/hardening.yml" \
-    -f "$LETTUCE_HOME/compose/multi.yml" \
-    -f "$LETTUCE_HOME/compose/vault.yml" \
-    -f "$LETTUCE_HOME/compose/gmail-triggers.yml" \
-    -f "$LETTUCE_HOME/compose/news-radar.yml" \
-    -f "$LETTUCE_HOME/compose/pipelock.yml" \
-    -f "$LETTUCE_HOME/compose/code-server.yml" \
-    -f "$LETTUCE_HOME/compose/garden.yml" \
+    -f "$LOLLO_HOME/compose/hardening.yml" \
+    -f "$LOLLO_HOME/compose/multi.yml" \
+    -f "$LOLLO_HOME/compose/vault.yml" \
+    -f "$LOLLO_HOME/compose/gmail-triggers.yml" \
+    -f "$LOLLO_HOME/compose/news-radar.yml" \
+    -f "$LOLLO_HOME/compose/pipelock.yml" \
+    -f "$LOLLO_HOME/compose/code-server.yml" \
+    -f "$LOLLO_HOME/compose/landing.yml" \
     "${extra[@]}" \
     --env-file "$env_file" \
     "$@"
@@ -522,9 +522,9 @@ compose_env() {
 # an explicit empty env file keeps Compose from reading any .env.
 compose_shared() {
   env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} \
-    docker compose -p lettuce_shared \
-    --project-directory "$LETTUCE_HOME/compose/shared" \
-    -f "$LETTUCE_HOME/compose/shared/gotenberg.yml" \
+    docker compose -p lollo_shared \
+    --project-directory "$LOLLO_HOME/compose/shared" \
+    -f "$LOLLO_HOME/compose/shared/gotenberg.yml" \
     --env-file /dev/null \
     "$@"
 }
@@ -532,32 +532,32 @@ compose_shared() {
 # ── document tools ───────────────────────────────────────────────────────────
 # doc_tools_tag -> the content hash of doc-tools/ (its tests, README.md, AGENTS.md
 # and CLAUDE.md excluded), the tag of the tools' image and volume every stack
-# with the garden-doc-tools profile shares.
+# with the lollo-doc-tools profile shares.
 # Any change to what goes into the image is a new tag, so `up` rebuilds it,
 # fills a new volume and recreates the app-servers; an unchanged tree reuses
 # both. Ten hex characters.
 doc_tools_tag() {
-  local d=$LETTUCE_HOME/doc-tools
+  local d=$LOLLO_HOME/doc-tools
   [[ -f $d/Dockerfile ]] || die "doc-tools/Dockerfile is missing"
   (cd "$d" && find . -type f ! -path './tests/*' ! -path ./README.md ! -path ./AGENTS.md ! -path ./CLAUDE.md ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 |
     LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-10)
 }
 
-doc_tools_image() { printf 'lettuce-doc-tools:%s' "$(doc_tools_tag)"; }
+doc_tools_image() { printf 'lollo-doc-tools:%s' "$(doc_tools_tag)"; }
 
 # doc_tools_volume -> the volume the app-servers mount: the image's tools, copied
-# out by lettucectl (ensure_doc_tools_volume). Not an image mount: Docker 29
+# out by lolloctl (ensure_doc_tools_volume). Not an image mount: Docker 29
 # brings those back empty after a daemon restart.
-doc_tools_volume() { printf 'lettuce-doc-tools-%s' "$(doc_tools_tag)"; }
+doc_tools_volume() { printf 'lollo-doc-tools-%s' "$(doc_tools_tag)"; }
 
 # doc_tools_network NAME -> the stack's internal network to the shared Gotenberg
-doc_tools_network() { printf 'lettuce-doc-tools-%s' "$1"; }
+doc_tools_network() { printf 'lollo-doc-tools-%s' "$1"; }
 
-# DOC_TOOLS_LABEL marks the networks lettucectl made, with the stack's name.
-DOC_TOOLS_LABEL=lettuce.doc-tools.stack
+# DOC_TOOLS_LABEL marks the networks lolloctl made, with the stack's name.
+DOC_TOOLS_LABEL=lollo.doc-tools.stack
 # Where the app-server mounts the tools (compose/doc-tools.yml, the launchers and
 # the MCP entries people add use it too), and where the image holds them.
-DOC_TOOLS_TARGET=/opt/lettuce-doc-tools
+DOC_TOOLS_TARGET=/opt/lollo-doc-tools
 
 # host_docker ARGS... -> plain docker, under `env -i` like `compose`
 host_docker() {
@@ -565,22 +565,22 @@ host_docker() {
 }
 
 # vault_volume NAME -> the Docker volume holding the stack's vault
-vault_volume() { printf 'lettuce-%s_vault-data' "$1"; }
+vault_volume() { printf 'lollo-%s_vault-data' "$1"; }
 
-# has_vault NAME -> success when the vault's volume exists. Turning the garden-vault
+# has_vault NAME -> success when the vault's volume exists. Turning the lollo-vault
 # profile off keeps it, and `compose down -v` deletes it either way.
 has_vault() { host_docker volume inspect "$(vault_volume "$1")" >/dev/null 2>&1; }
 
 # receipts_volume NAME -> the Docker volume holding the stack's pipelock receipts
 # and their signing key
-receipts_volume() { printf 'lettuce-%s_pipelock-data' "$1"; }
+receipts_volume() { printf 'lollo-%s_pipelock-data' "$1"; }
 
 # has_receipts NAME -> success when that volume exists; like the vault's, it
 # outlives the profile and goes with `compose down -v`
 has_receipts() { host_docker volume inspect "$(receipts_volume "$1")" >/dev/null 2>&1; }
 
 # news_radar_volume NAME -> the Docker volume holding the stack's monitors, sources and items
-news_radar_volume() { printf 'lettuce-%s_news-radar-data' "$1"; }
+news_radar_volume() { printf 'lollo-%s_news-radar-data' "$1"; }
 
 # has_news_radar NAME -> success when that volume exists; it outlives the profile
 # and goes with `compose down -v`
@@ -607,7 +607,7 @@ stack_running() {
 stale_services() {
   local enabled existing
   enabled=$(compose "$1" config --services) || die "$1: docker compose config failed"
-  existing=$(host_docker ps -a --filter "label=com.docker.compose.project=lettuce-$1" \
+  existing=$(host_docker ps -a --filter "label=com.docker.compose.project=lollo-$1" \
     --format '{{.Label "com.docker.compose.service"}}') || die "$1: docker ps failed"
   comm -23 <(sort -u <<<"$existing") <(sort -u <<<"$enabled") | sed '/^$/d'
 }
@@ -660,15 +660,15 @@ sync_push_contact() {
   [[ $(env_get "$f" PUSH_VAPID_CONTACT_EMAIL) == "$contact" ]] || env_set "$f" PUSH_VAPID_CONTACT_EMAIL "$contact"
 }
 
-# ensure_executor_token NAME -> gives the stack, once, the token the garden
-# executor presents to the /executor/v1/ APIs of garden and gmail-triggers.
+# ensure_executor_token NAME -> gives the stack, once, the token the lollo
+# executor presents to the /executor/v1/ APIs of landing and gmail-triggers.
 # Nothing rotates it; to replace it, delete the line from stack.env and run
-# `lettucectl up`.
+# `lolloctl up`.
 ensure_executor_token() {
   local f
   f=$(stack_env "$1")
-  [[ -n $(env_get "$f" GARDEN_EXECUTOR_TOKEN) ]] ||
-    env_set "$f" GARDEN_EXECUTOR_TOKEN "$(openssl rand -hex 32)"
+  [[ -n $(env_get "$f" LOLLO_EXECUTOR_TOKEN) ]] ||
+    env_set "$f" LOLLO_EXECUTOR_TOKEN "$(openssl rand -hex 32)"
 }
 
 # env_without_profile FILE PROFILE -> the path of a private temp copy of the env
@@ -706,15 +706,15 @@ sync_news_radar_settings() {
   done
 }
 
-# sync_garden_profiles NAME -> GARDEN_PROFILES, the garden pages the landing page
-# links to, follows COMPOSE_PROFILES. Only the garden service gets it (not the
+# sync_lollo_profiles NAME -> LOLLO_PROFILES, the lollo pages the landing page
+# links to, follows COMPOSE_PROFILES. Only the landing service gets it (not the
 # vault, which a recreate would relock), and only this list, so a profile
-# without a garden page changes nothing in its config.
-sync_garden_profiles() {
-  local f garden
+# without a lollo page changes nothing in its config.
+sync_lollo_profiles() {
+  local f lollo
   f=$(stack_env "$1")
-  garden=$(garden_profiles "$(env_get "$f" COMPOSE_PROFILES)")
-  [[ $(env_get "$f" GARDEN_PROFILES) == "$garden" ]] || env_set "$f" GARDEN_PROFILES "$garden"
+  lollo=$(lollo_profiles "$(env_get "$f" COMPOSE_PROFILES)")
+  [[ $(env_get "$f" LOLLO_PROFILES) == "$lollo" ]] || env_set "$f" LOLLO_PROFILES "$lollo"
 }
 
 # The config check_stack last rendered from a stack's own stack.env, and its name.
@@ -746,7 +746,7 @@ check_stack() {
     profiles=$(env_get "$f" COMPOSE_PROFILES)
     has_profile "$profiles" cloudflared || die "$name: COMPOSE_PROFILES must contain cloudflared"
     [[ $profiles == "$(cfg PROFILES)" ]] ||
-      die "$name: COMPOSE_PROFILES ($profiles) differs from config.env PROFILES ($(cfg PROFILES)); all stacks share one image (set both with: lettucectl profiles <list>)"
+      die "$name: COMPOSE_PROFILES ($profiles) differs from config.env PROFILES ($(cfg PROFILES)); all stacks share one image (set both with: lolloctl profiles <list>)"
   fi
   k=$(profile_unmet "$profiles")
   [[ -z $k ]] || die "$name: $k"
@@ -755,7 +755,7 @@ check_stack() {
     rendered=$(compose "$name" config --format json) || die "$name: docker compose config failed"
     # Kept for up_stack's build_local_images: the stack as stack.env renders it.
     # A check that refuses it dies, so a kept config is always one that passed.
-    # shellcheck disable=SC2034 # read by lettucectl's build_local_images
+    # shellcheck disable=SC2034 # read by lolloctl's build_local_images
     CHECKED_NAME=$name CHECKED_CONFIG=$rendered
   else
     tmp=$(mktemp "$f.XXXXXX")
@@ -779,81 +779,81 @@ check_stack() {
     | select((.value.cap_drop // []) | (index("NET_RAW") or index("ALL")) | not) | .key] | join(", ")' <<<"$rendered")
   [[ -z $sniffing ]] ||
     die "$name: $sniffing must drop NET_RAW; agents in the app-server's network namespace could capture the Access JWT (compose/hardening.yml)"
-  k=$(volume_users "$rendered" google-creds bff google-mcp garden-gmail-triggers)
-  [[ -z $k ]] || die "$name: $k mount(s) google-creds (the Google token); only bff, google-mcp and garden-gmail-triggers may"
+  k=$(volume_users "$rendered" google-creds bff google-mcp lollo-gmail-triggers)
+  [[ -z $k ]] || die "$name: $k mount(s) google-creds (the Google token); only bff, google-mcp and lollo-gmail-triggers may"
   # volumes_from would hand another service every mount of the one it names.
   k=$(jq -r '([.services | to_entries[]
       | select([(.value.volumes // [])[] | select(.source == "google-creds" or .source == "vault-data"
         or .source == "pipelock-data" or .source == "code-server-data" or .source == "code-exec-keys"
         or .source == "code-server-sock" or .source == "news-radar-data")] | length > 0)
-      | .key] + ["garden-gmail-triggers", "garden-vault", "garden-pipelock", "garden-news-radar", "garden-code-server", "garden-code-server-editor", "garden-code-server-exec"]) as $held
+      | .key] + ["lollo-gmail-triggers", "lollo-vault", "lollo-pipelock", "lollo-news-radar", "lollo-code-server", "lollo-code-server-editor", "lollo-code-server-exec"]) as $held
     | [.services | to_entries[] | .key as $k | (.value.volumes_from // [])[]
       | sub("^service:"; "") | sub(":(ro|rw)$"; "") | select(. as $t | $held | index($t)) | "\($k) from \(.)"]
     | join(", ")' <<<"$rendered")
   [[ -z $k ]] || die "$name: volumes_from reaches the Google token, the vault, the gmail-triggers rules, the pipelock receipts, News Radar or the code editor ($k)"
   # Both volumes outlive their profile, so these hold whatever the profiles.
-  k=$(volume_users "$rendered" vault-data garden-vault)
+  k=$(volume_users "$rendered" vault-data lollo-vault)
   [[ -z $k ]] || die "$name: $k mount(s) the vault's volume; only the vault service may"
-  k=$(volume_users "$rendered" pipelock-data garden-pipelock)
-  [[ -z $k ]] || die "$name: $k mount(s) pipelock's volume (its signing key and receipts); only garden-pipelock may"
-  k=$(volume_users "$rendered" news-radar-data garden-news-radar)
-  [[ -z $k ]] || die "$name: $k mount(s) News Radar's volume; only garden-news-radar may"
-  k=$(volume_users "$rendered" code-server-data garden-code-server-editor)
-  [[ -z $k ]] || die "$name: $k mount(s) the code editor's volume (its state and SSH key); only garden-code-server-editor may"
-  k=$(volume_users "$rendered" code-exec-keys garden-code-server-editor garden-code-server-exec)
-  [[ -z $k ]] || die "$name: $k mount(s) the code editor's SSH keys; only garden-code-server-editor and garden-code-server-exec may"
-  k=$(volume_users "$rendered" code-server-sock garden-code-server garden-code-server-editor)
-  [[ -z $k ]] || die "$name: $k mount(s) the code editor's socket; only garden-code-server and garden-code-server-editor may"
+  k=$(volume_users "$rendered" pipelock-data lollo-pipelock)
+  [[ -z $k ]] || die "$name: $k mount(s) pipelock's volume (its signing key and receipts); only lollo-pipelock may"
+  k=$(volume_users "$rendered" news-radar-data lollo-news-radar)
+  [[ -z $k ]] || die "$name: $k mount(s) News Radar's volume; only lollo-news-radar may"
+  k=$(volume_users "$rendered" code-server-data lollo-code-server-editor)
+  [[ -z $k ]] || die "$name: $k mount(s) the code editor's volume (its state and SSH key); only lollo-code-server-editor may"
+  k=$(volume_users "$rendered" code-exec-keys lollo-code-server-editor lollo-code-server-exec)
+  [[ -z $k ]] || die "$name: $k mount(s) the code editor's SSH keys; only lollo-code-server-editor and lollo-code-server-exec may"
+  k=$(volume_users "$rendered" code-server-sock lollo-code-server lollo-code-server-editor)
+  [[ -z $k ]] || die "$name: $k mount(s) the code editor's socket; only lollo-code-server and lollo-code-server-editor may"
   # A shared network namespace would reach the editor's socket-less ports and the shell's sshd.
   k=$(jq -r '[.services | to_entries[] | (.value.network_mode // "") as $m
-      | select($m | test("^service:garden-code-server(-editor|-exec)?$") or (startswith("container:") and contains("code-server")))
+      | select($m | test("^service:lollo-code-server(-editor|-exec)?$") or (startswith("container:") and contains("code-server")))
       | "\(.key) shares the network namespace of the code editor (\($m))"] | join("; ")' <<<"$rendered")
   [[ -z $k ]] || die "$name: $k"
   check_images "$name" "$rendered"
-  if has_profile "$profiles" garden-doc-tools && [[ $(host_platform 2>/dev/null) != linux/amd64 ]]; then
-    die "$name: garden-doc-tools needs a linux/amd64 host (OfficeAgent is pinned for x86_64 only); this one is $(host_platform 2>/dev/null || echo unknown)"
+  if has_profile "$profiles" lollo-doc-tools && [[ $(host_platform 2>/dev/null) != linux/amd64 ]]; then
+    die "$name: lollo-doc-tools needs a linux/amd64 host (OfficeAgent is pinned for x86_64 only); this one is $(host_platform 2>/dev/null || echo unknown)"
   fi
-  if has_profile "$profiles" garden-vault; then
-    check_sidecar "$name" "$rendered" garden-vault garden-vault compose/vault.yml
+  if has_profile "$profiles" lollo-vault; then
+    check_sidecar "$name" "$rendered" lollo-vault lollo-vault compose/vault.yml
   fi
-  if has_profile "$profiles" garden-pipelock; then
+  if has_profile "$profiles" lollo-pipelock; then
     check_pipelock "$name" "$rendered"
   fi
-  if has_profile "$profiles" garden-code-server; then
+  if has_profile "$profiles" lollo-code-server; then
     check_code_server "$name" "$rendered" "$(env_get "$f" LETTA_STATE_DIR)"
   fi
-  if has_profile "$profiles" garden-gmail-triggers; then
+  if has_profile "$profiles" lollo-gmail-triggers; then
     check_gmail_triggers "$name" "$rendered" "$(env_get "$f" LETTA_STATE_DIR)"
   fi
-  if has_profile "$profiles" garden-news-radar; then
+  if has_profile "$profiles" lollo-news-radar; then
     check_news_radar "$name" "$rendered"
   fi
-  k=$(garden_profiles "$profiles")
+  k=$(lollo_profiles "$profiles")
   if [[ -n $k ]]; then
-    for p in GARDEN_ORIGIN CF_GARDEN_AUD; do
+    for p in LOLLO_ORIGIN CF_LOLLO_AUD; do
       [[ -n $(env_get "$f" "$p") ]] || die "$name: $p is empty"
     done
-    [[ $(env_get "$f" GARDEN_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] ||
-      die "$name: GARDEN_EXECUTOR_TOKEN must be 64 lowercase hex characters (delete the line and run: lettucectl up $name)"
-    check_garden "$name" "$rendered" "${k%%,*}"
+    [[ $(env_get "$f" LOLLO_EXECUTOR_TOKEN) =~ ^[0-9a-f]{64}$ ]] ||
+      die "$name: LOLLO_EXECUTOR_TOKEN must be 64 lowercase hex characters (delete the line and run: lolloctl up $name)"
+    check_landing "$name" "$rendered" "${k%%,*}"
   fi
-  check_garden_audience "$name" "$rendered" "$f"
+  check_lollo_audience "$name" "$rendered" "$f"
   # Whatever the profiles: the tools' volume (by key or by name) and image mounts
   # are the app-server's only.
-  k=$(jq -r '[.volumes // {} | to_entries[] | select((.value.name // "") | startswith("lettuce-doc-tools")) | .key] as $tools
+  k=$(jq -r '[.volumes // {} | to_entries[] | select((.value.name // "") | startswith("lollo-doc-tools")) | .key] as $tools
     | [.services | to_entries[] | select(.key != "app-server")
     | select([(.value.volumes // [])[] | select(.type == "image" or ((.source // "") as $s
-        | $s == "doc-tools" or ($s | startswith("lettuce-doc-tools")) or ($tools | index($s))))] | length > 0)
+        | $s == "doc-tools" or ($s | startswith("lollo-doc-tools")) or ($tools | index($s))))] | length > 0)
     | .key] | join(", ")' <<<"$rendered")
   [[ -z $k ]] || die "$name: $k mount(s) an image or the document tools; only the app-server may (compose/doc-tools.yml)"
-  if has_profile "$profiles" garden-doc-tools; then
+  if has_profile "$profiles" lollo-doc-tools; then
     check_doc_tools "$name" "$rendered"
   fi
 }
 
 # check_doc_tools NAME RENDERED -> the app-server keeps what compose/doc-tools.yml
 # gives it and nothing more: the tools' volume of this tree, read-only, at
-# /opt/lettuce-doc-tools; its default network beside the stack's internal one
+# /opt/lollo-doc-tools; its default network beside the stack's internal one
 # to Gotenberg, which no other service joins.
 check_doc_tools() {
   local name=$1 rendered=$2 vol net k
@@ -861,7 +861,7 @@ check_doc_tools() {
   net=$(doc_tools_network "$name")
   jq -e --arg t "$DOC_TOOLS_TARGET" '[.services["app-server"].volumes // [] | .[] | select(.target == $t)]
     | length == 1 and .[0].type == "volume" and .[0].source == "doc-tools" and .[0].read_only == true' <<<"$rendered" >/dev/null ||
-    die "$name: the app-server must mount the volume $vol read-only at /opt/lettuce-doc-tools, and nothing else there (compose/doc-tools.yml)"
+    die "$name: the app-server must mount the volume $vol read-only at /opt/lollo-doc-tools, and nothing else there (compose/doc-tools.yml)"
   jq -e --arg v "$vol" '.volumes["doc-tools"] | .external == true and .name == $v' <<<"$rendered" >/dev/null ||
     die "$name: the doc-tools volume must be the external $vol (compose/doc-tools.yml)"
   jq -e '.services["app-server"].networks // {} | has("default") and has("doc-tools")' <<<"$rendered" >/dev/null ||
@@ -873,7 +873,7 @@ check_doc_tools() {
   if host_docker network inspect "$net" >/dev/null 2>&1; then
     k=$(host_docker network inspect "$net" --format "{{.Internal}} {{index .Labels \"$DOC_TOOLS_LABEL\"}}")
     [[ $k == "true $name" ]] ||
-      die "$name: $net must be an internal network lettucectl made for $name; remove it (docker network rm $net) and run: lettucectl up $name"
+      die "$name: $net must be an internal network lolloctl made for $name; remove it (docker network rm $net) and run: lolloctl up $name"
   fi
 }
 
@@ -927,7 +927,7 @@ volume_users() {
 }
 
 # check_images NAME RENDERED -> the images the stack runs are the ones
-# lettucectl means: in release mode, each published garden service runs the name
+# lolloctl means: in release mode, each published lollo service runs the name
 # RELEASE gives it (a hand edit cannot swap one in); and the shell's base is the
 # app-server's image as the render names it (app_server_image follows upstream's
 # naming, an upstream seam)
@@ -942,7 +942,7 @@ check_images() {
       [[ $got == "$want" ]] || die "$name: $svc runs $got, not the release's $want"
     done < <(published_images)
   fi
-  if jq -e '.services["garden-code-server-exec"]' <<<"$rendered" >/dev/null; then
+  if jq -e '.services["lollo-code-server-exec"]' <<<"$rendered" >/dev/null; then
     want=$(app_server_image)
     got=$(jq -r '.services["app-server"].image // empty' <<<"$rendered")
     [[ $got == "$want" ]] ||
@@ -987,53 +987,53 @@ check_sidecar() {
 # compose/pipelock.yml gives it (check_sidecar), and the app-server uses it
 # (compose/pipelock-proxy.yml) for everything but stack-internal traffic:
 # pipelock must never see the vault's values or the executor's token (which
-# goes to gmail-triggers, news-radar and garden).
+# goes to gmail-triggers, news-radar and landing).
 check_pipelock() {
   local name=$1 rendered=$2 k v
-  check_sidecar "$name" "$rendered" garden-pipelock garden-pipelock compose/pipelock.yml
+  check_sidecar "$name" "$rendered" lollo-pipelock lollo-pipelock compose/pipelock.yml
   for k in HTTPS_PROXY https_proxy HTTP_PROXY http_proxy; do
     v=$(jq -r --arg k "$k" '.services["app-server"].environment[$k] // ""' <<<"$rendered")
-    [[ $v == http://garden-pipelock:8888 ]] ||
-      die "$name: the app-server's $k must be http://garden-pipelock:8888 with the garden-pipelock profile (compose/pipelock-proxy.yml)"
+    [[ $v == http://lollo-pipelock:8888 ]] ||
+      die "$name: the app-server's $k must be http://lollo-pipelock:8888 with the lollo-pipelock profile (compose/pipelock-proxy.yml)"
   done
   for k in NO_PROXY no_proxy; do
-    for v in garden-vault garden-gmail-triggers garden-news-radar garden; do
+    for v in lollo-vault lollo-gmail-triggers lollo-news-radar landing; do
       jq -e --arg k "$k" --arg v "$v" '.services["app-server"].environment[$k] // "" | split(",") | index($v)' <<<"$rendered" >/dev/null ||
         die "$name: the app-server's $k must list $v; pipelock must not see its traffic (compose/pipelock-proxy.yml)"
     done
   done
 }
 
-# check_garden NAME RENDERED PROFILE -> the garden service (the landing page and
-# the agent list), on while PROFILE (or any garden page profile) is, keeps what
-# compose/garden.yml gives it: a hardened sidecar (check_sidecar) on the default
+# check_landing NAME RENDERED PROFILE -> the landing service (the landing page and
+# the agent list), on while PROFILE (or any lollo page profile) is, keeps what
+# compose/landing.yml gives it: a hardened sidecar (check_sidecar) on the default
 # network only, with no mounts at all (the agent list lives in memory).
-check_garden() {
+check_landing() {
   local name=$1 rendered=$2 svc
-  check_sidecar "$name" "$rendered" "$3" garden compose/garden.yml
-  svc=$(jq -c '.services.garden' <<<"$rendered")
+  check_sidecar "$name" "$rendered" "$3" landing compose/landing.yml
+  svc=$(jq -c '.services.landing' <<<"$rendered")
   jq -e '(.networks // {"default": null} | keys) == ["default"]' <<<"$svc" >/dev/null ||
-    die "$name: garden must be on the default network only"
+    die "$name: landing must be on the default network only"
   jq -e '(.volumes // []) | length == 0' <<<"$svc" >/dev/null ||
-    die "$name: garden must not mount anything (compose/garden.yml)"
+    die "$name: landing must not mount anything (compose/landing.yml)"
 }
 
-# check_garden_audience NAME RENDERED ENV_FILE -> every garden service in the
-# rendered config (garden_services, so a new garden page is held to it too)
-# accepts only the garden's Access application and origin:
-# CF_ACCESS_AUD is the env file's CF_GARDEN_AUD, never Lettuce's CF_ACCESS_AUD,
-# and PUBLIC_ORIGIN is its GARDEN_ORIGIN. Lettuce's token reaches the BFF in
-# plain HTTP inside the namespace agents share; the garden must refuse it.
-check_garden_audience() {
+# check_lollo_audience NAME RENDERED ENV_FILE -> every lollo service in the
+# rendered config (lollo_services, so a new lollo page is held to it too)
+# accepts only the lollo's Access application and origin:
+# CF_ACCESS_AUD is the env file's CF_LOLLO_AUD, never Lettuce's CF_ACCESS_AUD,
+# and PUBLIC_ORIGIN is its LOLLO_ORIGIN. Lettuce's token reaches the BFF in
+# plain HTTP inside the namespace agents share; the lollo must refuse it.
+check_lollo_audience() {
   local name=$1 rendered=$2 f=$3 s aud origin
-  for s in $(garden_services); do
+  for s in $(lollo_services); do
     jq -e --arg s "$s" '.services | has($s)' <<<"$rendered" >/dev/null || continue
     aud=$(jq -r --arg s "$s" '.services[$s].environment.CF_ACCESS_AUD // ""' <<<"$rendered")
     origin=$(jq -r --arg s "$s" '.services[$s].environment.PUBLIC_ORIGIN // ""' <<<"$rendered")
-    [[ -n $aud && $aud == "$(env_get "$f" CF_GARDEN_AUD)" && $aud != "$(env_get "$f" CF_ACCESS_AUD)" ]] ||
-      die "$name: $s must accept only the garden's Access application (CF_ACCESS_AUD = CF_GARDEN_AUD), never Lettuce's, whose token agents could catch"
-    [[ $origin == "$(env_get "$f" GARDEN_ORIGIN)" ]] ||
-      die "$name: $s must have PUBLIC_ORIGIN = GARDEN_ORIGIN, the garden's own host"
+    [[ -n $aud && $aud == "$(env_get "$f" CF_LOLLO_AUD)" && $aud != "$(env_get "$f" CF_ACCESS_AUD)" ]] ||
+      die "$name: $s must accept only the lollo's Access application (CF_ACCESS_AUD = CF_LOLLO_AUD), never Lettuce's, whose token agents could catch"
+    [[ $origin == "$(env_get "$f" LOLLO_ORIGIN)" ]] ||
+      die "$name: $s must have PUBLIC_ORIGIN = LOLLO_ORIGIN, the lollo's own host"
   done
 }
 
@@ -1042,117 +1042,117 @@ check_garden_audience() {
 # network only, mounting only its own volume, news-radar-data, at /data.
 check_news_radar() {
   local name=$1 rendered=$2 svc
-  check_sidecar "$name" "$rendered" garden-news-radar garden-news-radar compose/news-radar.yml
-  svc=$(jq -c '.services["garden-news-radar"]' <<<"$rendered")
+  check_sidecar "$name" "$rendered" lollo-news-radar lollo-news-radar compose/news-radar.yml
+  svc=$(jq -c '.services["lollo-news-radar"]' <<<"$rendered")
   jq -e '(.networks // {"default": null} | keys) == ["default"]' <<<"$svc" >/dev/null ||
-    die "$name: garden-news-radar must be on the default network only"
+    die "$name: lollo-news-radar must be on the default network only"
   jq -e '[(.volumes // [])[] | select(.type != "tmpfs") | {type, source, target}]
     == [{"type": "volume", "source": "news-radar-data", "target": "/data"}]' <<<"$svc" >/dev/null ||
-    die "$name: garden-news-radar may mount only its volume news-radar-data, at /data (compose/news-radar.yml)"
+    die "$name: lollo-news-radar may mount only its volume news-radar-data, at /data (compose/news-radar.yml)"
 }
 
 # check_gmail_triggers NAME RENDERED STATE_DIR -> the gmail-triggers service keeps
 # what compose/gmail-triggers.yml gives it: hardened (check_hardened), one host
-# path (STATE_DIR/garden/gmail-triggers), the Google volumes read-only and
+# path (STATE_DIR/lollo/gmail-triggers), the Google volumes read-only and
 # nothing else; and nothing else reaches the rules: no other bind mount or
-# volume device at, in or above STATE_DIR/garden, and no symlink on the way there.
+# volume device at, in or above STATE_DIR/lollo, and no symlink on the way there.
 check_gmail_triggers() {
-  local name=$1 rendered=$2 state=${3%/} svc garden k p o
-  garden=$state/garden
-  svc=$(jq -c '.services["garden-gmail-triggers"] // empty' <<<"$rendered")
-  [[ -n $svc ]] || die "$name: the garden-gmail-triggers profile is on but garden-gmail-triggers is not in the rendered config (compose/gmail-triggers.yml)"
-  check_hardened "$name" garden-gmail-triggers "$svc"
+  local name=$1 rendered=$2 state=${3%/} svc lollo k p o
+  lollo=$state/lollo
+  svc=$(jq -c '.services["lollo-gmail-triggers"] // empty' <<<"$rendered")
+  [[ -n $svc ]] || die "$name: the lollo-gmail-triggers profile is on but lollo-gmail-triggers is not in the rendered config (compose/gmail-triggers.yml)"
+  check_hardened "$name" lollo-gmail-triggers "$svc"
   k=$(jq -c '[(.volumes // [])[] | select(.type == "bind") | [.source, .target]]' <<<"$svc")
-  [[ $k == "$(jq -cn --arg s "$garden/gmail-triggers" '[[$s, "/data"]]')" ]] ||
-    die "$name: garden-gmail-triggers may mount from the host only $garden/gmail-triggers (at /data)"
+  [[ $k == "$(jq -cn --arg s "$lollo/gmail-triggers" '[[$s, "/data"]]')" ]] ||
+    die "$name: lollo-gmail-triggers may mount from the host only $lollo/gmail-triggers (at /data)"
   jq -e '[(.volumes // [])[] | select(.source == "google-creds" or .source == "google-policy") | select(.read_only != true)] | length == 0' <<<"$svc" >/dev/null ||
-    die "$name: garden-gmail-triggers must mount google-creds and google-policy read-only"
+    die "$name: lollo-gmail-triggers must mount google-creds and google-policy read-only"
   k=$(jq -r '[(.volumes // [])[] | select(.type != "bind")
     | select(.source != "google-creds" and .source != "google-policy") | .source // .type] | join(", ")' <<<"$svc")
-  [[ -z $k ]] || die "$name: garden-gmail-triggers must not mount $k; only its state and the Google volumes"
-  for p in "$state" "$garden" "$garden/gmail-triggers"; do
+  [[ -z $k ]] || die "$name: lollo-gmail-triggers must not mount $k; only its state and the Google volumes"
+  for p in "$state" "$lollo" "$lollo/gmail-triggers"; do
     [[ ! -L $p ]] || die "$name: $p is a symlink; Docker would follow it, so the gmail-triggers rules need real directories"
   done
   while IFS=$'\t' read -r k p; do
-    ! reaches "$p" "$garden" || die "$name: $k mounts $p, which reaches $garden, where the gmail-triggers rules live; only garden-gmail-triggers may"
-  done < <(jq -r '.services | to_entries[] | select(.key != "garden-gmail-triggers") | .key as $k
+    ! reaches "$p" "$lollo" || die "$name: $k mounts $p, which reaches $lollo, where the gmail-triggers rules live; only lollo-gmail-triggers may"
+  done < <(jq -r '.services | to_entries[] | select(.key != "lollo-gmail-triggers") | .key as $k
     | (.value.volumes // [])[] | select(.type == "bind") | [$k, .source] | @tsv' <<<"$rendered")
   while IFS=$'\t' read -r k p o; do
     if [[ $p != /* ]]; then
       [[ $o != *bind* ]] || die "$name: volume $k binds the relative path $p; use an absolute one"
       continue
     fi
-    ! reaches "$p" "$garden" || die "$name: volume $k is bound to $p, which reaches $garden, where the gmail-triggers rules live"
+    ! reaches "$p" "$lollo" || die "$name: volume $k is bound to $p, which reaches $lollo, where the gmail-triggers rules live"
   done < <(jq -r '(.volumes // {}) | to_entries[] | select(.value.driver_opts.device != null)
     | [.key, .value.driver_opts.device, (.value.driver_opts.o // "")] | @tsv' <<<"$rendered")
 }
 
 # check_code_server NAME RENDERED STATE_DIR -> the code editor's three services
 # keep what compose/code-server.yml gives them (code-server/README.md, "Security mechanisms"):
-# - the gate (garden-code-server): a hardened sidecar (check_sidecar), on default only,
+# - the gate (lollo-code-server): a hardened sidecar (check_sidecar), on default only,
 #   with the editor's socket read-only as its one mount;
-# - the editor (garden-code-server-editor): hardened, the workspaces as its one host
+# - the editor (lollo-code-server-editor): hardened, the workspaces as its one host
 #   path, its own volume, the SSH keys and its socket, on code-exec only,
 #   listening only on its socket (no port: it has no Access check), started
 #   without the port proxy, extensions or a marketplace, and with nothing that
 #   switches workspace trust off or trusts other origins; each flag that matters
 #   appears once, in the `--flag value` form, since code-server takes the last;
-# - the shell (garden-code-server-exec): isolated (check_isolated) without NET_RAW, the
+# - the shell (lollo-code-server-exec): isolated (check_isolated) without NET_RAW, the
 #   workspaces and the agents' tools as its host paths, the SSH keys read-only,
 #   on code-exec and code-egress only, never the stack's default network;
 # and nobody else on their networks, of which only code-egress leads out.
 check_code_server() {
   local name=$1 rendered=$2 state=${3%/} gate editor shell k p net members
-  gate=$(jq -c '.services["garden-code-server"] // empty' <<<"$rendered")
-  editor=$(jq -c '.services["garden-code-server-editor"] // empty' <<<"$rendered")
-  shell=$(jq -c '.services["garden-code-server-exec"] // empty' <<<"$rendered")
-  for k in garden-code-server garden-code-server-editor garden-code-server-exec; do
+  gate=$(jq -c '.services["lollo-code-server"] // empty' <<<"$rendered")
+  editor=$(jq -c '.services["lollo-code-server-editor"] // empty' <<<"$rendered")
+  shell=$(jq -c '.services["lollo-code-server-exec"] // empty' <<<"$rendered")
+  for k in lollo-code-server lollo-code-server-editor lollo-code-server-exec; do
     jq -e --arg s "$k" '.services | has($s)' <<<"$rendered" >/dev/null ||
-      die "$name: the garden-code-server profile is on but $k is not in the rendered config (compose/code-server.yml)"
+      die "$name: the lollo-code-server profile is on but $k is not in the rendered config (compose/code-server.yml)"
   done
 
-  check_sidecar "$name" "$rendered" garden-code-server garden-code-server compose/code-server.yml
+  check_sidecar "$name" "$rendered" lollo-code-server lollo-code-server compose/code-server.yml
   jq -e '(.networks // {} | keys) == ["default"]' <<<"$gate" >/dev/null ||
-    die "$name: garden-code-server (the gate) must be on the default network only"
+    die "$name: lollo-code-server (the gate) must be on the default network only"
   k=$(jq -c '[(.volumes // [])[] | [.type, .source, .target, (.read_only // false)]]' <<<"$gate")
   [[ $k == '[["volume","code-server-sock","/run/code-server",true]]' ]] ||
-    die "$name: garden-code-server (the gate) may mount only the volume code-server-sock, read-only (at /run/code-server)"
+    die "$name: lollo-code-server (the gate) may mount only the volume code-server-sock, read-only (at /run/code-server)"
 
-  check_hardened "$name" garden-code-server-editor "$editor"
+  check_hardened "$name" lollo-code-server-editor "$editor"
   k=$(jq -c '[(.volumes // [])[] | select(.type == "bind") | [.source, .target]]' <<<"$editor")
   [[ $k == "$(jq -cn --arg w "$state/workspaces" '[[$w, "/work"]]')" ]] ||
-    die "$name: garden-code-server-editor may mount from the host only $state/workspaces (at /work)"
+    die "$name: lollo-code-server-editor may mount from the host only $state/workspaces (at /work)"
   k=$(jq -c '[(.volumes // [])[] | select(.type == "volume") | [.source, .target, (.read_only // false)]] | sort' <<<"$editor")
   [[ $k == '[["code-exec-keys","/keys",false],["code-server-data","/data",false],["code-server-sock","/run/code-server",false]]' ]] ||
-    die "$name: garden-code-server-editor may mount only the volumes code-server-data (at /data), code-exec-keys (at /keys) and code-server-sock (at /run/code-server)"
+    die "$name: lollo-code-server-editor may mount only the volumes code-server-data (at /data), code-exec-keys (at /keys) and code-server-sock (at /run/code-server)"
   jq -e '(.networks // {} | keys) == ["code-exec"]' <<<"$editor" >/dev/null ||
-    die "$name: garden-code-server-editor must be on the code-exec network only"
+    die "$name: lollo-code-server-editor must be on the code-exec network only"
   # once FLAG VALUE: FLAG appears exactly once, followed by VALUE, and never as FLAG=...
   jq -e 'def once($f; $v): ([.[] | select(. == $f)] | length == 1) and (any(.[]; startswith($f + "=")) | not)
       and (index($f) as $i | $v == null or .[$i + 1] == $v);
     (.command // []) | once("--socket"; "/run/code-server/editor.sock") and once("--auth"; "none")
-    and once("--disable-proxy"; null) and once("--extensions-dir"; "/opt/lettuce-editor/no-extensions")
-    and once("--user-data-dir"; "/data/user") and once("--config"; "/opt/lettuce-editor/config.yaml")' <<<"$editor" >/dev/null ||
-    die "$name: garden-code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lettuce-editor/no-extensions, --user-data-dir /data/user and --config /opt/lettuce-editor/config.yaml, each once (compose/code-server.yml)"
+    and once("--disable-proxy"; null) and once("--extensions-dir"; "/opt/lollo-editor/no-extensions")
+    and once("--user-data-dir"; "/data/user") and once("--config"; "/opt/lollo-editor/config.yaml")' <<<"$editor" >/dev/null ||
+    die "$name: lollo-code-server-editor must run with --socket /run/code-server/editor.sock, --auth none, --disable-proxy, --extensions-dir /opt/lollo-editor/no-extensions, --user-data-dir /data/user and --config /opt/lollo-editor/config.yaml, each once (compose/code-server.yml)"
   k=$(jq -r '[(.command // [])[] | select(test("^--(bind-addr|socket-fd|disable-workspace-trust|link|proxy-domain|trusted-origins|enable-proposed-api|install-extension|github-auth|builtin-extensions-dir|abs-proxy-base-path)(=|$)"))]
     | join(", ")' <<<"$editor")
-  [[ -z $k ]] || die "$name: garden-code-server-editor must not run with $k (compose/code-server.yml)"
+  [[ -z $k ]] || die "$name: lollo-code-server-editor must not run with $k (compose/code-server.yml)"
   jq -e '(.environment // {}).EXTENSIONS_GALLERY == "{}"' <<<"$editor" >/dev/null ||
-    die "$name: garden-code-server-editor must have EXTENSIONS_GALLERY={} (no marketplace)"
+    die "$name: lollo-code-server-editor must have EXTENSIONS_GALLERY={} (no marketplace)"
 
-  check_isolated "$name" garden-code-server-exec "$shell"
+  check_isolated "$name" lollo-code-server-exec "$shell"
   jq -e '(.cap_drop // []) | (index("NET_RAW") or index("ALL"))' <<<"$shell" >/dev/null ||
-    die "$name: garden-code-server-exec must drop NET_RAW"
+    die "$name: lollo-code-server-exec must drop NET_RAW"
   k=$(jq -c '[(.volumes // [])[] | select(.type == "bind") | [.source, .target]] | sort' <<<"$shell")
   [[ $k == "$(jq -cn --arg w "$state/workspaces" --arg t "$state/tools" '[[$t, "/opt/agent-tools"], [$w, "/work"]]')" ]] ||
-    die "$name: garden-code-server-exec may mount from the host only $state/workspaces (at /work) and $state/tools (at /opt/agent-tools)"
+    die "$name: lollo-code-server-exec may mount from the host only $state/workspaces (at /work) and $state/tools (at /opt/agent-tools)"
   k=$(jq -c '[(.volumes // [])[] | select(.type == "volume") | [.source, .target, (.read_only // false)]]' <<<"$shell")
   [[ $k == '[["code-exec-keys","/keys",true]]' ]] ||
-    die "$name: garden-code-server-exec may mount only the volume code-exec-keys, read-only (at /keys)"
+    die "$name: lollo-code-server-exec may mount only the volume code-exec-keys, read-only (at /keys)"
   jq -e '(.networks // {} | keys) == ["code-egress", "code-exec"]' <<<"$shell" >/dev/null ||
-    die "$name: garden-code-server-exec must be on the code-exec and code-egress networks only"
+    die "$name: lollo-code-server-exec must be on the code-exec and code-egress networks only"
 
-  for net in code-exec:garden-code-server-editor,garden-code-server-exec code-egress:garden-code-server-exec; do
+  for net in code-exec:lollo-code-server-editor,lollo-code-server-exec code-egress:lollo-code-server-exec; do
     members=$(jq -r --arg n "${net%%:*}" '[.services | to_entries[] | select(.value.networks // {} | has($n)) | .key]
       | sort | join(",")' <<<"$rendered")
     [[ $members == "${net#*:}" ]] ||

@@ -1051,13 +1051,13 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <!-- Edge paths -->
         <path data-edge-from="assets" data-edge-to="gh-release" data-edge-label="gh release create" data-edge-key="0" data-edge-id="assets-release" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="1047.6,398;1047.6,598" d="M 1047.6 398 L 1047.6 598" class="a-emphasis" data-animate="edge" style="--step: 6;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="build" data-edge-to="image" data-edge-label="digests" data-edge-key="1" data-edge-id="build-image" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="531.2,372;592.8,372" d="M 531.2 372 L 592.8 372" class="a-emphasis" data-animate="edge" style="--step: 3;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="build" data-edge-to="garden-images" data-edge-label="push if new" data-edge-key="2" data-edge-id="build-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="461.2,338;461.2,246;588.8,246" d="M 461.2 338 L 461.2 254 Q 461.2 246 469.2 246 L 588.8 246" class="a-default" data-animate="edge" style="--step: 11;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="build" data-edge-to="lollo-images" data-edge-label="push if new" data-edge-key="2" data-edge-id="build-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="461.2,338;461.2,246;588.8,246" d="M 461.2 338 L 461.2 254 Q 461.2 246 469.2 246 L 588.8 246" class="a-default" data-animate="edge" style="--step: 11;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="checks" data-edge-to="plan" data-edge-label="pass" data-edge-key="3" data-edge-id="checks-plan" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="148,372;186,372" d="M 148 372 L 186 372" class="a-emphasis" data-animate="edge" style="--step: 1;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="ctl-job" data-edge-to="assets" data-edge-label="digest" data-edge-key="4" data-edge-id="ctl-assets" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="934.8,372;981.5999999999999,372" d="M 934.8 372 L 981.5999999999999 372" class="a-emphasis" data-animate="edge" style="--step: 5;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="ctl-job" data-edge-to="ctl-image" data-edge-label="push" data-edge-key="5" data-edge-id="ctl-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="878.8,346;878.8,272" d="M 878.8 346 L 878.8 272" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="ctl-job" data-edge-to="stop" data-edge-label="not on both platforms" data-edge-key="6" data-edge-id="ctl-stop" data-composition-routing="workflow-v2-auto" data-edge-role="error" data-composition-points="878.8,398;878.8,498;507.2,498" d="M 878.8 398 L 878.8 490 Q 878.8 498 870.8 498 L 507.2 498" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
         <path data-edge-from="image" data-edge-to="ctl-job" data-edge-label="names + digests" data-edge-key="7" data-edge-id="image-ctl" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="732.8,372;822.8,372" d="M 732.8 372 L 822.8 372" class="a-emphasis" data-animate="edge" style="--step: 4;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="image" data-edge-to="garden-images" data-edge-label="tag" data-edge-key="8" data-edge-id="image-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="662.8,346;662.8,280" d="M 662.8 346 L 662.8 280" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="image" data-edge-to="lollo-images" data-edge-label="tag" data-edge-key="8" data-edge-id="image-push" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="662.8,346;662.8,280" d="M 662.8 346 L 662.8 280" class="a-default" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="plan" data-edge-to="build" data-edge-label="per image, platform" data-edge-key="9" data-edge-id="plan-build" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="282,372;391.2,372" d="M 282 372 L 391.2 372" class="a-emphasis" data-animate="edge" style="--step: 2;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="plan" data-edge-to="stop" data-edge-label="tag is not VERSION" data-edge-key="10" data-edge-id="plan-stop" data-composition-routing="workflow-v2-auto" data-edge-role="error" data-composition-points="234,406;234,498;415.2,498" d="M 234 406 L 234 490 Q 234 498 242 498 L 415.2 498" class="a-security" data-animate="edge" style="--step: 12;" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
         <path data-edge-from="gh-release" data-edge-to="upgrade" data-edge-label="new wrapper" data-edge-key="11" data-edge-id="release-upgrade" data-composition-routing="workflow-v2-auto" data-edge-role="" data-composition-points="1047.6,650;1047.6,724" d="M 1047.6 650 L 1047.6 724" class="a-emphasis" data-animate="edge" style="--step: 7;" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
@@ -1076,28 +1076,28 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <text x="100" y="137.9" class="t-muted" font-size="7.6" text-anchor="middle">vX.Y.Z or vX.Y.Z-rc.N</text>
         </g>
 
-        <g id="node-garden-images" data-node-id="garden-images" data-node-label="lettuce-&lt;image&gt;" tabindex="0" role="button" aria-label="Focus lettuce-&lt;image&gt;, :&lt;content tag&gt;, amd64 + arm64, ghcr.io › Per image and platform, then per image, in parallel" aria-pressed="false" data-node-kind="database" data-node-sublabel=":&lt;content tag&gt;, amd64 + arm64" data-node-tag="SBOM, provenance" data-node-context="ghcr.io › Per image and platform, then per image, in parallel">
-          <title>lettuce-&lt;image&gt; · :&lt;content tag&gt;, amd64 + arm64 · ghcr.io › Per image and platform, then per image, in parallel · SBOM, provenance</title>
+        <g id="node-lollo-images" data-node-id="lollo-images" data-node-label="lollo-&lt;image&gt;" tabindex="0" role="button" aria-label="Focus lollo-&lt;image&gt;, :&lt;content tag&gt;, amd64 + arm64, ghcr.io › Per image and platform, then per image, in parallel" aria-pressed="false" data-node-kind="database" data-node-sublabel=":&lt;content tag&gt;, amd64 + arm64" data-node-tag="SBOM, provenance" data-node-context="ghcr.io › Per image and platform, then per image, in parallel">
+          <title>lollo-&lt;image&gt; · :&lt;content tag&gt;, amd64 + arm64 · ghcr.io › Per image and platform, then per image, in parallel · SBOM, provenance</title>
           <rect x="588.8" y="212" width="148" height="68" rx="8" class="c-mask"/>
           <rect x="588.8" y="212" width="148" height="68" rx="8" class="c-database" data-animate="node" style="--step: 10; --flow-node-name: archify-relay-node-6;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(594.8 218) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" x="662.8" y="246.2" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lettuce-&lt;image&gt;</text>
+          <text data-node-label="" x="662.8" y="246.2" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo-&lt;image&gt;</text>
           <text x="662.8" y="261.1" class="t-muted" font-size="8" text-anchor="middle">:&lt;content tag&gt;, amd64 + arm64</text>
         <text x="662.8" y="273.9" class="t-database" font-size="7" text-anchor="middle">SBOM, provenance</text>
         </g>
 
-        <g id="node-ctl-image" data-node-id="ctl-image" data-node-label="lettucectl" tabindex="0" role="button" aria-label="Focus lettucectl, :vX.Y.Z, carries RELEASE, ghcr.io" aria-pressed="false" data-node-kind="database" data-node-sublabel=":vX.Y.Z, carries RELEASE" data-node-context="ghcr.io">
-          <title>lettucectl · :vX.Y.Z, carries RELEASE · ghcr.io</title>
+        <g id="node-ctl-image" data-node-id="ctl-image" data-node-label="lolloctl" tabindex="0" role="button" aria-label="Focus lolloctl, :vX.Y.Z, carries RELEASE, ghcr.io" aria-pressed="false" data-node-kind="database" data-node-sublabel=":vX.Y.Z, carries RELEASE" data-node-context="ghcr.io">
+          <title>lolloctl · :vX.Y.Z, carries RELEASE · ghcr.io</title>
           <rect x="816.8" y="220" width="124" height="52" rx="8" class="c-mask"/>
           <rect x="816.8" y="220" width="124" height="52" rx="8" class="c-database" data-animate="node" style="--step: 11; --flow-node-name: archify-relay-node-9;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(822.8 226) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" x="878.8" y="252" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lettucectl</text>
+          <text data-node-label="" x="878.8" y="252" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lolloctl</text>
           <text x="878.8" y="264.3" class="t-muted" font-size="8" text-anchor="middle">:vX.Y.Z, carries RELEASE</text>
         </g>
 
@@ -1147,15 +1147,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <text x="662.8" y="384" class="t-muted" font-size="8" text-anchor="middle">content tag on both digests</text>
         </g>
 
-        <g id="node-ctl-job" data-node-id="ctl-job" data-node-label="release-file, ctl" tabindex="0" role="button" aria-label="Focus release-file, ctl, RELEASE, lettucectl, publish.yml (GitHub Actions)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="RELEASE, lettucectl" data-node-context="publish.yml (GitHub Actions)">
-          <title>release-file, ctl · RELEASE, lettucectl · publish.yml (GitHub Actions)</title>
+        <g id="node-ctl-job" data-node-id="ctl-job" data-node-label="release-file, ctl" tabindex="0" role="button" aria-label="Focus release-file, ctl, RELEASE, lolloctl, publish.yml (GitHub Actions)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="RELEASE, lolloctl" data-node-context="publish.yml (GitHub Actions)">
+          <title>release-file, ctl · RELEASE, lolloctl · publish.yml (GitHub Actions)</title>
           <rect x="822.8" y="346" width="112" height="52" rx="8" class="c-mask"/>
           <rect x="822.8" y="346" width="112" height="52" rx="8" class="c-backend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-7;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(828.8 352) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" x="878.8" y="377.1" class="t-primary" font-size="10.1" font-weight="600" text-anchor="middle">release-file, ctl</text>
-          <text x="878.8" y="389.2" class="t-muted" font-size="8" text-anchor="middle">RELEASE, lettucectl</text>
+          <text x="878.8" y="389.2" class="t-muted" font-size="8" text-anchor="middle">RELEASE, lolloctl</text>
         </g>
 
         <g id="node-assets" data-node-id="assets" data-node-label="wrapper, sums, notes" tabindex="0" role="button" aria-label="Focus wrapper, sums, notes, pinned to the digest, publish.yml (GitHub Actions)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="pinned to the digest" data-node-context="publish.yml (GitHub Actions)">
@@ -1181,15 +1181,15 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <text x="461.2" y="510" class="t-muted" font-size="8" text-anchor="middle">no release</text>
         </g>
 
-        <g id="node-gh-release" data-node-id="gh-release" data-node-label="vX.Y.Z" tabindex="0" role="button" aria-label="Focus vX.Y.Z, lettucectl, RELEASE, SHA256SUMS, GitHub release" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="lettucectl, RELEASE, SHA256SUMS" data-node-context="GitHub release">
-          <title>vX.Y.Z · lettucectl, RELEASE, SHA256SUMS · GitHub release</title>
+        <g id="node-gh-release" data-node-id="gh-release" data-node-label="vX.Y.Z" tabindex="0" role="button" aria-label="Focus vX.Y.Z, lolloctl, RELEASE, SHA256SUMS, GitHub release" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="lolloctl, RELEASE, SHA256SUMS" data-node-context="GitHub release">
+          <title>vX.Y.Z · lolloctl, RELEASE, SHA256SUMS · GitHub release</title>
           <rect x="967.5999999999999" y="598" width="160" height="52" rx="8" class="c-mask"/>
           <rect x="967.5999999999999" y="598" width="160" height="52" rx="8" class="c-cloud" data-animate="node" style="--step: 7; --flow-node-name: archify-relay-node-10;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(973.5999999999999 604) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
           <text data-node-label="" x="1047.6" y="619" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">vX.Y.Z</text>
-          <text x="1047.6" y="636" class="t-muted" font-size="8" text-anchor="middle">lettucectl, RELEASE, SHA256SUMS</text>
+          <text x="1047.6" y="636" class="t-muted" font-size="8" text-anchor="middle">lolloctl, RELEASE, SHA256SUMS</text>
         </g>
 
         <g id="node-upgrade" data-node-id="upgrade" data-node-label="self-upgrade" tabindex="0" role="button" aria-label="Focus self-upgrade, swaps after the pull, Admin's host" aria-pressed="false" data-node-kind="external" data-node-sublabel="swaps after the pull" data-node-context="Admin's host">
@@ -1213,7 +1213,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <rect x="540.2" y="352" width="43.6" height="14" rx="3" class="c-mask"/>
           <text x="562" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">digests</text>
         </g>
-        <g data-edge-from="build" data-edge-to="garden-images" data-edge-label="push if new" data-edge-key="2" data-edge-id="build-push">
+        <g data-edge-from="build" data-edge-to="lollo-images" data-edge-label="push if new" data-edge-key="2" data-edge-id="build-push">
           <rect x="493.6" y="226" width="62.8" height="14" rx="3" class="c-mask"/>
           <text x="525" y="236" class="t-muted" font-size="8" text-anchor="middle">push if new</text>
         </g>
@@ -1237,7 +1237,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
           <rect x="736.8" y="352" width="82" height="14" rx="3" class="c-mask"/>
           <text x="777.8" y="362" class="t-edge-emphasis" font-size="8" text-anchor="middle">names + digests</text>
         </g>
-        <g data-edge-from="image" data-edge-to="garden-images" data-edge-label="tag" data-edge-key="8" data-edge-id="image-push">
+        <g data-edge-from="image" data-edge-to="lollo-images" data-edge-label="tag" data-edge-key="8" data-edge-id="image-push">
           <rect x="647.8" y="303" width="30" height="14" rx="3" class="c-mask"/>
           <text x="662.8" y="313" class="t-muted" font-size="8" text-anchor="middle">tag</text>
         </g>

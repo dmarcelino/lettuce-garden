@@ -1,8 +1,8 @@
 import json
 import logging
 
-from garden_vault.logs import SecretFilter
-from garden_vault.push import Pusher
+from lollo_vault.logs import SecretFilter
+from lollo_vault.push import Pusher
 
 from .conftest import EMAIL, SECRET, FakeSender
 

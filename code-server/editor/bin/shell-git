@@ -2,7 +2,7 @@
 # (The extension runs git with LC_ALL=en_US.UTF-8, which the image lacks; bash
 # would warn about it on stderr, which the extension reads.)
 # git.path for VS Code's git extension (settings.json): every git call runs in
-# the shell container (garden-code-server-exec), never in the editor, which has
+# the shell container (lollo-code-server-exec), never in the editor, which has
 # no git. A repository's own config runs code (core.fsmonitor, filters, hooks,
 # diff.external); in the shell it runs where agents already run theirs. The
 # extension spawns git in the repository; the workspaces are at /work in both
@@ -28,17 +28,17 @@ cmd="cd -- $(printf '%q' "$dir") && exec agent-env env LC_ALL=C.UTF-8 LANGUAGE=e
 for arg in "$@"; do
   cmd+=" $(printf '%q' "$arg")"
 done
-ssh=(ssh -F /opt/lettuce-editor/ssh_config)
+ssh=(ssh -F /opt/lollo-editor/ssh_config)
 # Source Control starts several calls at once. Without a shared connection
 # (ControlMaster auto) each would open its own, and every one but the first
 # would say so on stderr: one opens it, under a lock, and the rest share it.
-if ! "${ssh[@]}" -O check garden-code-server-exec 2>/dev/null; then
+if ! "${ssh[@]}" -O check lollo-code-server-exec 2>/dev/null; then
   exec 9>/tmp/shell-git.lock
   flock 9
-  if ! "${ssh[@]}" -O check garden-code-server-exec 2>/dev/null; then
+  if ! "${ssh[@]}" -O check lollo-code-server-exec 2>/dev/null; then
     # The connection outlives this call (ControlPersist): not with the lock.
-    "${ssh[@]}" -T garden-code-server-exec true </dev/null >/dev/null 2>&1 9>&- || true
+    "${ssh[@]}" -T lollo-code-server-exec true </dev/null >/dev/null 2>&1 9>&- || true
   fi
   exec 9>&-
 fi
-exec "${ssh[@]}" -T garden-code-server-exec "$cmd"
+exec "${ssh[@]}" -T lollo-code-server-exec "$cmd"

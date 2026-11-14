@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end test and measurements for the garden-doc-tools profile (docs/doc-tools.md).
+# End-to-end test and measurements for the lollo-doc-tools profile (docs/doc-tools.md).
 # Opt-in and never run by tests/run.sh: it needs Docker, the stack's app-server
 # image and the Gotenberg image, and takes a few minutes.
 #
@@ -10,11 +10,11 @@
 # --report FILE also writes the results and measurements there as Markdown.
 # --no-idle-wait skips the 90 s wait for Gotenberg's idle measurement.
 #
-# It simulates four stacks (a-d) the way compose/doc-tools.yml and lettucectl
+# It simulates four stacks (a-d) the way compose/doc-tools.yml and lolloctl
 # wire them, without Cloudflare, the BFF or an agent: per stack, a default
 # network and an internal doc-tools network, an app-server container (the real
 # image, kept idle with `sleep`) on both with the tools' volume (filled from the
-# doc-tools image as lettucectl fills it) mounted read-only, and Lettuce's MCP settings with the `office` and `pdf` stdio
+# doc-tools image as lolloctl fills it) mounted read-only, and Lettuce's MCP settings with the `office` and `pdf` stdio
 # entries. Calls go through `letta mcp call` from the agent's workspace, as the
 # upstream mcp-servers skill makes them. One Gotenberg from
 # compose/shared/gotenberg.yml joins every doc-tools network as `gotenberg`.
@@ -24,13 +24,13 @@
 # to start while anything named doctools-e2e-* exists, and removes what it
 # created on exit, including the root-owned files in its temp dir (through a
 # throwaway container). It builds the doc-tools image when missing and keeps it,
-# as `lettucectl up` would; its volume is its own and goes on exit. Exit status: 0 when every scenario passes.
+# as `lolloctl up` would; its volume is its own and goes on exit. Exit status: 0 when every scenario passes.
 # Scenarios and cleanup are called by name (run_scenario, trap).
 # shellcheck disable=SC2329
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-LETTUCE_HOME=$ROOT
+LOLLO_HOME=$ROOT
 # shellcheck source=lib/common.sh
 source "$ROOT/lib/common.sh"
 
@@ -191,7 +191,7 @@ EOF
 }
 
 # write_settings FILE: Lettuce's MCP list with the measuring entries; office and
-# pdf are added by lib/mcp-servers.mjs, as `lettucectl mcp` adds them
+# pdf are added by lib/mcp-servers.mjs, as `lolloctl mcp` adds them
 write_settings() {
   jq -n '{
     autoConversationTitles: false,
@@ -201,9 +201,9 @@ write_settings() {
       baseUrl: "local:/data/local-backend",
       mcpServers: [
         {name: "officem", transport: "stdio", command: "/usr/bin/python3",
-         args: ["-I", "/root/.letta/e2e/measure.py", "office", "/opt/lettuce-doc-tools/bin/officeagent"]},
+         args: ["-I", "/root/.letta/e2e/measure.py", "office", "/opt/lollo-doc-tools/bin/officeagent"]},
         {name: "pdfm", transport: "stdio", command: "/usr/bin/python3",
-         args: ["-I", "/root/.letta/e2e/measure.py", "pdf", "/opt/lettuce-doc-tools/bin/pdf-mcp"]}
+         args: ["-I", "/root/.letta/e2e/measure.py", "pdf", "/opt/lollo-doc-tools/bin/pdf-mcp"]}
       ]
     }]
   }' >"$1"
@@ -301,7 +301,7 @@ sampler_stop() { # -> peak bytes
 
 # ── documents (generated, benign) ────────────────────────────────────────────
 BRIEF_PLAN='[{"op":"changeText","target":{"paraId":"auto-0000","expect":""},"with":"Project brief","mode":"Direct"},{"op":"insertParagraphs","target":{"paraId":"auto-0000","expect":"Project brief"},"position":"After","mode":"Direct","paragraphs":[{"text":"The supplier is Example Supplies."},{"text":"Delivery is due within thirty days."},{"text":"Payment terms are net 60."}]}]'
-DECK_PLAN='[{"op":"changeText","target":{"paraId":"slide256/shape2/p0","expect":""},"with":"Quarterly Review","mode":"Direct"},{"op":"insertSlide","slide":{"layout":"titleAndContent","title":"Next Steps","body":["Plan the garden","Paint the fence"]}}]'
+DECK_PLAN='[{"op":"changeText","target":{"paraId":"slide256/shape2/p0","expect":""},"with":"Quarterly Review","mode":"Direct"},{"op":"insertSlide","slide":{"layout":"titleAndContent","title":"Next Steps","body":["Mow the lawn","Paint the fence"]}}]'
 BOOK_PLAN='[{"op":"setCell","target":{"sheetId":1,"address":"A1"},"value":"Item"},{"op":"setCell","target":{"sheetId":1,"address":"B1"},"value":"Amount"},{"op":"setCell","target":{"sheetId":1,"address":"B2"},"value":"40"},{"op":"setCell","target":{"sheetId":1,"address":"B3"},"value":"2.5"},{"op":"setCell","target":{"sheetId":1,"address":"B4"},"formula":"SUM(B2:B3)*2"}]'
 marker_plan() { # marker_plan TEXT -> a one-paragraph Word plan
   jq -nc --arg t "$1" '[{op: "changeText", target: {paraId: "auto-0000", expect: ""}, with: $t, mode: "Direct"}]'
@@ -332,9 +332,9 @@ VOL=$P-tools
 info "filling $VOL"
 docker volume create --label "$LBL" "$VOL" >/dev/null
 cid=$(docker create --label "$LBL" "$IMG" /none)
-docker cp "$cid:/opt/lettuce-doc-tools/." - |
+docker cp "$cid:/opt/lollo-doc-tools/." - |
   docker run --rm -i --label "$LBL" --network none -v "$VOL:/dst" --entrypoint sh "$APP" \
-    -c 'tar -x -C /dst && touch /dst/.lettuce-doc-tools-complete' || die "could not fill $VOL"
+    -c 'tar -x -C /dst && touch /dst/.lollo-doc-tools-complete' || die "could not fill $VOL"
 docker rm -f "$cid" >/dev/null
 
 info "starting Gotenberg ($P-shared)"
@@ -356,7 +356,7 @@ for s in "${STACKS[@]}"; do
   docker run -d --name "$P-$s-app" --label "$LBL" --init --network "$P-$s-default" \
     -e LETTA_LOCAL_BACKEND_EXPERIMENTAL=true -e LETTA_LOCAL_BACKEND_DIR=/data/local-backend -e USER_CWD=/work \
     -v "$d/work:/work" -v "$d/home:/root/.letta" -v "$d/data:/data" \
-    --mount "type=volume,source=$VOL,target=/opt/lettuce-doc-tools,readonly,volume-nocopy" \
+    --mount "type=volume,source=$VOL,target=/opt/lollo-doc-tools,readonly,volume-nocopy" \
     -w /work --entrypoint sleep "$APP" infinity >/dev/null 2>"$TMP/run.err" ||
     die "app-server $s did not start: $(cat "$TMP/run.err")"
   docker network connect "$P-$s-doctools" "$P-$s-app"
@@ -381,7 +381,7 @@ s0_wiring() {
   local s nets
   for s in "${STACKS[@]}"; do
     expect "$s: the tools' mount is writable" \
-      docker exec "$P-$s-app" sh -c '! touch /opt/lettuce-doc-tools/.w 2>/dev/null' || return 1
+      docker exec "$P-$s-app" sh -c '! touch /opt/lollo-doc-tools/.w 2>/dev/null' || return 1
     nets=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$P-$s-app")
     expect "$s: app-server networks are '$nets'" test "$nets" = "$P-$s-default $P-$s-doctools " || return 1
     expect "$s: doc-tools network is not internal" \
@@ -393,8 +393,8 @@ s0_wiring() {
 
 # tools_there STACK -> the launchers are in the stack's app-server
 tools_there() {
-  expect "$1: /opt/lettuce-doc-tools/bin lacks the launchers after a restart" \
-    test "$(docker exec "$P-$1-app" ls /opt/lettuce-doc-tools/bin | paste -sd' ')" = "officeagent pdf-mcp"
+  expect "$1: /opt/lollo-doc-tools/bin lacks the launchers after a restart" \
+    test "$(docker exec "$P-$1-app" ls /opt/lollo-doc-tools/bin | paste -sd' ')" = "officeagent pdf-mcp"
 }
 
 s1_office() {
@@ -601,7 +601,7 @@ s5_restart_remove() {
   pdf_text b b-after-restart.pdf || return 1
   expect "b's output after its restart lacks its text" has "$TEXT" "Note kept by stack b" || return 1
 
-  # What `lettucectl remove` does for the doc-tools part.
+  # What `lolloctl remove` does for the doc-tools part.
   docker network disconnect -f "$P-b-doctools" "$GOT"
   docker rm -f "$P-b-app" >/dev/null
   docker network rm "$P-b-doctools" "$P-b-default" >/dev/null
@@ -739,10 +739,10 @@ measure_disk() {
     docs=$(du -sb --exclude=.officeagent "$w" | cut -f1)
     idx=$(du -sb "$w/.officeagent" 2>/dev/null | cut -f1)
     rw=$(docker container inspect --size -f '{{.SizeRw}}' "$P-$s-app")
-    tmpb=$(docker exec "$P-$s-app" du -sb /tmp/lettuce-doc-tools | cut -f1)
+    tmpb=$(docker exec "$P-$s-app" du -sb /tmp/lollo-doc-tools | cut -f1)
     mrow "Disk, stack $s: documents in the workspace / .officeagent index" "$docs B / ${idx:-0} B" \
       "the documents the tests made"
-    mrow "Disk, stack $s: container layer (SizeRw) / of which /tmp/lettuce-doc-tools" "$rw B / $tmpb B" \
+    mrow "Disk, stack $s: container layer (SizeRw) / of which /tmp/lollo-doc-tools" "$rw B / $tmpb B" \
       "the shared volume adds nothing per stack"
   done
   mrow "Disk, per stack: MCP settings (mcp-home)" "$(stat -c %s "$TMP/a/home/mcp-home/.letta/settings.json") B" \

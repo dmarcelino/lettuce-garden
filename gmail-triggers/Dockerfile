@@ -1,12 +1,12 @@
-# The gmail-triggers garden sidecar (see docs/gmail-triggers.md). Built by
-# lettucectl via compose/gmail-triggers.yml; tests/run-sidecar.sh builds the
+# The gmail-triggers lollo sidecar (see docs/gmail-triggers.md). Built by
+# lolloctl via compose/gmail-triggers.yml; tests/run-sidecar.sh builds the
 # `test` stage and runs it. Both pass the shared package as the build context
-# named `garden-common`.
+# named `lollo-common`.
 FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
-COPY --from=garden-common . /tmp/garden-common
-RUN pip install --root-user-action=ignore /tmp/garden-common && rm -rf /tmp/garden-common
+COPY --from=lollo-common . /tmp/lollo-common
+RUN pip install --root-user-action=ignore /tmp/lollo-common && rm -rf /tmp/lollo-common
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --root-user-action=ignore .

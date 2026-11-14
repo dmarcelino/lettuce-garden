@@ -1,5 +1,5 @@
 """The gate in front of the real editor, for scripts/code-server-e2e.sh (not a pytest
-module: it needs a running garden-code-server-editor). It builds the gate with a test
+module: it needs a running lollo-code-server-editor). It builds the gate with a test
 signing key in place of Cloudflare's, real HTTP and WebSockets over the editor's Unix socket,
 and drives it in-process. Prints one line per check; exits 1 when any fails."""
 
@@ -12,13 +12,13 @@ from collections.abc import Callable
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
-from garden_common.auth import Authenticator
+from lollo_common.auth import Authenticator
 from starlette.testclient import TestClient
 
 from code_server_gate.app import create_app, editor_client, unix_socket_connect
 from code_server_gate.config import PREFIX, Settings
 
-ORIGIN = "https://alfred-garden.example.com"
+ORIGIN = "https://alfred-lollo.example.com"
 EMAIL = "alfred@example.com"
 DOCUMENT = {"sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-site": "same-origin"}
 FRAME = {**DOCUMENT, "sec-fetch-dest": "iframe"}
@@ -132,7 +132,7 @@ def main() -> None:
         check("a WebSocket reaches the editor through the gate", websocket)
 
         def websocket_foreign_origin() -> None:
-            headers = {"origin": "https://alfred-garden.example.com:8443", "cf-access-jwt-assertion": token}
+            headers = {"origin": "https://alfred-lollo.example.com:8443", "cf-access-jwt-assertion": token}
             try:
                 with browser.websocket_connect(f"{PREFIX}/", headers=headers):
                     raise AssertionError("accepted")

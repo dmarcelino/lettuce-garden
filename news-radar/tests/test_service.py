@@ -7,9 +7,9 @@ from datetime import datetime
 import pytest
 from conftest import AGENT, EVENTS_JSON, OTHER_AGENT, json_spec
 
-from garden_news_radar.config import CARRY_SECONDS, MAX_PROMPT
-from garden_news_radar.service import ToolError, minutes_between
-from garden_news_radar.store import CLAIMED, FAILED, LOST, OK, QUEUED
+from lollo_news_radar.config import CARRY_SECONDS, MAX_PROMPT
+from lollo_news_radar.service import ToolError, minutes_between
+from lollo_news_radar.store import CLAIMED, FAILED, LOST, OK, QUEUED
 
 pytestmark = pytest.mark.anyio
 
@@ -352,7 +352,7 @@ async def test_an_item_recorded_in_the_second_a_report_is_built_is_not_lost(serv
 
 
 async def test_schedules_missed_during_a_restart_still_fire(service, web, store, clock, fetcher, settings):
-    from garden_news_radar.service import Service
+    from lollo_news_radar.service import Service
 
     await add_source(service, web)
     service.monitor_put(AGENT, "films", ["city-agenda"], schedule="0 8 * * *")
@@ -399,7 +399,7 @@ async def test_followed_item_pages_are_read_again_now_and_then(service, web, sto
 async def test_tools_answer_within_the_mcp_call_limit(service, monkeypatch):
     import anyio
 
-    import garden_news_radar.service as service_module
+    import lollo_news_radar.service as service_module
 
     async def slow(fetcher, url, **kwargs):
         await anyio.sleep(5)
@@ -460,7 +460,7 @@ async def test_conversations_and_set_up_in_are_checked(service, web, bad):
 def test_a_store_from_before_set_up_in_gains_the_column(settings, clock):
     import sqlite3
 
-    from garden_news_radar.store import Store
+    from lollo_news_radar.store import Store
 
     db = sqlite3.connect(settings.db_path)
     db.executescript(
@@ -808,7 +808,7 @@ async def test_monitors_take_up_to_sixty_terms(service, web):
 def test_a_store_from_before_where_gains_the_column(settings, clock):
     import sqlite3
 
-    from garden_news_radar.store import Store
+    from lollo_news_radar.store import Store
 
     Store(settings.db_path, clock=clock)
     db = sqlite3.connect(settings.db_path)

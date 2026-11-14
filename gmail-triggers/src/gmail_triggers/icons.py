@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from functools import cache
 
-from garden_common import icons
+from lollo_common import icons
 
 BG = (0x7A, 0xA2, 0xF7)
 FG = (0x0B, 0x10, 0x20)

@@ -7,7 +7,7 @@
     "locale": "en",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/dmarcelino/lettuce-garden.git",
+      "url": "https://github.com/dmarcelino/lollo-rozzo.git",
       "provider": "github",
       "link_mode": "web",
       "revision": "9499c99f267337cc46e5bb4baf5f133559057ab8"
@@ -18,7 +18,7 @@
       "id": "browser",
       "type": "external",
       "label": "Person's browser",
-      "sublabel": "garden host tab",
+      "sublabel": "lollo host tab",
       "pos": [
         40,
         40
@@ -40,7 +40,7 @@
       "id": "access",
       "type": "security",
       "label": "Cloudflare Access",
-      "sublabel": "garden app, Google login",
+      "sublabel": "lollo app, Google login",
       "pos": [
         250,
         40
@@ -60,7 +60,7 @@
           "path": "compose/code-server.yml",
           "line": 34,
           "end_line": 41,
-          "label": "gate takes CF_GARDEN_AUD"
+          "label": "gate takes CF_LOLLO_AUD"
         }
       ]
     },
@@ -82,7 +82,7 @@
           "path": "lib/cloudflare.sh",
           "line": 125,
           "end_line": 134,
-          "label": "garden host routes"
+          "label": "lollo host routes"
         },
         {
           "path": "lib/cloudflare.sh",
@@ -95,7 +95,7 @@
     {
       "id": "gate",
       "type": "security",
-      "label": "garden-code-server",
+      "label": "lollo-code-server",
       "sublabel": "gate: JWT, Origin, headers",
       "pos": [
         700,
@@ -148,9 +148,9 @@
       ]
     },
     {
-      "id": "garden",
+      "id": "lollo",
       "type": "frontend",
-      "label": "garden",
+      "label": "landing",
       "sublabel": "landing page, agent links",
       "pos": [
         250,
@@ -162,13 +162,13 @@
       ],
       "sources": [
         {
-          "path": "compose/garden.yml",
+          "path": "compose/landing.yml",
           "line": 18,
           "end_line": 48,
-          "label": "garden service"
+          "label": "landing service"
         },
         {
-          "path": "garden/src/garden_landing/app.py",
+          "path": "landing/src/lollo_landing/app.py",
           "line": 70,
           "end_line": 83,
           "label": "/code-server/?folder= links"
@@ -294,7 +294,7 @@
     {
       "id": "editor",
       "type": "frontend",
-      "label": "garden-code-server-editor",
+      "label": "lollo-code-server-editor",
       "sublabel": "code-server, Restricted Mode",
       "pos": [
         700,
@@ -328,7 +328,7 @@
     {
       "id": "shell",
       "type": "backend",
-      "label": "garden-code-server-exec",
+      "label": "lollo-code-server-exec",
       "sublabel": "sshd on app-server image",
       "pos": [
         990,
@@ -426,12 +426,12 @@
     },
     {
       "kind": "region",
-      "label": "Compose project lettuce-<name>",
+      "label": "Compose project lollo-<name>",
       "wraps": [
         "cloudflared",
         "gate",
         "bff",
-        "garden",
+        "lollo",
         "data",
         "sock",
         "keys",
@@ -470,7 +470,7 @@
     {
       "from": "access",
       "to": "cloudflared",
-      "label": "tunnel + garden JWT",
+      "label": "tunnel + lollo JWT",
       "variant": "emphasis"
     },
     {
@@ -481,7 +481,7 @@
     },
     {
       "from": "cloudflared",
-      "to": "garden",
+      "to": "lollo",
       "label": "/ and /assets/"
     },
     {
@@ -553,7 +553,7 @@
       "dot": "emerald",
       "title": "The only way in",
       "items": [
-        "The gate checks the garden's Access JWT on every request and WebSocket, the garden Origin on upgrades, and Sec-Fetch-Site same-origin for anything but a read",
+        "The gate checks the lollo's Access JWT on every request and WebSocket, the lollo Origin on upgrades, and Sec-Fetch-Site same-origin for anything but a read",
         "It passes only listed headers: the editor never sees the Access token or cookies, and never sets a cookie or COOP",
         "Only the workbench and code-server's own frames load as pages; everything else is nosniff with CSP sandbox",
         "The editor listens only on editor.sock; only the gate (ro) and the editor mount code-server-sock"
@@ -563,7 +563,7 @@
       "dot": "slate",
       "title": "Not connected",
       "items": [
-        "The editor and the shell are not on the stack's default network: no route to the app-server, the BFF, the vault, Gmail triggers or garden",
+        "The editor and the shell are not on the stack's default network: no route to the app-server, the BFF, the vault, Gmail triggers or lollo",
         "No code editor service opens a connection to the app-server or the BFF or starts a turn",
         "code-exec is internal and holds only the editor and the shell; only the shell is on code-egress"
       ]
@@ -574,7 +574,7 @@
       "items": [
         "Terminals (exec-shell) and Source Control's git (shell-git) run over SSH in the shell, through agent-env",
         "The shell is the app-server's image with the workspaces and /opt/agent-tools mounted read-write, like the agents'",
-        "The editor shares the garden origin with the vault and Gmail triggers, so it stays in Restricted Mode and runs nothing from the workspaces"
+        "The editor shares the lollo origin with the vault and Gmail triggers, so it stays in Restricted Mode and runs nothing from the workspaces"
       ]
     }
   ]

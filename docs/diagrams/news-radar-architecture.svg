@@ -970,7 +970,7 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <rect width="100%" height="100%" fill="url(#grid)"/>
 
         <!-- Boundaries (behind everything) -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Stack lettuce-&lt;name&gt;: one Docker Compose project per person" x="420" y="10" width="935" height="474" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Stack lollo-&lt;name&gt;: one Docker Compose project per person" x="420" y="10" width="935" height="474" rx="12" class="c-region" stroke-width="1"/>
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="1" data-composition-frame-label="app-server: agents run here as root" x="1115" y="10" width="240" height="294" rx="8" class="c-security-group" stroke-width="1"/>
 
@@ -1029,8 +1029,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="95" y="266" class="t-muted" font-size="9" text-anchor="middle">sees and deletes</text>
         </g>
 
-        <g id="node-cf-edge" data-node-id="cf-edge" data-node-label="Cloudflare Access" tabindex="0" role="button" aria-label="Focus Cloudflare Access, garden's own Access app, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="garden's own Access app" data-node-context="Architecture component">
-          <title>Cloudflare Access · garden's own Access app · Architecture component</title>
+        <g id="node-cf-edge" data-node-id="cf-edge" data-node-label="Cloudflare Access" tabindex="0" role="button" aria-label="Focus Cloudflare Access, lollo's own Access app, Architecture component" aria-pressed="false" data-node-kind="security" data-node-sublabel="lollo's own Access app" data-node-context="Architecture component">
+          <title>Cloudflare Access · lollo's own Access app · Architecture component</title>
           <rect x="210" y="220" width="170" height="64" rx="8" class="c-mask"/>
           <rect x="210" y="220" width="170" height="64" rx="8" class="c-security" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-2;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(216 226) scale(0.6875)">
@@ -1038,11 +1038,11 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
           <text data-node-label="" x="295" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Cloudflare Access</text>
-        <text x="295" y="266" class="t-muted" font-size="9" text-anchor="middle">garden's own Access app</text>
+        <text x="295" y="266" class="t-muted" font-size="9" text-anchor="middle">lollo's own Access app</text>
         </g>
 
-        <g id="node-cloudflared" data-node-id="cloudflared" data-node-label="cloudflared" tabindex="0" role="button" aria-label="Focus cloudflared, routes by host + path, Stack lettuce-&lt;name&gt;: one Docker Compose project per person" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="routes by host + path" data-node-context="Stack lettuce-&lt;name&gt;: one Docker Compose project per person">
-          <title>cloudflared · routes by host + path · Stack lettuce-&lt;name&gt;: one Docker Compose project per person</title>
+        <g id="node-cloudflared" data-node-id="cloudflared" data-node-label="cloudflared" tabindex="0" role="button" aria-label="Focus cloudflared, routes by host + path, Stack lollo-&lt;name&gt;: one Docker Compose project per person" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="routes by host + path" data-node-context="Stack lollo-&lt;name&gt;: one Docker Compose project per person">
+          <title>cloudflared · routes by host + path · Stack lollo-&lt;name&gt;: one Docker Compose project per person</title>
           <rect x="450" y="220" width="160" height="64" rx="8" class="c-mask"/>
           <rect x="450" y="220" width="160" height="64" rx="8" class="c-cloud" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-5;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(456 226) scale(0.6875)">
@@ -1052,8 +1052,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="530" y="266" class="t-muted" font-size="9" text-anchor="middle">routes by host + path</text>
         </g>
 
-        <g id="node-bff" data-node-id="bff" data-node-label="BFF :8080" tabindex="0" role="button" aria-label="Focus BFF :8080, Lettuce UI, Stack lettuce-&lt;name&gt;: one Docker Compose project per person" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="Lettuce UI" data-node-context="Stack lettuce-&lt;name&gt;: one Docker Compose project per person">
-          <title>BFF :8080 · Lettuce UI · Stack lettuce-&lt;name&gt;: one Docker Compose project per person</title>
+        <g id="node-bff" data-node-id="bff" data-node-label="BFF :8080" tabindex="0" role="button" aria-label="Focus BFF :8080, Lettuce UI, Stack lollo-&lt;name&gt;: one Docker Compose project per person" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="Lettuce UI" data-node-context="Stack lollo-&lt;name&gt;: one Docker Compose project per person">
+          <title>BFF :8080 · Lettuce UI · Stack lollo-&lt;name&gt;: one Docker Compose project per person</title>
           <rect x="790" y="40" width="180" height="64" rx="8" class="c-mask"/>
           <rect x="790" y="40" width="180" height="64" rx="8" class="c-frontend" data-animate="node" style="--step: 4; --flow-node-name: archify-relay-node-8;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(796 46) scale(0.6875)">
@@ -1066,8 +1066,8 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="880" y="86" class="t-muted" font-size="9" text-anchor="middle">Lettuce UI</text>
         </g>
 
-        <g id="node-app-server" data-node-id="app-server" data-node-label="app-server" tabindex="0" role="button" aria-label="Focus app-server, agents, letta-code scheduler, Stack lettuce-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root" aria-pressed="false" data-node-kind="backend" data-node-sublabel="agents, letta-code scheduler" data-node-context="Stack lettuce-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root">
-          <title>app-server · agents, letta-code scheduler · Stack lettuce-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root</title>
+        <g id="node-app-server" data-node-id="app-server" data-node-label="app-server" tabindex="0" role="button" aria-label="Focus app-server, agents, letta-code scheduler, Stack lollo-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root" aria-pressed="false" data-node-kind="backend" data-node-sublabel="agents, letta-code scheduler" data-node-context="Stack lollo-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root">
+          <title>app-server · agents, letta-code scheduler · Stack lollo-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root</title>
           <rect x="1145" y="40" width="180" height="64" rx="8" class="c-mask"/>
           <rect x="1145" y="40" width="180" height="64" rx="8" class="c-backend" data-animate="node" style="--step: 5; --flow-node-name: archify-relay-node-4;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1151 46) scale(0.6875)">
@@ -1077,30 +1077,30 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         <text x="1235" y="86" class="t-muted" font-size="9" text-anchor="middle">agents, letta-code scheduler</text>
         </g>
 
-        <g id="node-news-radar" data-node-id="news-radar" data-node-label="garden-news-radar" tabindex="0" role="button" aria-label="Focus garden-news-radar, page, /mcp, fetcher, schedules, Stack lettuce-&lt;name&gt;: one Docker Compose project per person" aria-pressed="false" data-node-kind="backend" data-node-sublabel="page, /mcp, fetcher, schedules" data-node-context="Stack lettuce-&lt;name&gt;: one Docker Compose project per person">
-          <title>garden-news-radar · page, /mcp, fetcher, schedules · Stack lettuce-&lt;name&gt;: one Docker Compose project per person</title>
+        <g id="node-news-radar" data-node-id="news-radar" data-node-label="lollo-news-radar" tabindex="0" role="button" aria-label="Focus lollo-news-radar, page, /mcp, fetcher, schedules, Stack lollo-&lt;name&gt;: one Docker Compose project per person" aria-pressed="false" data-node-kind="backend" data-node-sublabel="page, /mcp, fetcher, schedules" data-node-context="Stack lollo-&lt;name&gt;: one Docker Compose project per person">
+          <title>lollo-news-radar · page, /mcp, fetcher, schedules · Stack lollo-&lt;name&gt;: one Docker Compose project per person</title>
           <rect x="790" y="220" width="180" height="64" rx="8" class="c-mask"/>
           <rect x="790" y="220" width="180" height="64" rx="8" class="c-backend" data-animate="node" style="--step: 3; --flow-node-name: archify-relay-node-3;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(796 226) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="880" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden-news-radar</text>
+          <text data-node-label="" x="880" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo-news-radar</text>
         <text x="880" y="266" class="t-muted" font-size="9" text-anchor="middle">page, /mcp, fetcher, schedules</text>
         </g>
 
-        <g id="node-executor" data-node-id="executor" data-node-label="garden executor" tabindex="0" role="button" aria-label="Focus garden executor, run.mjs --news-radar, every minute, Stack lettuce-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root" aria-pressed="false" data-node-kind="backend" data-node-sublabel="run.mjs --news-radar, every minute" data-node-context="Stack lettuce-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root">
-          <title>garden executor · run.mjs --news-radar, every minute · Stack lettuce-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root</title>
+        <g id="node-executor" data-node-id="executor" data-node-label="lollo executor" tabindex="0" role="button" aria-label="Focus lollo executor, run.mjs --news-radar, every minute, Stack lollo-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root" aria-pressed="false" data-node-kind="backend" data-node-sublabel="run.mjs --news-radar, every minute" data-node-context="Stack lollo-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root">
+          <title>lollo executor · run.mjs --news-radar, every minute · Stack lollo-&lt;name&gt;: one Docker Compose project per person › app-server: agents run here as root</title>
           <rect x="1145" y="220" width="180" height="64" rx="8" class="c-mask"/>
           <rect x="1145" y="220" width="180" height="64" rx="8" class="c-backend" data-animate="node" style="--step: 6; --flow-node-name: archify-relay-node-1;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1151 226) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="1235" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">garden executor</text>
+          <text data-node-label="" x="1235" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lollo executor</text>
         <text x="1235" y="266" class="t-muted" font-size="8.4" text-anchor="middle">run.mjs --news-radar, every minute</text>
         </g>
 
-        <g id="node-data" data-node-id="data" data-node-label="news-radar-data" tabindex="0" role="button" aria-label="Focus news-radar-data, sources, items, monitors, reports, Stack lettuce-&lt;name&gt;: one Docker Compose project per person" aria-pressed="false" data-node-kind="database" data-node-sublabel="sources, items, monitors, reports" data-node-context="Stack lettuce-&lt;name&gt;: one Docker Compose project per person">
-          <title>news-radar-data · sources, items, monitors, reports · Stack lettuce-&lt;name&gt;: one Docker Compose project per person</title>
+        <g id="node-data" data-node-id="data" data-node-label="news-radar-data" tabindex="0" role="button" aria-label="Focus news-radar-data, sources, items, monitors, reports, Stack lollo-&lt;name&gt;: one Docker Compose project per person" aria-pressed="false" data-node-kind="database" data-node-sublabel="sources, items, monitors, reports" data-node-context="Stack lollo-&lt;name&gt;: one Docker Compose project per person">
+          <title>news-radar-data · sources, items, monitors, reports · Stack lollo-&lt;name&gt;: one Docker Compose project per person</title>
           <rect x="450" y="400" width="180" height="64" rx="8" class="c-mask"/>
           <rect x="450" y="400" width="180" height="64" rx="8" class="c-database" data-animate="node" style="--step: 9; --flow-node-name: archify-relay-node-6;" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(456 406) scale(0.6875)">
@@ -1166,9 +1166,9 @@ been cleared for every commercial, promotional, or redistributive use.</metadata
         </g>
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="Stack lettuce-&lt;name&gt;: one Docker Compose project per person">
+        <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="Stack lollo-&lt;name&gt;: one Docker Compose project per person">
           <rect data-graph-role="structural-frame-label-mask" x="424" y="19" width="328.60003539999997" height="17" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="428" y="32.000001" class="t-cloud" font-size="9.000001" font-weight="600">Stack lettuce-&lt;name&gt;: one Docker Compose project per person</text>
+          <text data-boundary-label="" x="428" y="32.000001" class="t-cloud" font-size="9.000001" font-weight="600">Stack lollo-&lt;name&gt;: one Docker Compose project per person</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="security-group" data-composition-frame-label="app-server: agents run here as root">

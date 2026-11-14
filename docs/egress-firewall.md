@@ -1,6 +1,6 @@
 # Egress proxy (pipelock)
 
-The `garden-pipelock` profile gives each stack its own [pipelock](https://github.com/pipelab-org/pipelock),
+The `lollo-pipelock` profile gives each stack its own [pipelock](https://github.com/pipelab-org/pipelock),
 an egress proxy for AI agents. The agents' tools send their web traffic through it. It checks
 where each request goes, blocks some destinations, and writes a **signed receipt** for every
 decision. It is opt-in and **advisory**: it catches mistakes and naive attempts, and records
@@ -19,7 +19,7 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
   Code and Codex subagents, `npm`, `pip`, `git`, `curl`...), in SearXNG and in the DuckDuckGo
   reader. Traffic inside the stack (the vault, Gmail triggers, News Radar, the search sidecars,
   localhost, `host.docker.internal`) stays direct: pipelock must never see the vault's values, and
-  `lettucectl check` refuses a stack where it would.
+  `lolloctl check` refuses a stack where it would.
 - **Destination checks** (balanced mode, `pipelock/pipelock.yaml`):
   - a short built-in blocklist of paste and file-drop sites (pastebin, transfer.sh, ...);
   - private, internal and cloud-metadata addresses (SSRF): the LAN, the host, `169.254.169.254`.
@@ -30,7 +30,7 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
   - at most 1200 requests per minute to one site (each plain-HTTP request and each HTTPS
     connection counts, letta-code's model calls included), which only stops runaway loops.
 - **Page checks, for pages read through `/fetch`.** Agents that follow the
-  `fetching-web-pages` skill read pages through `http://garden-pipelock:8888/fetch?url=...`. Pipelock
+  `fetching-web-pages` skill read pages through `http://lollo-pipelock:8888/fetch?url=...`. Pipelock
   fetches the page itself, so it checks the whole URL for secrets and the page's text for
   prompt injection, and returns the text as JSON. A page with prompt injection is **blocked**
   (pipelock's balanced mode would only log a warning and hand the agent the page): the agent
@@ -67,8 +67,8 @@ How pipelock is built and wired, for developers: [pipelock/README.md](../pipeloc
 
 ### Turning it on
 ```bash
-lettucectl profiles cloudflared,search,garden-pipelock   # your current list plus garden-pipelock
-lettucectl skills all                             # installs the fetching-web-pages skill
+lolloctl profiles cloudflared,search,lollo-pipelock   # your current list plus lollo-pipelock
+lolloctl skills all                             # installs the fetching-web-pages skill
 ```
 `up` builds the image (`pipelock/Dockerfile`) from pipelock's source at a pinned release,
 without its separately licensed enterprise code. The first start creates the stack's receipt
@@ -77,13 +77,13 @@ receipts.
 
 ### Reading the receipts
 ```bash
-lettucectl receipts alfred                        # verify every receipt, list the sessions
-lettucectl receipts alfred ~/alfred-receipts.html # HTML report of the newest session
-lettucectl receipts alfred ~/r.html proxy.run.... # ... or of a listed session
+lolloctl receipts alfred                        # verify every receipt, list the sessions
+lolloctl receipts alfred ~/alfred-receipts.html # HTML report of the newest session
+lolloctl receipts alfred ~/r.html proxy.run.... # ... or of a listed session
 ```
 Pipelock refuses to verify a file that changes while it reads it, which a running pipelock
 does with every request, so `receipts` tries three times. If it still fails while pipelock is
-running, retry when the stack is quiet, or after `lettucectl down alfred`.
+running, retry when the stack is quiet, or after `lolloctl down alfred`.
 
 Each start of pipelock is a session. The report shows each decision with its time, destination
 and reason, and checks the signatures against the stack's public key. Both run in a one-off
@@ -93,7 +93,7 @@ agents reached: keep them private (they are written mode 600, and never inside t
 Expect some noise: each SearXNG search first tries HTTP/3 through the proxy, which pipelock
 refuses (an SSRF block on `pipelock` itself) before the search goes through normally.
 
-The signing key and the receipts live on the volume `lettuce-<name>_pipelock-data`, which only
+The signing key and the receipts live on the volume `lollo-<name>_pipelock-data`, which only
 pipelock mounts. Receipts are never pruned (removing one would break the chain); they grow by
 one line of about 1.5 KB per request, model calls included, so a busy stack adds several MB a
 day. `backup` copies them, and `remove` deletes them with the stack. To start over, take a
@@ -111,7 +111,7 @@ PIPELOCK_DIRECT=models.lan,10.0.0.5:11434
 # stacks/alfred/stack.env: added to the list above, for alfred only
 PIPELOCK_DIRECT=gpu-box.lan
 ```
-Then run `lettucectl up all` (or `up alfred`). lettucectl appends the list to `NO_PROXY`, so
+Then run `lolloctl up all` (or `up alfred`). lolloctl appends the list to `NO_PROXY`, so
 those hosts are reached directly, without checks or receipts, by letta-code and by every agent
 tool in that stack. `*`, URLs and address ranges are refused. A model server on the Docker
 host needs none of this: point Lettuce at `host.docker.internal`.
@@ -124,5 +124,5 @@ is harmless: Node says its proxy support may change, not that something failed.
 The agent gets a 403 with an `X-Pipelock-Block-Reason` header (or `blocked: true` and a
 `block_reason` from `/fetch`).
 The skill tells agents to report it rather than try another way. To see why, read the receipts
-or `lettucectl logs alfred garden-pipelock`. The policy is the same for every stack and lives in
-`pipelock/pipelock.yaml`; after changing it, `lettucectl up all` rebuilds the image.
+or `lolloctl logs alfred lollo-pipelock`. The policy is the same for every stack and lives in
+`pipelock/pipelock.yaml`; after changing it, `lolloctl up all` rebuilds the image.

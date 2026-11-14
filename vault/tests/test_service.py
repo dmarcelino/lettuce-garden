@@ -6,7 +6,7 @@ from collections import Counter
 import anyio
 import pytest
 
-from garden_vault.config import (
+from lollo_vault.config import (
     ERASE_GRACE_SECONDS,
     HANDLE_TTL_SECONDS,
     MAX_HANDLES,
@@ -14,7 +14,7 @@ from garden_vault.config import (
     MAX_WAIT_SECONDS,
     REQUEST_TTL_SECONDS,
 )
-from garden_vault.vault import Vault, VaultError
+from lollo_vault.vault import Vault, VaultError
 
 from .conftest import (
     CARD,
@@ -299,7 +299,7 @@ async def test_deleted_secret_cannot_be_shared(settings, vault):
 
 
 async def test_restart_forgets_requests(settings, vault, vault_path, clock):
-    from garden_vault.vault import Vault
+    from lollo_vault.vault import Vault
 
     from .conftest import FAST_KDF
 

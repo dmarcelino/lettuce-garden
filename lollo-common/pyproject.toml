@@ -1,0 +1,27 @@
+[project]
+name = "lollo-common"
+version = "0.1.0"
+description = "Shared code for the Lollo Rozzo sidecars"
+requires-python = ">=3.12"
+# Pinned like the sidecars that install it; keep these in step with them.
+dependencies = [
+  "anyio==4.15.1",
+  "pyjwt[crypto]==2.15.1",
+  "starlette==1.7.0",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+lollo_common = ["static/*"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I"]

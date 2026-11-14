@@ -14,7 +14,7 @@ import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from garden_common.auth import Authenticator
+from lollo_common.auth import Authenticator
 
 from gmail_triggers.config import Settings
 from gmail_triggers.google import Google, credential_file_name
@@ -22,10 +22,10 @@ from gmail_triggers.poller import Poller
 from gmail_triggers.store import Agent, Store
 
 EMAIL = "alfred@gmail.com"
-ORIGIN = "https://alfred-garden.example.com"
+ORIGIN = "https://alfred-lollo.example.com"
 
 # What a browser sends when a person opens a page or posts its form (Fetch
-# Metadata), and when a page's own script calls fetch(); see garden_common.auth.check_fetch.
+# Metadata), and when a page's own script calls fetch(); see lollo_common.auth.check_fetch.
 NAVIGATE = {"sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-site": "same-origin"}
 SCRIPT_FETCH = {"sec-fetch-mode": "cors", "sec-fetch-dest": "empty", "sec-fetch-site": "same-origin"}
 # Stands in for an email's text: tests assert it never reaches request files,
@@ -365,7 +365,7 @@ def raw_get(app: Any, raw_path: str, headers: dict[str, str]) -> int:
         "http_version": "1.1",
         "method": "GET",
         "scheme": "https",
-        "server": ("garden-gmail-triggers", 8000),
+        "server": ("lollo-gmail-triggers", 8000),
         "client": ("192.0.2.1", 1234),
         "root_path": "",
         "path": unquote(raw_path),

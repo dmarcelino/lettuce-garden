@@ -1,12 +1,12 @@
 # The host's shared Gotenberg (docs/doc-tools.md): one container for every stack
-# with the garden-doc-tools profile, run by lettucectl as the Compose project
-# `lettuce_shared` (compose_shared in lib/common.sh). It converts documents the
+# with the lollo-doc-tools profile, run by lolloctl as the Compose project
+# `lollo_shared` (compose_shared in lib/common.sh). It converts documents the
 # PDF MCP uploads (LibreOffice for Office files, Chromium for HTML) and merges,
 # rotates, watermarks and stamps PDFs; it keeps nothing, and it mounts no
 # workspace.
 #
 # Networks: its own internal one here, plus each stack's internal
-# lettuce-doc-tools-<name>, which lettucectl creates and connects it to with the
+# lollo-doc-tools-<name>, which lolloctl creates and connects it to with the
 # alias `gotenberg` (sync_doc_tools). It is the only container on more than one
 # of them, and none has a route out.
 #
@@ -20,7 +20,7 @@
 # a request was refused for; it covers every stack, so never run it at debug,
 # which logs file names.
 #
-# Pinned by its multi-arch index digest. `lettucectl check` refuses this service
+# Pinned by its multi-arch index digest. `lolloctl check` refuses this service
 # without its hardening (non-root user and no-new-privileges included), with a
 # port, or without the deny flags (or with one set back to false).
 services:
